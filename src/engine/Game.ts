@@ -85,6 +85,14 @@ export class Game {
   private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 }>();
   /** Bulldoze tool: per-tile snapshot of all destroyed state for revert. */
   private readonly strokeBulldozed = new Map<number, BulldozedSnapshot>();
+  /**
+   * Road tool: tile indices where the stroke cleared a forest tile down to
+   * grass. Used to restore the tree if the rubber band retreats. Outside of
+   * an active stroke this stays empty; the trees are permanently gone once
+   * the stroke commits (matches real life: paving over a forest is a
+   * one-way operation unless the player Undoes the whole stroke).
+   */
+  private readonly strokeForestCleared = new Set<number>();
 
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
@@ -417,6 +425,7 @@ export class Game {
     this.strokeStubs.clear();
     this.strokeZones.clear();
     this.strokeBulldozed.clear();
+    this.strokeForestCleared.clear();
     this.strokeDidSnapshot = false;
     if (!tile) return;
 
@@ -477,6 +486,7 @@ export class Game {
     this.strokeStubs.clear();
     this.strokeZones.clear();
     this.strokeBulldozed.clear();
+    this.strokeForestCleared.clear();
   }
 
   /**
@@ -620,6 +630,41 @@ export class Game {
       }
     }
 
+    // Forest clearing — every tile that's now a road but was forest gets
+    // paved over. Track each cleared tile so a stroke retreat can grow the
+    // tree back. Walk the tile sets we know we touched (endpoints of any
+    // desired edge, plus any desired stub) rather than every road tile on
+    // the map.
+    let forestChanged = false;
+    const touched = new Set<number>(desiredStubs);
+    for (const ek of desiredEdges) {
+      const { ax, ay, bx, by } = unpackEdge(ek, this.grid.width);
+      touched.add(this.tileIndex(ax, ay));
+      touched.add(this.tileIndex(bx, by));
+    }
+    for (const idx of touched) {
+      const { x, y } = this.unpackTile(idx);
+      const t = this.grid.get(x, y);
+      if (!t || !t.road) continue;
+      if (t.terrain === 'forest') {
+        t.terrain = 'grass';
+        this.strokeForestCleared.add(idx);
+        forestChanged = true;
+      }
+    }
+    // Restore trees on retreat — any tile we previously cleared that's no
+    // longer a road grows its forest back.
+    for (const idx of [...this.strokeForestCleared]) {
+      const { x, y } = this.unpackTile(idx);
+      const t = this.grid.get(x, y);
+      if (!t) continue;
+      if (!t.road) {
+        t.terrain = 'forest';
+        this.strokeForestCleared.delete(idx);
+        forestChanged = true;
+      }
+    }
+
     if (roadsChanged) {
       this.renderer.drawRoads(this.grid);
       // A* needs an up-to-date adjacency for any spawn that follows.
@@ -629,6 +674,11 @@ export class Game {
       this.renderer.drawZones(this.grid);
       // Promoting a zoned tile to road wipes its building.
       this.renderer.drawBuildings(this.grid);
+    }
+    if (forestChanged) {
+      // Terrain colour + tree-instance set both depend on Tile.terrain.
+      // drawWorld rebuilds both — on Small/Medium maps this is sub-frame.
+      this.renderer.drawWorld(this.grid);
     }
   }
 

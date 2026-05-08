@@ -6,3 +6,11 @@ dist
 .env*
 .idea
 .vscode
+# Per-machine Claude Code state — settings, worktrees, transcripts.
+# A worktree on machine A doesn't make sense on machine B; settings are
+# personal. Don't sync via git.
+.claude/
+# iCloud Drive sync occasionally creates "Conflicted Copy" placeholders
+# (e.g., "main 2.ts") and download stubs (".main.ts.icloud"). Don't track.
+*\ [0-9].*
+*.icloud

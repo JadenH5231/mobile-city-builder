@@ -160,8 +160,33 @@ on a different machine isn't a forensic exercise.
 - A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
 - See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
 
-## Status: alpha
+## Status: Alpha 1.0
 
-All 14 build steps are in. The prototype now plays end-to-end: paint roads + zones, watch buildings grow, manage taxes against road + service upkeep, place power/water/parks to unlock L3, deal with traffic via bus stops + depots. Saves on a 30 s auto-cadence.
+Tagged on `main` as `alpha-1.0`. All 14 build steps are in plus four
+post-alpha tuning passes; the prototype plays end-to-end with money
+that gets tight at scale, traffic that congests, three road tiers
+with one-way highways, player-placed stop signs with FIFO yielding
+across approaches, and queue spillback so cars never visually overlap.
 
-This is the alpha the user is reviewing. Next sessions are expected to be tuning + bug-fixing based on their feedback rather than new build steps. See `docs/PROGRESS.md` for full per-step detail and known issues.
+What's in 1.0 beyond the original 14 steps:
+- **Pass 1 (challenge tuning + Undo).** Tighter money, sharper traffic
+  penalties, 20-deep undo stack across paint strokes and placements.
+- **Pass 2 (sim scaling fix).** Spawn rate scales with population,
+  MAX_VEHICLES → 250, revenue cuts + per-capita "city services"
+  expense that grows with city size.
+- **Pass 3 (traffic-aware spawn routing).** A* edge cost includes
+  per-tile EMA load; new spawns reroute around hot corridors. Same-
+  segment minimum gap so cars don't visually overlap on hot routes.
+- **Pass 4 (big roads update).** Three road tiers (local / avenue /
+  highway), highway one-way semantics with paint-stroke direction,
+  per-tier speed + capacity + maintenance, player-placed stop signs
+  with min-pause + FIFO yielding, collisions at uncontrolled
+  intersections that hurt the destination's growth, queue spillback
+  across segments so a stop-sign queue doesn't pile up at the entry.
+
+Save schema is v2 — a v1 save (pre-pass-4) silently fails to load.
+
+The next pass is presumably content / depth (not infrastructure):
+intersection lights as a richer alternative to stop signs, real
+bus-route drawing, weather, day-night, more building types. The
+simulation is in a place where new mechanics layer on cleanly.

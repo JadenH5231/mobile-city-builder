@@ -2,7 +2,7 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: alpha.** All 14 build steps shipped. Plays end-to-end: paint roads + zones, watch buildings grow, manage taxes against road + service upkeep, place power/water/parks to unlock L3, deal with traffic via bus stops + depots. Saves on a 30 s auto-cadence.
+**Status: Alpha 1.0** (tagged on `main`). All 14 build steps + four post-alpha tuning passes. Plays end-to-end: paint a network with three road tiers (local / avenue / one-way highway), zone R/C/I, watch buildings grow, manage taxes against road + service upkeep, place power/water/parks to unlock L3, deal with traffic via stop signs (with FIFO yielding) and bus stops + depots. Cars can crash at uncontrolled intersections and the destination business takes a hit. Saves on a 30 s auto-cadence.
 
 ## Setup
 

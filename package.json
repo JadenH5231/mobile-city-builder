@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "Premium mobile city-builder prototype (PixiJS + TypeScript).",
+  "description": "Premium mobile city-builder prototype (Three.js + TypeScript, low-poly).",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
@@ -11,9 +11,10 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "pixi.js": "^8.2.0"
+    "three": "^0.169.0"
   },
   "devDependencies": {
+    "@types/three": "^0.169.0",
     "typescript": "^5.4.5",
     "vite": "^5.2.11"
   }

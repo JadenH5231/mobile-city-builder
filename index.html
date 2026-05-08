@@ -16,9 +16,113 @@
   <body>
     <div id="app"></div>
     <div id="hud">
-      <div id="hud-pill" class="pill">Pan • Pinch to zoom</div>
+      <div id="hud-pop" class="pill mono" title="Population">Pop · 0</div>
+      <div id="hud-rci" class="pill rci" aria-label="RCI demand">
+        <div class="rci__bar" data-zone="r" title="Residential demand">
+          <div class="rci__fill"></div>
+          <span class="rci__label">R</span>
+        </div>
+        <div class="rci__bar" data-zone="c" title="Commercial demand">
+          <div class="rci__fill"></div>
+          <span class="rci__label">C</span>
+        </div>
+        <div class="rci__bar" data-zone="i" title="Industrial demand">
+          <div class="rci__fill"></div>
+          <span class="rci__label">I</span>
+        </div>
+      </div>
+      <button id="hud-treasury" type="button" class="pill mono treasury" aria-label="Open budget">$50,000</button>
+      <button id="hud-undo" type="button" class="pill action" aria-label="Undo last change" disabled>Undo</button>
+      <button id="hud-heatmap" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle traffic heatmap">Heat</button>
       <div id="hud-fps" class="pill mono">— fps</div>
     </div>
+    <section
+      id="tile-info"
+      class="tile-info hidden"
+      role="dialog"
+      aria-label="Tile information"
+      aria-hidden="true"
+    >
+      <div class="tile-info__handle" aria-hidden="true"></div>
+      <button
+        id="tile-info-close"
+        class="tile-info__close"
+        type="button"
+        aria-label="Close tile info"
+      >×</button>
+      <div class="tile-info__title">Tile</div>
+      <div class="tile-info__row">
+        <span>Coords</span>
+        <span id="tile-info-coords" class="mono">—</span>
+      </div>
+      <div class="tile-info__row">
+        <span>Terrain</span>
+        <span id="tile-info-terrain">—</span>
+      </div>
+    </section>
+    <section
+      id="budget-panel"
+      class="info-panel hidden"
+      role="dialog"
+      aria-label="Budget"
+      aria-hidden="true"
+    >
+      <div class="info-panel__handle" aria-hidden="true"></div>
+      <button
+        id="budget-close"
+        class="info-panel__close"
+        type="button"
+        aria-label="Close budget"
+      >×</button>
+      <div class="info-panel__title">Budget</div>
+      <div class="info-panel__sub" id="budget-month">Month 0</div>
+
+      <div class="budget__stats">
+        <div class="budget__row">
+          <span>Treasury</span>
+          <span id="budget-treasury" class="mono">$50,000</span>
+        </div>
+        <div class="budget__row">
+          <span>Last income</span>
+          <span id="budget-income" class="mono">$0</span>
+        </div>
+        <div class="budget__row">
+          <span>Last expenses</span>
+          <span id="budget-expenses" class="mono">$0</span>
+        </div>
+        <div class="budget__row budget__row--total">
+          <span>Net</span>
+          <span id="budget-net" class="mono">$0</span>
+        </div>
+      </div>
+
+      <div class="budget__sliders">
+        <div class="budget__slider">
+          <label for="tax-r">
+            <span>Residential</span>
+            <span class="mono"><span id="tax-r-val">9</span>%</span>
+          </label>
+          <input type="range" id="tax-r" min="0" max="25" value="9" step="1">
+        </div>
+        <div class="budget__slider">
+          <label for="tax-c">
+            <span>Commercial</span>
+            <span class="mono"><span id="tax-c-val">10</span>%</span>
+          </label>
+          <input type="range" id="tax-c" min="0" max="25" value="10" step="1">
+        </div>
+        <div class="budget__slider">
+          <label for="tax-i">
+            <span>Industrial</span>
+            <span class="mono"><span id="tax-i-val">11</span>%</span>
+          </label>
+          <input type="range" id="tax-i" min="0" max="25" value="11" step="1">
+        </div>
+      </div>
+
+      <button id="budget-reset" type="button" class="budget__reset">Reset city</button>
+    </section>
+    <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

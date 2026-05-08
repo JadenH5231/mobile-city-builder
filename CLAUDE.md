@@ -1,10 +1,10 @@
 # Project context for Claude Code
 
-You are working on a **premium mobile-first 2.5D isometric city-builder prototype**. This file is the canonical context — read it first every session.
+You are working on a **premium mobile-first low-poly 3D city-builder prototype**. This file is the canonical context — read it first every session.
 
 ## What this project is
 
-A browser-based isometric city builder that plays like a premium Steam title (Cities: Skylines / classic SimCity) but is mobile-first. Single-purchase premium game model — **no monetization, no timers, no energy systems, no paywalls**. The prototype's job is to prove the core loop is fun.
+A browser-based city builder that plays like a premium Steam title (Cities: Skylines / classic SimCity) but is mobile-first. Single-purchase premium game model — **no monetization, no timers, no energy systems, no paywalls**. The prototype's job is to prove the core loop is fun.
 
 The full product spec lives at [`docs/SPEC.md`](docs/SPEC.md). **Always read SPEC.md before starting non-trivial work** — it has the build order, performance budget, anti-goals, and project structure. Do not deviate from it without checking with the user.
 
@@ -18,12 +18,16 @@ Current progress lives at [`docs/PROGRESS.md`](docs/PROGRESS.md). Update it afte
 - No artificial complexity (e.g. elaborate power grids that exist purely to be a chore)
 - No tap-to-build individual houses — use **zoning**, like Cities: Skylines
 
-## Tech stack (locked)
+## Tech stack
 
-- **Renderer:** PixiJS v8 (WebGL2)
+- **Renderer:** Three.js (low-poly 3D, orthographic camera at fixed 3/4 angle).
+  Original spec called for PixiJS v8 / 2D iso — pivoted in Step 4 because tile-based
+  2D paint produced unavoidable zig-zag on diagonals; 3D meshes per road segment let
+  us draw proper diagonal connectors. The simulation layer (Tile/Grid/Tool/save model)
+  is renderer-agnostic and survived the pivot intact.
 - **Language:** TypeScript, strict mode
 - **Build:** Vite 5
-- **Touch input:** Custom Pointer Events handler (no Hammer.js needed for the gestures we're doing)
+- **Touch input:** Custom Pointer Events handler (covers mouse, pen, touch via the same code path)
 - **Persistence:** IndexedDB via `idb` (added in Step 13)
 - **State:** Plain TS classes / lightweight ECS. **No React, no heavy frameworks.** UI overlay is vanilla DOM/CSS.
 
@@ -31,20 +35,20 @@ No backend. Fully client-side. Should work offline once loaded.
 
 ## Build order (do these in sequence, do not skip)
 
-1. ✅ **Bootstrap:** Vite + TS + PixiJS, render a single isometric tile
-2. ✅ **Grid:** Render a 64×64 isometric grid with placeholder tile colors. Camera pan + pinch zoom
-3. ⬜ **Tile selection:** Tap a tile, highlight it. Long-press shows tile info
-4. ⬜ **Roads:** Drag-to-place road tool. Roads connect to form a graph
-5. ⬜ **Zoning:** Drag-paint R/C/I zones on tiles adjacent to roads
-6. ⬜ **Building spawning:** Zoned tiles develop buildings over time
-7. ⬜ **Population & demand:** Buildings spawn population. RCI demand bars
-8. ⬜ **Vehicles:** Cars path from R to C/I along road graph using A*
-9. ⬜ **Economy:** Tax sliders, monthly budget tick, treasury
-10. ⬜ **City buildings:** Power plant, water tower, etc. Radius-based service coverage
-11. ⬜ **Traffic congestion:** Road capacity, slowdowns, heatmap overlay
-12. ⬜ **Bus system:** Stops, route drawing, bus pathing
-13. ⬜ **Save/load:** IndexedDB persistence
-14. ⬜ **Performance pass:** Profile on a real mid-range phone
+1. ✅ **Bootstrap:** Vite + TS, single tile rendered
+2. ✅ **Grid:** Render a 64×64 grid with placeholder colors. Camera pan + pinch zoom
+3. ✅ **Tile selection:** Tap to highlight, long-press for info panel
+4. ✅ **Roads:** Drag-to-place with diagonal-first 8-connected path; rubber band on edges
+5. ✅ **Zoning:** Drag-paint R/C/I zones on grass tiles adjacent to roads
+6. ✅ **Building spawning:** Zoned tiles develop low-poly buildings over fixed-rate sim ticks
+7. ✅ **Population & demand:** RCI demand drives growth; per-tier thresholds give a non-linear curve
+8. ✅ **Vehicles:** Cars A*-route from R to C/I along the road graph; smooth render-rate movement
+9. ✅ **Economy:** Treasury + tax sliders + monthly tick; tax rate also drives demand
+10. ✅ **City buildings:** Power, water, parks, bus stops/depots; radius services unlock L3
+11. ✅ **Traffic congestion:** Per-tile load, slowdowns, demand feedback, toggleable heatmap
+12. ✅ **Bus system:** Stops suppress nearby car-spawns; depots run visible buses on auto-routes
+13. ✅ **Save/load:** IndexedDB auto-save every 30 s, auto-restore on init, manual reset in budget panel
+14. ✅ **Performance pass:** Heatmap throttled to 5 Hz; build at 528 KB raw / 135 KB gzipped
 
 After each step, **stop** and tell the user what to test on their phone before moving on. Do not chain steps without confirmation.
 
@@ -54,7 +58,7 @@ After each step, **stop** and tell the user what to test on their phone before m
 - 30fps minimum on a 2021 mid-range Android with a Small map
 - Simulation tick decoupled from render tick — sim at ~10Hz, rendering at 60Hz
 - Spatial hashing for proximity queries
-- Sprite atlas everything; never load individual PNGs at runtime
+- InstancedMesh for repeating geometry (trees, future cars/buildings); never one Mesh per entity at scale
 
 ## Code conventions
 
@@ -63,27 +67,43 @@ After each step, **stop** and tell the user what to test on their phone before m
 - Each simulation system in its own module with a clean interface.
 - Game state must be **serializable** — no circular references, no functions stored in state. Save games depend on this.
 - Comments explain *why*, not *what*.
-- Existing code uses Pointer Events (not Touch Events) and PixiJS v8's new Graphics API (`g.poly().fill().stroke()`). Match the established style.
-- Module layout follows the spec exactly: `engine/`, `world/`, `simulation/`, `ui/`, `persistence/`. Don't restructure.
+- Existing code uses Pointer Events (not Touch Events) and Three.js. Match the established style.
+- Module layout: `engine/`, `world/`, `simulation/`, `ui/`, `persistence/`. Don't restructure.
 
 ## Project structure
 
 ```
 src/
   main.ts             entry point + FPS counter
-  styles.css          global CSS (HUD pills, body lock)
-  types.ts            shared constants + types
+  styles.css          global CSS (HUD pills, toolbar, info panel)
+  types.ts            shared constants + types (Dir, Tool, MAP_SIZES, ROAD_WIDTH…)
   engine/
-    Game.ts           bootstraps Pixi App + wires systems
-    Camera.ts         pan/zoom math (zoomAt anchors on screen point)
-    Input.ts          pointer-events gesture handler
-    Renderer.ts       iso grid drawing
+    Game.ts           bootstraps Three.js, owns the loop, paint logic
+    Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
+    Input.ts          pointer-events gesture handler (navigate / paint modes)
+    Renderer.ts       Three.js scene: terrain, roads, trees, selection
   world/
-    Grid.ts           tile container + placeholder generator
-    Tile.ts           single-tile struct
+    Grid.ts           tile container + road-edge graph
+    Tile.ts           single-tile struct (terrain, road bool)
+  simulation/
+    Population.ts     aggregate residents + jobs, derive RCI demand
+    Development.ts    demand-driven density growth tick (10 Hz), service-gated L3
+    RoadGraph.ts      adjacency list rebuilt on road changes
+    Pathfinding.ts    A* over the road graph, reusable buffers
+    Vehicles.ts       car spawn (sim) + path-following movement (render)
+    Economy.ts        treasury, tax rates, monthly settlement tick
+    Services.ts       radius sweep that flags hasPower / hasWater / hasPark
+    Traffic.ts        per-tile EMA + city-wide stress for demand feedback
+    Buses.ts          bus spawn (sim) + path-following movement; spawn suppression
+  persistence/
+    SaveGame.ts       IndexedDB single-slot auto-save + restore
+  ui/
+    TileInfoPanel.ts  bottom-sheet info card (DOM)
+    BudgetPanel.ts    treasury + tax sliders sheet (DOM)
+    Toolbar.ts        scrollable bottom tool selector
 ```
 
-`simulation/`, `ui/`, `persistence/` will be added in later steps as the spec dictates.
+All directories above exist as of the alpha build.
 
 ## How to run
 
@@ -103,16 +123,45 @@ npm run build        # type-check + production build → dist/
 - If the user asks for something that conflicts with the spec or anti-goals (e.g. "add a stamina bar"), surface the conflict and ask before doing it.
 - Placeholder art is fine throughout. Polish comes after the simulation is fun.
 
-## What's already built (Steps 1–2)
+## Keep documentation in sync with code
 
-Render a 64×64 iso diamond grid (mostly grass, sprinkled forest tiles). Camera centers and fits the map on load. One-finger drag pans; two-finger pinch zooms anchored on the gesture midpoint. Mouse wheel zoom on desktop. FPS counter pill in the top-right.
+**This is non-negotiable.** The user works across multiple machines via iCloud
+sync. Stale docs on one machine versus another machine's code mean a future
+Claude session opens this project with the wrong mental model and starts
+"helping" by re-doing work that's already done.
 
-The grid is drawn into a single batched `Graphics` object — fine through Medium maps. Step 14's perf pass is when we'll likely refactor to chunked `RenderTexture`s for the Large map.
+When you change anything material — a build step gets done, the tech stack
+shifts, a system gets rewritten, a tuning parameter changes meaning, a new
+known-issue surfaces — update the corresponding doc in the **same response**:
 
-## Next up
+- **`CLAUDE.md`** (this file): tech stack, project structure, build-order
+  status, working style. Update whenever the *shape* of the project changes.
+- **`docs/SPEC.md`**: canonical product spec — features, anti-goals,
+  performance budget. Update whenever the *intent* changes (new feature,
+  changed scope, pivoted stack).
+- **`docs/PROGRESS.md`**: running log of what's actually been built and why.
+  Update at the end of every build step, every tuning pass, every notable
+  bug fix or post-alpha decision. This is the file the next session reads to
+  know what's already done.
+- **`README.md`**: phone-LAN setup, scripts, feature-status table.
 
-**Step 3 — Tile selection.** Tap a tile to highlight it. Long-press shows a tile info panel. Need to:
-- Inverse iso projection: screen → grid coordinates (account for camera transform)
-- Selection overlay (separate Graphics layer above the tile layer)
-- Long-press detection (~500ms, no significant pointer movement)
-- A simple info panel UI — vanilla DOM, slides up from bottom on mobile
+A historical note for context: in May 2026 a partial iCloud sync left this
+worktree without `src/simulation/` and `src/persistence/`, while
+`docs/PROGRESS.md` claimed all 14 steps were done. The next Claude session
+spent meaningful time figuring out what was real versus what was lost.
+Whenever you add new code, also reflect it in these docs so the next pickup
+on a different machine isn't a forensic exercise.
+
+## What's already built
+
+- A flat 3D world with chunky vertex-coloured terrain, instanced cone-trees on forest tiles, an orthographic 3/4 camera, and selection highlight.
+- One-finger drag pans, two-finger pinch zooms anchored on the gesture midpoint, mouse wheel zooms on desktop.
+- Tap → yellow highlight; long-press → bottom-sheet info card with terrain + coords.
+- A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
+- See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
+
+## Status: alpha
+
+All 14 build steps are in. The prototype now plays end-to-end: paint roads + zones, watch buildings grow, manage taxes against road + service upkeep, place power/water/parks to unlock L3, deal with traffic via bus stops + depots. Saves on a 30 s auto-cadence.
+
+This is the alpha the user is reviewing. Next sessions are expected to be tuning + bug-fixing based on their feedback rather than new build steps. See `docs/PROGRESS.md` for full per-step detail and known issues.

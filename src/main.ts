@@ -74,7 +74,11 @@ game.tickCallbacks.push(() => {
   if (now - lastUiUpdate < 250) return;
   lastUiUpdate = now;
 
-  if (popEl) popEl.textContent = `Pop · ${game.population.totalResidents}`;
+  if (popEl) {
+    // totalResidents is a float (faction populations lerp through fractions).
+    // Round for display — there is no such thing as 0.4 of a person.
+    popEl.textContent = `Pop · ${Math.round(game.population.totalResidents).toLocaleString()}`;
+  }
 
   if (treasuryEl) {
     treasuryEl.textContent = formatCurrency(game.economy.treasury);

@@ -89,7 +89,11 @@ export class HappinessPanel {
     // Salt the comment-picker by months-elapsed × bucket so the message
     // stays stable but rotates when the player's situation actually moves.
     const months = this.deps.economy.monthsElapsed;
-    const totalRes = this.deps.population.totalResidents;
+    // Round the displayed total so per-faction counts and the city total
+    // both come from the same integer space — otherwise rounded faction
+    // counts divided by a float city total can produce % values that
+    // visibly don't sum to 100.
+    const totalDisplayed = Math.round(this.deps.population.totalResidents);
 
     for (const f of FACTIONS) {
       const h = this.deps.happiness.get(f.id);
@@ -103,9 +107,11 @@ export class HappinessPanel {
       row.el.dataset.bucket = bucket;
       row.moodEl.textContent = bucketLabel(bucket);
 
-      // Faction population + share-of-city.
+      // Faction population + share-of-city. Both the count and the
+      // denominator for the percentage come from rounded integers so the
+      // displayed values are consistent.
       const factionPop = Math.round(this.deps.population.factionPopulation.get(f.id) ?? 0);
-      const sharePct = totalRes > 0 ? (factionPop / totalRes) * 100 : 0;
+      const sharePct = totalDisplayed > 0 ? (factionPop / totalDisplayed) * 100 : 0;
       row.popEl.textContent = `${factionPop.toLocaleString()} residents · ${sharePct.toFixed(1)}%`;
       row.shareFill.style.width = `${Math.min(100, sharePct).toFixed(1)}%`;
       row.shareFill.style.background = `#${f.color.toString(16).padStart(6, '0')}`;

@@ -28,9 +28,10 @@ import type { Grid } from '../world/Grid';
 import {
   BUILDING_COLORS,
   BUILDING_DIMS,
+  DIR_OFFSETS,
   MAX_VEHICLES,
   ROAD_LIFT,
-  ROAD_WIDTH,
+  ROAD_TIER,
   TILE_SIZE,
   ZONE_COLORS,
   ZONE_LIFT,
@@ -58,11 +59,13 @@ const TERRAIN_COLORS: Record<TerrainType, number> = {
   sand: 0xddc174
 };
 
-const ROAD_COLOR = 0x3b3b3b;
 const ROAD_LANE = 0xf2cd5c;
 const SELECTION_COLOR = 0xffd84d;
 const TREE_TRUNK = 0x6e3e1d;
 const TREE_LEAF = 0x2f6a2d;
+const HIGHWAY_ARROW_COLOR = 0xf2cd5c;
+const STOP_SIGN_COLOR = 0xc83838;
+const STOP_SIGN_TEXT = 0xffffff;
 
 export class Renderer {
   readonly scene = new Scene();
@@ -73,6 +76,8 @@ export class Renderer {
   private zoneMesh: Mesh | null = null;
   private roadMesh: Mesh | null = null;
   private roadLanes: LineSegments | null = null;
+  /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
+  private roadOrnaments: Group | null = null;
   private treesMesh: InstancedMesh | null = null;
   private buildingsMesh: InstancedMesh | null = null;
   /** One Group containing per-kind city building Mesh objects. Rebuilt on change. */
@@ -231,6 +236,11 @@ export class Renderer {
       (this.roadLanes.material as LineBasicMaterial).dispose();
       this.roadLanes = null;
     }
+    if (this.roadOrnaments) {
+      this.disposeGroup(this.roadOrnaments);
+      this.worldGroup.remove(this.roadOrnaments);
+      this.roadOrnaments = null;
+    }
     const built = buildRoadMesh(grid);
     if (built) {
       this.roadMesh = built.mesh;
@@ -238,6 +248,24 @@ export class Renderer {
       if (built.lanes) {
         this.roadLanes = built.lanes;
         this.worldGroup.add(this.roadLanes);
+      }
+    }
+    const ornaments = buildRoadOrnamentsGroup(grid);
+    if (ornaments) {
+      this.roadOrnaments = ornaments;
+      this.worldGroup.add(ornaments);
+    }
+  }
+
+  private disposeGroup(g: Group): void {
+    while (g.children.length > 0) {
+      const c = g.children[0]!;
+      g.remove(c);
+      if (c instanceof Mesh) {
+        c.geometry.dispose();
+        const mat = c.material;
+        if (Array.isArray(mat)) for (const m of mat) m.dispose();
+        else (mat as MeshLambertMaterial).dispose();
       }
     }
   }
@@ -829,22 +857,34 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
 
   if (edges.length === 0 && stubs.length === 0) return null;
 
-  // Each edge → 1 quad (4 verts, 2 tris). Each stub → 1 quad (4 verts, 2 tris).
-  // Plus per-edge lane stripes for orthogonal segments only (skipped on
-  // diagonals to keep the look clean — they'd be too dense at low zoom).
+  // Per-edge tier drives width + colour (post-alpha pass 4). Each edge gets
+  // a vertex-coloured quad, all merged into one mesh / one draw call.
   const totalQuads = edges.length + stubs.length;
   const positions = new Float32Array(totalQuads * 4 * 3);
+  const colours = new Float32Array(totalQuads * 4 * 3);
   const indices = new Uint32Array(totalQuads * 6);
+  const c = new Color();
 
   let vi = 0;
+  let ci = 0;
   let ii = 0;
   let v = 0;
-  const half = ROAD_WIDTH / 2;
   const yLift = ROAD_LIFT;
 
   // --- edge quads ---
   const lanePositions: number[] = [];
   for (const e of edges) {
+    const ta = grid.get(e.ax, e.ay);
+    const tb = grid.get(e.bx, e.by);
+    // Use the wider/faster of the two endpoint tiers — visually consistent
+    // when a highway abuts a local at a ramp.
+    const tierA = ta?.roadType ?? 'local';
+    const tierB = tb?.roadType ?? 'local';
+    const tier = tierIndex(tierA) >= tierIndex(tierB) ? tierA : tierB;
+    const tierProps = ROAD_TIER[tier];
+    const half = tierProps.width / 2;
+    c.setHex(tierProps.color);
+
     const ax = (e.ax + 0.5) * TILE_SIZE;
     const az = (e.ay + 0.5) * TILE_SIZE;
     const bx = (e.bx + 0.5) * TILE_SIZE;
@@ -852,7 +892,6 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const dx = bx - ax;
     const dz = bz - az;
     const len = Math.hypot(dx, dz);
-    // Perpendicular (rotated 90° in XZ plane).
     const px = -dz / len * half;
     const pz = dx / len * half;
 
@@ -860,29 +899,42 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     positions[vi++] = bx + px; positions[vi++] = yLift; positions[vi++] = bz + pz;
     positions[vi++] = bx - px; positions[vi++] = yLift; positions[vi++] = bz - pz;
     positions[vi++] = ax - px; positions[vi++] = yLift; positions[vi++] = az - pz;
+    for (let k = 0; k < 4; k++) {
+      colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
+    }
     indices[ii++] = v; indices[ii++] = v + 1; indices[ii++] = v + 2;
     indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 3;
     v += 4;
 
-    // Lane stripe along the centreline. Drawn for both orthogonal and
-    // diagonal edges since each segment is its own clean road piece.
-    const yStripe = yLift + 0.001;
-    lanePositions.push(
-      ax + dx * 0.18, yStripe, az + dz * 0.18,
-      ax + dx * 0.42, yStripe, az + dz * 0.42,
-      ax + dx * 0.58, yStripe, az + dz * 0.58,
-      ax + dx * 0.82, yStripe, az + dz * 0.82
-    );
+    // Centre-line stripe — drawn for local + avenue. Highway gets directional
+    // arrows instead (see buildRoadOrnamentsGroup).
+    if (tier !== 'highway') {
+      const yStripe = yLift + 0.001;
+      lanePositions.push(
+        ax + dx * 0.18, yStripe, az + dz * 0.18,
+        ax + dx * 0.42, yStripe, az + dz * 0.42,
+        ax + dx * 0.58, yStripe, az + dz * 0.58,
+        ax + dx * 0.82, yStripe, az + dz * 0.82
+      );
+    }
   }
 
   // --- stub squares ---
   for (const s of stubs) {
+    const t = grid.get(s.x, s.y);
+    const tier = t?.roadType ?? 'local';
+    const tierProps = ROAD_TIER[tier];
+    const half = tierProps.width / 2;
+    c.setHex(tierProps.color);
     const cx = (s.x + 0.5) * TILE_SIZE;
     const cz = (s.y + 0.5) * TILE_SIZE;
     positions[vi++] = cx - half; positions[vi++] = yLift; positions[vi++] = cz - half;
     positions[vi++] = cx + half; positions[vi++] = yLift; positions[vi++] = cz - half;
     positions[vi++] = cx + half; positions[vi++] = yLift; positions[vi++] = cz + half;
     positions[vi++] = cx - half; positions[vi++] = yLift; positions[vi++] = cz + half;
+    for (let k = 0; k < 4; k++) {
+      colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
+    }
     indices[ii++] = v; indices[ii++] = v + 1; indices[ii++] = v + 2;
     indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 3;
     v += 4;
@@ -890,10 +942,11 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
 
   const geom = new BufferGeometry();
   geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
   geom.computeVertexNormals();
   const mat = new MeshStandardMaterial({
-    color: ROAD_COLOR,
+    vertexColors: true,
     roughness: 0.9,
     metalness: 0,
     flatShading: true
@@ -908,4 +961,91 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   }
 
   return { mesh, lanes };
+}
+
+function tierIndex(t: 'local' | 'avenue' | 'highway'): number {
+  return t === 'local' ? 0 : t === 'avenue' ? 1 : 2;
+}
+
+/**
+ * Highway flow arrows + stop sign markers, batched into a single Group. Both
+ * are visually small and rebuilt with the road mesh on every paint event.
+ */
+function buildRoadOrnamentsGroup(grid: Grid): Group | null {
+  const arrows: BufferGeometry[] = [];
+  const arrowColours: number[] = [];
+  const stops: BufferGeometry[] = [];
+  const stopColours: number[] = [];
+
+  for (const t of grid.iter()) {
+    if (!t.road) continue;
+    if (t.roadType === 'highway' && t.highwayDir >= 0 && t.highwayDir < 8) {
+      const cx = (t.x + 0.5) * TILE_SIZE;
+      const cz = (t.y + 0.5) * TILE_SIZE;
+      const offset = DIR_OFFSETS[t.highwayDir]!;
+      // Build a flat triangle pointing in the flow direction. y just above
+      // the road surface so it's visible without z-fighting.
+      const arrow = makeArrowGeom(0.18, 0.22);
+      const yaw = Math.atan2(offset[0], offset[1]);
+      arrow.rotateY(-yaw);
+      arrow.translate(cx, ROAD_LIFT + 0.003, cz);
+      arrows.push(arrow);
+      arrowColours.push(HIGHWAY_ARROW_COLOR);
+    }
+    if (t.stopSign) {
+      const cx = (t.x + 0.5) * TILE_SIZE;
+      const cz = (t.y + 0.5) * TILE_SIZE;
+      // Stop-sign: thin red disc on a stubby grey post. Two parts → two
+      // geometries. The disc is octagonal in spirit; we use a 16-sided
+      // cylinder which reads as round at this zoom and avoids the cost of a
+      // hand-built polygon.
+      const post = new CylinderGeometry(0.025, 0.025, 0.18, 6);
+      post.translate(cx, ROAD_LIFT + 0.09, cz);
+      stops.push(post);
+      stopColours.push(0x666666);
+
+      const sign = new CylinderGeometry(0.10, 0.10, 0.04, 8);
+      sign.rotateX(Math.PI / 2);
+      sign.translate(cx, ROAD_LIFT + 0.18, cz);
+      stops.push(sign);
+      stopColours.push(STOP_SIGN_COLOR);
+
+      // White face hint — a slightly smaller white disc on top of the red,
+      // gives the "stop sign" silhouette without a real text texture.
+      const face = new CylinderGeometry(0.07, 0.07, 0.005, 8);
+      face.rotateX(Math.PI / 2);
+      face.translate(cx, ROAD_LIFT + 0.20, cz);
+      stops.push(face);
+      stopColours.push(STOP_SIGN_TEXT);
+    }
+  }
+
+  if (arrows.length === 0 && stops.length === 0) return null;
+  const group = new Group();
+  if (arrows.length > 0) {
+    const merged = mergeGeoms(arrows, arrowColours);
+    const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    group.add(mesh);
+  }
+  if (stops.length > 0) {
+    const merged = mergeGeoms(stops, stopColours);
+    const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    group.add(mesh);
+  }
+  return group;
+}
+
+/** Flat triangle pointing +Z (north → "up" in world space at default rotation). */
+function makeArrowGeom(width: number, length: number): BufferGeometry {
+  const positions = new Float32Array([
+    -width / 2, 0, -length / 2,
+     width / 2, 0, -length / 2,
+              0, 0,  length / 2
+  ]);
+  const indices = new Uint32Array([0, 2, 1]);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(positions, 3));
+  g.setIndex(new BufferAttribute(indices, 1));
+  g.computeVertexNormals();
+  return g;
 }

@@ -1,11 +1,17 @@
 import type { Grid } from '../world/Grid';
 import type { Pathfinding } from './Pathfinding';
 import type { RoadGraph } from './RoadGraph';
+import { ROAD_TIER, type RoadType } from '../types';
 
 /** Hard cap on simultaneously-active buses citywide. */
 const MAX_BUSES = 16;
-/** Tiles per second — buses are slower than cars so they read as transit. */
-const BUS_SPEED = 1.5;
+/**
+ * Per-bus speed multiplier on top of the road tier's `baseSpeed`. Buses are
+ * slower than cars so they read as transit. With a multiplier of 0.75 a bus
+ * on local = 1.5 t/s (matches the old hardcoded BUS_SPEED), on avenue = 2.1
+ * t/s, on highway = 3.0 t/s — gradient that rewards transit on faster roads.
+ */
+const BUS_SPEED_MULT = 0.75;
 /** Distinct yellow so buses pop against the car palette. */
 const BUS_COLOR = 0xf2cd5c;
 /** Chebyshev radius around a bus stop where R car-spawns are suppressed. */
@@ -81,7 +87,7 @@ export class Buses {
         pathTiles: path,
         segmentIdx: 0,
         segmentT: 0,
-        speed: BUS_SPEED,
+        speed: BUS_SPEED_MULT,
         color: BUS_COLOR,
         depotTile: depotIdx,
         routeStops: stopTiles.slice(),
@@ -114,7 +120,12 @@ export class Buses {
       const by = (bIdx - bx) / gridWidth;
       const segLen = Math.hypot(bx - ax, by - ay) || 1;
 
-      bus.segmentT += (bus.speed * dt) / segLen;
+      // Per-tier base speed × per-bus multiplier. Buses don't crash and don't
+      // pause for stop signs (professional drivers / dispatcher control).
+      const destTile = grid.get(bx, by);
+      const tier: RoadType = destTile?.roadType ?? 'local';
+      const tierBase = ROAD_TIER[tier].baseSpeed;
+      bus.segmentT += (tierBase * bus.speed * dt) / segLen;
       while (bus.segmentT >= 1) {
         bus.segmentT -= 1;
         bus.segmentIdx++;

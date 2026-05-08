@@ -114,6 +114,23 @@ export class BudgetPanel {
     setNegative(this.netEl, net < 0);
 
     this.monthEl.textContent = `Month ${this.economy.monthsElapsed}`;
+
+    // Accident readout — last completed month's count + cost. Hidden if zero.
+    const accidentsEl = document.getElementById('budget-accidents');
+    const accidentsCostEl = document.getElementById('budget-accidents-cost');
+    const accidentsRow = document.getElementById('budget-accidents-row');
+    if (accidentsEl && accidentsCostEl && accidentsRow) {
+      const cost = this.economy.lastAccidentCost;
+      const total = this.economy.totalAccidents;
+      if (total > 0 || cost > 0) {
+        accidentsRow.classList.remove('hidden');
+        accidentsEl.textContent = String(total);
+        accidentsCostEl.textContent = formatCurrency(-cost);
+        setNegative(accidentsCostEl, cost > 0);
+      } else {
+        accidentsRow.classList.add('hidden');
+      }
+    }
   }
 }
 

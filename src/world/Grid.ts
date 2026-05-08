@@ -1,5 +1,5 @@
 import { Tile } from './Tile';
-import type { Building, TerrainType, Zone } from '../types';
+import type { Building, RoadType, TerrainType, Zone } from '../types';
 
 /**
  * A road edge connects two adjacent tiles (4- or 8-connected). We pack the
@@ -72,16 +72,60 @@ export class Grid {
     return this.roadEdges.size;
   }
 
-  /** Set or clear the standalone road bit on a tile. */
-  setRoad(x: number, y: number, on: boolean): boolean {
+  /**
+   * Set or clear the standalone road bit on a tile. When turning a tile INTO
+   * a road, `type` (default 'local') sets the tier; calling on an existing
+   * road overrides its tier. Clearing also resets road metadata.
+   */
+  setRoad(x: number, y: number, on: boolean, type: RoadType = 'local'): boolean {
     const t = this.get(x, y);
-    if (!t || t.road === on) return false;
-    t.road = on;
-    return true;
+    if (!t) return false;
+    if (on) {
+      const wasRoad = t.road;
+      const sameType = t.roadType === type;
+      if (wasRoad && sameType) return false;
+      t.road = true;
+      t.roadType = type;
+      // Highway direction is set per-stroke via setHighwayDir, not here.
+      if (type !== 'highway') t.highwayDir = -1;
+      // Roads are mutually exclusive with zones — clear defensively.
+      t.zone = 'none';
+      t.resetDevelopment();
+      return true;
+    } else {
+      if (!t.road) return false;
+      t.road = false;
+      t.roadType = 'local';
+      t.highwayDir = -1;
+      t.stopSign = false;
+      return true;
+    }
   }
 
   hasRoad(x: number, y: number): boolean {
     return this.get(x, y)?.road === true;
+  }
+
+  /**
+   * Set the highway flow direction on a tile. Direction is 0..7 from the
+   * `Dir` enum (or -1 to clear). Only meaningful on highway-tier road tiles
+   * — silently no-ops otherwise.
+   */
+  setHighwayDir(x: number, y: number, dir: number): boolean {
+    const t = this.get(x, y);
+    if (!t || !t.road || t.roadType !== 'highway') return false;
+    if (t.highwayDir === dir) return false;
+    t.highwayDir = dir;
+    return true;
+  }
+
+  /** Toggle a stop sign on a road tile. Caller enforces "intersection only". */
+  setStopSign(x: number, y: number, on: boolean): boolean {
+    const t = this.get(x, y);
+    if (!t || !t.road) return false;
+    if (t.stopSign === on) return false;
+    t.stopSign = on;
+    return true;
   }
 
   /** True if any 4-connected neighbour of (x, y) is a road tile. */
@@ -170,10 +214,27 @@ export class Grid {
     return out;
   }
 
-  /** Set/clear an edge given its packed key (paired with incidentRoadEdges). */
-  setRoadEdgeByKey(key: number, on: boolean): boolean {
+  /** Set/clear an edge given its packed key (paired with incidentRoadEdges).
+   *  Defaults to local tier when re-setting; bulldoze restore preserves tier
+   *  via the snapshot path that writes tiles directly. */
+  setRoadEdgeByKey(key: number, on: boolean, type: RoadType = 'local'): boolean {
     const e = this.unpackEdgeKey(key);
-    return this.setRoadEdge(e.ax, e.ay, e.bx, e.by, on);
+    return this.setRoadEdge(e.ax, e.ay, e.bx, e.by, on, type);
+  }
+
+  /** Number of road edges incident to (x, y). 3+ = intersection. */
+  incidentRoadEdgeCount(x: number, y: number): number {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny)) continue;
+        if (this.roadEdges.has(this.edgeKey(x, y, nx, ny))) n++;
+      }
+    }
+    return n;
   }
 
   private unpackEdgeKey(key: number): { ax: number; ay: number; bx: number; by: number } {
@@ -190,11 +251,19 @@ export class Grid {
   /**
    * Add an edge between two adjacent tiles. Both endpoints must be in bounds
    * and within Chebyshev distance 1 (i.e. 4- or 8-connected). Marks both
-   * endpoint tiles as road.
+   * endpoint tiles as road of the given tier (default 'local'); paint always
+   * wins, so painting an avenue over an existing local upgrades the tier.
+   *
+   * Highway direction is set separately by Game (via {@link setHighwayDir})
+   * after the edges are placed — that keeps this method tier-agnostic.
    *
    * Returns true if the edge state actually changed.
    */
-  setRoadEdge(ax: number, ay: number, bx: number, by: number, on: boolean): boolean {
+  setRoadEdge(
+    ax: number, ay: number, bx: number, by: number,
+    on: boolean,
+    type: RoadType = 'local'
+  ): boolean {
     if (!this.inBounds(ax, ay) || !this.inBounds(bx, by)) return false;
     const dx = bx - ax;
     const dy = by - ay;
@@ -202,16 +271,11 @@ export class Grid {
 
     const key = this.edgeKey(ax, ay, bx, by);
     if (on) {
+      // Always (re)set tier on both endpoints — paint always wins.
+      this.setRoad(ax, ay, true, type);
+      this.setRoad(bx, by, true, type);
       if (this.roadEdges.has(key)) return false;
       this.roadEdges.add(key);
-      this.setRoad(ax, ay, true);
-      this.setRoad(bx, by, true);
-      // Roads and zones are mutually exclusive on the same tile; promoting
-      // a tile to road silently displaces any zone on it (and the building).
-      const ta = this.get(ax, ay);
-      const tb = this.get(bx, by);
-      if (ta) { ta.zone = 'none'; ta.resetDevelopment(); }
-      if (tb) { tb.zone = 'none'; tb.resetDevelopment(); }
       return true;
     } else {
       if (!this.roadEdges.has(key)) return false;
@@ -229,8 +293,9 @@ export class Grid {
 
   /**
    * Replace the road-edge set with a deserialized list (flat
-   * [ax,ay,bx,by, …]). Caller is responsible for `road` flags on
-   * endpoints having been restored separately. Used by the save loader.
+   * [ax,ay,bx,by, …]). Tile-level state (roadType, highwayDir, stopSign)
+   * is restored from per-tile snapshots BEFORE this is called — the loader
+   * here is just the edge graph.
    */
   loadRoadEdges(edges: readonly number[]): void {
     this.roadEdges.clear();
@@ -241,8 +306,7 @@ export class Grid {
       const by = edges[i + 3]!;
       if (!this.inBounds(ax, ay) || !this.inBounds(bx, by)) continue;
       this.roadEdges.add(this.edgeKey(ax, ay, bx, by));
-      // Make sure both endpoints are flagged as roads (defensive — the
-      // tile snapshot above should already have set these).
+      // Defensive — the tile snapshot above should already have set these.
       const ta = this.get(ax, ay);
       if (ta) ta.road = true;
       const tb = this.get(bx, by);

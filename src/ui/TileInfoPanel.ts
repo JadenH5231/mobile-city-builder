@@ -1,10 +1,16 @@
-import type { Building, TerrainType, Zone } from '../types';
+import type { Building, RoadType, TerrainType, Zone } from '../types';
 
 export interface TileInfo {
   x: number;
   y: number;
   terrain: TerrainType;
   road: boolean;
+  /** Road tier when `road` is true. Undefined-behaviour to read otherwise. */
+  roadType: RoadType;
+  /** Highway flow direction (0..7 from `Dir` enum) or -1. */
+  highwayDir: number;
+  /** Player-placed stop sign on this road tile. */
+  stopSign: boolean;
   zone: Zone;
   density: number;
   building: Building;
@@ -12,6 +18,8 @@ export interface TileInfo {
   hasWater: boolean;
   hasPark: boolean;
 }
+
+const DIR_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
 /**
  * Bottom-sheet style info panel. Slides up on long-press, dismissible via the
@@ -41,7 +49,14 @@ export class TileInfoPanel {
   show(info: TileInfo): void {
     this.coordsEl.textContent = `${info.x}, ${info.y}`;
     const parts: string[] = [info.terrain];
-    if (info.road) parts.push('road');
+    if (info.road) {
+      let label = info.roadType;
+      if (info.roadType === 'highway' && info.highwayDir >= 0 && info.highwayDir < 8) {
+        label += ` →${DIR_LABELS[info.highwayDir]}`;
+      }
+      if (info.stopSign) label += ' · stop';
+      parts.push(label);
+    }
     if (info.building !== 'none') parts.push(info.building.replace(/_/g, ' '));
     if (info.zone !== 'none') {
       parts.push(info.density > 0 ? `${info.zone} L${info.density}` : info.zone);

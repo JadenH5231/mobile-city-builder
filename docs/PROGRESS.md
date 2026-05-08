@@ -268,3 +268,50 @@ Player asked: "do drivers take different routes if traffic on one route makes th
 - This fixes the visual overlap on hot segments that pass-2's bumped car volume made glaring.
 
 **Known leftover:** cars on **different** segments that converge on the same intersection tile can still visually overlap. Real fix is intersection control (the user's stop-signs / lights idea, queued as the next pass). For now the visual is least-bad at a 4-way junction with low through-traffic — by the time it's a problem, the player will be ready for the intersection mechanic anyway.
+
+## Post-alpha pass 4 — big roads update
+
+User playtest after pass 3: traffic awareness was working but the network was a flat sea of identical roads, money was still soft at high pop, and crashes weren't a thing. This pass adds three road tiers, player-placed stop signs, and collision mechanics that route around the user's intersection-control idea while keeping the simulation cheap.
+
+**Three road tiers (`RoadType`):**
+- **local** — 2-lane bidirectional. Base speed 2.0 t/s, slowdown coef 0.50, maintenance $15/edge. Default tier.
+- **avenue** — 4-lane bidirectional. Base speed 2.8 t/s, slowdown coef 0.25 (so it carries roughly twice the cars before noticeable congestion), maintenance $25/edge. Wider visual.
+- **highway** — 2-lane one-way. Base speed 4.0 t/s, slowdown coef 0.20, maintenance $40/edge. Distinct color, directional arrow markers along its length.
+
+Per-tile `roadType` lives on `Tile`. `Grid.setRoad` / `Grid.setRoadEdge` take a `type` parameter; `Grid.setHighwayDir` records the flow direction on highway tiles. **Paint always wins** — painting an avenue over an existing local upgrades the tier; painting local over a highway demotes it. The trade-off is a hidden mistake risk for the player but eliminates a "you can't change this without bulldozing" friction.
+
+**Highway one-way semantics:**
+- Each highway tile has `highwayDir` (0..7 from the `Dir` enum). Set by the paint stroke: a stroke from A through B to C imprints "A → B" on tile A, "B → C" on tile B. The last tile inherits the previous segment's direction so it has somewhere to flow when extended.
+- `RoadGraph.rebuild` honours direction: a directed edge X → Y is added only if every endpoint that's a highway has its direction matching the X → Y offset. So a highway flowing east exposes east-bound edges only; west-bound is silently dropped from the adjacency.
+- Highway-to-local edges (on/off ramps) work in the highway's flow direction only — the local tile imposes no constraint, so cars enter and exit naturally where the geometry permits.
+- A* still routes optimally over the directed graph. Pathfinding picks highways for long trips because per-tier weights are cheaper (`ROAD_PATH_WEIGHT`: local 1.0 / avenue 0.75 / highway 0.55).
+
+**Per-tier vehicle speed:**
+- Cars and buses look up the destination tile's tier each segment-cross, so a car merging onto a highway accelerates within ~one segment and decelerates the same way exiting onto a local. Free-flow speed is `tierBase × car.speed`; load slowdown applies the tier's `slowdown` coefficient.
+- Buses use a `BUS_SPEED_MULT = 0.75` per-bus multiplier on top of the tier base. So a bus on local = 1.5 t/s (matches the old hardcoded value), avenue = 2.1, highway = 3.0 — transit gets a real benefit from running on faster roads.
+
+**Collisions + stop signs:**
+- A tile with **3+ incident road edges** is an intersection. When a car arrives at one without a stop sign, we roll a per-other-car collision probability: `min(0.10, otherCarsOnTile × 0.018)`. Hit means the car despawns immediately and emits a `CrashEvent`. Game drains those each render frame: `economy.recordCrash($200)` plus `developmentPressure -= 0.15` on the destination zone tile (so the business that wasn't reached visibly slows growth).
+- Stop signs are a **player-placed flag** on a road tile, costing $250. Validation: tile must be a road with 3+ incident edges and no existing stop sign. Cars arriving at a stop-sign tile pause for `STOP_SIGN_PAUSE_SEC = 0.4`s; during that pause they hold their `loadedTile` count on the stop tile so other cars approaching see the wait realistically. While stopped, no collision check fires — the player buys safety with throughput.
+- Buses are immune to both crashes and stop-sign pauses (professional drivers / dispatcher control). Another reason transit is a real lever once a network gets crowded.
+
+**Economy:**
+- Road maintenance is now per-tier — the existing flat `ROAD_EDGE_MAINTENANCE` was replaced by an iteration over edges that averages the two endpoints' tier maintenance, so a mixed-tier edge (e.g. on/off ramp) doesn't get a free pass.
+- New fields on `Economy`: `totalAccidents` (lifetime), `accidentsThisMonth` (current month, reset on rollover), `lastAccidentCost` (settled total $ for the previous month). `recordCrash(treasuryHit)` is the public mutator.
+- BudgetPanel shows an `Accidents N — $-cost` row when accidents > 0; HUD remains unchanged for now.
+
+**Renderer:**
+- Road mesh is vertex-coloured per quad — each edge picks its tier from the wider of the two endpoints' tiers; each stub from its own tile. Width scales with tier (local 0.45, avenue 0.65, highway 0.60).
+- Highway tiles get a yellow flat triangle pointing in the flow direction. Stop signs are a small red disc on a grey post.
+- Both extras live in a `roadOrnaments` Group rebuilt with the road mesh on every paint — sub-millisecond at prototype scale, nothing fancy needed.
+
+**Save schema bumped to v2:**
+- Per-tile snapshot adds `roadType`, `highwayDir`, `stopSign`. Economy snapshot adds `totalAccidents`.
+- v1 saves silently fail to load (existing dropped per the `schemaVersion !== SCHEMA` check). The user is expected to hit "Reset city" in the budget panel for a clean playtest of the new mechanics anyway.
+
+**Tools update:** the single `road` tool was split into `road_local`, `road_avenue`, `road_highway`. New `place_stop_sign` tool follows the place-tap pattern (no rubber-band, no drag). Toolbar layout: Pan, Local, Avenue, Highway, R, C, I, Power, Water, Park, Stop sign, Bus stop, Bus depot, Bulldoze.
+
+**What still bothers me / next playtest worth a look:**
+- Mixed-tier paint is forgiving but might surprise the user — painting a highway through an existing avenue overwrites the avenue tier. Mention if surprising.
+- Collision rate `0.018` per other car is a placeholder; tune up if intersections feel too forgiving or down if early-game accidents wreck a starter city. Memory: feedback_intersection_control.
+- Cars on different segments converging on the same intersection tile still visually stack — the gap maintenance is per-segment only. Real fix would be to sequence intersection arrivals (proper light/yield logic). For now the stop sign mechanic is the player's tool.

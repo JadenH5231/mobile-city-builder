@@ -4,8 +4,8 @@
 export const TILE_SIZE = 1;
 
 /**
- * Visual road width as a fraction of TILE_SIZE. 0.45 covers most of a tile
- * but leaves a sliver of grass between parallel roads.
+ * Visual road width as a fraction of TILE_SIZE for the local tier. Avenue and
+ * highway override this — see {@link ROAD_TIER}.
  */
 export const ROAD_WIDTH = 0.45;
 
@@ -13,6 +13,75 @@ export const ROAD_WIDTH = 0.45;
 export const ROAD_LIFT = 0.02;
 /** Zone overlays sit just above terrain but under roads. */
 export const ZONE_LIFT = 0.005;
+
+/**
+ * Three road tiers (post-alpha pass 4 — "big roads update").
+ *
+ * - **local**: 2-lane bidirectional. The default tier; cheapest maintenance.
+ * - **avenue**: 4-lane bidirectional. Wider, faster, higher capacity.
+ * - **highway**: 2-lane one-way. Fastest tier when free-flowing; restricted
+ *   direction means painting matters and on/off ramps need real planning.
+ *
+ * Per-tile `roadType` lives on `Tile`. Edges between adjacent road tiles are
+ * still stored as undirected pairs in `Grid.roadEdges`; direction comes from
+ * `Tile.highwayDir` and is enforced when `RoadGraph.rebuild` builds the
+ * adjacency list.
+ */
+export type RoadType = 'local' | 'avenue' | 'highway';
+
+export interface RoadTierProps {
+  /** Free-flow speed in tiles/sec. Cars on this tier multiply this by the
+   *  per-car `speed` factor before applying load slowdown. */
+  baseSpeed: number;
+  /** Slowdown coefficient: effSpeed = base / (1 + load × slowdown). Lower
+   *  number = higher capacity (more cars before noticeable slowdown). */
+  slowdown: number;
+  /** Per-edge monthly maintenance cost in $. */
+  maintenance: number;
+  /** Mesh colour — read by Renderer. */
+  color: number;
+  /** Visual width as a fraction of TILE_SIZE. */
+  width: number;
+}
+
+export const ROAD_TIER: Record<RoadType, RoadTierProps> = {
+  local:    { baseSpeed: 2.0, slowdown: 0.50, maintenance: 15, color: 0x3b3b3b, width: 0.45 },
+  avenue:   { baseSpeed: 2.8, slowdown: 0.25, maintenance: 25, color: 0x2c2c2c, width: 0.65 },
+  highway:  { baseSpeed: 4.0, slowdown: 0.20, maintenance: 40, color: 0x1f1f1f, width: 0.60 }
+};
+
+/**
+ * Pathfinding speed factor — relative cost-of-travel multiplier for each
+ * tier. Lower = cheaper to traverse, so A* prefers it. Numbers chosen so the
+ * pathfinder strongly prefers highways and avenues for long trips, falling
+ * back to locals for short hops.
+ */
+export const ROAD_PATH_WEIGHT: Record<RoadType, number> = {
+  local: 1.0,
+  avenue: 0.75,
+  highway: 0.55
+};
+
+/**
+ * Stop sign — a player-placed flag on a road tile. Cars crossing a stop-sign
+ * tile pause briefly; in exchange, no collision check fires there. Memory:
+ * feedback_intersection_control (post-alpha pass 4).
+ */
+export const STOP_SIGN_COST = 250;
+/** Real-time seconds a car pauses at a stop sign before continuing. */
+export const STOP_SIGN_PAUSE_SEC = 0.4;
+
+/**
+ * Per-other-car probability of a collision when arriving at an uncontrolled
+ * intersection (3+ road edges, no stop sign). Capped so a single jammed tile
+ * doesn't pulverise an entire stream of cars in seconds.
+ */
+export const COLLISION_RATE_PER_OTHER = 0.018;
+export const COLLISION_RATE_CAP = 0.10;
+/** Treasury hit per crash — emergency response, infrastructure damage. */
+export const CRASH_TREASURY_PENALTY = 200;
+/** Each crash deducts this much developmentPressure from the destination tile. */
+export const CRASH_DEMAND_PENALTY = 0.15;
 
 export type TerrainType = 'grass' | 'forest' | 'water' | 'sand';
 
@@ -143,10 +212,16 @@ export const MAP_SIZES: Record<'small' | 'medium' | 'large', MapSize> = {
  * Active tool. `pan` is the navigation default; the others repurpose
  * single-finger drag for painting on the grid. Pinch / two-finger pan still
  * navigate the camera regardless of tool.
+ *
+ * Road tiers (post-alpha pass 4): `road_local` / `road_avenue` /
+ * `road_highway` replaced the single `road` tool. Highway strokes also
+ * imprint a flow direction on each painted tile.
  */
 export type Tool =
   | 'pan'
-  | 'road'
+  | 'road_local'
+  | 'road_avenue'
+  | 'road_highway'
   | 'bulldoze'
   | 'residential'
   | 'commercial'
@@ -155,10 +230,18 @@ export type Tool =
   | 'place_water'
   | 'place_park'
   | 'place_bus_stop'
-  | 'place_bus_depot';
+  | 'place_bus_depot'
+  | 'place_stop_sign';
 
 /** Tools that paint a zone. Maps directly to a Zone value. */
 export const ZONE_TOOLS = new Set<Tool>(['residential', 'commercial', 'industrial']);
+
+/** Tools that paint a road, mapped to their road tier. */
+export const ROAD_TOOLS: ReadonlyMap<Tool, RoadType> = new Map([
+  ['road_local', 'local' as const],
+  ['road_avenue', 'avenue' as const],
+  ['road_highway', 'highway' as const]
+]);
 
 /** Maps a place-tool to the Building kind it places. */
 export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>> = new Map([

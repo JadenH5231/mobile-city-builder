@@ -1,12 +1,11 @@
-import type { Building, TerrainType, Zone } from '../types';
+import type { Building, RoadType, TerrainType, Zone } from '../types';
 
 /**
  * A single tile on the grid. `road` is true when *anything road-related*
  * occupies this cell — either as an endpoint of a road edge or as a
- * standalone stub. The actual graph topology lives on Grid as a set of
- * edges between adjacent tiles (4- or 8-connected). `zone` is mutually
- * exclusive with road on the same cell: a zoned tile can't be a road and
- * vice versa, enforced by Grid.setZone / setRoadEdge.
+ * standalone stub. When `road` is true, `roadType` describes the tier
+ * (local / avenue / highway) and, for highways, `highwayDir` carries the
+ * flow direction. `zone` is mutually exclusive with road on the same cell.
  *
  * All fields must stay JSON-serializable for save games.
  */
@@ -15,6 +14,13 @@ export class Tile {
   readonly y: number;
   terrain: TerrainType;
   road = false;
+  /** Road tier when `road` is true. Reset to 'local' when `road` flips off. */
+  roadType: RoadType = 'local';
+  /** Highway flow direction (0..7 from `Dir` enum), -1 when not a highway or
+   *  direction is unset. Cars on a highway tile only travel in this direction. */
+  highwayDir = -1;
+  /** Player-placed stop sign on this road tile. Only meaningful at intersections. */
+  stopSign = false;
   zone: Zone = 'none';
   /** 0 = no building yet, 1..3 = low / medium / high density. */
   density = 0;

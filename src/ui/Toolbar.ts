@@ -18,11 +18,28 @@ const BUTTONS: readonly ToolButton[] = [
     </svg>`
   },
   {
-    tool: 'road',
-    label: 'Road',
+    tool: 'road_local',
+    label: 'Local',
     icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M5 3l-2 18M19 3l2 18M9 3l-1 5M9 13l-1 5M15 3l1 5M15 13l1 5"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+    </svg>`
+  },
+  {
+    tool: 'road_avenue',
+    label: 'Avenue',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 3l-1 18M9 3l-1 18M15 3l1 18M21 3l1 18"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+    </svg>`
+  },
+  {
+    tool: 'road_highway',
+    label: 'Highway',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 3l-2 18M18 3l2 18M11 6l4 6-4 6"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" fill="none"/>
     </svg>`
   },
   {
@@ -91,6 +108,15 @@ const BUTTONS: readonly ToolButton[] = [
     icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M3 10l3-5h12l3 5v9H3z M6 14h12 M7 19v2 M17 19v2"
             stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+    </svg>`
+  },
+  {
+    tool: 'place_stop_sign',
+    label: 'Stop',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"
+            stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      <path d="M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </svg>`
   },
   {

@@ -1,19 +1,25 @@
 import type { Grid } from '../world/Grid';
 import type { Economy } from '../simulation/Economy';
-import type { Building, TerrainType, Zone } from '../types';
+import type { Building, RoadType, TerrainType, Zone } from '../types';
 
 const DB_NAME = 'city-builder';
 const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
-const SCHEMA = 1;
+/**
+ * Schema 2 (post-alpha pass 4): adds per-tile `roadType`, `highwayDir`,
+ * `stopSign`, and economy `totalAccidents`. Schema 1 saves are dropped on
+ * load (treated as no save). Bump this when on-disk shape changes.
+ */
+const SCHEMA = 2;
 
 /**
  * Single-slot save.
  *
- * - Per-tile: terrain, road bool, zone, density, dev pressure, city building.
+ * - Per-tile: terrain, road bool + tier + highway dir + stop sign, zone,
+ *   density, dev pressure, city building.
  * - Road graph: flat `[ax, ay, bx, by, …]` of every edge.
- * - Economy: treasury + three tax rates + months elapsed.
+ * - Economy: treasury + three tax rates + months elapsed + lifetime accidents.
  *
  * Vehicles, traffic flags, service flags are NOT saved — they're regenerated
  * deterministically on load (Services.recompute, Traffic stays at 0,
@@ -22,6 +28,9 @@ const SCHEMA = 1;
 export interface TileSnapshot {
   terrain: TerrainType;
   road: boolean;
+  roadType: RoadType;
+  highwayDir: number;
+  stopSign: boolean;
   zone: Zone;
   density: number;
   pressure: number;
@@ -39,6 +48,7 @@ export interface SaveData {
   taxC: number;
   taxI: number;
   monthsElapsed: number;
+  totalAccidents: number;
 }
 
 /**
@@ -112,6 +122,9 @@ export function serialize(grid: Grid, economy: Economy): SaveData {
     tiles[i++] = {
       terrain: t.terrain,
       road: t.road,
+      roadType: t.roadType,
+      highwayDir: t.highwayDir,
+      stopSign: t.stopSign,
       zone: t.zone,
       density: t.density,
       pressure: t.developmentPressure,
@@ -132,7 +145,8 @@ export function serialize(grid: Grid, economy: Economy): SaveData {
     taxR: economy.taxR,
     taxC: economy.taxC,
     taxI: economy.taxI,
-    monthsElapsed: economy.monthsElapsed
+    monthsElapsed: economy.monthsElapsed,
+    totalAccidents: economy.totalAccidents
   };
 }
 
@@ -154,6 +168,9 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy): void {
     if (!snap) continue;
     t.terrain = snap.terrain;
     t.road = snap.road;
+    t.roadType = snap.roadType ?? 'local';
+    t.highwayDir = snap.highwayDir ?? -1;
+    t.stopSign = snap.stopSign ?? false;
     t.zone = snap.zone;
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
@@ -171,6 +188,9 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy): void {
   economy.taxC = data.taxC;
   economy.taxI = data.taxI;
   economy.monthsElapsed = data.monthsElapsed;
+  economy.totalAccidents = data.totalAccidents ?? 0;
   economy.lastRevenue = 0;
   economy.lastExpenses = 0;
+  economy.lastAccidentCost = 0;
+  economy.accidentsThisMonth = 0;
 }

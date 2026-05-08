@@ -438,6 +438,10 @@ body {
   color: #ff8a8a !important;
 }
 
+.budget__row.hidden {
+  display: none;
+}
+
 .budget__sliders {
   display: flex;
   flex-direction: column;

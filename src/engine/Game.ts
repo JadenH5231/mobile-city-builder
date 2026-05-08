@@ -17,12 +17,18 @@ import { BudgetPanel } from '../ui/BudgetPanel';
 import { SaveGame, applySave, serialize, type SaveData } from '../persistence/SaveGame';
 import {
   BUILDING_COSTS,
+  CRASH_DEMAND_PENALTY,
+  CRASH_TREASURY_PENALTY,
   MAP_SIZES,
   PLACE_TOOL_TO_BUILDING,
+  ROAD_TOOLS,
+  STOP_SIGN_COST,
   TILE_SIZE,
   ZONE_TOOLS,
+  dirBetween,
   type Building,
   type MapSize,
+  type RoadType,
   type Tool,
   type Zone
 } from '../types';
@@ -239,6 +245,21 @@ export class Game {
       const dt = dtMs / 1000;
       // Cars move smoothly at render rate, decoupled from the sim tick.
       this.vehicles.update(dt, this.grid, this.grid.width);
+      // Drain any crashes that fired this frame: deduct treasury, hit the
+      // destination tile's developmentPressure (so business growth slows
+      // when crashes prevent shoppers/workers from arriving).
+      if (this.vehicles.crashesThisFrame.length > 0) {
+        for (const crash of this.vehicles.crashesThisFrame) {
+          this.economy.recordCrash(CRASH_TREASURY_PENALTY);
+          const destTile = this.grid.get(crash.destX, crash.destY);
+          if (destTile) {
+            destTile.developmentPressure = Math.max(
+              0,
+              destTile.developmentPressure - CRASH_DEMAND_PENALTY
+            );
+          }
+        }
+      }
       this.renderer.updateCars(this.vehicles, this.grid.width);
       this.buses.update(dt, this.grid, this.grid.width, this.roadGraph, this.pathfinder);
       this.renderer.updateBuses(this.buses, this.grid.width);
@@ -307,6 +328,9 @@ export class Game {
       y: tile.y,
       terrain: t.terrain,
       road: t.road,
+      roadType: t.roadType,
+      highwayDir: t.highwayDir,
+      stopSign: t.stopSign,
       zone: t.zone,
       density: t.density,
       building: t.building,
@@ -400,6 +424,17 @@ export class Game {
     this.snapshotForUndo();
     this.strokeDidSnapshot = true;
 
+    // Stop sign — tap-only on a road tile that's an intersection.
+    if (this.tool === 'place_stop_sign') {
+      const placed = this.placeStopSign(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Place tools are tap-only (single building per tap). Skip the rubber
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
@@ -459,19 +494,38 @@ export class Game {
     return true;
   }
 
+  /**
+   * Place a stop sign on a road tile. Validates: tile is an intersection
+   * (3+ incident edges), no stop sign already, treasury can afford the cost.
+   */
+  private placeStopSign(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t || !t.road || t.stopSign) return false;
+    if (this.grid.incidentRoadEdgeCount(x, y) < 3) return false;
+    if (this.economy.treasury < STOP_SIGN_COST) return false;
+    if (!this.grid.setStopSign(x, y, true)) return false;
+    this.economy.treasury -= STOP_SIGN_COST;
+    this.renderer.drawRoads(this.grid);
+    return true;
+  }
+
   private applyRubberBand(end: { x: number; y: number }): void {
     if (!this.strokeOrigin) return;
     const path = path8(this.strokeOrigin, end);
-    if (this.tool === 'road') this.applyRoadStroke(path);
+    const tier = ROAD_TOOLS.get(this.tool);
+    if (tier) this.applyRoadStroke(path, tier);
     else if (this.tool === 'bulldoze') this.applyBulldozeStroke(path);
     else if (ZONE_TOOLS.has(this.tool)) this.applyZoneStroke(path, this.tool as Zone);
   }
 
   // --- Road tool stroke ---------------------------------------------------
 
-  private applyRoadStroke(path: { x: number; y: number }[]): void {
+  private applyRoadStroke(path: { x: number; y: number }[], tier: RoadType): void {
     const desiredEdges = new Set<number>();
     const desiredStubs = new Set<number>();
+    // For highway strokes, remember the flow direction at each tile so we
+    // can imprint it after edges are placed. Map<tileIdx, dirIndex>.
+    const desiredDirs = tier === 'highway' ? new Map<number, number>() : null;
 
     if (path.length === 1) {
       desiredStubs.add(this.tileIndex(path[0]!.x, path[0]!.y));
@@ -480,6 +534,19 @@ export class Game {
         const a = path[i]!;
         const b = path[i + 1]!;
         desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
+        if (desiredDirs) {
+          // Flow direction = "from a toward b" — applies to tile a.
+          const d = dirBetween(a.x, a.y, b.x, b.y);
+          if (d !== -1) desiredDirs.set(this.tileIndex(a.x, a.y), d);
+        }
+      }
+      // Last tile inherits the previous segment's direction (no outgoing edge
+      // in this stroke; cars passing through just continue in the same flow).
+      if (desiredDirs && path.length >= 2) {
+        const a = path[path.length - 2]!;
+        const b = path[path.length - 1]!;
+        const d = dirBetween(a.x, a.y, b.x, b.y);
+        if (d !== -1) desiredDirs.set(this.tileIndex(b.x, b.y), d);
       }
     }
 
@@ -499,16 +566,19 @@ export class Game {
       this.strokeStubs.delete(sk);
     }
 
-    // Apply the desired road state.
+    // Apply the desired road state at the chosen tier. Paint always wins —
+    // an existing local under a highway stroke gets upgraded.
     for (const ek of desiredEdges) {
-      // setRoadEdge promotes the endpoints to road and silently displaces
-      // their zones. We get a small free side-effect: a zone overlay redraw
-      // will be triggered if any zone was cleared.
       const { ax, ay, bx, by } = unpackEdge(ek, this.grid.width);
       const beforeZA = this.grid.zoneAt(ax, ay);
       const beforeZB = this.grid.zoneAt(bx, by);
-      if (this.grid.hasRoadEdge(ax, ay, bx, by)) continue;
-      if (this.grid.setRoadEdge(ax, ay, bx, by, true)) {
+      const hadEdge = this.grid.hasRoadEdge(ax, ay, bx, by);
+      const ta = this.grid.get(ax, ay);
+      const tb = this.grid.get(bx, by);
+      const tierChanged =
+        (ta && ta.roadType !== tier) || (tb && tb.roadType !== tier);
+      if (hadEdge && !tierChanged) continue;
+      if (this.grid.setRoadEdge(ax, ay, bx, by, true, tier)) {
         this.strokeEdges.add(ek);
         roadsChanged = true;
         if (beforeZA !== this.grid.zoneAt(ax, ay) || beforeZB !== this.grid.zoneAt(bx, by)) {
@@ -519,15 +589,23 @@ export class Game {
     for (const sk of desiredStubs) {
       const { x, y } = this.unpackTile(sk);
       const t = this.grid.get(x, y);
-      if (!t || t.road) continue;
-      if (this.grid.setRoad(x, y, true)) {
-        // Promoting to road also displaces any zone on this tile.
+      if (!t) continue;
+      if (t.road && t.roadType === tier) continue;
+      if (this.grid.setRoad(x, y, true, tier)) {
         if (t.zone !== 'none') {
-          t.zone = 'none';
+          // setRoad already cleared the zone, but the renderer needs to know.
           zonesChanged = true;
         }
         this.strokeStubs.add(sk);
         roadsChanged = true;
+      }
+    }
+
+    // Imprint highway flow direction on each tile in the stroke.
+    if (desiredDirs) {
+      for (const [tileIdx, dir] of desiredDirs) {
+        const { x, y } = this.unpackTile(tileIdx);
+        if (this.grid.setHighwayDir(x, y, dir)) roadsChanged = true;
       }
     }
 
@@ -609,10 +687,19 @@ export class Game {
       const snap = this.strokeBulldozed.get(idx)!;
       const { x, y } = this.unpackTile(idx);
       for (const ek of snap.edges) {
-        if (this.grid.setRoadEdgeByKey(ek, true)) roadsChanged = true;
+        if (this.grid.setRoadEdgeByKey(ek, true, snap.roadType)) roadsChanged = true;
       }
       if (snap.wasRoad && !this.grid.hasRoad(x, y)) {
-        if (this.grid.setRoad(x, y, true)) roadsChanged = true;
+        if (this.grid.setRoad(x, y, true, snap.roadType)) roadsChanged = true;
+      }
+      // Re-imprint per-tile road metadata (tier, highway dir, stop sign) — the
+      // edge restore above sets tier on the endpoints but a stub-only restore
+      // and per-tile state need explicit handling.
+      const tile = this.grid.get(x, y);
+      if (tile && tile.road) {
+        tile.roadType = snap.roadType;
+        tile.highwayDir = snap.highwayDir;
+        tile.stopSign = snap.stopSign;
       }
     }
     // PHASE 2 — restore zones + density + buildings (bypasses setZone /
@@ -649,6 +736,9 @@ export class Game {
 
       const snap: BulldozedSnapshot = {
         wasRoad: tile.road,
+        roadType: tile.roadType,
+        highwayDir: tile.highwayDir,
+        stopSign: tile.stopSign,
         zone: tile.zone,
         density: tile.density,
         developmentPressure: tile.developmentPressure,
@@ -698,6 +788,10 @@ export class Game {
 
 interface BulldozedSnapshot {
   wasRoad: boolean;
+  /** Road tier captured at bulldoze time — restored if the rubber band retreats. */
+  roadType: RoadType;
+  highwayDir: number;
+  stopSign: boolean;
   zone: Zone;
   /** Density at bulldoze time — restored verbatim if the rubber band retreats. */
   density: number;

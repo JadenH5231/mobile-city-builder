@@ -19,16 +19,35 @@ const TAX_SWEET = {
 const TAX_PENALTY_DENOMINATOR = 30;
 
 /**
- * Revenue coefficients — `residents * taxR * REV_PER_RESIDENT` etc. At the
- * default rates this lands on roughly `$18/resident` and `$25/job` per month,
- * matching the post-alpha tuning numbers.
+ * Revenue coefficients — `residents * taxR * REV_PER_RESIDENT` etc.
+ *
+ * Memory: feedback_challenge_tuning (post-alpha pass 2). Cut to ~50% of the
+ * pass-1 values because per-capita revenue scaled linearly with pop while
+ * expenses didn't, leaving high-pop cities trivially cash-positive (a 1500-pop
+ * city was banking $30K+/month on default taxes).
  */
-const REV_PER_RESIDENT = 2;
-const REV_PER_C_JOB = 2.5;
-const REV_PER_I_JOB = 2.27;
+const REV_PER_RESIDENT = 1.0;
+const REV_PER_C_JOB = 1.25;
+const REV_PER_I_JOB = 1.13;
 
-/** Per-edge monthly road maintenance, in $. */
-const ROAD_EDGE_MAINTENANCE = 12;
+/** Per-edge monthly road maintenance, in $. Bumped from $12 in pass 2. */
+const ROAD_EDGE_MAINTENANCE = 15;
+
+/**
+ * Per-capita "city services" expense — generic services we don't model as
+ * buildings (trash, fire, admin). Effective rate per resident is
+ * `BASE + totalResidents / 1000 * GROWTH`, so:
+ *   100 residents → $2.1/resident → $210/mo
+ *   500 residents → $2.5/resident → $1,250/mo
+ *  1500 residents → $3.5/resident → $5,250/mo
+ *  3000 residents → $5.0/resident → $15,000/mo
+ *
+ * The growth term is what creates the real squeeze at scale — pop alone now
+ * generates expenses, not just infrastructure. Memory:
+ * feedback_challenge_tuning (post-alpha pass 2).
+ */
+const SERVICES_BASE_PER_RESIDENT = 2;
+const SERVICES_GROWTH_PER_1K = 1;
 
 /**
  * Treasury, tax rates, monthly settlement. The settlement runs every
@@ -68,6 +87,11 @@ export class Economy {
       if (t.building === 'none') continue;
       expenses += BUILDING_UPKEEP[t.building as Exclude<Building, 'none'>] ?? 0;
     }
+    // Per-capita services with mild quadratic growth — see constants above.
+    const ratePerResident =
+      SERVICES_BASE_PER_RESIDENT +
+      (population.totalResidents / 1000) * SERVICES_GROWTH_PER_1K;
+    expenses += population.totalResidents * ratePerResident;
 
     const netRevenue = Math.round(revenue);
     const netExpenses = Math.round(expenses);

@@ -4,8 +4,16 @@ import type { RoadGraph } from './RoadGraph';
 import { MAX_VEHICLES, VEHICLE_PALETTE } from '../types';
 import { nearBusStop } from './Buses';
 
-/** Real-time milliseconds between spawn attempts. */
-const SPAWN_INTERVAL_MS = 1500;
+/**
+ * Spawn attempts per resident per real-time second. With 1500 residents that's
+ * ~7.5 attempts/sec — enough to saturate the road network and force the
+ * player to think about traffic flow.
+ *
+ * Memory: feedback_traffic_pressure (post-alpha pass 2). The original fixed
+ * 1.5s interval kept a 100-pop city and a 1500-pop city at the same car
+ * volume, which is why traffic stress never engaged in playtesting.
+ */
+const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
 /** Tiles per second of a free-flowing car. */
 const BASE_SPEED = 2.0;
 /** Slowdown coefficient: effective speed = base / (1 + load × COEF). Memory: feedback_traffic_pressure. */
@@ -41,13 +49,31 @@ export interface Car {
  */
 export class Vehicles {
   readonly cars: Car[] = [];
-  private spawnAccumMs = 0;
+  /** Spawn credits accumulator, in fractional cars-to-spawn. */
+  private spawnAccumulator = 0;
 
-  spawnTick(stepMs: number, grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
-    this.spawnAccumMs += stepMs;
-    while (this.spawnAccumMs >= SPAWN_INTERVAL_MS) {
-      this.spawnAccumMs -= SPAWN_INTERVAL_MS;
-      if (this.cars.length >= MAX_VEHICLES) continue;
+  /**
+   * @param residents Total residents in the city — drives spawn rate. Pass
+   *   `Population.totalResidents`. Zero means no spawn attempts.
+   */
+  spawnTick(
+    stepMs: number,
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding,
+    residents: number
+  ): void {
+    if (residents <= 0) return;
+    const seconds = stepMs / 1000;
+    this.spawnAccumulator += residents * SPAWN_PER_RESIDENT_PER_SEC * seconds;
+    while (this.spawnAccumulator >= 1) {
+      this.spawnAccumulator -= 1;
+      if (this.cars.length >= MAX_VEHICLES) {
+        // Don't bank credits while at cap — the network is full, and hoarding
+        // would cause a thundering-herd respawn the moment cars finish trips.
+        this.spawnAccumulator = 0;
+        break;
+      }
       this.attemptSpawn(grid, roadGraph, pathfinder);
     }
   }

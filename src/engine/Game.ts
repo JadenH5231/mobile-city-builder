@@ -220,7 +220,13 @@ export class Game {
         this.population.tick(this.grid, this.economy, this.traffic);
         if (this.development.tick(this.grid)) buildingsDirty = true;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population);
-        this.vehicles.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
+        this.vehicles.spawnTick(
+          SIM_STEP_MS,
+          this.grid,
+          this.roadGraph,
+          this.pathfinder,
+          this.population.totalResidents
+        );
         this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
       }
       // If we hit the cap, drop accumulated time so we don't immediately

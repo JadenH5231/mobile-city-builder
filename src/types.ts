@@ -66,8 +66,12 @@ export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48];
 /** Jobs per industrial tile by density tier. */
 export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
 
-/** Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh. */
-export const MAX_VEHICLES = 80;
+/**
+ * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —
+ * 250 lets a fully-developed Medium map saturate without the spawner silently
+ * dropping cars. Memory: feedback_traffic_pressure (post-alpha pass 2).
+ */
+export const MAX_VEHICLES = 250;
 
 /** Per-instance car colours — picked at random when a car spawns. */
 export const VEHICLE_PALETTE: readonly number[] = [

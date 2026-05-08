@@ -229,3 +229,24 @@ Things I caught during the run-through that the user will probably hit:
 - **Map size is hard-coded to small (64×64).** Medium/large work but there's no UI to pick. Edit `main.ts`'s `MAP_SIZES.small` to test bigger maps.
 - **Save schema doesn't persist current tool / camera position.** Reloading drops you on Pan tool, default camera. Not a big issue but worth noting.
 - **Tile traffic load can briefly under-flow when bulldozing.** Math is `Math.max(0, load - 1)` to defend, but the EMA can decay slightly slower than ideal in edge cases.
+
+## Post-alpha pass 2 — sim scaling fix
+
+User playtest at pop 1,492: never hit a single traffic problem with no transit and minimal effort, treasury reached $500K. Diagnosis: the sim didn't actually scale with city size.
+
+**Traffic was capped, not stressed.**
+- Old: `SPAWN_INTERVAL_MS = 1500` was a fixed real-time interval — 1 spawn attempt per 1.5s **regardless of population**. A 100-pop city and a 1,500-pop city saw the same car volume.
+- Old: `MAX_VEHICLES = 80` total cars on the entire map. With 1,500 residents, that's 1 car per 18 residents — never enough to congest anything.
+- New: spawn rate scales with `Population.totalResidents`. `SPAWN_PER_RESIDENT_PER_SEC = 0.005` — 1500 residents → 7.5 attempts/sec → ~200 cars in flight at typical trip length.
+- New: `MAX_VEHICLES = 250`. Big enough that a fully-developed Medium map can saturate.
+- New: `Vehicles.spawnTick` takes `residents` as a parameter. `Game` passes `population.totalResidents` from the prior sim step.
+- The existing `Traffic` EMA + `Population` stress penalty mechanism (R demand drag up to 0.7 at full stress) now actually engages because cars are present in volume.
+
+**Revenue was unbounded, expenses weren't.**
+- Old revenue coefs `2 / 2.5 / 2.27` cut to `1.0 / 1.25 / 1.13`. Per-capita revenue stayed proportional to taxes but at half the rate.
+- New per-capita "city services" expense: `$2/resident + $1/resident per 1000 residents in the city`. So a 100-pop city pays $210/mo, a 1,500-pop city pays $5,250/mo, a 3,000-pop city pays $15,000/mo. The growth term is what creates the squeeze at scale — population alone now generates expenses, not just infrastructure.
+- Road maintenance bumped $12 → $15 per edge. Sprawling networks cost meaningfully more.
+
+Net effect at pop 1,500 (default taxes 9/10/11): revenue ~$19K/mo, expenses ~$15-18K/mo. Player has to actually optimize — raise taxes (and eat the demand drag), tighten the road network, or grow density rather than sprawl.
+
+Bus suppression was deliberately left at 70% (user has not yet playtested transit) — a follow-up pass will dial it once they get there.

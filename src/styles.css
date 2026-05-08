@@ -510,6 +510,122 @@ body {
   display: none;
 }
 
+/* ---- Happiness panel ------------------------------------------------- */
+
+/* The community-sentiment sheet is taller than budget — let it grow up
+   to most of the viewport, with a scrollable list inside. */
+.info-panel--tall {
+  max-height: calc(100vh - 120px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#happiness-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 8px;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#happiness-overall[data-bucket="elated"] { color: #6dd06a; }
+#happiness-overall[data-bucket="happy"]  { color: #a8c97f; }
+#happiness-overall[data-bucket="neutral"] { color: var(--pill-fg); }
+#happiness-overall[data-bucket="unhappy"] { color: #eec453; }
+#happiness-overall[data-bucket="furious"] { color: #ff8a8a; }
+
+.happiness__row {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: border-color 200ms ease;
+}
+
+.happiness__row[data-bucket="furious"] { border-color: rgba(208, 106, 138, 0.45); }
+.happiness__row[data-bucket="unhappy"] { border-color: rgba(238, 196, 83, 0.30); }
+.happiness__row[data-bucket="elated"]  { border-color: rgba(109, 208, 106, 0.40); }
+
+.happiness__avatar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.7);
+  letter-spacing: 0.02em;
+}
+
+.happiness__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.happiness__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.happiness__name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+}
+
+.happiness__mood {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.7);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.happiness__title {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.55);
+  margin-top: 1px;
+}
+
+.happiness__comment {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--pill-fg);
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.happiness__cares {
+  font-size: 10px;
+  color: rgba(207, 232, 214, 0.40);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.happiness__bar {
+  margin-top: 8px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.happiness__bar-fill {
+  height: 100%;
+  background: #a8c97f;
+  border-radius: 2px;
+  transition: width 250ms ease, background-color 250ms ease;
+}
+
 .budget__sliders {
   display: flex;
   flex-direction: column;

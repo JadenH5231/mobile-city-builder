@@ -6,6 +6,7 @@ Update this file every time you complete (or partially complete) a build-order s
 
 - **Alpha 1.0** — tagged `alpha-1.0` on `main`. All 14 build steps + four post-alpha tuning passes (pass 1: challenge tuning + Undo; pass 2: sim scaling fix; pass 3: traffic-aware spawn routing + same-segment gap; pass 4: big roads update — three road tiers, highway one-way, player-placed stop signs with FIFO yielding, collisions, queue spillback). Save schema v2.
 - **Alpha 1.1 (in progress)** — toolbar groups variations behind one button (Roads → Local/Avenue/Highway popover; R/C/I → Low/Med/High popover); zoning splits into player-set density permissions (low caps at L1, medium at L2, high at L3 if services support it). Save schema v3 (v2 loadable via "default to high cap" compat).
+- **Alpha 1.2 (in progress)** — Happiness & Factions keystone. Ten named-leader factions (NIMBYs, YIMBYs, Environmentalists, Hometown Heritage, Chamber, Transit Riders, Drivers, Taxpayers, Safer Streets, Working Families) each with a persona, happiness derived from city state, and 15 mood-bucketed Facebook-style comments. Population pill opens Community Sentiment panel. Documented as a keystone in CLAUDE.md — every future feature should explicitly consider faction impact.
 
 ## Status
 

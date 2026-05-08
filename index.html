@@ -16,7 +16,7 @@
   <body>
     <div id="app"></div>
     <div id="hud">
-      <div id="hud-pop" class="pill mono" title="Population">Pop · 0</div>
+      <button id="hud-pop" type="button" class="pill mono treasury" aria-label="Open community sentiment">Pop · 0</button>
       <div id="hud-rci" class="pill rci" aria-label="RCI demand">
         <div class="rci__bar" data-zone="r" title="Residential demand">
           <div class="rci__fill"></div>
@@ -125,6 +125,24 @@
       </div>
 
       <button id="budget-reset" type="button" class="budget__reset">Reset city</button>
+    </section>
+    <section
+      id="happiness-panel"
+      class="info-panel info-panel--tall hidden"
+      role="dialog"
+      aria-label="Community sentiment"
+      aria-hidden="true"
+    >
+      <div class="info-panel__handle" aria-hidden="true"></div>
+      <button
+        id="happiness-close"
+        class="info-panel__close"
+        type="button"
+        aria-label="Close community sentiment"
+      >×</button>
+      <div class="info-panel__title">Community Sentiment</div>
+      <div class="info-panel__sub" id="happiness-overall">City mood: —</div>
+      <div id="happiness-list" class="happiness__list"></div>
     </section>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
     <script type="module" src="/src/main.ts"></script>

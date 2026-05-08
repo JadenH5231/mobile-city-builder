@@ -22,6 +22,10 @@ if (treasuryEl) {
   treasuryEl.addEventListener('click', () => game.toggleBudget());
 }
 
+if (popEl) {
+  popEl.addEventListener('click', () => game.toggleHappiness());
+}
+
 const heatmapBtn = document.getElementById('hud-heatmap');
 if (heatmapBtn) {
   heatmapBtn.addEventListener('click', () => {
@@ -77,8 +81,9 @@ game.tickCallbacks.push(() => {
     treasuryEl.classList.toggle('treasury--negative', game.economy.treasury < 0);
   }
 
-  // Keep the budget panel's numbers fresh while it's open.
+  // Keep the budget / happiness panel numbers fresh while either is open.
   if (game.budgetPanel.isOpen()) game.budgetPanel.refresh();
+  if (game.happinessPanel.isOpen()) game.happinessPanel.refresh();
 
   if (undoBtn) {
     const enabled = game.canUndo();

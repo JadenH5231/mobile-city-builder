@@ -123,6 +123,47 @@ npm run build        # type-check + production build → dist/
 - If the user asks for something that conflicts with the spec or anti-goals (e.g. "add a stamina bar"), surface the conflict and ask before doing it.
 - Placeholder art is fine throughout. Polish comes after the simulation is fun.
 
+## ⚡ Keystone feature: Happiness & Factions
+
+The **Happiness system** (Alpha 1.2) is a load-bearing keystone, not a side
+feature. The city has a fixed roster of factions, each with a named
+Community Leader, a persona, and a happiness score in [-1, 1] derived
+from current city state. Implementation lives in
+`src/simulation/Happiness.ts`; the UI is the Community Sentiment panel
+(open via the Population pill in the HUD).
+
+**Why it's a keystone:** the future of the game will lean on this layer —
+elections, policy levers, executive orders, public hearings, lobby groups,
+"events" tied to individual leaders, mod-squad notifications when a
+faction goes furious. Each one of those features should consume happiness
+state, not bolt on its own parallel mood system.
+
+**Rule for every new feature you add:** ask, *which factions does this
+touch, and how should their `compute` functions update?* Bus-only lanes
+make `transit` happier and `drivers` angrier; a power plant makes
+`environmentalists` furious; a tax cut delights `taxpayers` but starves
+`safer_streets`. The answer is rarely "none." When in doubt, add a small
+delta to the relevant faction's `compute` and let testing tune it.
+
+**Tone for leader comments:** flamboyant local-community-Facebook —
+heavy caps for emphasis, exclamation marks, hashtags where natural,
+emoji where natural, the unmistakable cadence of someone Showing Up.
+Each leader has a distinct voice; preserve that voice when adding new
+buckets or comment variants.
+
+The factions and their guiding principles (see Happiness.ts for full
+state):
+1. **NIMBY Coalition** (Karen Whitfield) — anti-density-near-them, anti-industry, pro-park
+2. **YIMBYs United** (Marcus Chen) — pro-density, pro-transit, anti-sprawl
+3. **Greenleaf Environmental Council** (Dr. Linda Greenfield) — anti-industry, anti-deforestation, pro-park
+4. **Hometown Heritage Society** (Bud Hargrove) — pro-rural-feel, anti-skyscraper, anti-large-network
+5. **Chamber of Commerce** (Chad Donaldson) — pro-business, pro-low-business-tax
+6. **Transit Riders Union** (Priya Patel) — pro-bus, pro-density-with-transit, anti-stroad
+7. **Drivers' Association** (Frank Mahoney) — pro-road, anti-bus-stop-near-R, pro-easy-driving
+8. **Taxpayers' Alliance** (Eleanor Vance) — pro-surplus, anti-deficit, anti-high-tax
+9. **Safer Streets Coalition** (Dr. Marcus Tate) — pro-stop-signs, anti-accidents, pro-services
+10. **Working Families First** (Maria Rodriguez) — pro-jobs, anti-high-R-tax, pro-services
+
 ## Keep documentation in sync with code
 
 **This is non-negotiable.** The user works across multiple machines via iCloud

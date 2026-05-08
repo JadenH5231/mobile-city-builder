@@ -14,6 +14,8 @@ import { Services } from '../simulation/Services';
 import { Traffic } from '../simulation/Traffic';
 import { Vehicles } from '../simulation/Vehicles';
 import { BudgetPanel } from '../ui/BudgetPanel';
+import { HappinessPanel } from '../ui/HappinessPanel';
+import { Happiness } from '../simulation/Happiness';
 import { SaveGame, applySave, serialize, type SaveData } from '../persistence/SaveGame';
 import {
   BUILDING_COSTS,
@@ -69,6 +71,9 @@ export class Game {
   panel!: TileInfoPanel;
   toolbar!: Toolbar;
   budgetPanel!: BudgetPanel;
+  happinessPanel!: HappinessPanel;
+  /** Happiness state: faction map, recomputed when the panel refreshes. */
+  readonly happiness = new Happiness();
 
   selected: { x: number; y: number } | null = null;
   tool: Tool = 'pan';
@@ -154,6 +159,13 @@ export class Game {
     this.toolbar = new Toolbar();
     this.toolbar.onChange = (tool) => this.setTool(tool);
     this.budgetPanel = new BudgetPanel(this.economy);
+    this.happinessPanel = new HappinessPanel({
+      happiness: this.happiness,
+      grid: () => this.grid,
+      economy: this.economy,
+      population: this.population,
+      traffic: this.traffic
+    });
 
     // Try to restore an existing save before drawing initial state. Failures
     // (no save / version mismatch / IDB unavailable) silently fall through
@@ -400,13 +412,25 @@ export class Game {
     location.reload();
   }
 
-  /** Toggle the budget panel; closes the tile-info card if it was open. */
+  /** Toggle the budget panel; closes any other bottom panel. */
   toggleBudget(): void {
     if (this.budgetPanel.isOpen()) {
       this.budgetPanel.hide();
     } else {
       this.panel.hide();
+      this.happinessPanel.hide();
       this.budgetPanel.show();
+    }
+  }
+
+  /** Toggle the community-sentiment panel; closes any other bottom panel. */
+  toggleHappiness(): void {
+    if (this.happinessPanel.isOpen()) {
+      this.happinessPanel.hide();
+    } else {
+      this.panel.hide();
+      this.budgetPanel.hide();
+      this.happinessPanel.show();
     }
   }
 

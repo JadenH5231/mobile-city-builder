@@ -1,0 +1,20 @@
+{
+  "name": "city-builder",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Premium mobile city-builder prototype (PixiJS + TypeScript).",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}

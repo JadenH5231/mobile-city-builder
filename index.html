@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Mobile viewport: lock zoom (we handle pinch ourselves), respect notches. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0a1410" />
+    <title>City Builder — prototype</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud">
+      <div id="hud-pill" class="pill">Pan • Pinch to zoom</div>
+      <div id="hud-fps" class="pill mono">— fps</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

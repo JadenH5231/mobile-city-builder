@@ -170,11 +170,20 @@ export class Toolbar {
     document.addEventListener('pointerdown', (e) => {
       if (this.openPopoverId === null) return;
       const target = e.target as Node | null;
-      // Don't close if the tap was inside the toolbar itself — group / member
-      // handlers manage their own state.
-      if (target && this.el.contains(target)) return;
+      if (!target) return;
+      // Don't close if the tap was inside the toolbar itself, or inside the
+      // currently-open popover (which now lives at body level).
+      if (this.el.contains(target)) return;
+      const openPop = this.groupPopovers.get(this.openPopoverId);
+      if (openPop && openPop.contains(target)) return;
       this.closePopovers();
     });
+
+    // Horizontal scroll on the toolbar moves the anchor under the popover —
+    // close it so the visual relationship doesn't drift. Same for window
+    // resize, which would offset the body-positioned popover.
+    this.el.addEventListener('scroll', () => this.closePopovers(), { passive: true });
+    window.addEventListener('resize', () => this.closePopovers());
   }
 
   /** Programmatic tool change. Used by Game when entering paint vs navigate
@@ -237,6 +246,10 @@ export class Toolbar {
     wrap.appendChild(btn);
     this.groupButtons.set(group.id, btn);
 
+    // Popover is appended to <body>, NOT to the toolbar. The toolbar uses
+    // overflow-x:auto for horizontal scrolling, which forces overflow-y to
+    // a clipping value too (per CSS spec) and would clip a popover anchored
+    // inside it. Body-level + position:fixed dodges all ancestor clipping.
     const pop = document.createElement('div');
     pop.className = 'toolbar__popover hidden';
     pop.dataset.group = group.id;
@@ -258,8 +271,9 @@ export class Toolbar {
       pop.appendChild(memBtn);
       this.toolButtons.set(m.tool, memBtn);
     }
-    wrap.appendChild(pop);
+    document.body.appendChild(pop);
     this.groupPopovers.set(group.id, pop);
+
     return wrap;
   }
 
@@ -270,7 +284,14 @@ export class Toolbar {
     }
     this.closePopovers();
     const pop = this.groupPopovers.get(id);
-    if (!pop) return;
+    const btn = this.groupButtons.get(id);
+    if (!pop || !btn) return;
+    // Position the popover above the group button, centred horizontally.
+    // bottom-anchored so it sits just above the pill regardless of its
+    // own height.
+    const rect = btn.getBoundingClientRect();
+    pop.style.left = `${rect.left + rect.width / 2}px`;
+    pop.style.bottom = `${Math.max(0, window.innerHeight - rect.top + 6)}px`;
     pop.classList.remove('hidden');
     this.openPopoverId = id;
   }

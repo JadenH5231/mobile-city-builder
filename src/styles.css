@@ -221,13 +221,13 @@ body {
   opacity: 0.5;
 }
 
-/* Popover floats above the toolbar (bottom of viewport), centred over the
-   group button. Uses `bottom: 100%` relative to the .toolbar__group wrapper
-   so it sits just above the pill. */
+/* Popover floats above its anchor group button. Lives at <body> level so
+   the toolbar's overflow:auto can't clip it, with `position: fixed` so it's
+   anchored to the viewport. Toolbar.ts sets `left` and `bottom` from the
+   group button's bounding rect when opening; `translateX(-50%)` centres
+   the popover under the (left, bottom) anchor point. */
 .toolbar__popover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
+  position: fixed;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

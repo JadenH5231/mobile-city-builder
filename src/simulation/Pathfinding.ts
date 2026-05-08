@@ -13,10 +13,22 @@ export class Pathfinding {
   private readonly open = new Set<number>();
 
   /**
+   * @param edgeCost Optional cost transformer. Called for each candidate edge
+   *   from `from` → `to` with the static base weight (1 for orthogonal, √2
+   *   for diagonal). Returning `base` means "untouched"; returning `base × k`
+   *   inflates the edge by `k`. Used by Vehicles to bias path search away
+   *   from congested tiles. Heuristic stays admissible because Euclidean
+   *   distance is still a lower bound when edge costs only grow.
    * @returns Tile flat indices from start (inclusive) to end (inclusive), or
    *   null if no path exists. Both endpoints must be present in the graph.
    */
-  findPath(graph: RoadGraph, start: number, end: number, gridWidth: number): number[] | null {
+  findPath(
+    graph: RoadGraph,
+    start: number,
+    end: number,
+    gridWidth: number,
+    edgeCost?: (from: number, to: number, base: number) => number
+  ): number[] | null {
     if (!graph.has(start) || !graph.has(end)) return null;
     if (start === end) return [start];
 
@@ -45,7 +57,8 @@ export class Pathfinding {
       if (!neighbours) continue;
 
       for (const n of neighbours) {
-        const tentative = cg + n.w;
+        const w = edgeCost ? edgeCost(current, n.idx, n.w) : n.w;
+        const tentative = cg + w;
         if (tentative < (this.gScore.get(n.idx) ?? Infinity)) {
           this.cameFrom.set(n.idx, current);
           this.gScore.set(n.idx, tentative);

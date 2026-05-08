@@ -250,3 +250,21 @@ User playtest at pop 1,492: never hit a single traffic problem with no transit a
 Net effect at pop 1,500 (default taxes 9/10/11): revenue ~$19K/mo, expenses ~$15-18K/mo. Player has to actually optimize — raise taxes (and eat the demand drag), tighten the road network, or grow density rather than sprawl.
 
 Bus suppression was deliberately left at 70% (user has not yet playtested transit) — a follow-up pass will dial it once they get there.
+
+## Post-alpha pass 3 — traffic-aware spawn routing + same-segment gap
+
+Player asked: "do drivers take different routes if traffic on one route makes the trip slower?" Old answer: no — A* used static edge weights and cars baked their `pathTiles` at spawn. Two consequences: a popular corridor jammed solid while parallel roads sat empty, and many cars on the same hot segment converged to identical world positions (visual overlap).
+
+**Spawn-time traffic awareness:**
+- `Pathfinding.findPath` gained an optional `edgeCost(from, to, base)` callback. When provided it's used in place of the static `n.w` for each candidate edge.
+- `Vehicles.attemptSpawn` passes a closure that returns `base × (1 + trafficLoadAvg × CONGESTION_PATH_COEF)`. With `CONGESTION_PATH_COEF = 0.6`, a tile sitting at avg-load 1 looks 60% more expensive than empty road. Heuristic stays admissible because Euclidean distance is still a lower bound when costs only grow.
+- Cars in flight don't re-plan — that's a deliberate scope choice for now (re-planning every N seconds would be ~30 lines but is a separate pass). The fact that *new* spawns route around the jam is enough to thin a hot route out over time.
+- `Buses` still calls the unparameterised path API → static weights → buses don't avoid traffic. That's deliberate (transit shouldn't reroute on its own).
+
+**Same-segment minimum gap:**
+- Before each `update` pass, build a per-car `leaderT` array: for each car, the smallest `segmentT` among other cars sharing the same `(segStart, segEnd)` pair that's strictly ahead (with car-index tie-break so two cars at identical T don't gridlock pretending they're each behind the other).
+- In the per-car advance, cap `segmentT` so the back car never gets within `MIN_CAR_GAP = 0.18` of its leader.
+- O(n²) but at the new `MAX_VEHICLES = 250` cap that's 62K cheap inner iterations per render frame — negligible.
+- This fixes the visual overlap on hot segments that pass-2's bumped car volume made glaring.
+
+**Known leftover:** cars on **different** segments that converge on the same intersection tile can still visually overlap. Real fix is intersection control (the user's stop-signs / lights idea, queued as the next pass). For now the visual is least-bad at a 4-way junction with low through-traffic — by the time it's a problem, the player will be ready for the intersection mechanic anyway.

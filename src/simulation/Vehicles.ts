@@ -20,6 +20,26 @@ const BASE_SPEED = 2.0;
 const SLOWDOWN_COEF = 0.5;
 /** Probability a candidate spawn near a bus stop is silently dropped. */
 const BUS_STOP_SUPPRESSION = 0.7;
+/**
+ * Path-search congestion coefficient. Each unit of EMA load on a tile
+ * inflates the edge cost into that tile by this fraction — so a tile sitting
+ * at avg-load 1 looks 60% more expensive to spawn-time pathfinding than an
+ * empty road. Drivers spawning while the map has hot routes naturally pick
+ * around them. Cars in flight don't re-plan (we only re-route at spawn).
+ *
+ * Tuning notes: too high (≥1.5) and the network fragments — drivers will
+ * take ridiculous detours to avoid mild traffic. Too low (≤0.2) and the
+ * effect is invisible. 0.6 reads as "drivers actively prefer empty roads
+ * but still take busier ones if they're meaningfully shorter."
+ */
+const CONGESTION_PATH_COEF = 0.6;
+/**
+ * Minimum gap between same-segment cars, expressed as a fraction of segment
+ * length. 0.18 ≈ "two car-lengths"; the back car holds back from the front
+ * car so they don't visually overlap. This is what stops the prior bug where
+ * many cars on the same hot segment converged on identical world positions.
+ */
+const MIN_CAR_GAP = 0.18;
 
 export interface Car {
   /** Flat tile indices, length ≥ 2. The path the car follows in order. */
@@ -100,7 +120,17 @@ export class Vehicles {
     const endIdx = endRoad.y * grid.width + endRoad.x;
     if (startIdx === endIdx) return;
 
-    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width);
+    // Traffic-aware spawn-time pathfinding: each candidate edge's cost is the
+    // static base weight inflated by the destination tile's EMA load. Drivers
+    // spawning during a jam pick around it.
+    const edgeCost = (_from: number, to: number, base: number): number => {
+      const tx = to % grid.width;
+      const ty = (to - tx) / grid.width;
+      const t = grid.get(tx, ty);
+      if (!t) return base;
+      return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
+    };
+    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
     if (!path || path.length < 2) return;
 
     const color = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
@@ -121,8 +151,44 @@ export class Vehicles {
    * out (with their load decremented). Speed is scaled by the load on the
    * tile they're heading toward — high load → noticeable slowdown, propagates
    * upstream.
+   *
+   * Per-segment minimum-gap maintenance: before advancing a car, we look up
+   * the closest car ahead of it on the **same segment**, and cap this car's
+   * `segmentT` advance so it never gets within {@link MIN_CAR_GAP} of that
+   * leader. Without this, multiple cars on the same hot route converge to
+   * identical positions and visually overlap.
+   *
+   * Note: cars on **different segments** that happen to converge on the same
+   * intersection tile can still overlap visually. Fixing that needs proper
+   * intersection control (a future build step) — left out here.
    */
   update(dt: number, grid: Grid, gridWidth: number): void {
+    // Build a per-segment leader map: for each car index, the smallest
+    // segmentT among cars sharing the same (segStart, segEnd) that's strictly
+    // greater than this car's segmentT. O(n²) inner pass is fine at n ≤ 250.
+    const leaderT: number[] = new Array(this.cars.length);
+    for (let i = 0; i < this.cars.length; i++) {
+      const me = this.cars[i]!;
+      const myA = me.pathTiles[me.segmentIdx]!;
+      const myB = me.pathTiles[me.segmentIdx + 1]!;
+      let best = Infinity;
+      for (let j = 0; j < this.cars.length; j++) {
+        if (i === j) continue;
+        const other = this.cars[j]!;
+        if (other.pathTiles[other.segmentIdx] !== myA) continue;
+        if (other.pathTiles[other.segmentIdx + 1] !== myB) continue;
+        // Tie-break on car index so two cars at identical segmentT don't both
+        // think they're behind each other (they'd both stall to gridlock).
+        const aheadT =
+          other.segmentT > me.segmentT ||
+          (other.segmentT === me.segmentT && j < i)
+            ? other.segmentT
+            : Infinity;
+        if (aheadT < best) best = aheadT;
+      }
+      leaderT[i] = best;
+    }
+
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
       const aIdx = car.pathTiles[car.segmentIdx]!;
@@ -138,7 +204,15 @@ export class Vehicles {
       const nextLoad = grid.get(bx, by)?.trafficLoad ?? 0;
       const effSpeed = car.speed / (1 + nextLoad * SLOWDOWN_COEF);
 
-      car.segmentT += (effSpeed * dt) / segLen;
+      let advance = (effSpeed * dt) / segLen;
+      const lt = leaderT[i]!;
+      if (lt !== Infinity) {
+        // Cap this car's segmentT so it stops MIN_CAR_GAP behind the leader.
+        const targetT = Math.max(0, lt - MIN_CAR_GAP);
+        const allowedAdvance = Math.max(0, targetT - car.segmentT);
+        advance = Math.min(advance, allowedAdvance);
+      }
+      car.segmentT += advance;
       while (car.segmentT >= 1) {
         car.segmentT -= 1;
         car.segmentIdx++;

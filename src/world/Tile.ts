@@ -22,6 +22,13 @@ export class Tile {
   /** Player-placed stop sign on this road tile. Only meaningful at intersections. */
   stopSign = false;
   zone: Zone = 'none';
+  /**
+   * Player-set density cap (1..3) — the upper bound this tile is *permitted*
+   * to grow to. 0 means unzoned. Effective max density is the minimum of
+   * this and the services-allowed cap (services still gate L3). Memory:
+   * feedback_zone_tier_permissions.
+   */
+  zoneCap: 0 | 1 | 2 | 3 = 0;
   /** 0 = no building yet, 1..3 = low / medium / high density. */
   density = 0;
   /** Sim-tick accumulator. Crossing 1.0 promotes density by one tier. */

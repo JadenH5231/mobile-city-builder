@@ -24,7 +24,8 @@ import {
   ROAD_TOOLS,
   STOP_SIGN_COST,
   TILE_SIZE,
-  ZONE_TOOLS,
+  ZONE_TIER_CAP,
+  ZONE_TOOL_INFO,
   dirBetween,
   type Building,
   type MapSize,
@@ -80,8 +81,8 @@ export class Game {
   private readonly strokeEdges = new Set<number>();
   /** Road tool: tile indices flipped from road=false to road=true. */
   private readonly strokeStubs = new Set<number>();
-  /** Zone tool: per-tile snapshot of original zone for revert. */
-  private readonly strokeZones = new Map<number, Zone>();
+  /** Zone tool: per-tile snapshot of original (zone, cap) for revert. */
+  private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 }>();
   /** Bulldoze tool: per-tile snapshot of all destroyed state for revert. */
   private readonly strokeBulldozed = new Map<number, BulldozedSnapshot>();
 
@@ -332,6 +333,7 @@ export class Game {
       highwayDir: t.highwayDir,
       stopSign: t.stopSign,
       zone: t.zone,
+      zoneCap: t.zoneCap,
       density: t.density,
       building: t.building,
       hasPower: t.hasPower,
@@ -513,9 +515,18 @@ export class Game {
     if (!this.strokeOrigin) return;
     const path = path8(this.strokeOrigin, end);
     const tier = ROAD_TOOLS.get(this.tool);
-    if (tier) this.applyRoadStroke(path, tier);
-    else if (this.tool === 'bulldoze') this.applyBulldozeStroke(path);
-    else if (ZONE_TOOLS.has(this.tool)) this.applyZoneStroke(path, this.tool as Zone);
+    if (tier) {
+      this.applyRoadStroke(path, tier);
+      return;
+    }
+    if (this.tool === 'bulldoze') {
+      this.applyBulldozeStroke(path);
+      return;
+    }
+    const zoneInfo = ZONE_TOOL_INFO.get(this.tool);
+    if (zoneInfo) {
+      this.applyZoneStroke(path, zoneInfo.zone, ZONE_TIER_CAP[zoneInfo.tier]);
+    }
   }
 
   // --- Road tool stroke ---------------------------------------------------
@@ -623,7 +634,11 @@ export class Game {
 
   // --- Zone tool stroke ---------------------------------------------------
 
-  private applyZoneStroke(path: { x: number; y: number }[], zone: Zone): void {
+  private applyZoneStroke(
+    path: { x: number; y: number }[],
+    zone: Exclude<Zone, 'none'>,
+    cap: 1 | 2 | 3
+  ): void {
     const desired = new Set<number>();
     for (const p of path) desired.add(this.tileIndex(p.x, p.y));
 
@@ -634,25 +649,24 @@ export class Game {
     for (const [idx, original] of this.strokeZones) {
       if (desired.has(idx)) continue;
       const { x, y } = this.unpackTile(idx);
-      if (this.grid.setZone(x, y, original)) changed = true;
+      if (this.grid.setZone(x, y, original.zone, original.cap)) changed = true;
       this.strokeZones.delete(idx);
     }
 
-    // Apply desired zone where eligible. Invalid tiles (road, no road
+    // Apply desired zone+cap where eligible. Invalid tiles (road, no road
     // adjacent, off-map) are silently skipped — feels nicer than rejecting
     // a whole stroke.
     for (const idx of desired) {
       const { x, y } = this.unpackTile(idx);
       const tile = this.grid.get(x, y);
       if (!tile) continue;
-      if (tile.zone === zone) continue;
+      if (tile.zone === zone && tile.zoneCap === cap) continue;
       // Snapshot original ONCE per tile per stroke so a wiggle restores
       // correctly even if we touched the cell multiple times.
-      if (!this.strokeZones.has(idx)) this.strokeZones.set(idx, tile.zone);
-      if (this.grid.setZone(x, y, zone)) changed = true;
-      else if (!this.strokeZones.has(idx)) {
-        // setZone refused; don't keep a phantom snapshot around.
+      if (!this.strokeZones.has(idx)) {
+        this.strokeZones.set(idx, { zone: tile.zone, cap: tile.zoneCap });
       }
+      if (this.grid.setZone(x, y, zone, cap)) changed = true;
     }
 
     if (changed) {
@@ -717,8 +731,9 @@ export class Game {
       }
       if (t.road || t.building !== 'none') continue;
       if (snap.zone === 'none' && t.zone === 'none') continue;
-      if (t.zone !== snap.zone || t.density !== snap.density) {
+      if (t.zone !== snap.zone || t.zoneCap !== snap.zoneCap || t.density !== snap.density) {
         t.zone = snap.zone;
+        t.zoneCap = snap.zoneCap;
         t.density = snap.density;
         t.developmentPressure = snap.developmentPressure;
         zonesChanged = true;
@@ -740,6 +755,7 @@ export class Game {
         highwayDir: tile.highwayDir,
         stopSign: tile.stopSign,
         zone: tile.zone,
+        zoneCap: tile.zoneCap,
         density: tile.density,
         developmentPressure: tile.developmentPressure,
         edges: this.grid.incidentRoadEdges(x, y),
@@ -793,6 +809,8 @@ interface BulldozedSnapshot {
   highwayDir: number;
   stopSign: boolean;
   zone: Zone;
+  /** Player-set density cap (0..3) at bulldoze time. Restored alongside zone. */
+  zoneCap: 0 | 1 | 2 | 3;
   /** Density at bulldoze time — restored verbatim if the rubber band retreats. */
   density: number;
   developmentPressure: number;

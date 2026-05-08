@@ -7,11 +7,13 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 2 (post-alpha pass 4): adds per-tile `roadType`, `highwayDir`,
- * `stopSign`, and economy `totalAccidents`. Schema 1 saves are dropped on
- * load (treated as no save). Bump this when on-disk shape changes.
+ * Schema 3 (Alpha 1.1): adds per-tile `zoneCap` (player-set density permission
+ * 0..3). Schema 2 saves load with `zoneCap` defaulted to 3 for any zoned tile,
+ * preserving the pre-1.1 "any zone can grow to L3 if services allow" behaviour.
+ * Schema 1 (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 2;
+const SCHEMA = 3;
+const MIN_LOADABLE_SCHEMA = 2;
 
 /**
  * Single-slot save.
@@ -32,6 +34,8 @@ export interface TileSnapshot {
   highwayDir: number;
   stopSign: boolean;
   zone: Zone;
+  /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
+  zoneCap?: 0 | 1 | 2 | 3;
   density: number;
   pressure: number;
   building: Building;
@@ -81,7 +85,12 @@ export class SaveGame {
       const req = tx.objectStore(STORE).get(SLOT_KEY);
       req.onsuccess = () => {
         const raw = req.result as SaveData | undefined;
-        if (!raw || raw.schemaVersion !== SCHEMA) return resolve(undefined);
+        if (!raw) return resolve(undefined);
+        // Accept any schema in [MIN_LOADABLE_SCHEMA, SCHEMA]. applySave fills
+        // in missing fields with defaults.
+        if (raw.schemaVersion < MIN_LOADABLE_SCHEMA || raw.schemaVersion > SCHEMA) {
+          return resolve(undefined);
+        }
         resolve(raw);
       };
       req.onerror = () => reject(req.error);
@@ -126,6 +135,7 @@ export function serialize(grid: Grid, economy: Economy): SaveData {
       highwayDir: t.highwayDir,
       stopSign: t.stopSign,
       zone: t.zone,
+      zoneCap: t.zoneCap,
       density: t.density,
       pressure: t.developmentPressure,
       building: t.building
@@ -172,6 +182,10 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy): void {
     t.highwayDir = snap.highwayDir ?? -1;
     t.stopSign = snap.stopSign ?? false;
     t.zone = snap.zone;
+    // zoneCap is schema 3+. v2 saves get the implicit "high" cap (3) for
+    // any zoned tile, mirroring pre-1.1 behaviour where services alone
+    // gated L3.
+    t.zoneCap = snap.zoneCap ?? (snap.zone === 'none' ? 0 : 3);
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
     t.building = snap.building;

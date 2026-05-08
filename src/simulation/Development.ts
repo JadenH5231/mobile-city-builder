@@ -13,8 +13,9 @@ const BASE_RATE = 0.06;
 const L0_FLOOR = 0.3;
 /** Pressure required to promote from L0→L1, L1→L2, L2→L3 respectively. */
 const PROMOTION_THRESHOLDS: readonly number[] = [0.4, 0.7, 2.5];
-/** Cap unless the tile has full power+water+park coverage. L3 is the service-gated payoff. */
-const MAX_REACHABLE_DENSITY_DEFAULT = 2;
+/** Services-allowed cap when power+water+park aren't all present. L3 is the
+ *  service-gated payoff *if the player also zoned for high density*. */
+const SERVICES_CAP_WITHOUT_PARK = 2;
 /** Penalty multiplier per missing utility. Cumulative — both missing → 0.09×. */
 const MISSING_SERVICE_PENALTY = 0.3;
 
@@ -36,7 +37,11 @@ export class Development {
     for (const t of grid.iter()) {
       if (t.zone === 'none' || t.road || t.building !== 'none') continue;
       const demand = this.demandFor(t.zone);
-      const cap = t.hasPower && t.hasWater && t.hasPark ? MAX_DENSITY : MAX_REACHABLE_DENSITY_DEFAULT;
+      // Effective max = min(player's zoning permission, services allow). The
+      // player gates the upper bound; services still gate L3 specifically.
+      const servicesCap = t.hasPower && t.hasWater && t.hasPark ? MAX_DENSITY : SERVICES_CAP_WITHOUT_PARK;
+      const playerCap = t.zoneCap > 0 ? t.zoneCap : MAX_DENSITY;
+      const cap = Math.min(playerCap, servicesCap);
       if (t.density >= cap) continue;
 
       // Concave rate curve so weak positive demand still grows visibly. L0

@@ -208,6 +208,74 @@ body {
   justify-content: center;
 }
 
+/* Group button: same as a regular tool pill but ends with a chevron and
+   anchors a popover. */
+.toolbar__group {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.toolbar__chevron {
+  font-size: 9px;
+  margin-left: 2px;
+  opacity: 0.5;
+}
+
+/* Popover floats above the toolbar (bottom of viewport), centred over the
+   group button. Uses `bottom: 100%` relative to the .toolbar__group wrapper
+   so it sits just above the pill. */
+.toolbar__popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  min-width: 120px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  border-radius: 12px;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+  pointer-events: auto;
+}
+
+.toolbar__popover.hidden {
+  display: none;
+}
+
+.toolbar__popover-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--pill-fg);
+  border-radius: 8px;
+  height: 40px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toolbar__popover-btn:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.toolbar__popover-btn[aria-pressed="true"] {
+  background: rgba(255, 216, 77, 0.16);
+  color: #ffe98a;
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.35);
+}
+
 .toolbar__icon svg {
   width: 100%;
   height: 100%;

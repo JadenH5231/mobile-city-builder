@@ -794,6 +794,14 @@ function buildZoneMesh(grid: Grid): Mesh | null {
   for (const t of grid.iter()) {
     if (t.zone === 'none') continue;
     c.setHex(ZONE_COLORS[t.zone as Exclude<Zone, 'none'>]);
+    // Tier shading — low zones look slightly washed out, high zones more
+    // saturated. Player can read intent from the overlay alone. Multiply
+    // each channel by the tier factor (0.78 / 0.92 / 1.06) so the colour
+    // family stays intact.
+    const tierFactor = t.zoneCap === 1 ? 0.78 : t.zoneCap === 2 ? 0.92 : 1.06;
+    c.r = Math.min(1, c.r * tierFactor);
+    c.g = Math.min(1, c.g * tierFactor);
+    c.b = Math.min(1, c.b * tierFactor);
 
     const x0 = t.x * TILE_SIZE + inset;
     const x1 = (t.x + 1) * TILE_SIZE - inset;

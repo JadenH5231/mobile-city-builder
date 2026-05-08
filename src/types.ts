@@ -209,13 +209,37 @@ export const MAP_SIZES: Record<'small' | 'medium' | 'large', MapSize> = {
 };
 
 /**
+ * Player-set zoning tier — the maximum density a tile is *permitted* to grow
+ * to. Buildings still need demand + services to actually reach a tier;
+ * zoning is an upper-bound permission, not a directive.
+ *
+ * - `low` (cap 1): tile stays at L1 detached/single-storey buildings forever.
+ * - `medium` (cap 2): tile may grow to L2; L3 is locked.
+ * - `high` (cap 3): tile may grow to L3 if power+water+park coverage allows.
+ *
+ * Zone density is a separate axis from Zone (R/C/I). All three zones support
+ * all three tiers.
+ */
+export type ZoneTier = 'low' | 'medium' | 'high';
+
+export const ZONE_TIER_CAP: Record<ZoneTier, 1 | 2 | 3> = {
+  low: 1,
+  medium: 2,
+  high: 3
+};
+
+/**
  * Active tool. `pan` is the navigation default; the others repurpose
  * single-finger drag for painting on the grid. Pinch / two-finger pan still
  * navigate the camera regardless of tool.
  *
  * Road tiers (post-alpha pass 4): `road_local` / `road_avenue` /
- * `road_highway` replaced the single `road` tool. Highway strokes also
- * imprint a flow direction on each painted tile.
+ * `road_highway`. Highway strokes also imprint a flow direction on each
+ * painted tile.
+ *
+ * Zone tiers (Alpha 1.1): each zone (R/C/I) splits into `_low` / `_medium`
+ * / `_high` variants that set the player-permitted density cap on each
+ * painted tile.
  */
 export type Tool =
   | 'pan'
@@ -223,9 +247,15 @@ export type Tool =
   | 'road_avenue'
   | 'road_highway'
   | 'bulldoze'
-  | 'residential'
-  | 'commercial'
-  | 'industrial'
+  | 'residential_low'
+  | 'residential_medium'
+  | 'residential_high'
+  | 'commercial_low'
+  | 'commercial_medium'
+  | 'commercial_high'
+  | 'industrial_low'
+  | 'industrial_medium'
+  | 'industrial_high'
   | 'place_power'
   | 'place_water'
   | 'place_park'
@@ -233,8 +263,21 @@ export type Tool =
   | 'place_bus_depot'
   | 'place_stop_sign';
 
-/** Tools that paint a zone. Maps directly to a Zone value. */
-export const ZONE_TOOLS = new Set<Tool>(['residential', 'commercial', 'industrial']);
+/**
+ * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
+ * paint dispatcher to set both `Tile.zone` and `Tile.zoneCap` in one call.
+ */
+export const ZONE_TOOL_INFO: ReadonlyMap<Tool, { zone: Exclude<Zone, 'none'>; tier: ZoneTier }> = new Map([
+  ['residential_low',    { zone: 'residential' as const, tier: 'low' as const }],
+  ['residential_medium', { zone: 'residential' as const, tier: 'medium' as const }],
+  ['residential_high',   { zone: 'residential' as const, tier: 'high' as const }],
+  ['commercial_low',     { zone: 'commercial' as const,  tier: 'low' as const }],
+  ['commercial_medium',  { zone: 'commercial' as const,  tier: 'medium' as const }],
+  ['commercial_high',    { zone: 'commercial' as const,  tier: 'high' as const }],
+  ['industrial_low',     { zone: 'industrial' as const,  tier: 'low' as const }],
+  ['industrial_medium',  { zone: 'industrial' as const,  tier: 'medium' as const }],
+  ['industrial_high',    { zone: 'industrial' as const,  tier: 'high' as const }]
+]);
 
 /** Tools that paint a road, mapped to their road tier. */
 export const ROAD_TOOLS: ReadonlyMap<Tool, RoadType> = new Map([

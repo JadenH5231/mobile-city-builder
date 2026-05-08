@@ -12,6 +12,8 @@ export interface TileInfo {
   /** Player-placed stop sign on this road tile. */
   stopSign: boolean;
   zone: Zone;
+  /** Player-set density cap (0..3). 0 means unzoned. */
+  zoneCap: 0 | 1 | 2 | 3;
   density: number;
   building: Building;
   hasPower: boolean;
@@ -59,7 +61,9 @@ export class TileInfoPanel {
     }
     if (info.building !== 'none') parts.push(info.building.replace(/_/g, ' '));
     if (info.zone !== 'none') {
-      parts.push(info.density > 0 ? `${info.zone} L${info.density}` : info.zone);
+      const tierLabel = info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'med' : info.zoneCap === 3 ? 'high' : '';
+      const zoneLabel = tierLabel ? `${info.zone}·${tierLabel}` : info.zone;
+      parts.push(info.density > 0 ? `${zoneLabel} L${info.density}` : zoneLabel);
     }
     const services: string[] = [];
     if (info.hasPower) services.push('power');

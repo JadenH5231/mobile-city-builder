@@ -90,6 +90,7 @@ export class Grid {
       if (type !== 'highway') t.highwayDir = -1;
       // Roads are mutually exclusive with zones — clear defensively.
       t.zone = 'none';
+      t.zoneCap = 0;
       t.resetDevelopment();
       return true;
     } else {
@@ -141,21 +142,39 @@ export class Grid {
   // --- Zoning -----------------------------------------------------------
 
   /**
-   * Set the zone on a tile. Clearing (zone='none') always succeeds. Setting
-   * a real zone requires the tile to be on grass (no road, in bounds) AND
-   * to have a 4-connected road neighbour. Returns true iff state changed.
+   * Set the zone on a tile + the player-permitted density cap (1..3 for real
+   * zones, 0 for 'none'). Clearing (zone='none') always succeeds. Setting a
+   * real zone requires the tile to be on grass (no road, in bounds) AND to
+   * have a 4-connected road neighbour. Returns true iff zone or cap changed.
+   *
+   * Re-painting an existing zone with a different cap (e.g. upgrading a low
+   * residential to high) updates the cap without clearing density — the
+   * player's permission widens or narrows but built buildings stay until
+   * demand naturally adjusts (or until cap drops below current density,
+   * which we let stand as "grandfathered" rather than bulldoze through).
    */
-  setZone(x: number, y: number, zone: Zone): boolean {
+  setZone(x: number, y: number, zone: Zone, cap: 0 | 1 | 2 | 3 = 0): boolean {
     const t = this.get(x, y);
     if (!t) return false;
     if (zone !== 'none') {
       if (t.road) return false;
       if (!this.hasRoadAdjacent(x, y)) return false;
     }
-    if (t.zone === zone) return false;
+    const sameZone = t.zone === zone;
+    const sameCap = t.zoneCap === cap;
+    if (sameZone && sameCap) return false;
+    const wasNone = t.zone === 'none';
     t.zone = zone;
-    // Re-zoning (or clearing) tears down whatever was developing on this cell.
-    t.resetDevelopment();
+    t.zoneCap = cap;
+    if (zone === 'none') {
+      t.resetDevelopment();
+    } else if (wasNone || !sameZone) {
+      // Switched zone kind (or zoned a fresh tile) — start over.
+      t.resetDevelopment();
+    }
+    // Cap-only changes preserve current density. If the new cap is below
+    // current density the tile is "grandfathered" — Development.tick won't
+    // grow it further, but the existing building stays. Bulldoze to wipe.
     return true;
   }
 

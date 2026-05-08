@@ -28,6 +28,14 @@ const BUS_STOP_SUPPRESSION = 0.7;
 const CONGESTION_PATH_COEF = 0.6;
 /** Minimum gap between same-segment cars (fraction of segment length). */
 const MIN_CAR_GAP = 0.18;
+/**
+ * SegmentT at which a car pauses when approaching a stop-sign tile. 0.5 is
+ * the visual boundary between the approach tile and the intersection tile —
+ * cars stop at the edge of the intersection, not inside it. After the pause
+ * we let `advance` push past 0.5 normally and the car crosses into the
+ * intersection on the next segment-cross.
+ */
+const STOP_PRE_T = 0.5;
 
 export interface Car {
   /** Flat tile indices, length ≥ 2. The path the car follows in order. */
@@ -186,23 +194,21 @@ export class Vehicles {
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
 
-      // Stop-sign pause — count down, hold position. When the timer drains,
-      // transition the load count from the stop tile to the next segment.
+      // Stop-sign pause — count down, hold at STOP_PRE_T. The car is
+      // visually parked at the boundary between the approach tile and the
+      // intersection tile, not in the centre.
       if (car.pauseRemaining > 0) {
         car.pauseRemaining = Math.max(0, car.pauseRemaining - dt);
         if (car.pauseRemaining > 0) continue;
-        const newTarget = car.pathTiles[car.segmentIdx + 1];
-        if (newTarget !== undefined) {
-          this.decrementLoad(grid, car.loadedTile);
-          car.loadedTile = newTarget;
-          this.incrementLoad(grid, car.loadedTile);
-        }
-        // Fall through to normal advance — pause is over.
+        // Pause is over — no load transition yet. The car is still on the
+        // approach segment heading INTO the intersection. Normal advance
+        // will push segmentT past STOP_PRE_T toward 1, and the regular
+        // segment-cross logic handles the actual entry.
       }
 
       const aIdx = car.pathTiles[car.segmentIdx]!;
       const bIdx = car.pathTiles[car.segmentIdx + 1];
-      if (bIdx === undefined) continue; // safety — shouldn't happen for live cars
+      if (bIdx === undefined) continue; // safety
       const ax = aIdx % gridWidth;
       const ay = (aIdx - ax) / gridWidth;
       const bx = bIdx % gridWidth;
@@ -210,8 +216,7 @@ export class Vehicles {
       const segLen = Math.hypot(bx - ax, by - ay) || 1;
 
       // Per-tier speed: read the destination tile's tier. Highway → fast,
-      // local → slow. Then apply load-based slowdown using the tier's
-      // capacity coefficient.
+      // local → slow. Then apply load-based slowdown.
       const destTile = grid.get(bx, by);
       const tier: RoadType = destTile?.roadType ?? 'local';
       const tierProps = ROAD_TIER[tier];
@@ -219,12 +224,34 @@ export class Vehicles {
       const effSpeed = (tierProps.baseSpeed * car.speed) / (1 + nextLoad * tierProps.slowdown);
 
       let advance = (effSpeed * dt) / segLen;
+
+      // Same-segment leader gap — keep cars from visually overlapping.
       const lt = leaderT[i]!;
       if (lt !== Infinity) {
         const targetT = Math.max(0, lt - MIN_CAR_GAP);
         const allowedAdvance = Math.max(0, targetT - car.segmentT);
         advance = Math.min(advance, allowedAdvance);
       }
+
+      // Stop-sign approach: if the next tile is a stop-sign intersection
+      // and we haven't reached STOP_PRE_T yet, cap advance so we park at
+      // the boundary instead of barreling into the centre.
+      const nextIsStop =
+        destTile?.stopSign === true &&
+        grid.incidentRoadEdgeCount(bx, by) >= 3 &&
+        car.segmentT < STOP_PRE_T;
+      if (nextIsStop) {
+        const allowedAdvance = Math.max(0, STOP_PRE_T - car.segmentT);
+        advance = Math.min(advance, allowedAdvance);
+        car.segmentT += advance;
+        // If we touched STOP_PRE_T (within numerical slop), begin the pause.
+        if (car.segmentT >= STOP_PRE_T - 1e-6) {
+          car.segmentT = STOP_PRE_T;
+          car.pauseRemaining = STOP_SIGN_PAUSE_SEC;
+        }
+        continue;
+      }
+
       car.segmentT += advance;
 
       let despawned = false;
@@ -252,23 +279,13 @@ export class Vehicles {
           break;
         }
 
-        // Intersection check — 3+ incident edges = junction.
+        // Intersection collision check. Stop-sign intersections never roll —
+        // the car was already paused at the boundary on the previous segment.
         const isIntersection = grid.incidentRoadEdgeCount(arrivedX, arrivedY) >= 3;
-
-        if (isIntersection && arrivedTile.stopSign) {
-          // Pause — keep load on the stop-sign tile so others see the wait.
-          // loadedTile is currently the arrived tile (it was the previous
-          // "to" target), so no transition needed yet.
-          car.pauseRemaining = STOP_SIGN_PAUSE_SEC;
-          car.segmentT = 0;
-          break;
-        }
-
         if (isIntersection && !arrivedTile.stopSign) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {
-            // CRASH. Surface the event for Game to apply penalties.
             this.crashesThisFrame.push({
               destX: car.destX,
               destY: car.destY,

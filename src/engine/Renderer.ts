@@ -993,30 +993,46 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
       arrowColours.push(HIGHWAY_ARROW_COLOR);
     }
     if (t.stopSign) {
+      // Place one small stop sign per road approach, on the right shoulder
+      // of incoming traffic — i.e. where a real stop sign goes (driver's
+      // right as they arrive at the intersection). For a 4-way intersection
+      // we get four signs around the corners.
       const cx = (t.x + 0.5) * TILE_SIZE;
       const cz = (t.y + 0.5) * TILE_SIZE;
-      // Stop-sign: thin red disc on a stubby grey post. Two parts → two
-      // geometries. The disc is octagonal in spirit; we use a 16-sided
-      // cylinder which reads as round at this zoom and avoids the cost of a
-      // hand-built polygon.
-      const post = new CylinderGeometry(0.025, 0.025, 0.18, 6);
-      post.translate(cx, ROAD_LIFT + 0.09, cz);
-      stops.push(post);
-      stopColours.push(0x666666);
+      const EDGE = TILE_SIZE * 0.40;       // distance from tile centre to approach edge
+      const SHOULDER = TILE_SIZE * 0.22;   // offset toward right shoulder of incoming car
+      for (let d = 0; d < 8; d++) {
+        const off = DIR_OFFSETS[d]!;
+        const nx = t.x + off[0];
+        const ny = t.y + off[1];
+        // Only place a sign for this side if a road actually approaches
+        // from there (an edge to that neighbour exists OR neighbour is road).
+        if (!grid.hasRoadEdge(t.x, t.y, nx, ny)) continue;
+        // Incoming motion vector = -off. Right shoulder is that rotated 90°
+        // CW in XZ (top-down): (vx, vz) → (vz, -vx). With v = (-off[0], -off[1])
+        // → right = (-off[1], off[0]).
+        const px = cx + off[0] * EDGE - off[1] * SHOULDER;
+        const pz = cz + off[1] * EDGE + off[0] * SHOULDER;
 
-      const sign = new CylinderGeometry(0.10, 0.10, 0.04, 8);
-      sign.rotateX(Math.PI / 2);
-      sign.translate(cx, ROAD_LIFT + 0.18, cz);
-      stops.push(sign);
-      stopColours.push(STOP_SIGN_COLOR);
+        // Smaller than before — these are roadside furniture, not landmarks.
+        const post = new CylinderGeometry(0.012, 0.012, 0.10, 6);
+        post.translate(px, ROAD_LIFT + 0.05, pz);
+        stops.push(post);
+        stopColours.push(0x666666);
 
-      // White face hint — a slightly smaller white disc on top of the red,
-      // gives the "stop sign" silhouette without a real text texture.
-      const face = new CylinderGeometry(0.07, 0.07, 0.005, 8);
-      face.rotateX(Math.PI / 2);
-      face.translate(cx, ROAD_LIFT + 0.20, cz);
-      stops.push(face);
-      stopColours.push(STOP_SIGN_TEXT);
+        const sign = new CylinderGeometry(0.05, 0.05, 0.02, 8);
+        sign.rotateX(Math.PI / 2);
+        sign.translate(px, ROAD_LIFT + 0.10, pz);
+        stops.push(sign);
+        stopColours.push(STOP_SIGN_COLOR);
+
+        // White face hint for the silhouette of a stop sign.
+        const face = new CylinderGeometry(0.035, 0.035, 0.003, 8);
+        face.rotateX(Math.PI / 2);
+        face.translate(px, ROAD_LIFT + 0.111, pz);
+        stops.push(face);
+        stopColours.push(STOP_SIGN_TEXT);
+      }
     }
   }
 

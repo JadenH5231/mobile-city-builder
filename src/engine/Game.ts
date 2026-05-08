@@ -244,7 +244,12 @@ export class Game {
         // Economy → Vehicles spawn. Each consumer reads from up-to-date
         // upstream state.
         this.traffic.tickEma(this.grid);
-        this.population.tick(this.grid, this.economy, this.traffic);
+        // Happiness is computed first each tick so Population can read it
+        // when distributing residents across factions. The reverse direction
+        // (happiness depending on totalResidents etc.) is one tick stale,
+        // which is invisible at 10 Hz.
+        this.happiness.computeAll(this.grid, this.economy, this.population, this.traffic);
+        this.population.tick(this.grid, this.economy, this.traffic, this.happiness);
         if (this.development.tick(this.grid)) buildingsDirty = true;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population);
         this.vehicles.spawnTick(

@@ -80,12 +80,8 @@ export class HappinessPanel {
    * scoring calls. Safe to call at HUD refresh rate.
    */
   refresh(): void {
-    this.deps.happiness.computeAll(
-      this.deps.grid(),
-      this.deps.economy,
-      this.deps.population,
-      this.deps.traffic
-    );
+    // Happiness is now computed every sim tick by Game; we just read it
+    // here. (Recomputing again on panel refresh would be redundant work.)
     const overall = this.deps.happiness.overall();
     this.overallEl.textContent = `City mood: ${overallLabel(overall)}`;
     this.overallEl.dataset.bucket = bucketOf(overall);
@@ -93,6 +89,7 @@ export class HappinessPanel {
     // Salt the comment-picker by months-elapsed × bucket so the message
     // stays stable but rotates when the player's situation actually moves.
     const months = this.deps.economy.monthsElapsed;
+    const totalRes = this.deps.population.totalResidents;
 
     for (const f of FACTIONS) {
       const h = this.deps.happiness.get(f.id);
@@ -105,6 +102,13 @@ export class HappinessPanel {
       row.barFill.style.background = barColor(h);
       row.el.dataset.bucket = bucket;
       row.moodEl.textContent = bucketLabel(bucket);
+
+      // Faction population + share-of-city.
+      const factionPop = Math.round(this.deps.population.factionPopulation.get(f.id) ?? 0);
+      const sharePct = totalRes > 0 ? (factionPop / totalRes) * 100 : 0;
+      row.popEl.textContent = `${factionPop.toLocaleString()} residents · ${sharePct.toFixed(1)}%`;
+      row.shareFill.style.width = `${Math.min(100, sharePct).toFixed(1)}%`;
+      row.shareFill.style.background = `#${f.color.toString(16).padStart(6, '0')}`;
     }
   }
 }
@@ -114,6 +118,8 @@ interface FactionRow {
   commentEl: HTMLElement;
   barFill: HTMLElement;
   moodEl: HTMLElement;
+  popEl: HTMLElement;
+  shareFill: HTMLElement;
 }
 
 function makeFactionRow(f: Faction): FactionRow {
@@ -130,13 +136,17 @@ function makeFactionRow(f: Faction): FactionRow {
       <div class="happiness__title">${escapeHtml(f.leaderTitle)} — ${escapeHtml(f.name)}</div>
       <div class="happiness__comment"></div>
       <div class="happiness__cares">${escapeHtml(f.cares)}</div>
+      <div class="happiness__pop"></div>
+      <div class="happiness__share-bar"><div class="happiness__share-fill"></div></div>
       <div class="happiness__bar"><div class="happiness__bar-fill"></div></div>
     </div>
   `;
   const commentEl = wrap.querySelector('.happiness__comment') as HTMLElement;
   const barFill = wrap.querySelector('.happiness__bar-fill') as HTMLElement;
   const moodEl = wrap.querySelector('.happiness__mood') as HTMLElement;
-  return { el: wrap, commentEl, barFill, moodEl };
+  const popEl = wrap.querySelector('.happiness__pop') as HTMLElement;
+  const shareFill = wrap.querySelector('.happiness__share-fill') as HTMLElement;
+  return { el: wrap, commentEl, barFill, moodEl, popEl, shareFill };
 }
 
 function avatarInitials(name: string): string {

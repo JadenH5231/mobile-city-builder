@@ -1,6 +1,7 @@
 import type { Grid } from '../world/Grid';
 import type { Economy } from './Economy';
 import type { Traffic } from './Traffic';
+import { FACTION_NATURAL_SHARE, type FactionId, type Happiness } from './Happiness';
 import {
   COMMERCIAL_JOBS,
   INDUSTRIAL_JOBS,
@@ -21,15 +22,28 @@ const STRESS_PENALTY: Record<Exclude<Zone, 'none'>, number> = {
 };
 
 /**
+ * Per-tick lerp rate for faction populations toward their happiness-derived
+ * targets. At 10 Hz tick rate, 0.03 per tick ≈ 30%/sec convergence — fast
+ * enough that the player sees response within seconds of changing zoning,
+ * slow enough that it reads as "people moving in/out" rather than a snap.
+ */
+const FACTION_POP_LERP = 0.03;
+
+/**
  * Aggregates resident / job totals from per-tile densities and derives the
  * three RCI demand values that drive `Development`. Demand is a balance between
  * supply (what's already built) and absorbing capacity (jobs vs people, etc.),
  * shifted by tax rates and traffic stress.
  *
+ * Faction populations (Alpha 1.2): each tick, R-tile capacity is split across
+ * the 10 factions according to their natural share × willingness, where
+ * willingness = clamp(1 + happiness, 0, 1). A faction at -1 happiness empties
+ * out (target = 0); at 0 or above it stays at full natural share. Each
+ * faction's actual count lerps toward its target so population shifts feel
+ * gradual. `totalResidents` is the sum — so happiness directly affects city
+ * population, which affects tax revenue, vehicle spawn, and demand-R.
+ *
  * Demand domain: [-1, 1]. Negative means surplus; positive means a real pull.
- * Memory: feedback_density_curve — formulas widened with bias terms so a fresh
- * city actually grows from zero, and the rate curve uses sqrt() so weak
- * positive demand still produces visible growth.
  */
 export class Population {
   totalResidents = 0;
@@ -39,15 +53,33 @@ export class Population {
   demandC = 0;
   demandI = 0;
 
-  tick(grid: Grid, economy: Economy, traffic: Traffic): void {
-    let residents = 0;
+  /** Maximum residents the built R buildings could hold if every faction
+   *  was fully happy. Useful for "city is X% occupied" displays. */
+  capacity = 0;
+
+  /**
+   * Per-faction current population. Sum equals `totalResidents`. Floating-
+   * point because the lerp passes through fractions; round when displaying.
+   */
+  readonly factionPopulation = new Map<FactionId, number>();
+
+  constructor() {
+    for (const id of Object.keys(FACTION_NATURAL_SHARE) as FactionId[]) {
+      this.factionPopulation.set(id, 0);
+    }
+  }
+
+  tick(grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness): void {
+    // Capacity = how many residents the built buildings COULD hold; jobs =
+    // built C / I jobs. Same pattern as before for jobs.
+    let capacity = 0;
     let cJobs = 0;
     let iJobs = 0;
     for (const t of grid.iter()) {
       if (t.zone === 'none' || t.density === 0 || t.road) continue;
       switch (t.zone) {
         case 'residential':
-          residents += RESIDENT_CAPACITY[t.density] ?? 0;
+          capacity += RESIDENT_CAPACITY[t.density] ?? 0;
           break;
         case 'commercial':
           cJobs += COMMERCIAL_JOBS[t.density] ?? 0;
@@ -57,17 +89,33 @@ export class Population {
           break;
       }
     }
-    this.totalResidents = residents;
+    this.capacity = capacity;
     this.totalCommercialJobs = cJobs;
     this.totalIndustrialJobs = iJobs;
+
+    // Lerp each faction's population toward (capacity × share × willingness).
+    // Willingness: 0 → 1 as happiness goes from -1 → 0; clamped at 1 for
+    // any positive happiness. So a happy or content faction stays at full
+    // share; a furious one empties out.
+    let totalResidents = 0;
+    for (const id of Object.keys(FACTION_NATURAL_SHARE) as FactionId[]) {
+      const h = happiness.get(id);
+      const willingness = Math.max(0, Math.min(1, 1 + h));
+      const target = capacity * FACTION_NATURAL_SHARE[id] * willingness;
+      const current = this.factionPopulation.get(id) ?? 0;
+      const next = current + (target - current) * FACTION_POP_LERP;
+      this.factionPopulation.set(id, next);
+      totalResidents += next;
+    }
+    this.totalResidents = totalResidents;
 
     // Base demand formulas. Bias terms (+20, +2, +5) bootstrap an empty city
     // so freshly-painted zones have something to grow from. Denominators tune
     // sensitivity — bigger denominator = more residents/jobs needed to move
     // the needle.
-    let r = (iJobs + cJobs - residents + 20) / 50;
-    let c = (residents / 4 - cJobs + 2) / 15;
-    let i = (residents / 2 - iJobs + 5) / 25;
+    let r = (iJobs + cJobs - totalResidents + 20) / 50;
+    let c = (totalResidents / 4 - cJobs + 2) / 15;
+    let i = (totalResidents / 2 - iJobs + 5) / 25;
 
     // Tax penalty — pulled from Economy so the BudgetPanel sliders move demand
     // in real time as the player drags.

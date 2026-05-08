@@ -611,8 +611,30 @@ body {
   font-style: italic;
 }
 
-.happiness__bar {
+.happiness__pop {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.65);
   margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.happiness__share-bar {
+  margin-top: 4px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.happiness__share-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 250ms ease;
+  /* background colour set inline by JS to match the faction's accent. */
+}
+
+.happiness__bar {
+  margin-top: 4px;
   height: 4px;
   background: rgba(255, 255, 255, 0.06);
   border-radius: 2px;

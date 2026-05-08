@@ -36,6 +36,29 @@ export type FactionId =
   | 'safer_streets'
   | 'working_families';
 
+/**
+ * What share of a fully-saturated city's population each faction
+ * "naturally" represents — the demographic baseline that's filled when
+ * everyone in that group is happy. Sums to exactly 1.0.
+ *
+ * The numbers reflect rough size-of-bloc rather than uniform 10% — Drivers
+ * and the Hometown crowd are bigger blocs than the Chamber of Commerce or
+ * the YIMBY newsletter readership, but every group has enough mass to
+ * swing the city if neglected.
+ */
+export const FACTION_NATURAL_SHARE: Record<FactionId, number> = {
+  nimbys:           0.12,
+  yimbys:           0.08,
+  environmentalists: 0.09,
+  hometown:         0.14,
+  chamber:          0.06,
+  transit:          0.08,
+  drivers:          0.13,
+  taxpayers:        0.11,
+  safer_streets:    0.10,
+  working_families: 0.09
+};
+
 export type HappinessBucket = 'elated' | 'happy' | 'neutral' | 'unhappy' | 'furious';
 
 export interface FactionComments {

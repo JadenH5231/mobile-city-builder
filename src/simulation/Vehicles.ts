@@ -49,8 +49,17 @@ export interface Car {
   color: number;
   /** The tile we're currently counted against for traffic load. */
   loadedTile: number;
-  /** Real-time seconds remaining at a stop sign. > 0 means "frozen this frame". */
+  /** Real-time seconds remaining of the *minimum* stop-sign pause. */
   pauseRemaining: number;
+  /**
+   * After the minimum pause expires, the car enters yielding mode: it stays
+   * parked at STOP_PRE_T until the intersection clears AND no earlier
+   * yielder at the same junction is ahead in the FIFO. `yieldSince` is set
+   * when yielding begins (used to break ties). Both reset when the car
+   * finally advances past the stop.
+   */
+  yielding: boolean;
+  yieldSince: number;
   /** Destination zone tile (for crash demand penalty). */
   destX: number;
   destY: number;
@@ -154,6 +163,8 @@ export class Vehicles {
       color,
       loadedTile: path[1]!,
       pauseRemaining: 0,
+      yielding: false,
+      yieldSince: 0,
       destX: dest.x,
       destY: dest.y
     };
@@ -168,6 +179,7 @@ export class Vehicles {
    */
   update(dt: number, grid: Grid, gridWidth: number): void {
     this.crashesThisFrame.length = 0;
+    const now = performance.now();
 
     // Per-segment leader pre-pass — used to keep cars from visually overlapping.
     const leaderT: number[] = new Array(this.cars.length);
@@ -191,19 +203,60 @@ export class Vehicles {
       leaderT[i] = best;
     }
 
+    // Occupancy pre-pass — which tiles currently have a car *inside* them
+    // (visually past the boundary, not parked at a stop). Used by the
+    // yielding check below so a stopped car waits for cross-traffic. Cars
+    // that are paused or yielding at a stop sign are excluded — they're
+    // at the boundary, not in the intersection.
+    const occupied = new Set<number>();
+    for (const c of this.cars) {
+      if (c.pauseRemaining > 0 || c.yielding) continue;
+      const fromIdx = c.pathTiles[c.segmentIdx];
+      const toIdx = c.pathTiles[c.segmentIdx + 1];
+      if (fromIdx !== undefined && c.segmentT < STOP_PRE_T) occupied.add(fromIdx);
+      if (toIdx !== undefined && c.segmentT > STOP_PRE_T) occupied.add(toIdx);
+    }
+
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
 
-      // Stop-sign pause — count down, hold at STOP_PRE_T. The car is
-      // visually parked at the boundary between the approach tile and the
-      // intersection tile, not in the centre.
+      // Stage 1: minimum stop-sign pause. Counts down from
+      // STOP_SIGN_PAUSE_SEC. When it expires, the car switches to
+      // yielding mode (stage 2) — still parked, but now waiting for the
+      // intersection to clear instead of just waiting on the timer.
       if (car.pauseRemaining > 0) {
         car.pauseRemaining = Math.max(0, car.pauseRemaining - dt);
         if (car.pauseRemaining > 0) continue;
-        // Pause is over — no load transition yet. The car is still on the
-        // approach segment heading INTO the intersection. Normal advance
-        // will push segmentT past STOP_PRE_T toward 1, and the regular
-        // segment-cross logic handles the actual entry.
+        car.yielding = true;
+        car.yieldSince = now;
+      }
+
+      // Stage 2: yielding. Block until the intersection ahead is empty AND
+      // no car at any approach to the same intersection has been yielding
+      // longer (FIFO). Without the FIFO check, multiple cars all releasing
+      // at the same frame would crash into each other.
+      if (car.yielding) {
+        const targetIdx = car.pathTiles[car.segmentIdx + 1];
+        if (targetIdx !== undefined) {
+          if (occupied.has(targetIdx)) continue;
+          let aheadInQueue = false;
+          for (let j = 0; j < this.cars.length; j++) {
+            if (j === i) continue;
+            const c = this.cars[j]!;
+            if (!c.yielding) continue;
+            if (c.pathTiles[c.segmentIdx + 1] !== targetIdx) continue;
+            // Earlier yieldSince wins. Tie-break on car-array index so we
+            // never deadlock on equal timestamps.
+            if (c.yieldSince < car.yieldSince || (c.yieldSince === car.yieldSince && j < i)) {
+              aheadInQueue = true;
+              break;
+            }
+          }
+          if (aheadInQueue) continue;
+        }
+        // Released — clear yielding flag and fall through to advance.
+        car.yielding = false;
+        car.yieldSince = 0;
       }
 
       const aIdx = car.pathTiles[car.segmentIdx]!;

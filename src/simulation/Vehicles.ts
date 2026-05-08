@@ -309,6 +309,33 @@ export class Vehicles {
 
       let despawned = false;
       while (car.segmentT >= 1) {
+        // Spillback: don't cross into the next segment if it's full. A
+        // segment is "full" if any car on it sits within MIN_CAR_GAP of
+        // segmentT = 0 (the entry). Without this, a queue at a stop sign
+        // overflows onto the start of the approach segment and stacks at
+        // segmentT = 0 (the leader-gap clamp won't push cars below zero,
+        // so they all pile up at the same world position).
+        //
+        // When the next segment is full we hold near segmentT = 1 of the
+        // CURRENT segment; the queue extends one segment back. Recursively
+        // this propagates spillback across the whole upstream chain.
+        const newFromIdx = car.pathTiles[car.segmentIdx + 1];
+        const newToIdx = car.pathTiles[car.segmentIdx + 2];
+        if (newFromIdx !== undefined && newToIdx !== undefined) {
+          let minNextT = Infinity;
+          for (let j = 0; j < this.cars.length; j++) {
+            if (j === i) continue;
+            const other = this.cars[j]!;
+            if (other.pathTiles[other.segmentIdx] !== newFromIdx) continue;
+            if (other.pathTiles[other.segmentIdx + 1] !== newToIdx) continue;
+            if (other.segmentT < minNextT) minNextT = other.segmentT;
+          }
+          if (minNextT < MIN_CAR_GAP) {
+            car.segmentT = 1 - 1e-6;
+            break; // out of while
+          }
+        }
+
         car.segmentT -= 1;
         car.segmentIdx++;
 

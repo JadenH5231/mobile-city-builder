@@ -239,13 +239,27 @@ on a different machine isn't a forensic exercise.
 - A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
 - See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
 
-## Status: Alpha 1.0
+## Status: Alpha 1.5
 
-Tagged on `main` as `alpha-1.0`. All 14 build steps are in plus four
-post-alpha tuning passes; the prototype plays end-to-end with money
-that gets tight at scale, traffic that congests, three road tiers
-with one-way highways, player-placed stop signs with FIFO yielding
-across approaches, and queue spillback so cars never visually overlap.
+Tagged on `main` as `alpha-1.5`. Builds on Alpha 1.0 (all 14 build steps
++ four post-alpha tuning passes — money pressure, traffic congestion,
+three road tiers with one-way highways, player-placed stop signs with
+FIFO yielding) with a full civic-and-political layer:
+
+- Tool-bar grouping + density-tier zoning (low/medium/high as player
+  permissions, services still gate L3).
+- **Happiness & Factions** keystone — 10 named-leader factions, each
+  with a happiness function, mood-bucketed Facebook-style comments,
+  and a natural share of city population. Per-resident faction
+  assignment: happy factions fill, angry ones empty, totalResidents
+  tracks the sum.
+- **Yearly elections** (every 12 sim months). Mayor always wins
+  ≥ 50.0001%; opponent = 2nd-most-angry leader. 4 of the remaining 9
+  take council seats. Councillors gate costs, zoning changes, and
+  bans; their faction gets +10% population share.
+- **Civic actions** powered by **Political Capital** — Endorse Leader,
+  Form Coalition, Photo-op, Mayoral Override. PC accrues monthly
+  based on faction happiness; persisted in save schema v4.
 
 What's in 1.0 beyond the original 14 steps:
 - **Pass 1 (challenge tuning + Undo).** Tighter money, sharper traffic

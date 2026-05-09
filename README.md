@@ -2,7 +2,7 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 1.0** (tagged on `main`). All 14 build steps + four post-alpha tuning passes. Plays end-to-end: paint a network with three road tiers (local / avenue / one-way highway), zone R/C/I, watch buildings grow, manage taxes against road + service upkeep, place power/water/parks to unlock L3, deal with traffic via stop signs (with FIFO yielding) and bus stops + depots. Cars can crash at uncontrolled intersections and the destination business takes a hit. Saves on a 30 s auto-cadence.
+**Status: Alpha 1.5** (tagged on `main`). Alpha 1.0's full simulation (three road tiers, traffic + collisions, services, transit, money pressure) plus a complete civic-political layer: 10 named-leader factions with mood-bucketed Facebook-style comments, per-resident faction assignment, yearly elections (player as mayor, always wins ≥ 50.0001%), 4-seat council with cost multipliers + zoning gate + population boost, and four player civic actions (Endorse / Coalition / Photo-op / Mayoral Override) powered by a slow-accruing Political Capital resource. Saves on a 30 s auto-cadence.
 
 ## Setup
 

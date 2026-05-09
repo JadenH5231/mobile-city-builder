@@ -82,10 +82,10 @@ src/
     Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
     Input.ts          pointer-events gesture handler (navigate / paint modes)
     Renderer.ts       Three.js scene: terrain, roads, sidewalks, paths, trees, selection
-    BuildingVariants.ts spec catalogue + builder for 36 building variants
+    BuildingVariants.ts spec catalogue + builder for 36 zoned variants + buildLuxuryParts (2-tile mansion)
   world/
     Grid.ts           tile container + road-edge graph + procedural generator
-    Tile.ts           single-tile struct (terrain, road, path, elevation, bridge…)
+    Tile.ts           single-tile struct (terrain, road, path, elevation, bridge, luxury…)
     TerrainGenerator.ts noise-based lakes/rivers/forests/elevation
   simulation/
     Population.ts     aggregate residents + jobs (incl. mixed-use), derive RCI demand
@@ -171,15 +171,26 @@ faction. Skipping a row implicitly defaults to neutral (0) — fine for
 neutral-everywhere items but the council mechanic only generates real
 political pressure when the stance matrix has opinions in it.
 
-**Stance-matrix coverage as of Alpha 2.0**: roads (local/avenue/highway),
-R/C/I × low/med/high, MU × low/med/high (Alpha 2.0), power_plant,
-water_tower, park, bus_stop, bus_depot, stop_sign — all rows filled
-with deliberate values. Intentionally absent from the matrix:
-`walking_path` and `traffic_light` — neither has a per-tile cost or
-zone-change semantic for the council mechanic to gate, so adding rows
-would be dead weight. Their faction reactions live directly in each
-faction's `compute()` instead. If a future feature gives either a real
-cost or a council-controllable property, add the row at that point.
+**Stance-matrix coverage as of Alpha 2.6**: roads (local/avenue/highway),
+R/C/I × low/med/high, MU × low/med/high (Alpha 2.0), `r_lux` for the
+luxury low-density 2-tile pair (Alpha 2.5), power_plant, water_tower,
+park, bus_stop, bus_depot, stop_sign — all rows filled with deliberate
+values. Intentionally absent from the matrix: `walking_path` and
+`traffic_light` — neither has a per-tile cost or zone-change semantic
+for the council mechanic to gate, so adding rows would be dead weight.
+Their faction reactions live directly in each faction's `compute()`
+instead. If a future feature gives either a real cost or a
+council-controllable property, add the row at that point.
+
+**Toolbar-ban surface (Alpha 2.6)**: `Game.refreshToolbarBans()` walks
+a `Tool → StanceKey` map after every election (and on init), calls
+`council.costMultiplier(key)`, and pushes the set of banned Tools into
+`Toolbar.setBannedTools()`. The toolbar marks each banned button with
+`data-banned="true"` (CSS handles strikethrough + 🚫). Group buttons
+get `"true" | "partial" | "false"` based on how many of their members
+are banned. When you add a new buildable Tool that maps to a stance
+key, append it to the `toolToKey` array in `Game.refreshToolbarBans`
+or the toolbar visual won't reflect council bans on it.
 
 **Civic actions** layer player-driven influence on top of organic
 happiness. Implemented in `Council.ts`:
@@ -265,10 +276,90 @@ on a different machine isn't a forensic exercise.
 - **Happiness & Factions** keystone with 10 named-leader factions.
 - **Yearly elections + 4-seat council** with cost multipliers, zoning gate, population boost.
 - **Civic actions** (Endorse / Coalition / Photo-op / Mayoral Override) powered by Political Capital.
-- **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
-- **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
+- **Save/load** to IndexedDB, schema v8, auto-save every 30 s.
+- **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, "Not enough money" placement toast, traffic heatmap, undo (20-deep).
+- **Luxury low-density residential** (Alpha 2.5) — the new `Lux` paint tool places a single grand home spanning a 2-tile pair. Premium tax rate (2.5×), heavy NIMBY draw, $800 up-front cost.
 
-## Status: Alpha 2.4
+## Status: Alpha 2.6
+
+Visual overhaul + perf pass on top of 2.5. Six visual pieces and one
+perf pass land together to push the prototype toward a late-beta look:
+
+- **Bridge railings + deck stripe.** Slim parapet rails on both
+  shoulders + a yellow median deck stripe so a bridge doesn't read as
+  a bare slab.
+- **Tree shadows.** Slim dark-green octagonal disc at each tree base
+  reads as a soft cast shadow without the cost of a real shadow map.
+- **Council ban visual on toolbar.** Each Tool maps to its
+  `FACTION_STANCES` key; banned tools get strikethrough + dimmed +
+  🚫 marker. Group buttons show "all" or "partial" ban state.
+  `Game.refreshToolbarBans` runs on init and after every election.
+- **Modular parks.** Adjacent park tiles flood-fill into clusters;
+  the renderer emits one bigger structure per cluster (1=cottage,
+  2=playground+pond, 3=pavilion+pond+fountain, 4+=grand bandstand).
+- **Sidewalk decoration on commercial blocks.** Non-highway road
+  tiles next to a developed C/MU tile have a 30%-deterministic
+  hydrant / parking meter / bike rack on the sidewalk pad.
+- **Sky gradient + clouds.** `scene.background` is now a vertical
+  CanvasGradient; 5 stylized cloud clusters float far above the
+  world.
+- **Perf: drop normals on flat-shaded meshes.** Every Mesh uses
+  `flatShading: true`, which derives normals via `dFdx/dFdy` in the
+  fragment shader — the precomputed normal attribute was unread.
+  `mergeGeoms` no longer allocates / stores a normals buffer; ~12
+  `computeVertexNormals()` calls removed. Per-frame
+  `instanceMatrix.needsUpdate` skipped on cars/buses/walkers when
+  count is 0.
+
+No save schema bump — pure visual + perf changes.
+
+### Status: Alpha 2.5 (carryover)
+
+Luxury low-density residential — a 2-tile-pair zone for premium tax
+revenue and NIMBY/hometown population draw.
+
+- New tool `residential_luxury_low` under the **R** popover (Lux).
+  Tap-only: validates the origin tile, finds an adjacent free
+  road-adjacent partner (N/E/S/W), and marks both as
+  `zone='residential', luxury=true, zoneCap=1`. Refuses with a status
+  toast if no valid partner.
+- `Tile.luxury` bit. Save schema bumped to v8 (older v7 saves load
+  with `luxury=false`).
+- `Grid.setZone` clears luxury+partner when a luxury tile leaves the
+  zone (bulldoze, re-zone) so we never leave orphan half-mansions.
+- Population tracks `luxuryCapacity` and `luxuryResidents` separately;
+  faction targeting blends regular + luxury shares (luxury weighted
+  toward NIMBYs 30% / Hometown 20% / Taxpayers 18% / Chamber 10%).
+- Economy applies `LUXURY_TAX_BONUS = 1.5` on top of base R tax for
+  luxury residents — they pay 2.5× the regular rate.
+- Up-front cost `$800` (gated by council `r_lux` cost-multiplier).
+- Renderer detects luxury pairs in `buildBuildingsMesh`, emits one
+  mansion per pair from the lex-smaller tile via `buildLuxuryParts`.
+  Three deterministic variants (mansion / ranch / contemporary) with
+  pitched roof along the long axis, attached garage, twin chimneys,
+  ornamental shrubs, paved walkway, manicured lawn pad.
+- New `FACTION_STANCES.r_lux` row for every faction. Strong NIMBY +0.9,
+  Yimby -0.8, Working-Families -0.6, Taxpayers +0.7, Hometown +0.6.
+
+Also in 2.5: **"Not enough money" toast** on Place tools. Previously
+Place tools silently failed when the treasury was insufficient or the
+council had banned the kind — now `Game.onStatusMessage` fires a 2.5 s
+pill above the toolbar with the required amount or "Banned by council"
+reason.
+
+### Status: Alpha 2.4.1 (carryover)
+
+Disabled the Alpha 2.3 elevation visual via the `FLAT_TERRAIN` flag in
+`src/world/TerrainGenerator.ts`. Procedural terrain still uses
+elevation noise to *decide* lake / river / forest / sand placement,
+but every tile's elevation is forced to 0 in the final spec, and
+`SaveGame` zeros loaded elevations too. All elevation-aware renderer
+paths stay intact (they just see 0 everywhere). Flip the flag back to
+`false` to re-enable rolling hills once the cross-tile artefacts
+(sidewalks stepping at boundaries, zone-overlay non-corner-sharing)
+are addressed in a later pass.
+
+### Status: Alpha 2.4 (carryover)
 
 Cleanup pass on top of 2.3 — terrain-aware overlays + zoning gates.
 The procedural elevation introduced in 2.3 was already pushing buildings
@@ -297,11 +388,6 @@ decks. 2.4 fixes the lot.
   remain pure transit.
 - **No save schema bump** — purely visual / placement-rule changes.
   v7 saves load unchanged.
-- **Deferred to 2.5+**: overpass bridges (road-over-road still needs a
-  multi-level road graph — every Tile gets `bridgeRoad` fields,
-  RoadGraph builds a second adjacency layer, vehicles + pathfinder gain
-  a level axis); elevation-affected pathfinding cost (steeper = slower);
-  lane-stripe smoothing across a multi-segment slope.
 
 ### Status: Alpha 2.3 (carryover)
 

@@ -51,6 +51,9 @@ const MAX_SIM_STEPS_PER_FRAME = 5;
 const AUTOSAVE_MS = 30_000;
 /** Max undo entries kept in memory. */
 const UNDO_STACK_LIMIT = 20;
+/** SessionStorage key set by `resetCity` so the post-reload init skips
+ *  loading any stray autosave that won the race. */
+const RESET_FLAG = 'city-builder-just-reset';
 
 /**
  * Game owns the Three.js renderer, the camera, and the top-level systems.
@@ -148,6 +151,11 @@ export class Game {
   // Persistence — auto-saves every AUTOSAVE_MS, also restores on init.
   readonly saveGame = new SaveGame();
   private autosaveAccumMs = 0;
+  /** Set true when {@link resetCity} runs, so the autosave doesn't race the
+   *  imminent location.reload() and re-write the city to IDB after we
+   *  cleared it. Also gated by a sessionStorage flag (`RESET_FLAG`) that
+   *  init() honours after the reload, in case the race wins anyway. */
+  private resetting = false;
   // Undo — capped FIFO stack of full snapshots. One entry per user-initiated
   // operation (paint stroke, building placement). Tax slider tweaks aren't
   // tracked because the user can just slide back.
@@ -192,11 +200,26 @@ export class Game {
 
     // Try to restore an existing save before drawing initial state. Failures
     // (no save / version mismatch / IDB unavailable) silently fall through
-    // to a fresh map.
+    // to a fresh map. If the previous tab session called resetCity, honour
+    // that even if the autosave-vs-reload race somehow committed a save —
+    // re-clear here so the slot is genuinely empty.
+    const justReset = (() => {
+      try {
+        const v = sessionStorage.getItem(RESET_FLAG);
+        if (v) sessionStorage.removeItem(RESET_FLAG);
+        return v === '1';
+      } catch {
+        return false;
+      }
+    })();
     try {
       await this.saveGame.open();
-      const data = await this.saveGame.load();
-      if (data) applySave(data, this.grid, this.economy, this.council);
+      if (justReset) {
+        await this.saveGame.clear();
+      } else {
+        const data = await this.saveGame.load();
+        if (data) applySave(data, this.grid, this.economy, this.council);
+      }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
     }
@@ -358,9 +381,11 @@ export class Game {
       }
 
       // Auto-save throttled to AUTOSAVE_MS. Fire-and-forget — don't block
-      // the render loop on disk.
+      // the render loop on disk. Skip if a reset is in flight; otherwise
+      // a save can fire between saveGame.clear() and location.reload(),
+      // restoring the city we just wiped.
       this.autosaveAccumMs += dtMs;
-      if (this.autosaveAccumMs >= AUTOSAVE_MS) {
+      if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
         void this.saveGame.save(this.grid, this.economy, this.council).catch(() => {});
       }
@@ -464,9 +489,18 @@ export class Game {
 
   /**
    * Wipe the current city back to a fresh map. Clears the IndexedDB save
-   * too so a reload doesn't restore the old state.
+   * too so a reload doesn't restore the old state. Two-layer safety against
+   * the autosave-vs-reload race: gate the autosave via {@link resetting},
+   * AND drop a sessionStorage flag that the next init() honours by
+   * re-clearing the slot before any load attempt.
    */
   async resetCity(): Promise<void> {
+    this.resetting = true;
+    try {
+      sessionStorage.setItem(RESET_FLAG, '1');
+    } catch {
+      /* sessionStorage unavailable (rare) — the in-memory flag still gates the save */
+    }
     try {
       await this.saveGame.clear();
     } catch {

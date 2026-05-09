@@ -28,7 +28,7 @@ Current progress lives at [`docs/PROGRESS.md`](docs/PROGRESS.md). Update it afte
 - **Language:** TypeScript, strict mode
 - **Build:** Vite 5
 - **Touch input:** Custom Pointer Events handler (covers mouse, pen, touch via the same code path)
-- **Persistence:** IndexedDB via `idb` (added in Step 13)
+- **Persistence:** Raw IndexedDB (no `idb` library — kept the dep list short). Wrapped in `src/persistence/SaveGame.ts`.
 - **State:** Plain TS classes / lightweight ECS. **No React, no heavy frameworks.** UI overlay is vanilla DOM/CSS.
 
 No backend. Fully client-side. Should work offline once loaded.
@@ -149,10 +149,11 @@ make `transit` happier and `drivers` angrier; a power plant makes
 delta to the relevant faction's `compute` and let testing tune it.
 
 **Governance hooks** (`src/simulation/Council.ts`): Happiness drives the
-3-month election cycle. The 2nd-most-angry faction's leader runs as the
-mayor's opponent (and is excluded from the council that term). 4 of the
-remaining 9 take seats, ranked by `vote = factionPop × turnout` where
-turnout climbs with anger. Councillors do three things in office:
+**yearly** election cycle (every 12 sim months — was 3 months pre-1.5,
+changed after a playtest pass). The 2nd-most-angry faction's leader runs
+as the mayor's opponent (and is excluded from the council that term).
+4 of the remaining 9 take seats, ranked by `vote = factionPop × turnout`
+where turnout climbs with anger. Councillors do three things in office:
 
 1. **Cost multiplier** on every buildable: `mult = 1 − sumStances × 0.25`
    clamped [0.20, 2.5]. If every councillor strongly opposes (all
@@ -167,6 +168,16 @@ When you add a new buildable, place it in `FACTION_STANCES` for every
 faction. Skipping a row implicitly defaults to neutral (0) — fine for
 neutral-everywhere items but the council mechanic only generates real
 political pressure when the stance matrix has opinions in it.
+
+**Stance-matrix coverage as of Alpha 2.0**: roads (local/avenue/highway),
+R/C/I × low/med/high, MU × low/med/high (Alpha 2.0), power_plant,
+water_tower, park, bus_stop, bus_depot, stop_sign — all rows filled
+with deliberate values. Intentionally absent from the matrix:
+`walking_path` and `traffic_light` — neither has a per-tile cost or
+zone-change semantic for the council mechanic to gate, so adding rows
+would be dead weight. Their faction reactions live directly in each
+faction's `compute()` instead. If a future feature gives either a real
+cost or a council-controllable property, add the row at that point.
 
 **Civic actions** layer player-driven influence on top of organic
 happiness. Implemented in `Council.ts`:
@@ -236,11 +247,24 @@ on a different machine isn't a forensic exercise.
 
 ## What's already built
 
-- A flat 3D world with chunky vertex-coloured terrain, instanced cone-trees on forest tiles, an orthographic 3/4 camera, and selection highlight.
-- One-finger drag pans, two-finger pinch zooms anchored on the gesture midpoint, mouse wheel zooms on desktop.
-- Tap → yellow highlight; long-press → bottom-sheet info card with terrain + coords.
-- A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
-- See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
+(Quick scan — `docs/PROGRESS.md` is the authoritative log.)
+
+- **World & camera:** flat 3D vertex-coloured terrain, instanced cone-trees on forest tiles, orthographic 3/4 camera, selection highlight, pinch-zoom + pan.
+- **Roads** in three tiers (local / avenue / highway, highway one-way), with proper 3D mesh segments for orthogonal AND diagonal strokes via an 8-connected diagonal-first rubber band. Bulldoze tool reverses it.
+- **Zoning** in 4 kinds: R / C / I / Mixed-use, each with low/med/high tiers gated by player-set caps (and L3 still service-gated).
+- **Buildings** that grow with demand on a 10 Hz dev tick; low-poly InstancedMesh with per-tile palette + scale.
+- **Population & demand** with per-faction resident assignment driven by happiness; RCI bars + treasury reflect live state.
+- **Cars** A* on the road graph with traffic-aware spawn routing, congestion-aware spillback + leader-gap, three-tier per-segment speed, queued stop-sign yielding, intersection collisions, return trips after a visit timer, and **path-coverage spawn suppression** that converts trips to walkers.
+- **Walking paths + sidewalks + crosswalks + pedestrians** on a separate `PathGraph`. Pedestrians cap 500.
+- **Buses** that auto-cycle every depot's stops, with **sidewalk pull-over dwell** so they don't block car traffic.
+- **Adaptive traffic lights** as a richer alternative to stop signs.
+- **Services** (power, water, parks) with radius coverage flags driving L3 unlock.
+- **Economy** with treasury, R/C/I tax sliders, monthly settlement.
+- **Happiness & Factions** keystone with 10 named-leader factions.
+- **Yearly elections + 4-seat council** with cost multipliers, zoning gate, population boost.
+- **Civic actions** (Endorse / Coalition / Photo-op / Mayoral Override) powered by Political Capital.
+- **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
+- **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
 
 ## Status: Alpha 2.0
 
@@ -338,9 +362,14 @@ What's in 1.0 beyond the original 14 steps:
   intersections that hurt the destination's growth, queue spillback
   across segments so a stop-sign queue doesn't pile up at the entry.
 
-Save schema is v2 — a v1 save (pre-pass-4) silently fails to load.
+Save schema at the time of 1.0 was v2; current is v6 (see Alpha 2.0
+status above). Schemas v2..v6 all load — missing fields default to
+sensible values (zoneCap=3, PC=0, path/trafficLight/busStop=false). v1
+is silently dropped.
 
-The next pass is presumably content / depth (not infrastructure):
-intersection lights as a richer alternative to stop signs, real
-bus-route drawing, weather, day-night, more building types. The
-simulation is in a place where new mechanics layer on cleanly.
+The next pass is presumably content / depth (Alpha 2.1+): roundabouts,
+multi-lane avenues, mid-trip car rerouting, tap-a-car route preview,
+per-tile speed limits, one-way local streets, bus-only lanes,
+pedestrian visual variety, idle clusters, time-of-day pulse, save
+slots, line-graph stats panel, weather, day/night, education / health
+buildings. See `docs/PROGRESS.md` for the authoritative deferred list.

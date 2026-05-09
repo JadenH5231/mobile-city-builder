@@ -1,5 +1,5 @@
 import type { Council, ElectionResult } from '../simulation/Council';
-import { FACTIONS } from '../simulation/Happiness';
+import { FACTIONS, pickOppositionTweet } from '../simulation/Happiness';
 
 /**
  * Modal popup that auto-opens after each election. Shows mayor / opponent
@@ -14,6 +14,7 @@ export class CouncilPanel {
   private readonly mayorPctEl: HTMLElement;
   private readonly opponentNameEl: HTMLElement;
   private readonly opponentPctEl: HTMLElement;
+  private readonly opponentTweetEl: HTMLElement;
   private readonly councilListEl: HTMLElement;
   private readonly voteListEl: HTMLElement;
   private readonly termEl: HTMLElement;
@@ -24,6 +25,7 @@ export class CouncilPanel {
     this.mayorPctEl = mustGet('council-mayor-pct');
     this.opponentNameEl = mustGet('council-opponent-name');
     this.opponentPctEl = mustGet('council-opponent-pct');
+    this.opponentTweetEl = mustGet('council-opponent-tweet');
     this.councilListEl = mustGet('council-list');
     this.voteListEl = mustGet('council-vote-list');
     this.termEl = mustGet('council-term');
@@ -58,6 +60,15 @@ export class CouncilPanel {
     const opponentFaction = FACTIONS.find((f) => f.id === r.opponentId);
     this.opponentNameEl.textContent = opponentFaction?.leaderName ?? r.opponentId;
     this.opponentPctEl.textContent = `${r.opponentPct.toFixed(4)}%`;
+    // Concession-tweet (Alpha 2.7.2): the defeated opponent posts a
+    // mean-spirited shot at the mayor right after the results.
+    if (opponentFaction) {
+      const tweet = pickOppositionTweet(r.opponentId, r.term);
+      this.opponentTweetEl.innerHTML = `<span class="council__opponent-tweet-handle">@${shortHandle(opponentFaction.leaderName)}</span> ${escapeHtml(tweet)}`;
+      this.opponentTweetEl.hidden = false;
+    } else {
+      this.opponentTweetEl.hidden = true;
+    }
 
     // New council members.
     this.councilListEl.innerHTML = '';
@@ -96,6 +107,10 @@ export class CouncilPanel {
       this.voteListEl.appendChild(row);
     }
   }
+}
+
+function shortHandle(fullName: string): string {
+  return fullName.toLowerCase().replace(/[^a-z]+/g, '');
 }
 
 function avatarInitials(name: string): string {

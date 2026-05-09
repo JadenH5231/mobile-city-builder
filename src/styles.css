@@ -1347,6 +1347,30 @@ body.photo-mode .photo-op {
   font-style: italic;
 }
 
+/* Opposition concession tweet (Alpha 2.7.2). Styled like a quoted social-
+   media post — the defeated leader takes a parting shot at the mayor. */
+.council__opponent-tweet {
+  margin: 14px 0 6px;
+  padding: 10px 14px;
+  background: rgba(207, 90, 90, 0.10);
+  border-left: 3px solid rgba(207, 90, 90, 0.55);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f0e8df;
+  font-style: italic;
+}
+.council__opponent-tweet[hidden] { display: none; }
+.council__opponent-tweet-handle {
+  display: inline-block;
+  margin-right: 6px;
+  font-style: normal;
+  color: rgba(207, 90, 90, 0.95);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
 .council__section-title {
   font-size: 12px;
   letter-spacing: 0.04em;

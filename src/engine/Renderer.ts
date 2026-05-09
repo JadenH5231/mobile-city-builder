@@ -25,7 +25,7 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildVariantParts } from './BuildingVariants';
+import { buildLuxuryParts, buildVariantParts } from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -844,7 +844,26 @@ function buildBuildingsMesh(grid: Grid): Mesh | null {
   // the actual hill rather than buried in it.
   const baseLift = ROAD_LIFT * 0.5;
   for (const t of grid.iter()) {
-    if (t.zone === 'none' || t.road || t.density === 0) continue;
+    if (t.zone === 'none' || t.road) continue;
+    // Luxury (Alpha 2.5): a 2-tile pair renders as one mansion. Emit only
+    // from the lex-smaller tile of the pair (lower x, then lower y) so we
+    // don't double-render. The mansion body extends into the partner.
+    if (t.luxury && t.zone === 'residential') {
+      const partner = findLuxuryPartner(grid, t.x, t.y);
+      if (!partner) continue; // orphan — render nothing
+      // Lex order: lower x wins; tie → lower y wins.
+      if (t.x > partner.x || (t.x === partner.x && t.y > partner.y)) continue;
+      const parts = buildLuxuryParts(t.x, t.y, partner.x, partner.y);
+      const yLift = baseLift + t.elevation;
+      for (const p of parts) {
+        if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    if (t.density === 0) continue;
     const parts = buildVariantParts(t.zone, t.density, t.x, t.y);
     const yLift = baseLift + t.elevation;
     for (const p of parts) {
@@ -858,6 +877,16 @@ function buildBuildingsMesh(grid: Grid): Mesh | null {
   const merged = mergeGeoms(geoms, colours);
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
+}
+
+/** First 4-neighbour with `luxury && zone==='residential'`, else null. */
+function findLuxuryPartner(grid: Grid, x: number, y: number): { x: number; y: number } | null {
+  const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  for (const [dx, dy] of dirs) {
+    const n = grid.get(x + dx, y + dy);
+    if (n && n.luxury && n.zone === 'residential') return { x: n.x, y: n.y };
+  }
+  return null;
 }
 
 // --- Traffic heatmap ----------------------------------------------------

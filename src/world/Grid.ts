@@ -242,18 +242,48 @@ export class Grid {
     const sameCap = t.zoneCap === cap;
     if (sameZone && sameCap) return false;
     const wasNone = t.zone === 'none';
+    const wasLuxury = t.luxury;
     t.zone = zone;
     t.zoneCap = cap;
     if (zone === 'none') {
       t.resetDevelopment();
+      // Luxury cleanup (Alpha 2.5) — when this tile leaves the zone, also
+      // un-luxury its partner so we don't leave an orphan half-mansion.
+      if (wasLuxury) {
+        t.luxury = false;
+        this.clearAdjacentLuxury(x, y);
+      }
     } else if (wasNone || !sameZone) {
-      // Switched zone kind (or zoned a fresh tile) — start over.
+      // Switched zone kind (or zoned a fresh tile) — start over. If we
+      // came from a luxury R into a non-luxury zone, also clear the
+      // partner so the pair invariant holds.
       t.resetDevelopment();
+      if (wasLuxury) {
+        t.luxury = false;
+        this.clearAdjacentLuxury(x, y);
+      }
     }
     // Cap-only changes preserve current density. If the new cap is below
     // current density the tile is "grandfathered" — Development.tick won't
     // grow it further, but the existing building stays. Bulldoze to wipe.
     return true;
+  }
+
+  /**
+   * Clear `luxury` on any 4-neighbour residential+luxury tile. Used by
+   * `setZone` when a luxury tile drops out of the zone, so its partner
+   * doesn't end up as an orphan half-mansion. Doesn't recurse — assumes
+   * pairs are exactly two tiles.
+   */
+  private clearAdjacentLuxury(x: number, y: number): void {
+    const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    for (const [dx, dy] of dirs) {
+      const n = this.get(x + dx, y + dy);
+      if (n && n.luxury && n.zone === 'residential') {
+        n.luxury = false;
+        n.resetDevelopment();
+      }
+    }
   }
 
   zoneAt(x: number, y: number): Zone {

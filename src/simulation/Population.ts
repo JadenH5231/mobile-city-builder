@@ -6,11 +6,31 @@ import type { Council } from './Council';
 import {
   COMMERCIAL_JOBS,
   INDUSTRIAL_JOBS,
+  LUXURY_RESIDENT_CAPACITY_PER_TILE,
   MIXED_COMMERCIAL_JOBS,
   MIXED_RESIDENT_CAPACITY,
   RESIDENT_CAPACITY,
   type Zone
 } from '../types';
+
+/**
+ * Faction shares for luxury-low residents (Alpha 2.5). Sums to ~1.0.
+ * Heavily biased toward NIMBYs / hometown / taxpayers — luxury homes
+ * attract a different demographic than regular R. Working-families and
+ * yimbys get crumbs because they don't WANT a mansion.
+ */
+const LUXURY_FACTION_SHARE: Record<FactionId, number> = {
+  nimbys: 0.30,
+  hometown: 0.20,
+  taxpayers: 0.18,
+  chamber: 0.10,
+  drivers: 0.08,
+  safer_streets: 0.06,
+  environmentalists: 0.04,
+  working_families: 0.02,
+  yimbys: 0.01,
+  transit: 0.01
+};
 
 /**
  * Per-zone traffic-stress demand penalty multipliers. Memory:
@@ -63,6 +83,13 @@ export class Population {
   capacity = 0;
 
   /**
+   * Subset of `totalResidents` that lives in luxury low-density homes
+   * (Alpha 2.5). Read by Economy to apply the LUXURY_TAX_BONUS premium
+   * on top of base R tax revenue.
+   */
+  luxuryResidents = 0;
+
+  /**
    * Per-faction current population. Sum equals `totalResidents`. Floating-
    * point because the lerp passes through fractions; round when displaying.
    */
@@ -77,14 +104,24 @@ export class Population {
   tick(grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness, council: Council): void {
     // Capacity = how many residents the built buildings COULD hold; jobs =
     // built C / I jobs. Same pattern as before for jobs.
-    let capacity = 0;
+    // Luxury capacity (Alpha 2.5) is tracked separately so we can split
+    // faction-share targeting into "regular" vs "luxury" buckets.
+    let regularCapacity = 0;
+    let luxuryCapacity = 0;
     let cJobs = 0;
     let iJobs = 0;
     for (const t of grid.iter()) {
-      if (t.zone === 'none' || t.density === 0 || t.road) continue;
+      if (t.zone === 'none' || t.road) continue;
+      // Luxury tiles count even at density 0 — they're permanent placement
+      // (not demand-driven growth), so capacity is fixed per tile.
+      if (t.luxury && t.zone === 'residential') {
+        luxuryCapacity += LUXURY_RESIDENT_CAPACITY_PER_TILE;
+        continue;
+      }
+      if (t.density === 0) continue;
       switch (t.zone) {
         case 'residential':
-          capacity += RESIDENT_CAPACITY[t.density] ?? 0;
+          regularCapacity += RESIDENT_CAPACITY[t.density] ?? 0;
           break;
         case 'commercial':
           cJobs += COMMERCIAL_JOBS[t.density] ?? 0;
@@ -94,11 +131,12 @@ export class Population {
           break;
         case 'mixed':
           // Mixed-use: half-rate residents AND half-rate commercial jobs.
-          capacity += MIXED_RESIDENT_CAPACITY[t.density] ?? 0;
+          regularCapacity += MIXED_RESIDENT_CAPACITY[t.density] ?? 0;
           cJobs += MIXED_COMMERCIAL_JOBS[t.density] ?? 0;
           break;
       }
     }
+    const capacity = regularCapacity + luxuryCapacity;
     this.capacity = capacity;
     this.totalCommercialJobs = cJobs;
     this.totalIndustrialJobs = iJobs;
@@ -115,7 +153,13 @@ export class Population {
       const h = happiness.get(id);
       const willingness = Math.max(0, Math.min(1, 1 + h));
       const boost = council.populationBoost(id);
-      const raw = capacity * FACTION_NATURAL_SHARE[id] * willingness * boost;
+      // Regular capacity uses each faction's natural share. Luxury capacity
+      // overrides with LUXURY_FACTION_SHARE so a luxury home draws NIMBYs
+      // and hometown disproportionately. Both still gate on willingness +
+      // council boost since happiness gates everyone.
+      const regularRaw = regularCapacity * FACTION_NATURAL_SHARE[id] * willingness * boost;
+      const luxuryRaw = luxuryCapacity * LUXURY_FACTION_SHARE[id] * willingness * boost;
+      const raw = regularRaw + luxuryRaw;
       rawTargets.set(id, raw);
       totalRawTarget += raw;
     }
@@ -132,6 +176,10 @@ export class Population {
       totalResidents += next;
     }
     this.totalResidents = totalResidents;
+    // Luxury residents = the share of totalResidents that lives in luxury
+    // tiles. Approximated by (luxuryCapacity / capacity) * totalResidents
+    // — exact enough for tax math; no need to track per-faction split.
+    this.luxuryResidents = capacity > 0 ? totalResidents * (luxuryCapacity / capacity) : 0;
 
     // Base demand formulas. Bias terms (+20, +2, +5) bootstrap an empty city
     // so freshly-painted zones have something to grow from. Denominators tune

@@ -28,6 +28,7 @@ import {
   BUILDING_COSTS,
   CRASH_DEMAND_PENALTY,
   CRASH_TREASURY_PENALTY,
+  LUXURY_LOW_COST,
   MAP_SIZES,
   PLACE_TOOL_TO_BUILDING,
   ROAD_TOOLS,
@@ -665,6 +666,20 @@ export class Game {
       }
     }
 
+    // Luxury low-density residential — tap-only, takes a 2-tile pair.
+    // Validates origin tile + finds an adjacent free zoneable tile, then
+    // marks both tiles luxury+R+lowCap. Refuses (with toast) if there's
+    // no valid partner adjacent.
+    if (this.tool === 'residential_luxury_low') {
+      const placed = this.placeLuxuryPair(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Place tools are tap-only (single building per tap). Skip the rubber
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
@@ -814,6 +829,78 @@ export class Game {
     this.renderer.drawRoads(this.grid);
     this.trafficLights.rebuild(this.grid);
     return true;
+  }
+
+  /**
+   * Luxury low-density paint (Alpha 2.5). Tap-only — places a 2-tile pair.
+   * The tapped tile becomes the primary; we look for any 4-neighbour tile
+   * that's also free + zoneable + adjacent-to-road, in N/E/S/W order, and
+   * mark BOTH as zone='residential', luxury=true, zoneCap=1. Refuses with
+   * a status toast if there's no valid partner adjacent or treasury is
+   * short. Council cost-multiplier and ban gating reuse the new `r_lux`
+   * stance row.
+   */
+  private placeLuxuryPair(x: number, y: number): boolean {
+    const primary = this.grid.get(x, y);
+    if (!primary) return false;
+    if (!this.canZoneLuxury(x, y)) {
+      this.onStatusMessage?.('Luxury home needs a free road-adjacent tile');
+      return false;
+    }
+    // Find a partner — first 4-neighbour that's also valid for luxury.
+    const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    let partner: { x: number; y: number } | null = null;
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (this.canZoneLuxury(nx, ny)) {
+        partner = { x: nx, y: ny };
+        break;
+      }
+    }
+    if (!partner) {
+      this.onStatusMessage?.('Luxury home needs an adjacent free tile');
+      return false;
+    }
+    const mult = this.council.costMultiplier('r_lux');
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
+    const cost = Math.round(LUXURY_LOW_COST * mult);
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
+      return false;
+    }
+    // Mutate both tiles. setZone gates already checked via canZoneLuxury,
+    // so these calls should not refuse — set them, flag luxury, deduct.
+    if (!this.grid.setZone(x, y, 'residential', 1)) return false;
+    if (!this.grid.setZone(partner.x, partner.y, 'residential', 1)) {
+      // Roll back the primary if partner zoning unexpectedly fails.
+      this.grid.setZone(x, y, 'none');
+      return false;
+    }
+    primary.luxury = true;
+    const partnerTile = this.grid.get(partner.x, partner.y)!;
+    partnerTile.luxury = true;
+    this.economy.treasury -= cost;
+    this.maybeOfferPhotoOp('r_lux');
+    return true;
+  }
+
+  /**
+   * Luxury-paint pre-check: is `(x,y)` a tile that could become half of a
+   * luxury pair? Same constraints as a regular zone paint (free, zoneable,
+   * adjacent-to-road), AND the tile must not already be luxury (so two
+   * pairs don't share a tile).
+   */
+  private canZoneLuxury(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t) return false;
+    if (t.road || t.zone !== 'none' || t.building !== 'none' || t.path) return false;
+    if (t.terrain === 'water' || t.bridge) return false;
+    if (t.luxury) return false;
+    return this.grid.hasRoadAdjacent(x, y);
   }
 
   /**

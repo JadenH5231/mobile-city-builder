@@ -79,6 +79,14 @@ const ICON_TIER_HIGH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <rect x="4" y="4" width="16" height="16" stroke="currentColor"
         stroke-width="1.8" fill="none"/>
 </svg>`;
+const ICON_TIER_LUX = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="3" y="14" width="6" height="6" stroke="currentColor"
+        stroke-width="1.8" fill="none"/>
+  <rect x="15" y="14" width="6" height="6" stroke="currentColor"
+        stroke-width="1.8" fill="none"/>
+  <path d="M12 4l2 4 4 .6-3 2.8.7 4-3.7-2-3.7 2 .7-4-3-2.8 4-.6z"
+        stroke="currentColor" stroke-width="1.4" fill="none"/>
+</svg>`;
 
 const ITEMS: readonly ToolbarItem[] = [
   { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -106,7 +114,8 @@ const ITEMS: readonly ToolbarItem[] = [
     members: [
       { kind: 'tool', tool: 'residential_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'residential_medium', label: 'Med',  icon: ICON_TIER_MED },
-      { kind: 'tool', tool: 'residential_high',   label: 'High', icon: ICON_TIER_HIGH }
+      { kind: 'tool', tool: 'residential_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX }
     ]
   },
   {

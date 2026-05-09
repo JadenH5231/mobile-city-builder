@@ -67,6 +67,15 @@ export class Tile {
    * feedback_zone_tier_permissions.
    */
   zoneCap: 0 | 1 | 2 | 3 = 0;
+  /**
+   * Luxury low-density bit (Alpha 2.5). When true and `zone === 'residential'`,
+   * this tile is part of a 2-tile luxury home pair. The partner is whichever
+   * 4-neighbour tile also has `luxury` true; bulldozing one auto-clears the
+   * other. Luxury tiles never grow past density 1 (zoneCap stays 1), house
+   * fewer residents per tile, but pay a premium tax rate and bias the
+   * faction-population mix toward NIMBYs.
+   */
+  luxury = false;
   /** 0 = no building yet, 1..3 = low / medium / high density. */
   density = 0;
   /** Sim-tick accumulator. Crossing 1.0 promotes density by one tier. */

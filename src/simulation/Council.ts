@@ -49,6 +49,11 @@ export interface FactionStances {
    *  so stances usually average their R and C rows but with a thumb on the
    *  scale for factions that love (or hate) walkable density specifically. */
   mu_low: number;    mu_medium: number; mu_high: number;
+  /** Luxury low-density residential (Alpha 2.5). 2-tile pair. NIMBYs and
+   *  hometown love it (rich, low-density, screens out density), taxpayers
+   *  like the revenue, working-families and yimbys hate it (replaces
+   *  workforce housing with a mansion). */
+  r_lux: number;
   power_plant: number;
   water_tower: number;
   park: number;
@@ -71,6 +76,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: -0.4, c_medium: -0.6, c_high: -0.8,
     i_low: -0.7, i_medium: -0.9, i_high: -1.0,
     mu_low: 0.0, mu_medium: -0.3, mu_high: -0.7,
+    r_lux: 0.9,
     power_plant: -0.7, water_tower: 0.0, park: 0.6,
     bus_stop: -0.3, bus_depot: -0.5, stop_sign: 0.4
   },
@@ -80,6 +86,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.0, c_medium: 0.4, c_high: 0.7,
     i_low: 0.0, i_medium: 0.2, i_high: 0.3,
     mu_low: 0.2, mu_medium: 0.6, mu_high: 0.9,
+    r_lux: -0.8,
     power_plant: 0.0, water_tower: 0.2, park: 0.3,
     bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2
   },
@@ -89,6 +96,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.0, c_medium: 0.0, c_high: 0.0,
     i_low: -0.5, i_medium: -0.7, i_high: -1.0,
     mu_low: 0.1, mu_medium: 0.3, mu_high: 0.4,
+    r_lux: -0.3,
     power_plant: -0.9, water_tower: 0.2, park: 1.0,
     bus_stop: 0.8, bus_depot: 0.8, stop_sign: 0.1
   },
@@ -98,6 +106,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.2, c_medium: -0.3, c_high: -0.7,
     i_low: -0.3, i_medium: -0.5, i_high: -0.8,
     mu_low: 0.0, mu_medium: -0.4, mu_high: -0.8,
+    r_lux: 0.6,
     power_plant: -0.4, water_tower: 0.0, park: 0.5,
     bus_stop: -0.2, bus_depot: -0.3, stop_sign: 0.2
   },
@@ -107,6 +116,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.5, c_medium: 0.7, c_high: 0.9,
     i_low: 0.6, i_medium: 0.7, i_high: 0.8,
     mu_low: 0.2, mu_medium: 0.5, mu_high: 0.7,
+    r_lux: 0.4,
     power_plant: 0.4, water_tower: 0.3, park: 0.1,
     bus_stop: 0.1, bus_depot: 0.2, stop_sign: -0.1
   },
@@ -116,6 +126,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.0, c_medium: 0.3, c_high: 0.5,
     i_low: 0.0, i_medium: 0.0, i_high: 0.0,
     mu_low: 0.3, mu_medium: 0.6, mu_high: 0.8,
+    r_lux: -0.5,
     power_plant: -0.3, water_tower: 0.1, park: 0.4,
     bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3
   },
@@ -125,6 +136,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.3, c_medium: 0.4, c_high: 0.4,
     i_low: 0.2, i_medium: 0.2, i_high: 0.2,
     mu_low: 0.0, mu_medium: -0.1, mu_high: -0.2,
+    r_lux: 0.3,
     power_plant: 0.1, water_tower: 0.0, park: 0.0,
     bus_stop: -0.7, bus_depot: -0.8, stop_sign: -0.4
   },
@@ -134,6 +146,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.4, c_medium: 0.5, c_high: 0.5,
     i_low: 0.4, i_medium: 0.4, i_high: 0.5,
     mu_low: 0.3, mu_medium: 0.4, mu_high: 0.4,
+    r_lux: 0.7,
     power_plant: -0.4, water_tower: -0.2, park: -0.2,
     bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2
   },
@@ -143,6 +156,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.2, c_medium: 0.2, c_high: 0.2,
     i_low: -0.2, i_medium: -0.3, i_high: -0.4,
     mu_low: 0.2, mu_medium: 0.3, mu_high: 0.3,
+    r_lux: 0.2,
     power_plant: -0.3, water_tower: 0.4, park: 0.7,
     bus_stop: 0.3, bus_depot: 0.3, stop_sign: 1.0
   },
@@ -152,6 +166,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     c_low: 0.5, c_medium: 0.6, c_high: 0.5,
     i_low: 0.7, i_medium: 0.7, i_high: 0.6,
     mu_low: 0.4, mu_medium: 0.5, mu_high: 0.4,
+    r_lux: -0.6,
     power_plant: 0.2, water_tower: 0.3, park: 0.4,
     bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3
   }

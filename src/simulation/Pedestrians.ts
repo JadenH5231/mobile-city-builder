@@ -36,9 +36,15 @@ export interface Walker {
   segmentIdx: number;
   segmentT: number;
   color: number;
-  /** Tiny perpendicular jitter (tile units) so a stream of walkers spreads
-   *  across the sidewalk width instead of marching the centerline. */
-  sideOffset: number;
+  /**
+   * Which side of the direction-of-travel the walker uses: -1 = left,
+   * +1 = right. Picked at spawn and held for the trip. The renderer
+   * resolves this to a perpendicular offset that depends on the tile
+   * the walker is currently on (sidewalk-band offset on a road tile,
+   * a small spread on a path tile) so they walk *beside* cars rather
+   * than on top of them.
+   */
+  side: 1 | -1;
 }
 
 export class Pedestrians {
@@ -84,7 +90,7 @@ export class Pedestrians {
       segmentIdx: 0,
       segmentT: 0,
       color,
-      sideOffset: (Math.random() - 0.5) * 0.18
+      side: Math.random() < 0.5 ? -1 : 1
     });
   }
 

@@ -231,6 +231,11 @@ export class Grid {
     if (!t) return false;
     if (zone !== 'none') {
       if (t.road) return false;
+      // No zoning on water (Alpha 2.4) — buildings can't develop in lakes
+      // or rivers. Bridges count as roads anyway and are caught above, but
+      // re-check defensively in case a bridge tile loses its road bit.
+      if (t.terrain === 'water') return false;
+      if (t.bridge) return false;
       if (!this.hasRoadAdjacent(x, y)) return false;
     }
     const sameZone = t.zone === zone;

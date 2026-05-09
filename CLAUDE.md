@@ -268,7 +268,42 @@ on a different machine isn't a forensic exercise.
 - **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
 - **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
 
-## Status: Alpha 2.3
+## Status: Alpha 2.4
+
+Cleanup pass on top of 2.3 — terrain-aware overlays + zoning gates.
+The procedural elevation introduced in 2.3 was already pushing buildings
+up onto hills, but every other ground-anchored mesh (roads, sidewalks,
+paths, zone overlays, heatmap, road furniture) and every dynamic instance
+(cars, buses, walkers) was still drawn at the old flat lift, so they
+sank into hilltops, floated over valleys, and passed through bridge
+decks. 2.4 fixes the lot.
+
+- **Per-tile y-lift everywhere.** Renderer pipelines now compute
+  `y = (bridge ? BRIDGE_LIFT : <baseLift> + tile.elevation)` for every
+  ground-anchored quad and ornament. Road quad endpoints, lane stripes,
+  road stubs, sidewalks, walking paths, zone overlays, the heatmap,
+  highway arrows, stop signs, traffic lights, road-attached bus stops,
+  and zebra crosswalks all ride the terrain. Bridges stay absolute at
+  `BRIDGE_LIFT`.
+- **Cars / buses / walkers y-lerp** between segment endpoint heights.
+  New helpers `roadSurfaceY` (vehicles) and `walkerSurfaceY`
+  (pedestrians, picks `SIDEWALK_LIFT` / `PATH_LIFT` / `BRIDGE_LIFT` per
+  tile type) drive the lerp. Cars on a bridge ride at
+  `BRIDGE_LIFT + 0.05`, matching the deck. `updateCars` and
+  `updateBuses` now take `Grid` instead of a bare `gridWidth`.
+- **Zoning gate.** `Grid.setZone` now rejects `terrain === 'water'`
+  AND `bridge === true`. User feedback: "you shouldn't be able to zone
+  in the water or on bridges". Buildings can't develop in lakes; bridges
+  remain pure transit.
+- **No save schema bump** — purely visual / placement-rule changes.
+  v7 saves load unchanged.
+- **Deferred to 2.5+**: overpass bridges (road-over-road still needs a
+  multi-level road graph — every Tile gets `bridgeRoad` fields,
+  RoadGraph builds a second adjacency layer, vehicles + pathfinder gain
+  a level axis); elevation-affected pathfinding cost (steeper = slower);
+  lane-stripe smoothing across a multi-segment slope.
+
+### Status: Alpha 2.3 (carryover)
 
 Natural terrain pass on top of 2.2:
 
@@ -289,11 +324,6 @@ Natural terrain pass on top of 2.2:
   y-values differ along the segment.
 - **Save schema v7** persists `elevation` and `bridge` per tile. v6
   saves load with elevation=0 and bridge=false (flat by construction).
-- **Deferred to Alpha 2.4**: overpass bridges (road-over-road needs a
-  multi-level road graph — every Tile gets `bridgeRoad` fields,
-  RoadGraph builds a second adjacency layer, vehicles + pathfinder
-  gain a level axis); roads following terrain elevation visually;
-  elevation-affected pathfinding cost.
 
 ### Status: Alpha 2.2 (carryover)
 

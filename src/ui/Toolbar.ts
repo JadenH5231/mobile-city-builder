@@ -199,6 +199,7 @@ export class Toolbar {
   private readonly groupPopovers = new Map<string, HTMLElement>();
   private current: Tool = 'pan';
   private openPopoverId: string | null = null;
+  private bannedTools: Set<Tool> = new Set();
   onChange?: (tool: Tool) => void;
 
   constructor() {
@@ -235,6 +236,43 @@ export class Toolbar {
     this.current = tool;
     this.closePopovers();
     this.refreshActive();
+  }
+
+  /**
+   * Mark a set of tools as banned-by-council (Alpha 2.6). Banned tools
+   * render with a strikethrough + reduced opacity + a 🚫 tooltip via the
+   * `data-banned="true"` attribute (styled in styles.css). Game.ts calls
+   * this after every council change.
+   */
+  setBannedTools(banned: ReadonlySet<Tool>): void {
+    this.bannedTools = new Set(banned);
+    for (const [tool, btn] of this.toolButtons) {
+      const isBanned = this.bannedTools.has(tool);
+      btn.dataset.banned = isBanned ? 'true' : 'false';
+      if (isBanned) {
+        btn.setAttribute('title', 'Banned by council this term');
+      } else {
+        btn.removeAttribute('title');
+      }
+    }
+    // Group buttons get a 'partial' or 'all' ban indicator depending on
+    // how many of their members are banned. Anything ≥ 1 banned member
+    // gets the visual cue so the player notices before opening the popover.
+    for (const item of ITEMS) {
+      if (item.kind !== 'group') continue;
+      const btn = this.groupButtons.get(item.id);
+      if (!btn) continue;
+      const total = item.members.length;
+      const bannedCount = item.members.filter((m) => this.bannedTools.has(m.tool)).length;
+      const allBanned = bannedCount === total && total > 0;
+      const someBanned = bannedCount > 0 && !allBanned;
+      btn.dataset.banned = allBanned ? 'true' : someBanned ? 'partial' : 'false';
+      if (bannedCount > 0) {
+        btn.setAttribute('title', `${bannedCount} of ${total} variant${total > 1 ? 's' : ''} banned by council`);
+      } else {
+        btn.removeAttribute('title');
+      }
+    }
   }
 
   private render(): void {
@@ -305,6 +343,9 @@ export class Toolbar {
       memBtn.setAttribute('aria-label', m.label);
       memBtn.setAttribute('aria-pressed', String(m.tool === this.current));
       memBtn.innerHTML = `<span class="toolbar__icon" aria-hidden="true">${m.icon}</span><span class="toolbar__label">${m.label}</span>`;
+      // Register popover sub-buttons in toolButtons too so setBannedTools
+      // can flip their data-banned attribute alongside the top-level ones.
+      this.toolButtons.set(m.tool, memBtn);
       memBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.activate(m.tool);

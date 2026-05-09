@@ -200,6 +200,60 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.35);
 }
 
+/* Council-banned tools (Alpha 2.6) — strikethrough label, dimmed, with a
+   small 🚫 marker overlaid in the corner. Top-level pills get the full
+   strikethrough; group buttons whose members are ALL banned get the same
+   treatment, and groups with SOME banned get a subtle warning glow. */
+.toolbar__btn[data-banned="true"] {
+  opacity: 0.55;
+  position: relative;
+}
+.toolbar__btn[data-banned="true"] .toolbar__label {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 110, 110, 0.85);
+  text-decoration-thickness: 2px;
+}
+.toolbar__btn[data-banned="true"]::after {
+  content: "🚫";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+}
+.toolbar__btn[data-banned="partial"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 110, 110, 0.45);
+}
+.toolbar__btn[data-banned="partial"]::after {
+  content: "⚠";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 9px;
+  color: #ffae5e;
+  line-height: 1;
+  pointer-events: none;
+}
+.toolbar__popover-btn[data-banned="true"] {
+  opacity: 0.55;
+  position: relative;
+}
+.toolbar__popover-btn[data-banned="true"] .toolbar__label {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 110, 110, 0.85);
+  text-decoration-thickness: 2px;
+}
+.toolbar__popover-btn[data-banned="true"]::after {
+  content: "🚫";
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .toolbar__icon {
   width: 20px;
   height: 20px;

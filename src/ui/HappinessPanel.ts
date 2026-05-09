@@ -8,9 +8,15 @@ import {
   overallLabel,
   pickComment,
   type Faction,
+  type FactionId,
   type Happiness
 } from '../simulation/Happiness';
-import { COUNCIL_COMMENTS, type Council } from '../simulation/Council';
+import {
+  COSTS,
+  COUNCIL_COMMENTS,
+  PC_CAP,
+  type Council
+} from '../simulation/Council';
 
 interface Deps {
   readonly happiness: Happiness;
@@ -21,21 +27,51 @@ interface Deps {
   readonly traffic: Traffic;
 }
 
+type CivicAction = 'endorse' | 'coalition' | 'override';
+
 /**
- * Bottom-sheet "City Sentiment" feed. Each faction is rendered as a
- * Facebook-style post — leader avatar (initials in the faction's accent
- * colour), name + title, the comment for their current mood, and a small
- * happiness bar.
+ * Bottom-sheet "City Sentiment" feed.
  *
- * The DOM is built once; refresh() updates the comment text and the bar.
- * The leader's avatar / name / title don't change so we don't touch them.
+ * Top-of-panel layout:
+ *  - City mood line (existing).
+ *  - Council bar — current council members + opponent, prominently shown.
+ *  - Civic actions — Political Capital, action buttons (Endorse, Coalition,
+ *    Mayoral Override). Each button opens a faction-picker modal.
+ *
+ * Below is the per-faction feed where each row shows the leader's mood,
+ * comment (or city-hall mode if on council), residents, and a happiness bar.
  */
 export class HappinessPanel {
   private readonly el: HTMLElement;
   private readonly closeBtn: HTMLElement;
   private readonly listEl: HTMLElement;
   private readonly overallEl: HTMLElement;
+
+  // Council bar
+  private readonly councilBarTitleEl: HTMLElement;
+  private readonly councilBarSeatsEl: HTMLElement;
+  private readonly councilBarOppEl: HTMLElement;
+
+  // Civic action elements
+  private readonly civicPcFillEl: HTMLElement;
+  private readonly civicPcNumEl: HTMLElement;
+  private readonly civicActiveEl: HTMLElement;
+  private readonly btnEndorse: HTMLButtonElement;
+  private readonly btnCoalition: HTMLButtonElement;
+  private readonly btnOverride: HTMLButtonElement;
+
+  // Civic action modal
+  private readonly modalEl: HTMLElement;
+  private readonly modalTitleEl: HTMLElement;
+  private readonly modalSubEl: HTMLElement;
+  private readonly modalListEl: HTMLElement;
+  private readonly modalConfirmEl: HTMLButtonElement;
+  private readonly modalCloseEl: HTMLElement;
+
   private readonly rows = new Map<string, FactionRow>();
+  private currentAction: CivicAction | null = null;
+  private currentSelections: FactionId[] = [];
+
   onClose?: () => void;
 
   constructor(private readonly deps: Deps) {
@@ -43,11 +79,33 @@ export class HappinessPanel {
     this.closeBtn = mustGet('happiness-close');
     this.listEl = mustGet('happiness-list');
     this.overallEl = mustGet('happiness-overall');
+    this.councilBarTitleEl = mustGet('council-bar-title');
+    this.councilBarSeatsEl = mustGet('council-bar-seats');
+    this.councilBarOppEl = mustGet('council-bar-opp');
+    this.civicPcFillEl = mustGet('civic-pc-fill');
+    this.civicPcNumEl = mustGet('civic-pc-num');
+    this.civicActiveEl = mustGet('civic-active');
+    this.btnEndorse = mustGet('civic-btn-endorse') as HTMLButtonElement;
+    this.btnCoalition = mustGet('civic-btn-coalition') as HTMLButtonElement;
+    this.btnOverride = mustGet('civic-btn-override') as HTMLButtonElement;
+
+    this.modalEl = mustGet('civic-modal');
+    this.modalTitleEl = mustGet('civic-modal-title');
+    this.modalSubEl = mustGet('civic-modal-sub');
+    this.modalListEl = mustGet('civic-modal-list');
+    this.modalConfirmEl = mustGet('civic-modal-confirm') as HTMLButtonElement;
+    this.modalCloseEl = mustGet('civic-modal-close');
 
     this.closeBtn.addEventListener('click', () => {
       this.hide();
       this.onClose?.();
     });
+
+    this.btnEndorse.addEventListener('click', () => this.openModal('endorse'));
+    this.btnCoalition.addEventListener('click', () => this.openModal('coalition'));
+    this.btnOverride.addEventListener('click', () => this.openModal('override'));
+    this.modalCloseEl.addEventListener('click', () => this.closeModal());
+    this.modalConfirmEl.addEventListener('click', () => this.confirmAction());
 
     this.buildRows();
   }
@@ -70,31 +128,22 @@ export class HappinessPanel {
   hide(): void {
     this.el.classList.add('hidden');
     this.el.setAttribute('aria-hidden', 'true');
+    this.closeModal();
   }
 
   isOpen(): boolean {
     return !this.el.classList.contains('hidden');
   }
 
-  /**
-   * Recompute all faction happiness from current state and refresh visible
-   * comment + bar for every leader. Cheap — one grid sweep + 10 small
-   * scoring calls. Safe to call at HUD refresh rate.
-   */
   refresh(): void {
-    // Happiness is now computed every sim tick by Game; we just read it
-    // here. (Recomputing again on panel refresh would be redundant work.)
     const overall = this.deps.happiness.overall();
     this.overallEl.textContent = `City mood: ${overallLabel(overall)}`;
     this.overallEl.dataset.bucket = bucketOf(overall);
 
-    // Salt the comment-picker by months-elapsed × bucket so the message
-    // stays stable but rotates when the player's situation actually moves.
+    this.refreshCouncilBar();
+    this.refreshCivicSection();
+
     const months = this.deps.economy.monthsElapsed;
-    // Round the displayed total so per-faction counts and the city total
-    // both come from the same integer space — otherwise rounded faction
-    // counts divided by a float city total can produce % values that
-    // visibly don't sum to 100.
     const totalDisplayed = Math.round(this.deps.population.totalResidents);
 
     for (const f of FACTIONS) {
@@ -105,8 +154,6 @@ export class HappinessPanel {
       const salt = months + bucketToSalt(bucket) * 7;
       const onCouncil = this.deps.council.isCouncillor(f.id);
       const isOpponent = this.deps.council.isOpponent(f.id);
-      // Council members shift to "city hall mode" — replaces the regular
-      // mood-bucketed comment with a fixed council-voice line.
       row.commentEl.textContent = onCouncil
         ? COUNCIL_COMMENTS[f.id]
         : pickComment(f, h, salt);
@@ -115,19 +162,204 @@ export class HappinessPanel {
       row.el.dataset.bucket = bucket;
       row.moodEl.textContent = bucketLabel(bucket);
 
-      // Council / opponent badges.
       const role = onCouncil ? 'council' : isOpponent ? 'opponent' : '';
       row.el.dataset.role = role;
       row.badgeEl.textContent = onCouncil ? '★ COUNCIL' : isOpponent ? '✕ RAN AGAINST' : '';
       row.badgeEl.style.display = role ? 'inline-block' : 'none';
 
-      // Faction population + share-of-city.
       const factionPop = Math.round(this.deps.population.factionPopulation.get(f.id) ?? 0);
       const sharePct = totalDisplayed > 0 ? (factionPop / totalDisplayed) * 100 : 0;
       row.popEl.textContent = `${factionPop.toLocaleString()} residents · ${sharePct.toFixed(1)}%`;
       row.shareFill.style.width = `${Math.min(100, sharePct).toFixed(1)}%`;
       row.shareFill.style.background = `#${f.color.toString(16).padStart(6, '0')}`;
     }
+  }
+
+  private refreshCouncilBar(): void {
+    const c = this.deps.council;
+    if (c.term === 0) {
+      // Months until next year boundary.
+      const m = this.deps.economy.monthsElapsed;
+      const monthsToElection = 12 - (m % 12);
+      this.councilBarTitleEl.textContent =
+        `★ Council — first election in ${monthsToElection} month${monthsToElection === 1 ? '' : 's'}`;
+      this.councilBarSeatsEl.innerHTML = '<span class="council-bar__none">No seats yet — Mayor governs alone</span>';
+      this.councilBarOppEl.textContent = '';
+      return;
+    }
+    this.councilBarTitleEl.textContent = `★ Council · Term ${c.term}`;
+    this.councilBarSeatsEl.innerHTML = '';
+    for (const id of c.councillors) {
+      const f = FACTIONS.find((x) => x.id === id);
+      if (!f) continue;
+      const seat = document.createElement('div');
+      seat.className = 'council-bar__seat';
+      seat.innerHTML = `
+        <span class="council-bar__seat-avatar" style="background:#${f.color.toString(16).padStart(6, '0')}">${avatarInitials(f.leaderName)}</span>
+        <span>${escapeHtml(shortName(f.leaderName))}</span>
+      `;
+      this.councilBarSeatsEl.appendChild(seat);
+    }
+    if (c.opponent) {
+      const opp = FACTIONS.find((x) => x.id === c.opponent);
+      this.councilBarOppEl.textContent = opp ? `✕ Defeated: ${opp.leaderName}` : '';
+    } else {
+      this.councilBarOppEl.textContent = '';
+    }
+  }
+
+  private refreshCivicSection(): void {
+    const c = this.deps.council;
+    const pc = c.politicalCapital;
+    this.civicPcNumEl.textContent = `${Math.floor(pc)} / ${PC_CAP}`;
+    this.civicPcFillEl.style.width = `${(pc / PC_CAP) * 100}%`;
+
+    // Endorse button state
+    if (c.endorsedFaction) {
+      const f = FACTIONS.find((x) => x.id === c.endorsedFaction);
+      this.btnEndorse.textContent = `Endorsing: ${f?.leaderName ?? c.endorsedFaction}`;
+      this.btnEndorse.disabled = true;
+    } else {
+      this.btnEndorse.textContent = `Endorse Leader (${COSTS.endorse_pc} PC)`;
+      this.btnEndorse.disabled = pc < COSTS.endorse_pc;
+    }
+
+    // Coalition button state
+    if (c.coalition) {
+      const a = FACTIONS.find((x) => x.id === c.coalition!.a);
+      const b = FACTIONS.find((x) => x.id === c.coalition!.b);
+      this.btnCoalition.textContent = `Coalition: ${shortName(a?.leaderName ?? '')} + ${shortName(b?.leaderName ?? '')}`;
+      this.btnCoalition.disabled = true;
+    } else {
+      this.btnCoalition.textContent = `Form Coalition (${COSTS.coalition_pc} PC)`;
+      this.btnCoalition.disabled = pc < COSTS.coalition_pc;
+    }
+
+    // Override button state
+    if (c.isOverrideActive()) {
+      this.btnOverride.textContent = '⚡ Mayoral Override ACTIVE';
+      this.btnOverride.disabled = true;
+    } else if (c.isOverridePending()) {
+      this.btnOverride.textContent = '⏳ Override pending — kicks in next election';
+      this.btnOverride.disabled = true;
+    } else {
+      this.btnOverride.textContent = `Mayoral Override (${COSTS.override_pc} PC)`;
+      this.btnOverride.disabled = pc < COSTS.override_pc;
+    }
+
+    // Active summary
+    const lines: string[] = [];
+    if (c.endorsedFaction) lines.push('Endorsement active until next election');
+    if (c.coalition) lines.push('Coalition active for this term');
+    if (c.isOverrideActive()) lines.push('Mayoral Override active for this term — no council restrictions');
+    else if (c.isOverridePending()) lines.push('Override paid, activates at next election');
+    this.civicActiveEl.textContent = lines.join(' · ');
+  }
+
+  // -------------------------------------------------------------------
+  // Civic action modal
+  // -------------------------------------------------------------------
+
+  private openModal(action: CivicAction): void {
+    this.currentAction = action;
+    this.currentSelections = [];
+
+    if (action === 'override') {
+      this.modalTitleEl.textContent = '⚡ Mayoral Override';
+      this.modalSubEl.textContent =
+        `Spend ${COSTS.override_pc} PC. Activates at the next election and lasts one full term. ` +
+        `While active, no cost penalties, no zoning approval needed, no banned actions.`;
+      this.modalListEl.innerHTML = '<div class="civic__option" style="cursor:default; pointer-events:none">Confirm to purchase.</div>';
+      this.modalConfirmEl.textContent = `Buy Override (${COSTS.override_pc} PC)`;
+      this.modalConfirmEl.classList.remove('hidden');
+    } else if (action === 'endorse') {
+      this.modalTitleEl.textContent = '👑 Endorse a Leader';
+      this.modalSubEl.textContent =
+        `Spend ${COSTS.endorse_pc} PC. Endorsed faction gets +20% vote share at the next election ` +
+        `and can't be your opponent. Other factions take a small happiness hit.`;
+      this.modalConfirmEl.classList.add('hidden');
+      this.populateOptions(1);
+    } else {
+      this.modalTitleEl.textContent = '🤝 Form a Coalition';
+      this.modalSubEl.textContent =
+        `Spend ${COSTS.coalition_pc} PC. Pick TWO factions. Both gain happiness; their natural rivals ` +
+        `lose happiness. Lasts until next election.`;
+      this.modalConfirmEl.textContent = 'Form Coalition';
+      this.modalConfirmEl.classList.remove('hidden');
+      this.populateOptions(2);
+    }
+
+    this.modalEl.classList.remove('hidden');
+    this.modalEl.setAttribute('aria-hidden', 'false');
+  }
+
+  private populateOptions(maxSelect: number): void {
+    this.modalListEl.innerHTML = '';
+    for (const f of FACTIONS) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'civic__option';
+      btn.dataset.faction = f.id;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.innerHTML = `
+        <span class="civic__option-avatar" style="background:#${f.color.toString(16).padStart(6, '0')}">${avatarInitials(f.leaderName)}</span>
+        <span class="civic__option-name">${escapeHtml(f.leaderName)}</span>
+        <span class="civic__option-tag">${escapeHtml(f.name)}</span>
+      `;
+      btn.addEventListener('click', () => this.toggleSelection(f.id, maxSelect));
+      this.modalListEl.appendChild(btn);
+    }
+  }
+
+  private toggleSelection(id: FactionId, maxSelect: number): void {
+    const idx = this.currentSelections.indexOf(id);
+    if (idx >= 0) {
+      this.currentSelections.splice(idx, 1);
+    } else {
+      if (this.currentSelections.length >= maxSelect) {
+        // For single-select, replace; for multi-select, ignore.
+        if (maxSelect === 1) this.currentSelections = [id];
+        else return;
+      } else {
+        this.currentSelections.push(id);
+      }
+    }
+    // Update aria-pressed on each button.
+    for (const btn of this.modalListEl.querySelectorAll<HTMLButtonElement>('.civic__option[data-faction]')) {
+      const fid = btn.dataset.faction as FactionId;
+      btn.setAttribute('aria-pressed', String(this.currentSelections.includes(fid)));
+    }
+    // For endorse (single-select), confirm immediately on tap.
+    if (maxSelect === 1 && this.currentSelections.length === 1) {
+      this.confirmAction();
+    }
+  }
+
+  private confirmAction(): void {
+    if (!this.currentAction) return;
+    const c = this.deps.council;
+    let success = false;
+    if (this.currentAction === 'override') {
+      success = c.activateOverride();
+    } else if (this.currentAction === 'endorse') {
+      const f = this.currentSelections[0];
+      if (f) success = c.endorse(f);
+    } else if (this.currentAction === 'coalition') {
+      if (this.currentSelections.length === 2) {
+        success = c.declareCoalition(this.currentSelections[0]!, this.currentSelections[1]!);
+      }
+    }
+    if (success) {
+      this.closeModal();
+      this.refresh();
+    }
+  }
+
+  private closeModal(): void {
+    this.modalEl.classList.add('hidden');
+    this.modalEl.setAttribute('aria-hidden', 'true');
+    this.currentAction = null;
+    this.currentSelections = [];
   }
 }
 
@@ -177,8 +409,14 @@ function avatarInitials(name: string): string {
   return (first + last).toUpperCase();
 }
 
+function shortName(name: string): string {
+  // "Karen Whitfield" → "Karen W." for the council bar (compact).
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1]?.[0] ?? ''}.`;
+}
+
 function happinessToPct(h: number): number {
-  // Map [-1, 1] to [0, 100]. Centre is 50%.
   return Math.round(((h + 1) / 2) * 100);
 }
 

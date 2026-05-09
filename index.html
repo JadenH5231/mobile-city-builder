@@ -142,8 +142,43 @@
       >×</button>
       <div class="info-panel__title">Community Sentiment</div>
       <div class="info-panel__sub" id="happiness-overall">City mood: —</div>
+      <div id="council-bar" class="council-bar">
+        <div class="council-bar__title" id="council-bar-title">No council yet</div>
+        <div class="council-bar__seats" id="council-bar-seats"></div>
+        <div class="council-bar__opp" id="council-bar-opp"></div>
+      </div>
+      <div id="civic-section" class="civic">
+        <div class="civic__pc">
+          <span>Political Capital</span>
+          <div class="civic__pc-bar"><div id="civic-pc-fill" class="civic__pc-fill"></div></div>
+          <span class="civic__pc-num" id="civic-pc-num">0 / 50</span>
+        </div>
+        <div class="civic__buttons">
+          <button id="civic-btn-endorse" class="civic__btn" type="button">Endorse Leader (5 PC)</button>
+          <button id="civic-btn-coalition" class="civic__btn" type="button">Form Coalition (10 PC)</button>
+          <button id="civic-btn-override" class="civic__btn civic__btn--primary" type="button">Mayoral Override (40 PC)</button>
+        </div>
+        <div class="civic__active" id="civic-active"></div>
+      </div>
       <div id="happiness-list" class="happiness__list"></div>
     </section>
+    <div id="photo-op-banner" class="photo-op hidden" role="alert" aria-live="polite">
+      <div id="photo-op-avatar" class="photo-op__avatar">??</div>
+      <div id="photo-op-text" class="photo-op__text"></div>
+      <div class="photo-op__actions">
+        <button id="photo-op-attend" type="button" class="photo-op__attend">Attend</button>
+        <button id="photo-op-skip" type="button" class="photo-op__skip">Skip</button>
+      </div>
+    </div>
+    <div id="civic-modal" class="modal hidden" role="dialog" aria-label="Civic action" aria-modal="true" aria-hidden="true">
+      <div class="modal__sheet">
+        <button id="civic-modal-close" class="modal__close" type="button" aria-label="Close">×</button>
+        <h2 class="modal__title" id="civic-modal-title">Civic Action</h2>
+        <div class="modal__sub" id="civic-modal-sub"></div>
+        <div id="civic-modal-list" class="civic__list"></div>
+        <button id="civic-modal-confirm" class="modal__cta hidden" type="button">Confirm</button>
+      </div>
+    </div>
     <div
       id="council-panel"
       class="modal hidden"

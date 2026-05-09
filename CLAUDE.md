@@ -165,6 +165,24 @@ faction. Skipping a row implicitly defaults to neutral (0) — fine for
 neutral-everywhere items but the council mechanic only generates real
 political pressure when the stance matrix has opinions in it.
 
+**Civic actions** layer player-driven influence on top of organic
+happiness. Implemented in `Council.ts`:
+- *Endorse* (5 PC): boosts a faction's vote share, makes them immune
+  from being chosen as opponent, slight happiness penalty for everyone
+  else.
+- *Coalition* (10 PC): pick two factions; allies gain happiness, rivals
+  per `FACTION_RIVALS` lose it.
+- *Photo-op* (2 PC + $200, opportunistic): triggered after placing a
+  building strongly favoured by a faction; boosts that faction's
+  turnout, makes opponents of the building unhappy.
+- *Mayoral Override* (40 PC): activates at next election for one term;
+  bypasses cost mults, zoning approval, and bans entirely.
+
+When adding a new lever or system, the question to ask is the same as
+for happiness: *what civic actions could let the player target this?*
+Don't bolt on parallel resource systems — Political Capital is meant
+to be the universal "civic agency" currency.
+
 **Tone for leader comments:** flamboyant local-community-Facebook —
 heavy caps for emphasis, exclamation marks, hashtags where natural,
 emoji where natural, the unmistakable cadence of someone Showing Up.

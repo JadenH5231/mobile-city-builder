@@ -672,6 +672,286 @@ body {
   background: rgba(255, 216, 77, 0.06);
 }
 
+/* ---- Photo-op banner ------------------------------------------------- */
+
+.photo-op {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 70px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pill-border);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 90;
+  max-width: calc(100vw - 24px);
+  pointer-events: auto;
+}
+
+.photo-op.hidden {
+  display: none;
+}
+
+.photo-op__avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.photo-op__text {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--pill-fg);
+}
+
+.photo-op__cost {
+  color: rgba(207, 232, 214, 0.55);
+  font-size: 11px;
+}
+
+.photo-op__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.photo-op__attend, .photo-op__skip {
+  appearance: none;
+  border: 1px solid var(--pill-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--pill-fg);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.photo-op__attend {
+  background: rgba(255, 216, 77, 0.16);
+  color: #ffe98a;
+  border-color: rgba(255, 216, 77, 0.4);
+}
+
+.photo-op__attend:active, .photo-op__skip:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Civic modal list (used for endorse / coalition pickers) -------- */
+
+.civic__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.civic__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.civic__option:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.civic__option[aria-pressed="true"] {
+  border-color: rgba(255, 216, 77, 0.5);
+  background: rgba(255, 216, 77, 0.08);
+}
+
+.civic__option[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.civic__option-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.7);
+  flex: 0 0 auto;
+}
+
+.civic__option-name {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: #fff;
+}
+
+.civic__option-tag {
+  font-size: 10px;
+  color: rgba(207, 232, 214, 0.55);
+  font-style: italic;
+}
+
+/* ---- Civic actions section in HappinessPanel ----------------------- */
+
+.civic {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.civic__pc {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(207, 232, 214, 0.7);
+}
+
+.civic__pc-bar {
+  flex: 1 1 auto;
+  height: 6px;
+  margin: 0 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.civic__pc-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffe98a, #ffd84d);
+  border-radius: 3px;
+  transition: width 250ms ease;
+}
+
+.civic__pc-num {
+  font-variant-numeric: tabular-nums;
+  color: #ffe98a;
+  font-weight: 600;
+}
+
+.civic__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.civic__btn {
+  appearance: none;
+  border: 1px solid var(--pill-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--pill-fg);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.civic__btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.civic__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.civic__btn--primary {
+  background: rgba(255, 216, 77, 0.14);
+  color: #ffe98a;
+  border-color: rgba(255, 216, 77, 0.35);
+}
+
+.civic__active {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.65);
+  font-style: italic;
+}
+
+/* Council bar at top of Sentiment panel. */
+.council-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 216, 77, 0.06);
+  border: 1px solid rgba(255, 216, 77, 0.18);
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+.council-bar__title {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 216, 77, 0.85);
+  font-weight: 700;
+}
+
+.council-bar__seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.council-bar__seat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  color: var(--pill-fg);
+}
+
+.council-bar__seat-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.council-bar__opp {
+  font-size: 11px;
+  color: rgba(255, 176, 197, 0.85);
+}
+
+.council-bar__none {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.55);
+  font-style: italic;
+}
+
 /* ---- Council / election modal --------------------------------------- */
 
 .modal {

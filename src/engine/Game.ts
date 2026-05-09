@@ -17,7 +17,9 @@ import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
 import { CouncilPanel } from '../ui/CouncilPanel';
 import { Happiness } from '../simulation/Happiness';
-import { Council, type StanceKey } from '../simulation/Council';
+import { Council, FACTION_RIVALS, FACTION_STANCES, type StanceKey } from '../simulation/Council';
+import type { FactionId } from '../simulation/Happiness';
+import { PhotoOpBanner } from '../ui/PhotoOpBanner';
 import { SaveGame, applySave, serialize, type SaveData } from '../persistence/SaveGame';
 import {
   BUILDING_COSTS,
@@ -76,6 +78,7 @@ export class Game {
   budgetPanel!: BudgetPanel;
   happinessPanel!: HappinessPanel;
   councilPanel!: CouncilPanel;
+  photoOpBanner!: PhotoOpBanner;
   /** Happiness state: faction map, recomputed when the panel refreshes. */
   readonly happiness = new Happiness();
   /** Council state: current term's councillors, opponent, last election result. */
@@ -174,6 +177,7 @@ export class Game {
       traffic: this.traffic
     });
     this.councilPanel = new CouncilPanel(this.council);
+    this.photoOpBanner = new PhotoOpBanner();
 
     // Try to restore an existing save before drawing initial state. Failures
     // (no save / version mismatch / IDB unavailable) silently fall through
@@ -181,7 +185,7 @@ export class Game {
     try {
       await this.saveGame.open();
       const data = await this.saveGame.load();
-      if (data) applySave(data, this.grid, this.economy);
+      if (data) applySave(data, this.grid, this.economy, this.council);
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
     }
@@ -253,8 +257,15 @@ export class Game {
         // upstream state.
         this.traffic.tickEma(this.grid);
         // Happiness is computed first each tick so Population can read it
-        // when distributing residents across factions.
-        this.happiness.computeAll(this.grid, this.economy, this.population, this.traffic);
+        // when distributing residents across factions. Civic-action
+        // modifiers (endorsement, coalition) layer on after the raw compute.
+        this.happiness.computeAll(
+          this.grid,
+          this.economy,
+          this.population,
+          this.traffic,
+          this.civicModifiers()
+        );
         this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council);
         if (this.development.tick(this.grid)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
@@ -262,6 +273,9 @@ export class Game {
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
+          // PC accrues every month (before the election so the player
+          // walks into election day with the latest balance).
+          this.council.awardMonthlyPC(this.happiness);
           const fired = this.council.maybeRunElection(
             this.economy.monthsElapsed,
             this.happiness,
@@ -323,7 +337,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -392,7 +406,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -404,7 +418,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy);
+    applySave(snap, this.grid, this.economy, this.council);
     this.afterStateRestore();
   }
 
@@ -460,6 +474,26 @@ export class Game {
     this.selected = null;
     this.renderer.clearSelection();
     this.panel.hide();
+  }
+
+  /**
+   * Shape `Happiness.computeAll` consumes for civic-action modifiers.
+   * Resolves coalition rivals from the FACTION_RIVALS table.
+   */
+  private civicModifiers() {
+    const allies: FactionId[] = this.council.coalition
+      ? [this.council.coalition.a, this.council.coalition.b]
+      : [];
+    const rivals = new Set<FactionId>();
+    for (const ally of allies) {
+      for (const r of FACTION_RIVALS[ally]) rivals.add(r);
+    }
+    return {
+      endorsedFaction: this.council.endorsedFaction,
+      coalitionAllies: allies,
+      coalitionRivals: [...rivals],
+      campaignDeltas: this.council.campaignHappinessDelta
+    };
   }
 
   // --- Paint-mode handlers ------------------------------------------------
@@ -553,6 +587,7 @@ export class Game {
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
     this.renderer.drawCityBuildings(this.grid);
+    this.maybeOfferPhotoOp(stanceKey);
     return true;
   }
 
@@ -571,7 +606,39 @@ export class Game {
     if (!this.grid.setStopSign(x, y, true)) return false;
     this.economy.treasury -= cost;
     this.renderer.drawRoads(this.grid);
+    this.maybeOfferPhotoOp('stop_sign');
     return true;
+  }
+
+  /**
+   * After a placement, check whether any faction's stance toward the placed
+   * thing is strong enough (≥ 0.5) to invite a photo-op. If so, queue the
+   * banner — player can accept (spends PC + $$, boosts that faction's
+   * turnout, makes opponents mad) or skip.
+   */
+  private maybeOfferPhotoOp(key: StanceKey): void {
+    let best: FactionId | null = null;
+    let bestStance = 0.5; // threshold
+    for (const id of Object.keys(FACTION_STANCES) as FactionId[]) {
+      const s = FACTION_STANCES[id][key];
+      if (s > bestStance) { best = id; bestStance = s; }
+    }
+    if (!best) return;
+    if (this.council.hasPhotoOpThisTerm(best)) return;
+    if (this.council.politicalCapital < 2) return;
+    if (this.economy.treasury < 200) return;
+
+    // Opponents = factions that strongly dislike this thing.
+    const opponents: FactionId[] = [];
+    for (const id of Object.keys(FACTION_STANCES) as FactionId[]) {
+      if (FACTION_STANCES[id][key] <= -0.3) opponents.push(id);
+    }
+
+    const factionId = best;
+    this.photoOpBanner.show(factionId, () => {
+      const ok = this.council.tryPhotoOp(factionId, this.economy.treasury >= 200, opponents);
+      if (ok) this.economy.treasury -= 200;
+    });
   }
 
   private applyRubberBand(end: { x: number; y: number }): void {

@@ -722,16 +722,26 @@ export function pickComment(faction: Faction, happiness: number, salt: number): 
  * Owns the per-faction happiness map. Recomputed on demand (panel open,
  * monthly tick, etc.) — pure function of city state, no internal accumulator
  * yet. Future: hook into events for momentum / decay.
+ *
+ * Civic actions (endorsement, coalition) layer modifiers on top of the
+ * raw faction-state happiness — see `applyCivicModifiers` below.
  */
 export class Happiness {
   /** Per-faction happiness in [-1, 1]. Empty until first compute. */
   readonly happiness = new Map<FactionId, number>();
 
-  computeAll(grid: Grid, economy: Economy, population: Population, traffic: Traffic): void {
+  computeAll(
+    grid: Grid,
+    economy: Economy,
+    population: Population,
+    traffic: Traffic,
+    civicMods?: CivicModifiers
+  ): void {
     const stats = buildStats(grid, economy, population, traffic);
     for (const f of FACTIONS) {
       this.happiness.set(f.id, clamp(f.compute(stats)));
     }
+    if (civicMods) applyCivicModifiers(this.happiness, civicMods);
   }
 
   /** Mean happiness across all factions, [-1, 1]. */
@@ -754,4 +764,48 @@ export function overallLabel(h: number): string {
   if (h >= -0.2) return 'Mixed';
   if (h >= -0.5) return 'Restless';
   return 'In Crisis';
+}
+
+/**
+ * Layered modifiers from civic actions, applied to happiness AFTER the raw
+ * compute. Endorsement and coalition pull from `Council`; this struct is
+ * the renderer-agnostic shape so Happiness doesn't import Council directly.
+ */
+export interface CivicModifiers {
+  /** Endorsed faction gets +ENDORSE_BONUS, all others get -ENDORSE_PENALTY. */
+  readonly endorsedFaction: FactionId | null;
+  /** Allied factions in a coalition get +COALITION_BONUS. */
+  readonly coalitionAllies: readonly FactionId[];
+  /** Faction IDs that are rivals of the coalition's allies — they get -COALITION_PENALTY. */
+  readonly coalitionRivals: readonly FactionId[];
+  /** Per-faction one-off happiness deltas from civic actions (photo-ops etc.). */
+  readonly campaignDeltas: ReadonlyMap<FactionId, number>;
+}
+
+/** Bonus to the endorsed faction. */
+const ENDORSE_BONUS = 0.10;
+/** Penalty to all non-endorsed factions. */
+const ENDORSE_PENALTY = 0.05;
+/** Bonus to each coalition ally. */
+const COALITION_BONUS = 0.20;
+/** Penalty to each rival of any coalition ally. */
+const COALITION_PENALTY = 0.20;
+
+function applyCivicModifiers(map: Map<FactionId, number>, mods: CivicModifiers): void {
+  if (mods.endorsedFaction !== null) {
+    for (const [id, h] of map) {
+      const adj = id === mods.endorsedFaction ? ENDORSE_BONUS : -ENDORSE_PENALTY;
+      map.set(id, clamp(h + adj));
+    }
+  }
+  for (const id of mods.coalitionAllies) {
+    map.set(id, clamp((map.get(id) ?? 0) + COALITION_BONUS));
+  }
+  for (const id of mods.coalitionRivals) {
+    if (mods.coalitionAllies.includes(id)) continue; // ally is also a rival? skip
+    map.set(id, clamp((map.get(id) ?? 0) - COALITION_PENALTY));
+  }
+  for (const [id, delta] of mods.campaignDeltas) {
+    map.set(id, clamp((map.get(id) ?? 0) + delta));
+  }
 }

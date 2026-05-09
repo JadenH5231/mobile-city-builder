@@ -148,6 +148,47 @@ const ALL_FACTION_IDS: readonly FactionId[] = [
   'transit', 'drivers', 'taxpayers', 'safer_streets', 'working_families'
 ];
 
+/**
+ * Per-faction natural enemies — used by the Coalition mechanic. When the
+ * player allies with a faction, that faction's rivals take a happiness hit.
+ * The pairs reflect real urban-political fault lines:
+ *  - NIMBYs vs YIMBYs (zoning fight)
+ *  - Environmentalists vs Chamber (industry fight)
+ *  - Hometown vs YIMBYs (growth fight)
+ *  - Drivers vs Transit (mode fight)
+ *  - Drivers vs Safer Streets (speed-vs-safety fight)
+ *  - Taxpayers vs Working Families (tax fight)
+ */
+export const FACTION_RIVALS: Record<FactionId, readonly FactionId[]> = {
+  nimbys:           ['yimbys'],
+  yimbys:           ['nimbys', 'hometown'],
+  environmentalists: ['chamber'],
+  hometown:         ['yimbys'],
+  chamber:          ['environmentalists'],
+  transit:          ['drivers'],
+  drivers:          ['transit', 'safer_streets'],
+  taxpayers:        ['working_families'],
+  safer_streets:    ['drivers'],
+  working_families: ['taxpayers']
+};
+
+/** Civic-action costs in Political Capital and treasury. */
+export const COSTS = {
+  endorse_pc: 5,
+  photo_op_pc: 2,
+  photo_op_cash: 200,
+  coalition_pc: 10,
+  override_pc: 40
+} as const;
+
+/** Hard ceiling on Political Capital so it can't be hoarded indefinitely. */
+export const PC_CAP = 50;
+
+export interface Coalition {
+  readonly a: FactionId;
+  readonly b: FactionId;
+}
+
 /** Per-faction "city hall mode" comment shown when they're on council. */
 export const COUNCIL_COMMENTS: Record<FactionId, string> = {
   nimbys:
@@ -213,33 +254,66 @@ export class Council {
   /** Months elapsed when the last election ran. Prevents double-firing. */
   private lastElectionMonth = -1;
 
+  // ---- Civic action state -----------------------------------------------
+  /** Slow-accumulating resource. Earned monthly based on faction happiness. */
+  politicalCapital = 0;
+  /** Faction the player has endorsed for the *upcoming* election. Cleared
+   *  when that election fires. The endorsed faction can't be picked as
+   *  opponent (you've publicly aligned with them). */
+  endorsedFaction: FactionId | null = null;
+  /** Two factions in a player-declared alliance. Cleared at next election. */
+  coalition: Coalition | null = null;
+  /** Per-term cap so a player can't photo-op the same faction repeatedly. */
+  private readonly photoOpsThisTerm = new Set<FactionId>();
+  /** Per-faction multiplier applied to vote scores at the next election.
+   *  Photo-ops boost this; cleared after each election. */
+  private readonly campaignBoost = new Map<FactionId, number>();
+  /** Per-faction one-off happiness adjustments from civic actions
+   *  (e.g. opposition factions take -0.05 when the player photo-ops a
+   *  building they hate). Cleared at election. Read by Happiness via
+   *  the CivicModifiers struct. */
+  readonly campaignHappinessDelta = new Map<FactionId, number>();
+  /** True when the player has paid for override but the next term hasn't
+   *  started yet. Becomes false (and `overrideTerm` is set) at the next
+   *  election. */
+  private overridePending = false;
+  /** Term number during which Mayoral Override is active. -1 = inactive. */
+  private overrideTerm = -1;
+
   /**
-   * Run an election if it's due (every 3 months on the boundary). Returns
+   * Run an election if it's due (every 12 months on the boundary). Returns
    * the new ElectionResult if one fired, else null.
    */
   maybeRunElection(monthsElapsed: number, happiness: Happiness, population: Population): ElectionResult | null {
     if (monthsElapsed === 0) return null;
-    if (monthsElapsed % 3 !== 0) return null;
+    if (monthsElapsed % 12 !== 0) return null;
     if (this.lastElectionMonth === monthsElapsed) return null;
     this.lastElectionMonth = monthsElapsed;
     return this.runElection(happiness, population);
   }
 
   private runElection(happiness: Happiness, population: Population): ElectionResult {
-    // Anger ranking — most-angry first.
-    const byAnger = [...ALL_FACTION_IDS].sort((a, b) => happiness.get(a) - happiness.get(b));
-    // Second-most-angry runs as opponent. Falls back to most-angry if only
-    // one faction has data (shouldn't happen but defensive).
-    const opponentId = byAnger[1] ?? byAnger[0]!;
+    // Expire override that was active in the term that's now ending.
+    if (this.overrideTerm === this.term) this.overrideTerm = -1;
 
-    // Vote score per faction = pop × turnout. Turnout climbs with anger.
+    // Anger ranking — most-angry first. Endorsed faction can't be opponent
+    // (you've publicly aligned with them, so they don't run against you).
+    const byAnger = [...ALL_FACTION_IDS].sort((a, b) => happiness.get(a) - happiness.get(b));
+    const opponentCandidates = this.endorsedFaction
+      ? byAnger.filter((id) => id !== this.endorsedFaction)
+      : byAnger;
+    const opponentId = opponentCandidates[1] ?? opponentCandidates[0]!;
+
+    // Vote score per faction = pop × turnout × campaignBoost × endorsementBoost.
     const voteScores = new Map<FactionId, number>();
     let totalVotes = 0;
     for (const id of ALL_FACTION_IDS) {
       const h = happiness.get(id);
       const turnout = 0.4 + 0.5 * Math.max(0, -h);
       const pop = population.factionPopulation.get(id) ?? 0;
-      const v = pop * turnout;
+      const photoBoost = this.campaignBoost.get(id) ?? 1;
+      const endorseBoost = this.endorsedFaction === id ? 1.20 : 1;
+      const v = pop * turnout * photoBoost * endorseBoost;
       voteScores.set(id, v);
       totalVotes += v;
     }
@@ -250,8 +324,7 @@ export class Council {
       .sort((a, b) => (voteScores.get(b) ?? 0) - (voteScores.get(a) ?? 0))
       .slice(0, 4);
 
-    // Mayor's % derived from overall mood. Always wins, never higher than 85
-    // (keep races feeling competitive even with a thriving city).
+    // Mayor's % derived from overall mood. Always wins, never higher than 85.
     const overall = happiness.overall();
     const mayorPct = Math.max(50.0001, Math.min(85, 50 + overall * 25));
     const opponentPct = 100 - mayorPct;
@@ -267,6 +340,20 @@ export class Council {
     this.term++;
     this.councillors = councillors;
     this.opponent = opponentId;
+
+    // Civic actions consumed at election: endorsement, coalition, photo-ops.
+    this.endorsedFaction = null;
+    this.coalition = null;
+    this.photoOpsThisTerm.clear();
+    this.campaignBoost.clear();
+    this.campaignHappinessDelta.clear();
+
+    // Pending override activates for this new term.
+    if (this.overridePending) {
+      this.overrideTerm = this.term;
+      this.overridePending = false;
+    }
+
     const result: ElectionResult = {
       term: this.term,
       mayorPct,
@@ -279,12 +366,97 @@ export class Council {
     return result;
   }
 
+  // ---- Civic actions ----------------------------------------------------
+
+  /** Award PC for the month based on faction happiness. Capped at PC_CAP. */
+  awardMonthlyPC(happiness: Happiness): number {
+    let earned = 1; // base
+    for (const id of ALL_FACTION_IDS) {
+      if (happiness.get(id) >= 0.5) earned += 0.5;
+    }
+    const next = Math.min(PC_CAP, this.politicalCapital + earned);
+    const actually = next - this.politicalCapital;
+    this.politicalCapital = next;
+    return actually;
+  }
+
+  private spendPC(amount: number): boolean {
+    if (this.politicalCapital < amount) return false;
+    this.politicalCapital -= amount;
+    return true;
+  }
+
+  /** Endorse a faction for the next election. 5 PC. */
+  endorse(faction: FactionId): boolean {
+    if (this.endorsedFaction !== null) return false; // already endorsed
+    if (!this.spendPC(COSTS.endorse_pc)) return false;
+    this.endorsedFaction = faction;
+    return true;
+  }
+
+  /** Declare a 2-faction coalition. 10 PC. Picks two distinct factions. */
+  declareCoalition(a: FactionId, b: FactionId): boolean {
+    if (a === b) return false;
+    if (this.coalition !== null) return false;
+    if (!this.spendPC(COSTS.coalition_pc)) return false;
+    this.coalition = { a, b };
+    return true;
+  }
+
+  /**
+   * Activate Mayoral Override for the *next* full term. 40 PC. While active,
+   * `costMultiplier` returns 1.0 and `canChangeZone` returns true regardless
+   * of council composition.
+   */
+  activateOverride(): boolean {
+    if (this.overridePending || this.isOverrideActive()) return false;
+    if (!this.spendPC(COSTS.override_pc)) return false;
+    this.overridePending = true;
+    return true;
+  }
+
+  isOverrideActive(): boolean {
+    return this.overrideTerm === this.term && this.term > 0;
+  }
+
+  isOverridePending(): boolean {
+    return this.overridePending;
+  }
+
+  /**
+   * Try to redeem a photo-op opportunity for the given faction. Returns true
+   * if successful (PC + cash spent, faction recorded). Caller passes the
+   * list of *opponents of the underlying building* so Council can apply a
+   * small happiness penalty to them — the photo-op makes them mad.
+   */
+  tryPhotoOp(faction: FactionId, cashOk: boolean, opponents: readonly FactionId[] = []): boolean {
+    if (this.photoOpsThisTerm.has(faction)) return false;
+    if (!cashOk) return false;
+    if (this.politicalCapital < COSTS.photo_op_pc) return false;
+    this.spendPC(COSTS.photo_op_pc);
+    this.photoOpsThisTerm.add(faction);
+    const prev = this.campaignBoost.get(faction) ?? 1;
+    this.campaignBoost.set(faction, prev * 1.25);
+    for (const opp of opponents) {
+      const cur = this.campaignHappinessDelta.get(opp) ?? 0;
+      this.campaignHappinessDelta.set(opp, cur - 0.05);
+    }
+    return true;
+  }
+
+  hasPhotoOpThisTerm(faction: FactionId): boolean {
+    return this.photoOpsThisTerm.has(faction);
+  }
+
   /**
    * Multiplier on a placement / paint cost. Sums councillors' stances toward
    * `key` and converts to a multiplier. Returns Infinity when the council
    * has banned the action (every councillor strongly opposes).
+   *
+   * **Mayoral Override** completely bypasses this — returns 1.0 always.
    */
   costMultiplier(key: StanceKey): number {
+    if (this.isOverrideActive()) return 1.0;
     if (this.councillors.length === 0) return 1.0;
     let sum = 0;
     let allStronglyOpposed = true;
@@ -301,10 +473,11 @@ export class Council {
 
   /**
    * Zoning-change rule: at least two councillors must have a non-negative
-   * stance toward the new (zone, tier). Bulldoze (zone='none' equivalent)
-   * always passes — caller decides whether bulldoze counts.
+   * stance toward the new (zone, tier). **Mayoral Override** bypasses
+   * (always returns true).
    */
   canChangeZone(zoneKind: 'residential' | 'commercial' | 'industrial', tier: ZoneTier): boolean {
+    if (this.isOverrideActive()) return true;
     if (this.councillors.length === 0) return true;
     const prefix = zoneKind === 'residential' ? 'r' : zoneKind === 'commercial' ? 'c' : 'i';
     const key = `${prefix}_${tier}` as StanceKey;

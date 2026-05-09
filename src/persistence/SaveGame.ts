@@ -8,15 +8,14 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 6 (Alpha 2.0): adds `trafficLight` bool per tile, plus the
- * 'mixed' zone value joins the Zone union (existing parse path is
- * permissive enough that earlier schemas just won't have any mixed tiles
- * to deserialise). v5 saves load with trafficLight defaulted to false.
- * v4 saves load with `path` defaulted to false. v3 saves load with PC
- * defaulted to 0; v2 also still loads (zoneCap defaulted to 3). Schema 1
- * (pre-Alpha-1.0) is silently dropped.
+ * Schema 7 (Alpha 2.3): adds per-tile `elevation` (terrain height) and
+ * `bridge` bit (road over water gets elevated). v6 saves load with
+ * elevation=0 and bridge=false everywhere — those maps are flat by
+ * construction so this is correct. v5..v6 still load with their
+ * existing defaults (trafficLight, busStop, path defaulted to false).
+ * Schema 1 (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 6;
+const SCHEMA = 7;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -41,6 +40,10 @@ export interface TileSnapshot {
   trafficLight?: boolean;
   /** Road-attached bus stop. Schema 6+. */
   busStop?: boolean;
+  /** Terrain elevation in tile units. Schema 7+. */
+  elevation?: number;
+  /** Bridge bit — road on a water tile renders elevated. Schema 7+. */
+  bridge?: boolean;
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
   zoneCap?: 0 | 1 | 2 | 3;
@@ -148,6 +151,8 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
       stopSign: t.stopSign,
       trafficLight: t.trafficLight,
       busStop: t.busStop,
+      elevation: t.elevation,
+      bridge: t.bridge,
       zone: t.zone,
       zoneCap: t.zoneCap,
       density: t.density,
@@ -206,6 +211,8 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy, council?
     t.trafficLight = snap.trafficLight ?? false;
     if (t.trafficLight) t.stopSign = false;
     t.busStop = snap.busStop ?? false;
+    t.elevation = snap.elevation ?? 0;
+    t.bridge = snap.bridge ?? false;
     t.zone = snap.zone;
     // zoneCap is schema 3+. v2 saves get the implicit "high" cap (3) for
     // any zoned tile, mirroring pre-1.1 behaviour where services alone

@@ -11,6 +11,14 @@ export const ROAD_WIDTH = 0.45;
 
 /** How far above the terrain plane the road meshes sit, to avoid z-fighting. */
 export const ROAD_LIFT = 0.02;
+/**
+ * Bridge deck height above the surrounding water (Alpha 2.3). Roads
+ * painted on water tiles are elevated to this Y so cars visibly cross
+ * over the river/lake. Pillars span from the water surface (~ -0.06)
+ * up to this lift. Future overpass support (Alpha 2.4+) will reuse this
+ * for road-over-road bridges.
+ */
+export const BRIDGE_LIFT = 0.22;
 /** Zone overlays sit just above terrain but under roads. */
 export const ZONE_LIFT = 0.005;
 

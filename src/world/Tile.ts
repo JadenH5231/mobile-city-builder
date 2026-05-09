@@ -13,7 +13,23 @@ export class Tile {
   readonly x: number;
   readonly y: number;
   terrain: TerrainType;
+  /**
+   * Terrain elevation in tile units (Alpha 2.3). 0 = ground level, water
+   * sits at slightly negative, hills go up to ~0.5. Used by the terrain
+   * mesh builder (corner vertices average the four meeting tiles' values
+   * for smooth ramps) and by future systems that might gate gameplay on
+   * slope. Roads currently render flat at ROAD_LIFT regardless — paving
+   * still works on hills, it just doesn't follow the slope visually yet.
+   */
+  elevation = 0;
   road = false;
+  /**
+   * Bridge bit (Alpha 2.3). True when this road tile spans water — the
+   * renderer elevates the road plane and drops two short pillars to the
+   * water surface. Set automatically by `Grid.setRoad` when called on a
+   * water tile; cleared when the road is removed.
+   */
+  bridge = false;
   /** Road tier when `road` is true. Reset to 'local' when `road` flips off. */
   roadType: RoadType = 'local';
   /** Highway flow direction (0..7 from `Dir` enum), -1 when not a highway or

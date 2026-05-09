@@ -84,8 +84,9 @@ src/
     Renderer.ts       Three.js scene: terrain, roads, sidewalks, paths, trees, selection
     BuildingVariants.ts spec catalogue + builder for 36 building variants
   world/
-    Grid.ts           tile container + road-edge graph
-    Tile.ts           single-tile struct (terrain, road, path bool)
+    Grid.ts           tile container + road-edge graph + procedural generator
+    Tile.ts           single-tile struct (terrain, road, path, elevation, bridge…)
+    TerrainGenerator.ts noise-based lakes/rivers/forests/elevation
   simulation/
     Population.ts     aggregate residents + jobs (incl. mixed-use), derive RCI demand
     Development.ts    demand-driven density growth tick (10 Hz), service-gated L3
@@ -267,7 +268,34 @@ on a different machine isn't a forensic exercise.
 - **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
 - **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
 
-## Status: Alpha 2.2
+## Status: Alpha 2.3
+
+Natural terrain pass on top of 2.2:
+
+- **Procedural map generator** in `src/world/TerrainGenerator.ts`. Two
+  octaves of value noise drive an elevation field; low pockets become
+  lakes; a 70%-chance meandering river is carved edge-to-edge; forests
+  cluster on mid-elevation grass; sand auto-spawns at water shorelines.
+  Seeded by `Date.now()` so each fresh map is different but a saved
+  map round-trips identically.
+- **`Tile.elevation`** with corner-shared vertex averaging in the
+  terrain mesh — smooth ramps, no stair-stepping. Hills/valleys tinted
+  to read as 3D under flat shading. Buildings lift by their tile's
+  elevation so they sit on the hill rather than buried in it.
+- **`Tile.bridge`** auto-set by `Grid.setRoad` when the target tile is
+  water. Renderer elevates the road quad to `BRIDGE_LIFT = 0.22` and
+  drops two short stone pillars from below the water surface up to the
+  deck. Bridges next to land naturally form a ramp because endpoint
+  y-values differ along the segment.
+- **Save schema v7** persists `elevation` and `bridge` per tile. v6
+  saves load with elevation=0 and bridge=false (flat by construction).
+- **Deferred to Alpha 2.4**: overpass bridges (road-over-road needs a
+  multi-level road graph — every Tile gets `bridgeRoad` fields,
+  RoadGraph builds a second adjacency layer, vehicles + pathfinder
+  gain a level axis); roads following terrain elevation visually;
+  elevation-affected pathfinding cost.
+
+### Status: Alpha 2.2 (carryover)
 
 Second visual polish pass on top of 2.1:
 

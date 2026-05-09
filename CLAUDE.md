@@ -81,16 +81,18 @@ src/
     Game.ts           bootstraps Three.js, owns the loop, paint logic
     Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
     Input.ts          pointer-events gesture handler (navigate / paint modes)
-    Renderer.ts       Three.js scene: terrain, roads, trees, selection
+    Renderer.ts       Three.js scene: terrain, roads, sidewalks, paths, trees, selection
   world/
     Grid.ts           tile container + road-edge graph
-    Tile.ts           single-tile struct (terrain, road bool)
+    Tile.ts           single-tile struct (terrain, road, path bool)
   simulation/
     Population.ts     aggregate residents + jobs, derive RCI demand
     Development.ts    demand-driven density growth tick (10 Hz), service-gated L3
-    RoadGraph.ts      adjacency list rebuilt on road changes
-    Pathfinding.ts    A* over the road graph, reusable buffers
-    Vehicles.ts       car spawn (sim) + path-following movement (render)
+    RoadGraph.ts      car adjacency rebuilt on road changes
+    PathGraph.ts      pedestrian adjacency: paths + non-highway road tiles
+    Pathfinding.ts    A* over any PathfindGraph (RoadGraph or PathGraph)
+    Vehicles.ts       car spawn + park-then-return + path-coverage suppression
+    Pedestrians.ts    walker spawn + path-following on the pedestrian graph
     Economy.ts        treasury, tax rates, monthly settlement tick
     Services.ts       radius sweep that flags hasPower / hasWater / hasPark
     Traffic.ts        per-tile EMA + city-wide stress for demand feedback
@@ -239,7 +241,34 @@ on a different machine isn't a forensic exercise.
 - A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
 - See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
 
-## Status: Alpha 1.5
+## Status: Alpha 1.6
+
+Pedestrian update on top of Alpha 1.5. Five interlocking pieces (see
+`docs/PROGRESS.md` for the longer write-up):
+
+- **Walking paths** as a new placeable in the Roads popover. Per-tile, no
+  edge graph, visibly narrower than any road. Paint rules: paths CANNOT
+  remove roads (silently skipped on a road tile), CAN remove zoning.
+- **Sidewalks** auto-render on every local + avenue road tile (highway
+  tiles never get one — they're vehicle-only).
+- **Pedestrians** in `src/simulation/Pedestrians.ts`. Walk developed R →
+  developed C/I along the new `PathGraph` (paths + non-highway roads).
+  Capped at 200, walking distance ≤ 18 tiles. Render: small vertical
+  pawn with perpendicular jitter so streams spread across sidewalks.
+- **Path coverage suppresses car spawns** with probability 0.55 when
+  origin and destination are both adjacent to a path. Composes with
+  bus-stop suppression when both apply.
+- **Cars return.** Outbound trips no longer despawn at the destination —
+  they push a `PendingReturn` with an 8–22 sec visit timer and
+  `Vehicles.scheduleReturnTrips` plans the return leg. Fixes the
+  one-way-traffic feel.
+- Faction wiring per the keystone rule: big bonuses for transit /
+  safer-streets / environmentalists; modest bonuses for yimbys /
+  hometown / nimbys / chamber / working-families; drivers and taxpayers
+  unaffected.
+- Save schema v5 persists the per-tile `path` bit.
+
+### Status: Alpha 1.5 (carryover)
 
 Tagged on `main` as `alpha-1.5`. Builds on Alpha 1.0 (all 14 build steps
 + four post-alpha tuning passes — money pressure, traffic congestion,

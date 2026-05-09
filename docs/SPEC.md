@@ -58,9 +58,11 @@ Power and water are **simple radius checks** (radius 8). Park is radius 3. A til
 
 ### 4. Traffic & Transit (priority — delivered)
 - Cars spawn from developed Residential, route via A* on the road graph to a developed Commercial or Industrial tile, render at 60 Hz on smooth segment lerp.
+- **Cars return** (Alpha 1.6). Outbound trips queue a `PendingReturn` with a randomised 8–22 sec visit timer; the return car spawns at the destination and drives back to the origin road tile. Traffic now reads as two-way.
 - Per-tile traffic load propagates upstream slowdowns; sustained EMA pressure drags down R/C/I demand.
 - **Traffic heatmap toggle** in the HUD (green→yellow→red overlay, rebuilt at 5 Hz when visible).
 - Buses: each `bus_depot` keeps one bus alive, auto-cycling through every `bus_stop` on the map. Bus stops suppress 70% of nearby car spawns. (Player-drawn routes were a stretch goal — auto-cycle was deemed enough to demonstrate transit pressure for the prototype.)
+- **Walking paths + sidewalks + pedestrians** (Alpha 1.6). Walking paths are a player-placed per-tile surface in the Roads popover, visibly narrower than any road. Paths cannot remove roads (silently skipped on a road tile) and visually terminate where they meet a road; they CAN remove zoning. Local + avenue road tiles auto-render concrete sidewalks (highways do not). Pedestrians spawn from developed R, walk the path/sidewalk graph to developed C/I, and despawn on arrival. When both ends of a trip are adjacent to a path, the corresponding car spawn is dropped with probability 0.55 — paths reduce traffic. Walking distance capped at 18 tiles so paths are for neighborhood mobility, not cross-city journeys.
 
 ### 5. Economy (priority — delivered)
 - Treasury, three tax sliders (R/C/I, 0–25%, defaults 9/10/11). Tax rate scales monthly revenue and shifts demand (sweet spot at the default = zero penalty).
@@ -78,10 +80,11 @@ Aggregate population, jobs, and three demand values — **not** individual citiz
 - **Undo:** ring-buffer of full state snapshots, capped at 20. Each paint stroke / placement pushes one entry; sliders don't.
 
 ### 8. Save/Load (delivered)
-- Single-slot IndexedDB save under key `main`, schema v1.
-- Saved: per-tile `terrain/road/zone/density/pressure/building`, road-edge list, treasury, three tax rates, months elapsed.
+- Single-slot IndexedDB save under key `main`, schema v5 as of Alpha 1.6.
+- Saved: per-tile `terrain/road/roadType/highwayDir/stopSign/zone/zoneCap/density/pressure/building/path`, road-edge list, treasury, three tax rates, months elapsed, lifetime accidents, Political Capital.
 - Auto-saves every 30 s real-time (fire-and-forget); auto-restores on init.
 - Reset button at the bottom of the budget panel clears the slot and reloads.
+- Schema migration: v2 → v5 saves all load with sensible defaults for fields added later (zoneCap defaults to 3 for any zoned tile; PC defaults to 0; path defaults to false). v1 is silently dropped.
 
 ## Performance Budget (non-negotiable)
 

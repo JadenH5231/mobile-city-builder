@@ -7,6 +7,8 @@ import { Toolbar } from '../ui/Toolbar';
 import { Development } from '../simulation/Development';
 import { Economy } from '../simulation/Economy';
 import { Pathfinding } from '../simulation/Pathfinding';
+import { PathGraph } from '../simulation/PathGraph';
+import { Pedestrians } from '../simulation/Pedestrians';
 import { Population } from '../simulation/Population';
 import { RoadGraph } from '../simulation/RoadGraph';
 import { Buses } from '../simulation/Buses';
@@ -97,6 +99,8 @@ export class Game {
   private readonly strokeStubs = new Set<number>();
   /** Zone tool: per-tile snapshot of original (zone, cap) for revert. */
   private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 }>();
+  /** Path tool: tile indices flipped from path=false to path=true this stroke. */
+  private readonly strokePaths = new Set<number>();
   /** Bulldoze tool: per-tile snapshot of all destroyed state for revert. */
   private readonly strokeBulldozed = new Map<number, BulldozedSnapshot>();
   /**
@@ -123,8 +127,15 @@ export class Game {
   // internal buffers across calls.
   readonly roadGraph = new RoadGraph();
   private readonly pathfinder = new Pathfinding();
+  /** Pedestrian adjacency graph — paths + non-highway road tiles. Rebuilt
+   *  alongside the road graph whenever walkable tiles change. */
+  readonly pathGraph = new PathGraph();
+  /** Walker pathfinder — separate buffers from the car pathfinder so the two
+   *  systems don't trip over each other's gScore/cameFrom maps within a tick. */
+  private readonly walkPathfinder = new Pathfinding();
   readonly vehicles = new Vehicles();
   readonly buses = new Buses();
+  readonly pedestrians = new Pedestrians();
   // Service-coverage flags get rebuilt on any building placement / removal.
   private readonly services = new Services();
   // Traffic owns the per-tile EMA + stress aggregate read by Population.
@@ -192,11 +203,13 @@ export class Game {
 
     this.renderer.drawWorld(this.grid);
     this.renderer.drawZones(this.grid);
+    this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid);
     this.renderer.drawCityBuildings(this.grid);
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
+    this.pathGraph.rebuild(this.grid);
     this.fitCameraToGrid();
     this.handleResize();
 
@@ -288,9 +301,19 @@ export class Game {
           this.grid,
           this.roadGraph,
           this.pathfinder,
+          this.population.totalResidents,
+          this.pathGraph,
+          this.walkPathfinder
+        );
+        this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder);
+        this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
+        this.pedestrians.spawnTick(
+          SIM_STEP_MS,
+          this.grid,
+          this.pathGraph,
+          this.walkPathfinder,
           this.population.totalResidents
         );
-        this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
       }
       // If we hit the cap, drop accumulated time so we don't immediately
       // catch up on the next frame either.
@@ -320,6 +343,8 @@ export class Game {
       this.renderer.updateCars(this.vehicles, this.grid.width);
       this.buses.update(dt, this.grid, this.grid.width, this.roadGraph, this.pathfinder);
       this.renderer.updateBuses(this.buses, this.grid.width);
+      this.pedestrians.update(dt, this.grid.width);
+      this.renderer.updatePedestrians(this.pedestrians, this.grid.width);
       // Heatmap rebuild is the most expensive optional layer (full road
       // mesh rebuild). Throttle to 5 Hz when visible — the EMA only moves
       // that fast anyway. Memory: feedback_traffic_pressure (heatmap must
@@ -392,6 +417,7 @@ export class Game {
       zoneCap: t.zoneCap,
       density: t.density,
       building: t.building,
+      path: t.path,
       hasPower: t.hasPower,
       hasWater: t.hasWater,
       hasPark: t.hasPark
@@ -425,12 +451,15 @@ export class Game {
   private afterStateRestore(): void {
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
+    this.pathGraph.rebuild(this.grid);
     this.renderer.drawZones(this.grid);
+    this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid);
     this.renderer.drawCityBuildings(this.grid);
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
+    this.pedestrians.clear();
   }
 
   /**
@@ -504,6 +533,7 @@ export class Game {
     this.strokeEdges.clear();
     this.strokeStubs.clear();
     this.strokeZones.clear();
+    this.strokePaths.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
     this.strokeDidSnapshot = false;
@@ -557,6 +587,7 @@ export class Game {
         this.strokeEdges.size === 0 &&
         this.strokeStubs.size === 0 &&
         this.strokeZones.size === 0 &&
+        this.strokePaths.size === 0 &&
         this.strokeBulldozed.size === 0;
       if (noop) this.undoStack.pop();
       this.strokeDidSnapshot = false;
@@ -565,6 +596,7 @@ export class Game {
     this.strokeEdges.clear();
     this.strokeStubs.clear();
     this.strokeZones.clear();
+    this.strokePaths.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
   }
@@ -647,6 +679,10 @@ export class Game {
     const tier = ROAD_TOOLS.get(this.tool);
     if (tier) {
       this.applyRoadStroke(path, tier);
+      return;
+    }
+    if (this.tool === 'place_path') {
+      this.applyPathStroke(path);
       return;
     }
     if (this.tool === 'bulldoze') {
@@ -789,6 +825,9 @@ export class Game {
       this.renderer.drawRoads(this.grid);
       // A* needs an up-to-date adjacency for any spawn that follows.
       this.roadGraph.rebuild(this.grid);
+      // Road tiles are walkable for pedestrians (except highways), so the
+      // pedestrian graph must rebuild whenever road tiles change.
+      this.pathGraph.rebuild(this.grid);
     }
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
@@ -857,6 +896,58 @@ export class Game {
     }
   }
 
+  // --- Path tool stroke ---------------------------------------------------
+
+  /**
+   * Walking-path stroke. Per-tile, no edge graph (pedestrians treat 4-connected
+   * path tiles as walkable). Rules:
+   *  - Path CANNOT overwrite a road (road tile is silently skipped).
+   *  - Path CAN overwrite a zone (zone is cleared, in-progress development is
+   *    discarded). Re-zoning the tile later requires bulldozing the path.
+   *  - Stroke retreat undoes path tiles set this stroke. Zones cleared mid-
+   *    stroke are NOT auto-restored on retreat (mirrors road-stroke
+   *    behaviour); the full Undo stack handles the entire stroke if needed.
+   */
+  private applyPathStroke(path: { x: number; y: number }[]): void {
+    const desired = new Set<number>();
+    for (const p of path) desired.add(this.tileIndex(p.x, p.y));
+
+    let pathsChanged = false;
+    let zonesChanged = false;
+
+    // Retreat: tiles we set in earlier moves but no longer on the band.
+    for (const idx of this.strokePaths) {
+      if (desired.has(idx)) continue;
+      const { x, y } = this.unpackTile(idx);
+      if (this.grid.setPath(x, y, false)) pathsChanged = true;
+      this.strokePaths.delete(idx);
+    }
+
+    // Apply to fresh tiles. Roads silently skipped per the rule above.
+    for (const idx of desired) {
+      const { x, y } = this.unpackTile(idx);
+      const tile = this.grid.get(x, y);
+      if (!tile) continue;
+      if (tile.road || tile.path) continue;
+      const hadZone = tile.zone !== 'none';
+      if (this.grid.setPath(x, y, true)) {
+        this.strokePaths.add(idx);
+        pathsChanged = true;
+        if (hadZone) zonesChanged = true;
+      }
+    }
+
+    if (pathsChanged) {
+      this.renderer.drawPaths(this.grid);
+      this.pathGraph.rebuild(this.grid);
+    }
+    if (zonesChanged) {
+      this.renderer.drawZones(this.grid);
+      // Clearing a zone wipes any building that was developing on it.
+      this.renderer.drawBuildings(this.grid);
+    }
+  }
+
   // --- Bulldoze stroke ----------------------------------------------------
 
   private applyBulldozeStroke(path: { x: number; y: number }[]): void {
@@ -866,6 +957,7 @@ export class Game {
     let roadsChanged = false;
     let zonesChanged = false;
     let cityBuildingsChanged = false;
+    let pathsChanged = false;
 
     // Find tiles previously bulldozed by this stroke that aren't on the
     // new rubber-band path — we'll restore them.
@@ -911,8 +1003,17 @@ export class Game {
         cityBuildingsChanged = true;
       }
       if (t.road || t.building !== 'none') continue;
+      // Walking path restore (mutually exclusive with road, but zone+path
+      // can't coexist either — so only restore if no zone is being restored
+      // on top of it). Apply zone restore below.
+      if (snap.path && !t.path && t.zone === 'none') {
+        t.path = true;
+        pathsChanged = true;
+      }
       if (snap.zone === 'none' && t.zone === 'none') continue;
       if (t.zone !== snap.zone || t.zoneCap !== snap.zoneCap || t.density !== snap.density) {
+        // setPath was true above? clear it before restoring a zone (mutually exclusive).
+        if (t.path) { t.path = false; pathsChanged = true; }
         t.zone = snap.zone;
         t.zoneCap = snap.zoneCap;
         t.density = snap.density;
@@ -928,7 +1029,7 @@ export class Game {
       const { x, y } = this.unpackTile(idx);
       const tile = this.grid.get(x, y);
       if (!tile) continue;
-      if (!tile.road && tile.zone === 'none' && tile.building === 'none') continue;
+      if (!tile.road && tile.zone === 'none' && tile.building === 'none' && !tile.path) continue;
 
       const snap: BulldozedSnapshot = {
         wasRoad: tile.road,
@@ -940,7 +1041,8 @@ export class Game {
         density: tile.density,
         developmentPressure: tile.developmentPressure,
         edges: this.grid.incidentRoadEdges(x, y),
-        building: tile.building
+        building: tile.building,
+        path: tile.path
       };
       this.strokeBulldozed.set(idx, snap);
 
@@ -954,6 +1056,9 @@ export class Game {
       }
       if (tile.building !== 'none') {
         if (this.grid.setBuilding(x, y, 'none')) cityBuildingsChanged = true;
+      }
+      if (tile.path) {
+        if (this.grid.setPath(x, y, false)) pathsChanged = true;
       }
     }
 
@@ -970,6 +1075,10 @@ export class Game {
       this.renderer.drawCityBuildings(this.grid);
       // Service coverage changed — rerun the sweep so Development sees it.
       this.services.recompute(this.grid);
+    }
+    if (pathsChanged) {
+      this.renderer.drawPaths(this.grid);
+      this.pathGraph.rebuild(this.grid);
     }
   }
 
@@ -999,6 +1108,8 @@ interface BulldozedSnapshot {
   edges: number[];
   /** City building (power plant, water tower, …) that occupied this tile. */
   building: Building;
+  /** Walking-path bit at bulldoze time. */
+  path: boolean;
 }
 
 /**

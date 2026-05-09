@@ -1,10 +1,14 @@
 import type { Grid } from '../world/Grid';
 import type { Pathfinding } from './Pathfinding';
 import type { RoadGraph } from './RoadGraph';
+import type { PathGraph } from './PathGraph';
 import {
+  CAR_VISIT_HIGH_SEC,
+  CAR_VISIT_LOW_SEC,
   COLLISION_RATE_CAP,
   COLLISION_RATE_PER_OTHER,
   MAX_VEHICLES,
+  PATH_CAR_SUPPRESSION,
   ROAD_TIER,
   STOP_SIGN_PAUSE_SEC,
   VEHICLE_PALETTE,
@@ -63,6 +67,14 @@ export interface Car {
   /** Destination zone tile (for crash demand penalty). */
   destX: number;
   destY: number;
+  /** Road tile this trip departed from. Optional — only set on cars that
+   *  should queue a return trip when they reach their destination. Return
+   *  cars have it undefined so they don't recurse. */
+  originRoadIdx?: number;
+  /** Origin home (residential cell) — used for the return trip's crash
+   *  attribution. Only meaningful when {@link originRoadIdx} is set. */
+  originHomeX?: number;
+  originHomeY?: number;
 }
 
 /**
@@ -95,20 +107,48 @@ export interface CrashEvent {
  * the timer drains, the load transitions to the next segment's destination
  * and motion resumes.
  */
+/**
+ * A trip whose outbound leg has finished but whose return leg hasn't fired
+ * yet. Stored so {@link Vehicles.scheduleReturnTrips} can spawn a return
+ * car after a randomised "visit" delay.
+ */
+export interface PendingReturn {
+  /** performance.now() timestamp at which the return car should spawn. */
+  readyAt: number;
+  /** Road tile the original outbound trip departed from. */
+  originRoadIdx: number;
+  /** Road tile the original outbound trip ended at. */
+  destRoadIdx: number;
+  /** Original residential cell, for crash demand attribution if it crashes. */
+  originHomeX: number;
+  originHomeY: number;
+}
+
 export class Vehicles {
   readonly cars: Car[] = [];
   /** Spawn credits accumulator, in fractional cars-to-spawn. */
   private spawnAccumulator = 0;
   /** Crash events that fired during the most recent `update` call. Cleared each tick. */
   readonly crashesThisFrame: CrashEvent[] = [];
+  /** Outbound trips whose driver is "visiting" the destination, waiting to
+   *  drive back. Drained by {@link scheduleReturnTrips}. */
+  readonly pendingReturns: PendingReturn[] = [];
 
-  /** @param residents Total residents in the city — drives spawn rate. */
+  /**
+   * @param residents Total residents in the city — drives spawn rate.
+   * @param pathGraph Optional walkable graph; if both this and `walkPathfinder`
+   *   are supplied, spawns where origin AND dest are near a walking path get
+   *   probabilistically suppressed (the trip is a "should be walking" — and
+   *   the Pedestrians sim spawns its own walker independently).
+   */
   spawnTick(
     stepMs: number,
     grid: Grid,
     roadGraph: RoadGraph,
     pathfinder: Pathfinding,
-    residents: number
+    residents: number,
+    pathGraph?: PathGraph,
+    _walkPathfinder?: Pathfinding
   ): void {
     if (residents <= 0) return;
     const seconds = stepMs / 1000;
@@ -119,11 +159,60 @@ export class Vehicles {
         this.spawnAccumulator = 0;
         break;
       }
-      this.attemptSpawn(grid, roadGraph, pathfinder);
+      this.attemptSpawn(grid, roadGraph, pathfinder, pathGraph);
     }
   }
 
-  private attemptSpawn(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
+  /**
+   * Drain {@link pendingReturns} for any trips whose visit timer has expired,
+   * planning a fresh A* path back to the origin and spawning a car for it.
+   * If the return path can't be found (road got bulldozed mid-visit, etc.),
+   * the entry is dropped silently.
+   */
+  scheduleReturnTrips(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
+    if (this.pendingReturns.length === 0) return;
+    const now = performance.now();
+    for (let i = this.pendingReturns.length - 1; i >= 0; i--) {
+      const r = this.pendingReturns[i]!;
+      if (r.readyAt > now) continue;
+      this.pendingReturns.splice(i, 1);
+      if (this.cars.length >= MAX_VEHICLES) continue;
+      // Plan the reverse leg using the same congestion-aware cost the
+      // outbound spawn used. This is the "rush hour back home" car.
+      const edgeCost = (_from: number, to: number, base: number): number => {
+        const tx = to % grid.width;
+        const ty = (to - tx) / grid.width;
+        const t = grid.get(tx, ty);
+        if (!t) return base;
+        return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
+      };
+      const path = pathfinder.findPath(roadGraph, r.destRoadIdx, r.originRoadIdx, grid.width, edgeCost);
+      if (!path || path.length < 2) continue;
+      const color = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
+      const car: Car = {
+        pathTiles: path,
+        segmentIdx: 0,
+        segmentT: 0,
+        speed: 1.0,
+        color,
+        loadedTile: path[1]!,
+        pauseRemaining: 0,
+        yielding: false,
+        yieldSince: 0,
+        destX: r.originHomeX,
+        destY: r.originHomeY
+      };
+      this.cars.push(car);
+      this.incrementLoad(grid, car.loadedTile);
+    }
+  }
+
+  private attemptSpawn(
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding,
+    pathGraph?: PathGraph
+  ): void {
     const origin = pickRandomDevelopedTile(grid, 'residential');
     if (!origin) return;
     if (nearBusStop(grid, origin.x, origin.y) && Math.random() < BUS_STOP_SUPPRESSION) return;
@@ -131,6 +220,14 @@ export class Vehicles {
     const destZone = Math.random() < 0.5 ? 'commercial' : 'industrial';
     const dest = pickRandomDevelopedTile(grid, destZone);
     if (!dest) return;
+
+    // Walking-path suppression. If both origin and destination tiles are
+    // adjacent to a walking path, the Pedestrians sim is already covering
+    // these trips — drop the car spawn with probability PATH_CAR_SUPPRESSION
+    // so traffic doesn't double-count walkable routes.
+    if (pathGraph && nearPath(grid, origin.x, origin.y) && nearPath(grid, dest.x, dest.y)) {
+      if (Math.random() < PATH_CAR_SUPPRESSION) return;
+    }
 
     const startRoad = nearestRoadTile(grid, origin.x, origin.y);
     if (!startRoad) return;
@@ -166,7 +263,10 @@ export class Vehicles {
       yielding: false,
       yieldSince: 0,
       destX: dest.x,
-      destY: dest.y
+      destY: dest.y,
+      originRoadIdx: startIdx,
+      originHomeX: origin.x,
+      originHomeY: origin.y
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
@@ -342,6 +442,25 @@ export class Vehicles {
         // End of path — trip completed cleanly.
         if (car.segmentIdx >= car.pathTiles.length - 1) {
           this.decrementLoad(grid, car.loadedTile);
+          // Outbound trip: queue a return car after a randomised visit
+          // interval so traffic feels two-way. Cars without originRoadIdx
+          // (i.e. return cars themselves) don't recurse — they just despawn.
+          if (
+            car.originRoadIdx !== undefined &&
+            car.originHomeX !== undefined &&
+            car.originHomeY !== undefined
+          ) {
+            const arrivedIdx = car.pathTiles[car.segmentIdx]!;
+            const visitMs =
+              (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
+            this.pendingReturns.push({
+              readyAt: now + visitMs,
+              originRoadIdx: car.originRoadIdx,
+              destRoadIdx: arrivedIdx,
+              originHomeX: car.originHomeX,
+              originHomeY: car.originHomeY
+            });
+          }
           this.cars.splice(i, 1);
           car.segmentT = 0;
           despawned = true;
@@ -390,10 +509,11 @@ export class Vehicles {
     }
   }
 
-  /** Wipe every car. Resets per-tile traffic load. */
+  /** Wipe every car (and any queued return trips). Resets per-tile traffic load. */
   clear(grid: Grid, _gridWidth: number): void {
     this.cars.length = 0;
     this.crashesThisFrame.length = 0;
+    this.pendingReturns.length = 0;
     for (const t of grid.iter()) t.trafficLoad = 0;
   }
 
@@ -436,4 +556,15 @@ function nearestRoadTile(grid: Grid, x: number, y: number): { x: number; y: numb
     if (grid.hasRoad(c.x, c.y)) return c;
   }
   return null;
+}
+
+/** True if any 8-connected neighbour of (x, y) is a walking-path tile. */
+function nearPath(grid: Grid, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (grid.hasPath(x + dx, y + dy)) return true;
+    }
+  }
+  return false;
 }

@@ -62,6 +62,46 @@ export const ROAD_PATH_WEIGHT: Record<RoadType, number> = {
   highway: 0.55
 };
 
+/* ---- Walking paths + sidewalks (Alpha 1.6) ---------------------------- */
+
+/** Walking-path render width as a fraction of TILE_SIZE — visibly smaller than any road. */
+export const PATH_WIDTH = 0.20;
+/** Render lift: above zone overlay, below road so roads occlude paths visually. */
+export const PATH_LIFT = 0.012;
+/** Walking-path mesh colour — warm flagstone. */
+export const PATH_COLOR = 0xb89a6c;
+
+/** Sidewalk render lift: just above terrain, below road so roads occlude sidewalks. */
+export const SIDEWALK_LIFT = 0.009;
+/** Sidewalk strip colour — pale concrete. */
+export const SIDEWALK_COLOR = 0xc7c2b3;
+/** How wide a sidewalk extends past the road on each side, as fraction of TILE_SIZE. */
+export const SIDEWALK_PAD = 0.10;
+
+/** Pedestrian InstancedMesh capacity. Smaller geom than cars, can saturate higher. */
+export const MAX_PEDESTRIANS = 200;
+/** Pedestrian render colour palette — picked at random when one spawns. */
+export const PEDESTRIAN_PALETTE: readonly number[] = [
+  0xeac984, 0xb38f5b, 0x8e6e4a, 0xd8a4a4, 0x9bb685
+];
+
+/**
+ * Cars that arrive at their destination linger here (sim seconds) before
+ * starting the return trip. Picked uniformly between LOW and HIGH so traffic
+ * doesn't pulse in lockstep with the spawn rate. Memory: round-trip traffic
+ * (Alpha 1.6) — fixes the "all traffic flows one way" feel.
+ */
+export const CAR_VISIT_LOW_SEC = 8;
+export const CAR_VISIT_HIGH_SEC = 22;
+
+/**
+ * Per-residential-tile probability per spawn attempt that an outbound trip
+ * gets converted to a pedestrian when a path covers the route. Tuned with
+ * BUS_STOP_SUPPRESSION as a sister knob — both reduce car spawns when an
+ * alternative mode is available nearby.
+ */
+export const PATH_CAR_SUPPRESSION = 0.55;
+
 /**
  * Stop sign — a player-placed flag on a road tile. Cars crossing a stop-sign
  * tile pause briefly; in exchange, no collision check fires there. Memory:
@@ -246,6 +286,7 @@ export type Tool =
   | 'road_local'
   | 'road_avenue'
   | 'road_highway'
+  | 'place_path'
   | 'bulldoze'
   | 'residential_low'
   | 'residential_medium'

@@ -8,11 +8,12 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 4 (Alpha 1.4): adds Council `politicalCapital`. v3 saves load with
- * PC defaulted to 0; v2 also still loads (zoneCap defaulted to 3). Schema 1
- * (pre-Alpha-1.0) is silently dropped.
+ * Schema 5 (Alpha 1.6): adds `path` bool per tile (walking paths). v4 saves
+ * load with `path` defaulted to false. v3 saves load with PC defaulted to 0;
+ * v2 also still loads (zoneCap defaulted to 3). Schema 1 (pre-Alpha-1.0) is
+ * silently dropped.
  */
-const SCHEMA = 4;
+const SCHEMA = 5;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -39,6 +40,8 @@ export interface TileSnapshot {
   density: number;
   pressure: number;
   building: Building;
+  /** Walking-path bit (Alpha 1.6). Schema 5+. */
+  path?: boolean;
 }
 
 export interface SaveData {
@@ -140,7 +143,8 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
       zoneCap: t.zoneCap,
       density: t.density,
       pressure: t.developmentPressure,
-      building: t.building
+      building: t.building,
+      path: t.path
     };
   }
   const edges: number[] = [];
@@ -195,6 +199,10 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy, council?
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
     t.building = snap.building;
+    // Path is schema 5+. Older saves had no walking paths.
+    t.path = snap.path ?? false;
+    // Defensive: a path on a road tile would violate the invariant.
+    if (t.road) t.path = false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

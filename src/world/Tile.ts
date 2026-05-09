@@ -21,6 +21,13 @@ export class Tile {
   highwayDir = -1;
   /** Player-placed stop sign on this road tile. Only meaningful at intersections. */
   stopSign = false;
+  /**
+   * Walking-path bit (Alpha 1.6). Per-tile, no edge graph — pedestrians treat
+   * paths as 4-connected walkable surfaces. Mutually exclusive with road
+   * (paths refuse to overwrite roads); CAN sit on top of zoned tiles, in
+   * which case painting clears the zone first. Never settable on a road tile.
+   */
+  path = false;
   zone: Zone = 'none';
   /**
    * Player-set density cap (1..3) — the upper bound this tile is *permitted*

@@ -6,6 +6,7 @@ import { TileInfoPanel } from '../ui/TileInfoPanel';
 import { Toolbar } from '../ui/Toolbar';
 import { Development } from '../simulation/Development';
 import { Economy } from '../simulation/Economy';
+import { GlobalMarket } from '../simulation/GlobalMarket';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -156,6 +157,8 @@ export class Game {
   // Economy for the tax-driven demand penalty (one-frame stale tax penalty
   // is fine — the slider was about to settle anyway).
   readonly economy = new Economy();
+  /** Global lumber market + outside-world connection check (Alpha 2.7). */
+  readonly globalMarket = new GlobalMarket();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -264,12 +267,13 @@ export class Game {
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
-    this.renderer.drawBuildings(this.grid);
-    this.renderer.drawCityBuildings(this.grid);
+    this.renderer.drawBuildings(this.grid, this.cityMood());
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
+    this.globalMarket.recompute(this.grid);
     this.fitCameraToGrid();
     this.handleResize();
 
@@ -282,6 +286,35 @@ export class Game {
    * set into the Toolbar so it can flip the visual state. Called on init
    * and after every election so the player sees instantly what's blocked.
    */
+  /**
+   * Average city mood (Alpha 2.7), in [-1, +1]. Mean of every faction's
+   * happiness — used by Renderer.drawBuildings to modulate building
+   * colours (low mood → graffiti + dingy, high mood → vibrant). Per-tile
+   * happiness inside the renderer further modulates by services.
+   */
+  cityMood(): number {
+    if (!this.happiness) return 0;
+    const ids: FactionId[] = [
+      'nimbys','yimbys','environmentalists','hometown','chamber',
+      'transit','drivers','taxpayers','safer_streets','working_families'
+    ];
+    let sum = 0;
+    for (const id of ids) sum += this.happiness.get(id);
+    return sum / ids.length;
+  }
+
+  /**
+   * Visual health for forestry clusters (Alpha 2.7), 0..1. Healthy when
+   * the city is connected to the outside world AND the global lumber
+   * price is high; struggling otherwise. Read by Renderer.
+   */
+  forestryHealth(): number {
+    if (!this.globalMarket.isConnected()) return 0.30;
+    const price = this.globalMarket.lumberPrice(this.economy.monthsElapsed);
+    // lumber price oscillates roughly in [0.55, 1.45]; map to [0, 1].
+    return Math.max(0, Math.min(1, (price - 0.55) / 0.9));
+  }
+
   private refreshToolbarBans(): void {
     const banned = new Set<Tool>();
     // Each tool maps to its FACTION_STANCES key. Walking-path and
@@ -306,6 +339,7 @@ export class Game {
       ['place_power', 'power_plant'],
       ['place_water', 'water_tower'],
       ['place_park', 'park'],
+      ['place_forestry', 'forestry'],
       ['place_bus_stop', 'bus_stop'],
       ['place_bus_depot', 'bus_depot'],
       ['place_stop_sign', 'stop_sign']
@@ -386,7 +420,7 @@ export class Game {
         this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council);
         if (this.development.tick(this.grid)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -427,7 +461,7 @@ export class Game {
       if (steps >= MAX_SIM_STEPS_PER_FRAME && this.simAccumulatorMs > SIM_STEP_MS) {
         this.simAccumulatorMs = 0;
       }
-      if (buildingsDirty) this.renderer.drawBuildings(this.grid);
+      if (buildingsDirty) this.renderer.drawBuildings(this.grid, this.cityMood());
 
       // Render-rate dt: scale by simSpeed so vehicles/walkers visually move
       // faster at 2× / 3× and freeze at 0.
@@ -568,11 +602,12 @@ export class Game {
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
+    this.globalMarket.recompute(this.grid);
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
-    this.renderer.drawBuildings(this.grid);
-    this.renderer.drawCityBuildings(this.grid);
+    this.renderer.drawBuildings(this.grid, this.cityMood());
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();
@@ -793,10 +828,19 @@ export class Game {
       this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
       return false;
     }
+    // Forestry-specific terrain gate (Alpha 2.7) — surface a clear toast
+    // if the player taps a non-forest tile, instead of silent failure.
+    if (kind === 'forestry') {
+      const t = this.grid.get(x, y);
+      if (t && t.terrain !== 'forest') {
+        this.onStatusMessage?.('Forestry can only be placed on forest tiles');
+        return false;
+      }
+    }
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
-    this.renderer.drawCityBuildings(this.grid);
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
     // Parks are walkable (Alpha 2.6.1) — rebuild the pedestrian graph
     // so walkers can route through the new park tile immediately.
     if (kind === 'park') this.pathGraph.rebuild(this.grid);
@@ -1136,11 +1180,14 @@ export class Game {
       // Road tiles are walkable for pedestrians (except highways), so the
       // pedestrian graph must rebuild whenever road tiles change.
       this.pathGraph.rebuild(this.grid);
+      // Outside-world connection (Alpha 2.7) depends on edge-tile road
+      // membership; refresh whenever roads change.
+      this.globalMarket.recompute(this.grid);
     }
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Promoting a zoned tile to road wipes its building.
-      this.renderer.drawBuildings(this.grid);
+      this.renderer.drawBuildings(this.grid, this.cityMood());
     }
     if (forestChanged) {
       // Terrain colour + tree-instance set both depend on Tile.terrain.
@@ -1200,7 +1247,7 @@ export class Game {
     if (changed) {
       this.renderer.drawZones(this.grid);
       // Re-zoning a developed tile resets its density to 0; rebuild buildings.
-      this.renderer.drawBuildings(this.grid);
+      this.renderer.drawBuildings(this.grid, this.cityMood());
     }
   }
 
@@ -1252,7 +1299,7 @@ export class Game {
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Clearing a zone wipes any building that was developing on it.
-      this.renderer.drawBuildings(this.grid);
+      this.renderer.drawBuildings(this.grid, this.cityMood());
     }
   }
 
@@ -1375,14 +1422,15 @@ export class Game {
     if (roadsChanged) {
       this.renderer.drawRoads(this.grid);
       this.roadGraph.rebuild(this.grid);
+      this.globalMarket.recompute(this.grid);
     }
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Bulldozing tears down whatever was developing on that tile.
-      this.renderer.drawBuildings(this.grid);
+      this.renderer.drawBuildings(this.grid, this.cityMood());
     }
     if (cityBuildingsChanged) {
-      this.renderer.drawCityBuildings(this.grid);
+      this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
       // Service coverage changed — rerun the sweep so Development sees it.
       this.services.recompute(this.grid);
     }

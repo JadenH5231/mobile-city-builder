@@ -1,6 +1,15 @@
 import type { Grid } from '../world/Grid';
 import type { Population } from './Population';
-import { BUILDING_UPKEEP, LUXURY_TAX_BONUS, ROAD_TIER, type Building, type Zone } from '../types';
+import {
+  BUILDING_UPKEEP,
+  FORESTRY_BASE_REVENUE_PER_TILE,
+  FORESTRY_DISCONNECTED_MULT,
+  LUXURY_TAX_BONUS,
+  ROAD_TIER,
+  type Building,
+  type Zone
+} from '../types';
+import type { GlobalMarket } from './GlobalMarket';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -71,6 +80,11 @@ export class Economy {
   /** Last completed month's totals — read by BudgetPanel. */
   lastRevenue = 0;
   lastExpenses = 0;
+  /** Last completed month's forestry exports (Alpha 2.7). 0 when no
+   *  forestry tiles or city not connected. */
+  lastForestryRevenue = 0;
+  /** Last lumber-price multiplier seen by runMonth (Alpha 2.7). */
+  lastLumberPrice = 1.0;
   /** Last completed month's accident-related expense (for budget breakdown). */
   lastAccidentCost = 0;
   /** Number of crashes during the current (in-progress) month. */
@@ -82,11 +96,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population);
+      this.runMonth(grid, population, market);
     }
   }
 
@@ -102,18 +116,34 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
     // population.totalResidents below — we just add the premium delta.
     const luxuryBonusRevenue =
       population.luxuryResidents * this.taxR * REV_PER_RESIDENT * LUXURY_TAX_BONUS;
+
+    // Forestry exports (Alpha 2.7): each forestry tile produces lumber
+    // at a base rate. Modulated by the global lumber price; if the city
+    // isn't connected to the outside world (no road tile on the edge),
+    // a steep discount applies (some local sales, no real export).
+    let forestryTiles = 0;
+    for (const t of grid.iter()) {
+      if (t.building === 'forestry') forestryTiles++;
+    }
+    const lumberPrice = market ? market.lumberPrice(this.monthsElapsed) : 1.0;
+    const connectionMult = market && market.isConnected() ? 1.0 : FORESTRY_DISCONNECTED_MULT;
+    const forestryRevenue = forestryTiles * FORESTRY_BASE_REVENUE_PER_TILE * lumberPrice * connectionMult;
+    this.lastLumberPrice = lumberPrice;
+    this.lastForestryRevenue = Math.round(forestryRevenue);
+
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
       population.totalCommercialJobs * this.taxC * REV_PER_C_JOB +
-      population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB;
+      population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
+      forestryRevenue;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.
     // Charge the average of the two endpoints' tier so a mixed-tier edge

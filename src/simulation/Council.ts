@@ -60,6 +60,11 @@ export interface FactionStances {
   bus_stop: number;
   bus_depot: number;
   stop_sign: number;
+  /** Forestry industry (Alpha 2.7). Doesn't drain forest resources, but
+   *  industrial-flavoured visuals + lumber-truck haul; environmentalists
+   *  hate, chamber/working-families love. Hometown likes it (logging is
+   *  rural-coded). */
+  forestry: number;
 }
 
 export type StanceKey = keyof FactionStances;
@@ -78,7 +83,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.0, mu_medium: -0.3, mu_high: -0.7,
     r_lux: 0.9,
     power_plant: -0.7, water_tower: 0.0, park: 0.6,
-    bus_stop: -0.3, bus_depot: -0.5, stop_sign: 0.4
+    bus_stop: -0.3, bus_depot: -0.5, stop_sign: 0.4,
+    forestry: -0.4
   },
   yimbys: {
     road_local: -0.1, road_avenue: 0.3, road_highway: 0.0,
@@ -88,7 +94,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.2, mu_medium: 0.6, mu_high: 0.9,
     r_lux: -0.8,
     power_plant: 0.0, water_tower: 0.2, park: 0.3,
-    bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2
+    bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2,
+    forestry: 0.0
   },
   environmentalists: {
     road_local: -0.2, road_avenue: -0.4, road_highway: -0.8,
@@ -98,7 +105,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.1, mu_medium: 0.3, mu_high: 0.4,
     r_lux: -0.3,
     power_plant: -0.9, water_tower: 0.2, park: 1.0,
-    bus_stop: 0.8, bus_depot: 0.8, stop_sign: 0.1
+    bus_stop: 0.8, bus_depot: 0.8, stop_sign: 0.1,
+    forestry: -0.7
   },
   hometown: {
     road_local: 0.1, road_avenue: -0.3, road_highway: -0.6,
@@ -108,7 +116,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.0, mu_medium: -0.4, mu_high: -0.8,
     r_lux: 0.6,
     power_plant: -0.4, water_tower: 0.0, park: 0.5,
-    bus_stop: -0.2, bus_depot: -0.3, stop_sign: 0.2
+    bus_stop: -0.2, bus_depot: -0.3, stop_sign: 0.2,
+    forestry: 0.6
   },
   chamber: {
     road_local: 0.1, road_avenue: 0.3, road_highway: 0.4,
@@ -118,7 +127,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.2, mu_medium: 0.5, mu_high: 0.7,
     r_lux: 0.4,
     power_plant: 0.4, water_tower: 0.3, park: 0.1,
-    bus_stop: 0.1, bus_depot: 0.2, stop_sign: -0.1
+    bus_stop: 0.1, bus_depot: 0.2, stop_sign: -0.1,
+    forestry: 0.7
   },
   transit: {
     road_local: -0.1, road_avenue: 0.3, road_highway: -0.5,
@@ -128,7 +138,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.3, mu_medium: 0.6, mu_high: 0.8,
     r_lux: -0.5,
     power_plant: -0.3, water_tower: 0.1, park: 0.4,
-    bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3
+    bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3,
+    forestry: 0.0
   },
   drivers: {
     road_local: 0.5, road_avenue: 0.8, road_highway: 1.0,
@@ -138,7 +149,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.0, mu_medium: -0.1, mu_high: -0.2,
     r_lux: 0.3,
     power_plant: 0.1, water_tower: 0.0, park: 0.0,
-    bus_stop: -0.7, bus_depot: -0.8, stop_sign: -0.4
+    bus_stop: -0.7, bus_depot: -0.8, stop_sign: -0.4,
+    forestry: 0.2
   },
   taxpayers: {
     road_local: -0.2, road_avenue: -0.3, road_highway: -0.5,
@@ -148,7 +160,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.3, mu_medium: 0.4, mu_high: 0.4,
     r_lux: 0.7,
     power_plant: -0.4, water_tower: -0.2, park: -0.2,
-    bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2
+    bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2,
+    forestry: 0.5
   },
   safer_streets: {
     road_local: 0.1, road_avenue: 0.0, road_highway: -0.4,
@@ -158,7 +171,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.2, mu_medium: 0.3, mu_high: 0.3,
     r_lux: 0.2,
     power_plant: -0.3, water_tower: 0.4, park: 0.7,
-    bus_stop: 0.3, bus_depot: 0.3, stop_sign: 1.0
+    bus_stop: 0.3, bus_depot: 0.3, stop_sign: 1.0,
+    forestry: 0.0
   },
   working_families: {
     road_local: 0.1, road_avenue: 0.2, road_highway: 0.1,
@@ -168,7 +182,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     mu_low: 0.4, mu_medium: 0.5, mu_high: 0.4,
     r_lux: -0.6,
     power_plant: 0.2, water_tower: 0.3, park: 0.4,
-    bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3
+    bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3,
+    forestry: 0.6
   }
 };
 

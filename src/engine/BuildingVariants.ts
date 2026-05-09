@@ -138,7 +138,7 @@ export function buildVariantParts(zone: Zone, density: number, tileX: number, ti
   const cz = tileY + 0.5 + oz;
 
   const out: VariantPart[] = [];
-  applySpec(spec, cx, cz, yaw, out);
+  applySpec(spec, cx, cz, yaw, out, zone, tileX, tileY);
   return out;
 }
 
@@ -148,19 +148,43 @@ function pickVariant(x: number, y: number, n: number): number {
   return h % n;
 }
 
-function applySpec(spec: Spec, cx: number, cz: number, yaw: number, out: VariantPart[]): void {
+function applySpec(
+  spec: Spec, cx: number, cz: number, yaw: number, out: VariantPart[],
+  zone: Zone, tileX: number, tileY: number
+): void {
   // Body 1.
   emitBody(spec.body, cx, cz, yaw, out);
   if (spec.roof && spec.roof.kind !== 'flat') {
     emitRoof(spec.body, spec.roof, cx, cz, yaw, out);
   }
-  if (spec.body2) emitBody(spec.body2, cx, cz, yaw, out);
+  // Facade detail (Alpha 2.2) — windows + ground-floor treatment for
+  // R/C/MU. Industrial bodies stay windowless to read as warehouses /
+  // factories. Tower decorations are facaded too further down.
+  if (zoneShowsWindows(zone)) {
+    emitFacade(spec.body, cx, cz, yaw, out, zone, tileX, tileY, /*isPodium*/ false);
+  }
+  if (spec.body2) {
+    emitBody(spec.body2, cx, cz, yaw, out);
+    if (zoneShowsWindows(zone)) {
+      // body2 is conventionally the podium / shop wing on mixed-use, so
+      // it always gets the shopfront treatment regardless of which body
+      // is "lower" — mixed-use authors body2 with that intent.
+      emitFacade(spec.body2, cx, cz, yaw, out, zone, tileX, tileY, /*isPodium*/ zone === 'mixed');
+    }
+  }
   if (!spec.decorations) return;
   for (const dec of spec.decorations) {
     switch (dec.kind) {
       case 'chimney': emitChimney(dec, spec.body, cx, cz, yaw, out); break;
       case 'antenna': emitAntenna(dec, spec.body, spec.roof, cx, cz, out); break;
-      case 'tower': emitTower(dec, spec.body, cx, cz, yaw, out); break;
+      case 'tower':
+        emitTower(dec, spec.body, cx, cz, yaw, out);
+        // Setback towers also get window banding when they're R/C/MU —
+        // a high-rise residence without windows reads as a blank slab.
+        if (zoneShowsWindows(zone)) {
+          emitTowerFacade(dec, spec.body, cx, cz, yaw, out, tileX, tileY);
+        }
+        break;
       case 'awning': emitAwning(dec, spec.body, cx, cz, yaw, out); break;
       case 'sign': emitSign(dec, spec.body, cx, cz, yaw, out); break;
       case 'tank': emitTank(dec, cx, cz, out); break;
@@ -313,6 +337,166 @@ function sideOffset(side: 'N' | 'S' | 'E' | 'W', body: Body): { x: number; z: nu
     case 'S': return { x: 0, z:  halfD + 0.03 };
     case 'E': return { x:  halfW + 0.03, z: 0 };
     case 'W': return { x: -halfW - 0.03, z: 0 };
+  }
+}
+
+/* ---- Facade detail (Alpha 2.2) ------------------------------------- */
+
+/** Industrial buildings stay windowless — they read as warehouses /
+ *  factories, which is the genre cue. R / C / MU all get windows. */
+function zoneShowsWindows(zone: Zone): boolean {
+  return zone === 'residential' || zone === 'commercial' || zone === 'mixed';
+}
+
+/** Window glass colour. Slightly varied with a tile hash so a row of
+ *  identical buildings still has subtle variation in glass tone. */
+function windowColor(tileX: number, tileY: number): number {
+  const r = Math.abs(((tileX * 1597334677) ^ (tileY * 2654435761)) | 0);
+  // Three glass tones — neutral grey-blue, warmer yellow-tinged, cooler teal.
+  const palette = [0x2c3e54, 0x3a3a48, 0x2a4250];
+  return palette[r % palette.length]!;
+}
+
+/**
+ * Wrap a body with window bands on all four sides plus a ground-floor
+ * element (door for residential, shopfront for commercial / mixed
+ * podium). Each band is a very thin slab attached to the outside of the
+ * body face so the dark glass colour reads cleanly against the body's
+ * warm/cool palette.
+ *
+ * Window count scales with body height: 1 floor for h ≤ 0.30, 2 for
+ * 0.31..0.55, scaling up to ~6 for a 1.5-tall tower. The bottom 0.18 of
+ * each face is reserved for the ground-floor element so windows don't
+ * collide with the door/shopfront.
+ */
+function emitFacade(
+  body: Body, cx: number, cz: number, yaw: number, out: VariantPart[],
+  zone: Zone, tileX: number, tileY: number, isPodium: boolean
+): void {
+  const yBase = body.yBase ?? 0;
+  const groundReserved = Math.min(body.h * 0.4, 0.20);
+  const winColor = windowColor(tileX, tileY);
+
+  // Number of window bands above the ground reserved zone.
+  const bandSpace = body.h - groundReserved;
+  const floors = Math.max(1, Math.round(bandSpace / 0.22));
+
+  if (bandSpace > 0.05) {
+    for (let f = 0; f < floors; f++) {
+      const t = (f + 0.5) / floors;
+      const y = yBase + groundReserved + bandSpace * t;
+      // North face band.
+      pushWindowBand(out, body, cx, cz, yaw, 'N', y, winColor);
+      pushWindowBand(out, body, cx, cz, yaw, 'S', y, winColor);
+      // Side bands shorter so corners read.
+      pushWindowBand(out, body, cx, cz, yaw, 'E', y, winColor);
+      pushWindowBand(out, body, cx, cz, yaw, 'W', y, winColor);
+    }
+  }
+
+  // Ground-floor element. Mixed-use podium and commercial both get
+  // shopfronts (wide light-glass). Residential gets a door + 1-2 small
+  // windows.
+  const wantsShopfront =
+    zone === 'commercial' ||
+    (zone === 'mixed' && isPodium) ||
+    // Mixed-use without a body2 (single-body variants) still gets a
+    // shopfront on its main body — that's the "shop down, flat above" feel.
+    (zone === 'mixed' && !isPodium);
+  if (wantsShopfront) {
+    emitShopfront(body, cx, cz, yaw, out, tileX, tileY);
+  } else {
+    emitDoor(body, cx, cz, yaw, out, winColor);
+  }
+}
+
+function pushWindowBand(
+  out: VariantPart[], body: Body, cx: number, cz: number, yaw: number,
+  side: 'N' | 'S' | 'E' | 'W', y: number, color: number
+): void {
+  // Window band hugs the body face — 0.7 of face width, 0.07 tall,
+  // 0.012 thick (just barely standing out from the wall plane).
+  let w: number, d: number;
+  if (side === 'N' || side === 'S') {
+    w = body.w * 0.7;
+    d = 0.012;
+  } else {
+    w = 0.012;
+    d = body.d * 0.7;
+  }
+  const g = new BoxGeometry(w, 0.07, d);
+  const offset = side === 'N' ? { x: 0, z: -body.d / 2 - 0.005 }
+               : side === 'S' ? { x: 0, z:  body.d / 2 + 0.005 }
+               : side === 'E' ? { x:  body.w / 2 + 0.005, z: 0 }
+               :                { x: -body.w / 2 - 0.005, z: 0 };
+  g.translate(offset.x, y, offset.z);
+  if (yaw) g.rotateY(yaw);
+  g.translate(cx, 0, cz);
+  out.push({ geom: g, color });
+}
+
+function emitDoor(
+  body: Body, cx: number, cz: number, yaw: number, out: VariantPart[], _winColor: number
+): void {
+  const yBase = body.yBase ?? 0;
+  // Small dark door panel on the N face, plus a tiny window beside it.
+  const door = new BoxGeometry(body.w * 0.16, 0.16, 0.012);
+  door.translate(-body.w * 0.18, yBase + 0.08, -body.d / 2 - 0.005);
+  if (yaw) door.rotateY(yaw);
+  door.translate(cx, 0, cz);
+  out.push({ geom: door, color: 0x4a342a });
+  // Step / threshold light strip.
+  const step = new BoxGeometry(body.w * 0.16, 0.012, 0.05);
+  step.translate(-body.w * 0.18, yBase + 0.006, -body.d / 2 - 0.025);
+  if (yaw) step.rotateY(yaw);
+  step.translate(cx, 0, cz);
+  out.push({ geom: step, color: 0x6a6e74 });
+}
+
+function emitShopfront(
+  body: Body, cx: number, cz: number, yaw: number, out: VariantPart[],
+  tileX: number, tileY: number
+): void {
+  const yBase = body.yBase ?? 0;
+  // Wide bright shopfront window on the N face — half-tile wide, low.
+  const r = Math.abs(((tileX * 1597334677) ^ (tileY * 374761393)) | 0);
+  // Three shopfront tints — warm yellow (lit interior), cool teal, neutral.
+  const tintPalette = [0xeec888, 0x6ea8bb, 0xc9c9d0];
+  const tint = tintPalette[r % tintPalette.length]!;
+  const shop = new BoxGeometry(body.w * 0.7, 0.14, 0.012);
+  shop.translate(0, yBase + 0.10, -body.d / 2 - 0.005);
+  if (yaw) shop.rotateY(yaw);
+  shop.translate(cx, 0, cz);
+  out.push({ geom: shop, color: tint });
+  // Frame strip below shopfront — darker so the lit window pops.
+  const frame = new BoxGeometry(body.w * 0.7, 0.022, 0.014);
+  frame.translate(0, yBase + 0.022, -body.d / 2 - 0.006);
+  if (yaw) frame.rotateY(yaw);
+  frame.translate(cx, 0, cz);
+  out.push({ geom: frame, color: 0x2a2018 });
+}
+
+/**
+ * Window banding for a setback Tower decoration. Same logic as emitFacade
+ * but positioned on top of the main body (yBase = body.h) and without a
+ * shopfront / door (the tower entrance is at ground level on the body).
+ */
+function emitTowerFacade(
+  t: Tower, body: Body, cx: number, cz: number, yaw: number, out: VariantPart[],
+  tileX: number, tileY: number
+): void {
+  const yBase = body.h + (body.yBase ?? 0);
+  const winColor = windowColor(tileX, tileY);
+  const towerBody: Body = { w: t.w, d: t.d, h: t.h, color: t.color, yBase };
+  const bandSpace = t.h * 0.85;
+  const floors = Math.max(2, Math.round(bandSpace / 0.22));
+  for (let f = 0; f < floors; f++) {
+    const tFrac = (f + 0.5) / floors;
+    const y = yBase + t.h * 0.05 + bandSpace * tFrac;
+    pushWindowBand(out, towerBody, cx, cz, yaw, 'N', y, winColor);
+    pushWindowBand(out, towerBody, cx, cz, yaw, 'S', y, winColor);
+    pushWindowBand(out, towerBody, cx, cz, yaw, 'E', y, winColor);
+    pushWindowBand(out, towerBody, cx, cz, yaw, 'W', y, winColor);
   }
 }
 

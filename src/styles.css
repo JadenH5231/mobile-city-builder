@@ -815,25 +815,30 @@ body {
 .civic {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 10px;
   background: rgba(0, 0, 0, 0.18);
   border-radius: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .civic__pc {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 12px;
+  gap: 8px;
+  font-size: 11px;
   color: rgba(207, 232, 214, 0.7);
+}
+
+.civic__pc-label {
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 .civic__pc-bar {
   flex: 1 1 auto;
+  min-width: 40px;
   height: 6px;
-  margin: 0 10px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 3px;
   overflow: hidden;
@@ -850,11 +855,12 @@ body {
   font-variant-numeric: tabular-nums;
   color: #ffe98a;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .civic__buttons {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 
@@ -865,10 +871,15 @@ body {
   color: var(--pill-fg);
   font-size: 12px;
   font-weight: 500;
-  padding: 8px 12px;
+  padding: 7px 8px;
   border-radius: 999px;
   cursor: pointer;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 
 .civic__btn:active {
@@ -890,6 +901,10 @@ body {
   font-size: 11px;
   color: rgba(207, 232, 214, 0.65);
   font-style: italic;
+}
+
+.civic__active:empty {
+  display: none;
 }
 
 /* Council bar at top of Sentiment panel. */

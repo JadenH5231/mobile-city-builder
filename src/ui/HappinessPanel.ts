@@ -217,10 +217,12 @@ export class HappinessPanel {
     // Endorse button state
     if (c.endorsedFaction) {
       const f = FACTIONS.find((x) => x.id === c.endorsedFaction);
-      this.btnEndorse.textContent = `Endorsing: ${f?.leaderName ?? c.endorsedFaction}`;
+      this.btnEndorse.textContent = `✓ ${shortName(f?.leaderName ?? c.endorsedFaction)}`;
+      this.btnEndorse.title = `Endorsing ${f?.leaderName ?? c.endorsedFaction}`;
       this.btnEndorse.disabled = true;
     } else {
-      this.btnEndorse.textContent = `Endorse Leader (${COSTS.endorse_pc} PC)`;
+      this.btnEndorse.textContent = `Endorse · ${COSTS.endorse_pc}`;
+      this.btnEndorse.title = `Endorse a leader (${COSTS.endorse_pc} PC)`;
       this.btnEndorse.disabled = pc < COSTS.endorse_pc;
     }
 
@@ -228,32 +230,36 @@ export class HappinessPanel {
     if (c.coalition) {
       const a = FACTIONS.find((x) => x.id === c.coalition!.a);
       const b = FACTIONS.find((x) => x.id === c.coalition!.b);
-      this.btnCoalition.textContent = `Coalition: ${shortName(a?.leaderName ?? '')} + ${shortName(b?.leaderName ?? '')}`;
+      this.btnCoalition.textContent = '✓ Coalition';
+      this.btnCoalition.title = `Coalition: ${a?.leaderName ?? ''} + ${b?.leaderName ?? ''}`;
       this.btnCoalition.disabled = true;
     } else {
-      this.btnCoalition.textContent = `Form Coalition (${COSTS.coalition_pc} PC)`;
+      this.btnCoalition.textContent = `Coalition · ${COSTS.coalition_pc}`;
+      this.btnCoalition.title = `Form a coalition (${COSTS.coalition_pc} PC)`;
       this.btnCoalition.disabled = pc < COSTS.coalition_pc;
     }
 
     // Override button state
     if (c.isOverrideActive()) {
-      this.btnOverride.textContent = '⚡ Mayoral Override ACTIVE';
+      this.btnOverride.textContent = '⚡ Override ON';
+      this.btnOverride.title = 'Mayoral Override active for this term';
       this.btnOverride.disabled = true;
     } else if (c.isOverridePending()) {
-      this.btnOverride.textContent = '⏳ Override pending — kicks in next election';
+      this.btnOverride.textContent = '⏳ Override';
+      this.btnOverride.title = 'Override pending — kicks in next election';
       this.btnOverride.disabled = true;
     } else {
-      this.btnOverride.textContent = `Mayoral Override (${COSTS.override_pc} PC)`;
+      this.btnOverride.textContent = `Override · ${COSTS.override_pc}`;
+      this.btnOverride.title = `Mayoral Override (${COSTS.override_pc} PC)`;
       this.btnOverride.disabled = pc < COSTS.override_pc;
     }
 
-    // Active summary
-    const lines: string[] = [];
-    if (c.endorsedFaction) lines.push('Endorsement active until next election');
-    if (c.coalition) lines.push('Coalition active for this term');
-    if (c.isOverrideActive()) lines.push('Mayoral Override active for this term — no council restrictions');
-    else if (c.isOverridePending()) lines.push('Override paid, activates at next election');
-    this.civicActiveEl.textContent = lines.join(' · ');
+    // Active summary — only surface what buttons can't convey on their own.
+    // Override active uniquely means "no council restrictions this term", which
+    // matters during play; the rest is already visible in the button labels.
+    this.civicActiveEl.textContent = c.isOverrideActive()
+      ? '⚡ Override term — no council limits'
+      : '';
   }
 
   // -------------------------------------------------------------------

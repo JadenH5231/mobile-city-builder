@@ -257,7 +257,8 @@ export type Building =
   | 'park'
   | 'bus_stop'
   | 'bus_depot'
-  | 'forestry';
+  | 'forestry'
+  | 'farm';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -271,7 +272,9 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   bus_depot: 4000,
   // Forestry (Alpha 2.7) — modest sticker price; the lumber revenue is
   // the long-tail return. Only placeable on forest terrain.
-  forestry: 1200
+  forestry: 1200,
+  // Farm (Alpha 2.7.1) — grass-only modular industry mirroring forestry.
+  farm: 1000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -281,7 +284,8 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   park: 80,
   bus_stop: 60,
   bus_depot: 300,
-  forestry: 90
+  forestry: 90,
+  farm: 75
 };
 
 /**
@@ -298,6 +302,20 @@ export const FORESTRY_DISCONNECTED_MULT = 0.40;
 /** Lumber-price oscillation: 1 ± LUMBER_AMP, period in sim months. */
 export const LUMBER_AMP = 0.30;
 export const LUMBER_PERIOD_MONTHS = 18;
+
+/**
+ * Farm global-market parameters (Alpha 2.7.1). Same shape as forestry —
+ * per-tile lumber/produce per month × global price × connection. Lower
+ * base revenue since farms are easier to set up and far less capital
+ * intensive than a sawmill operation.
+ */
+export const FARM_BASE_REVENUE_PER_TILE = 85;
+export const FARM_DISCONNECTED_MULT = 0.55;
+/** Produce price oscillation. Different period from lumber (12 vs 18
+ *  months) so the two markets don't perfectly align — a player who
+ *  diversifies between forestry and farming has smoother revenue. */
+export const PRODUCE_AMP = 0.25;
+export const PRODUCE_PERIOD_MONTHS = 12;
 
 /**
  * Service coverage radii in tile units. Buildings within a building's radius
@@ -379,6 +397,7 @@ export type Tool =
   | 'place_water'
   | 'place_park'
   | 'place_forestry'
+  | 'place_farm'
   | 'place_bus_stop'
   | 'place_bus_depot'
   | 'place_stop_sign'
@@ -416,6 +435,7 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_water', 'water_tower' as const],
   ['place_park', 'park' as const],
   ['place_forestry', 'forestry' as const],
+  ['place_farm', 'farm' as const],
   ['place_bus_stop', 'bus_stop' as const],
   ['place_bus_depot', 'bus_depot' as const]
 ]);

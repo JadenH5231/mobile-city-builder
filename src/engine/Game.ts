@@ -268,7 +268,7 @@ export class Game {
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood());
-    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
@@ -315,6 +315,19 @@ export class Game {
     return Math.max(0, Math.min(1, (price - 0.55) / 0.9));
   }
 
+  /**
+   * Visual health for farm clusters (Alpha 2.7.1). Same shape as
+   * forestryHealth but reads the produce-price oscillation. Disconnected
+   * farms struggle visually but less severely than disconnected forestry
+   * (food has more local market).
+   */
+  farmHealth(): number {
+    if (!this.globalMarket.isConnected()) return 0.40;
+    const price = this.globalMarket.producePrice(this.economy.monthsElapsed);
+    // produce price oscillates roughly in [0.65, 1.35]; map to [0, 1].
+    return Math.max(0, Math.min(1, (price - 0.65) / 0.7));
+  }
+
   private refreshToolbarBans(): void {
     const banned = new Set<Tool>();
     // Each tool maps to its FACTION_STANCES key. Walking-path and
@@ -340,6 +353,7 @@ export class Game {
       ['place_water', 'water_tower'],
       ['place_park', 'park'],
       ['place_forestry', 'forestry'],
+      ['place_farm', 'farm'],
       ['place_bus_stop', 'bus_stop'],
       ['place_bus_depot', 'bus_depot'],
       ['place_stop_sign', 'stop_sign']
@@ -607,7 +621,7 @@ export class Game {
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood());
-    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();
@@ -837,10 +851,18 @@ export class Game {
         return false;
       }
     }
+    // Farm-specific terrain gate (Alpha 2.7.1).
+    if (kind === 'farm') {
+      const t = this.grid.get(x, y);
+      if (t && t.terrain !== 'grass') {
+        this.onStatusMessage?.('Farms can only be placed on grass tiles');
+        return false;
+      }
+    }
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
-    this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     // Parks are walkable (Alpha 2.6.1) — rebuild the pedestrian graph
     // so walkers can route through the new park tile immediately.
     if (kind === 'park') this.pathGraph.rebuild(this.grid);
@@ -1430,7 +1452,7 @@ export class Game {
       this.renderer.drawBuildings(this.grid, this.cityMood());
     }
     if (cityBuildingsChanged) {
-      this.renderer.drawCityBuildings(this.grid, this.forestryHealth());
+      this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
       // Service coverage changed — rerun the sweep so Development sees it.
       this.services.recompute(this.grid);
     }

@@ -2,6 +2,8 @@ import type { Grid } from '../world/Grid';
 import type { Population } from './Population';
 import {
   BUILDING_UPKEEP,
+  FARM_BASE_REVENUE_PER_TILE,
+  FARM_DISCONNECTED_MULT,
   FORESTRY_BASE_REVENUE_PER_TILE,
   FORESTRY_DISCONNECTED_MULT,
   LUXURY_TAX_BONUS,
@@ -85,6 +87,10 @@ export class Economy {
   lastForestryRevenue = 0;
   /** Last lumber-price multiplier seen by runMonth (Alpha 2.7). */
   lastLumberPrice = 1.0;
+  /** Last completed month's farm exports (Alpha 2.7.1). */
+  lastFarmRevenue = 0;
+  /** Last produce-price multiplier (Alpha 2.7.1). */
+  lastProducePrice = 1.0;
   /** Last completed month's accident-related expense (for budget breakdown). */
   lastAccidentCost = 0;
   /** Number of crashes during the current (in-progress) month. */
@@ -124,26 +130,35 @@ export class Economy {
     const luxuryBonusRevenue =
       population.luxuryResidents * this.taxR * REV_PER_RESIDENT * LUXURY_TAX_BONUS;
 
-    // Forestry exports (Alpha 2.7): each forestry tile produces lumber
-    // at a base rate. Modulated by the global lumber price; if the city
-    // isn't connected to the outside world (no road tile on the edge),
-    // a steep discount applies (some local sales, no real export).
+    // Export industries (Alpha 2.7+): each forestry / farm tile produces
+    // a tradable commodity at a base rate. Modulated by global price; if
+    // the city isn't connected to the outside world (no road tile on the
+    // edge), a steep discount applies.
     let forestryTiles = 0;
+    let farmTiles = 0;
     for (const t of grid.iter()) {
       if (t.building === 'forestry') forestryTiles++;
+      else if (t.building === 'farm') farmTiles++;
     }
+    const isConnected = market ? market.isConnected() : true;
     const lumberPrice = market ? market.lumberPrice(this.monthsElapsed) : 1.0;
-    const connectionMult = market && market.isConnected() ? 1.0 : FORESTRY_DISCONNECTED_MULT;
-    const forestryRevenue = forestryTiles * FORESTRY_BASE_REVENUE_PER_TILE * lumberPrice * connectionMult;
+    const producePrice = market ? market.producePrice(this.monthsElapsed) : 1.0;
+    const forestryConn = isConnected ? 1.0 : FORESTRY_DISCONNECTED_MULT;
+    const farmConn = isConnected ? 1.0 : FARM_DISCONNECTED_MULT;
+    const forestryRevenue = forestryTiles * FORESTRY_BASE_REVENUE_PER_TILE * lumberPrice * forestryConn;
+    const farmRevenue = farmTiles * FARM_BASE_REVENUE_PER_TILE * producePrice * farmConn;
     this.lastLumberPrice = lumberPrice;
+    this.lastProducePrice = producePrice;
     this.lastForestryRevenue = Math.round(forestryRevenue);
+    this.lastFarmRevenue = Math.round(farmRevenue);
 
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
       population.totalCommercialJobs * this.taxC * REV_PER_C_JOB +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
-      forestryRevenue;
+      forestryRevenue +
+      farmRevenue;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.
     // Charge the average of the two endpoints' tier so a mixed-tier edge

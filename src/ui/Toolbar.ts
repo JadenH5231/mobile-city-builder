@@ -169,6 +169,12 @@ const ITEMS: readonly ToolbarItem[] = [
     <path d="M5 19h14 M7 22h10"
           stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   </svg>` },
+  { kind: 'tool', tool: 'place_farm', label: 'Farm', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 18l4-7 4 4 3-5 4 6 3-3v5z"
+          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    <path d="M3 21h18 M6 12v-3 M9 8v-2 M14 9v-3 M19 11v-2"
+          stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>` },
   { kind: 'tool', tool: 'place_bus_stop', label: 'BusStop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <rect x="6" y="4" width="12" height="14" rx="2"
           stroke="currentColor" stroke-width="1.8" fill="none"/>

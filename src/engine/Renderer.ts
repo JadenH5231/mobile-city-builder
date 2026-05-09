@@ -254,7 +254,7 @@ export class Renderer {
    * One Group, one Mesh per kind, vertex-coloured so flat shading still
    * gives subtle face shading.
    */
-  drawCityBuildings(grid: Grid, forestryHealth = 1.0): void {
+  drawCityBuildings(grid: Grid, forestryHealth = 1.0, farmHealth = 1.0): void {
     // Wipe and recreate. Cheap — even a busy city has a couple dozen.
     while (this.cityBuildingsGroup.children.length > 0) {
       const child = this.cityBuildingsGroup.children[0]!;
@@ -266,7 +266,7 @@ export class Renderer {
         else (mat as MeshLambertMaterial).dispose();
       }
     }
-    const built = buildCityBuildingsMesh(grid, forestryHealth);
+    const built = buildCityBuildingsMesh(grid, forestryHealth, farmHealth);
     if (built) this.cityBuildingsGroup.add(built);
   }
 
@@ -1021,7 +1021,7 @@ function heatColor(load: number, out: Color): void {
  * - bus_stop: thin yellow pole + a small canopy
  * - bus_depot: orange box (bigger than bus_stop)
  */
-function buildCityBuildingsMesh(grid: Grid, forestryHealth: number): Mesh | null {
+function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: number): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
 
@@ -1051,6 +1051,19 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number): Mesh | null
       if (visited.has(key)) continue;
       const cluster = floodBuilding(grid, t.x, t.y, 'forestry', visited);
       const parts = forestryClusterParts(cluster, forestryHealth);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    if (t.building === 'farm') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'farm', visited);
+      const parts = farmClusterParts(cluster, farmHealth);
       for (const p of parts) {
         const g = p.makeGeom();
         g.translate(p.dx, p.dy, p.dz);
@@ -1311,28 +1324,24 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
 }
 
 /**
- * Modular forestry renderer (Alpha 2.7). Each forestry cluster of size
- * 1..12+ adds a feature per tile from a fixed sequence, so a 3-tile
- * cluster looks visibly bigger than a 2-tile cluster, and a 12-tile
- * cluster reads as a fully-built timber operation. Sequence:
+ * Modular forestry renderer (Alpha 2.7.1). A cluster of forestry tiles
+ * renders as ONE cohesive timber operation rather than N independent
+ * sheds. The cluster gets:
  *
- *  1: lone logger's hut (centerpiece)
- *  2: + log pile
- *  3: + sawmill (chimney box)
- *  4: + drying yard (log racks)
- *  5: + log truck
- *  6: + crane (boom + post)
- *  7: + kiln (cylinder + steam puff when healthy)
- *  8: + fuel tank
- *  9: + office trailer
- * 10: + second log pile
- * 11: + conveyor belt
- * 12: + rail siding (parallel rails)
+ *  1. A continuous gravel yard pad spanning every tile (overlapping at
+ *     edges so adjacent tile pads visibly merge).
+ *  2. A perimeter rail fence — sweeps each tile's 4-edges and emits a
+ *     fence segment only on edges that face out (no forestry neighbour).
+ *  3. Internal connector paths between every pair of 4-adjacent tiles —
+ *     paved beige strips so the operation reads as linked.
+ *  4. Per-tile roles assigned from a fixed sequence (hut → sawmill →
+ *     orchard → log_pile → drying_yard → orchard → log_truck → crane →
+ *     orchard → kiln → fuel_tank → office → orchard → conveyor →
+ *     rail). Orchard tiles render rows of small spruce saplings —
+ *     a sustainable tree farm to make the cluster read as renewable.
  *
- * `health` ∈ [0, 1] modulates colour saturation, paint vibrancy, and
- * whether the kiln puff appears. health < 0.45 shows weeds (small
- * yellow tufts on the dirt pad) + faded paint. health > 0.85 shows
- * smoke and crisp paint.
+ * `health` ∈ [0, 1] modulates colour saturation, paint vibrancy, weed
+ * tufts when struggling, and steam puffs when thriving.
  */
 function forestryClusterParts(
   cluster: Array<{ x: number; y: number }>,
@@ -1340,54 +1349,129 @@ function forestryClusterParts(
 ): CityBuildingPart[] {
   if (cluster.length === 0) return [];
   const out: CityBuildingPart[] = [];
-  // Sort cluster deterministically (lex by x, then y) so feature
-  // assignment is stable across renders.
+  // Sort cluster deterministically (lex by x, then y) so role assignment
+  // is stable across renders.
   const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  // O(1) lookup whether a tile is part of the cluster.
+  const member = new Set<string>();
+  for (const c of sorted) member.add(c.x + ',' + c.y);
+  const isMember = (x: number, y: number) => member.has(x + ',' + y);
+
   // Health-tinted colours.
   const dirt = lerpColor(0x4a3a26, 0x6a5a40, health);
   const woodMain = lerpColor(0x6e4d2c, 0x8a5e34, health);
   const woodPale = lerpColor(0xb18a5a, 0xd6a868, health);
   const tinRoof = lerpColor(0x4a4a44, 0x707064, health);
   const log = lerpColor(0x6a4830, 0x8a5d3c, health);
+  const path = lerpColor(0x9c9080, 0xc7baa8, health);
   const struggling = health < 0.45;
   const thriving = health > 0.85;
 
-  // Dirt pad on every tile — replaces the green grass under each tile
-  // so a forestry cluster reads as a working yard, not lawn.
+  // 1. Continuous yard pad. Slightly wider than 1.0 so adjacent pads
+  // overlap by a sliver — the cluster reads as one big gravel yard
+  // rather than 9 squares with seams.
   for (const c of sorted) {
     const cx = (c.x + 0.5) * TILE_SIZE;
     const cz = (c.y + 0.5) * TILE_SIZE;
-    out.push({ makeGeom: () => box(0.92, 0.025, 0.92), color: dirt, dx: cx, dy: 0.013, dz: cz });
-    // Weed tufts when struggling.
+    out.push({ makeGeom: () => box(1.04, 0.025, 1.04), color: dirt, dx: cx, dy: 0.013, dz: cz });
     if (struggling) {
       const h = (Math.abs(c.x * 374761393) ^ Math.abs(c.y * 668265263)) | 0;
-      const tx = ((h % 100) / 100 - 0.5) * 0.6;
-      const tz = (((h >> 7) % 100) / 100 - 0.5) * 0.6;
+      const tx = ((h % 100) / 100 - 0.5) * 0.7;
+      const tz = (((h >> 7) % 100) / 100 - 0.5) * 0.7;
       out.push({ makeGeom: () => cone(0.04, 0.08, 5), color: 0xc8b04a, dx: cx + tx, dy: 0.04, dz: cz + tz });
     }
   }
 
-  // Per-tile feature emission based on the tile's index in the sorted
-  // cluster. Anything past index 11 just doubles up on log piles.
+  // 2. Internal connector paths. For each pair of 4-adjacent forestry
+  // tiles, lay a long paved strip from the lower tile center to the
+  // higher one. We only emit one strip per pair (lex-smaller→larger).
+  const dirs: Array<[number, number]> = [[1, 0], [0, 1]];
+  for (const c of sorted) {
+    for (const [dx, dy] of dirs) {
+      if (!isMember(c.x + dx, c.y + dy)) continue;
+      const cx0 = (c.x + 0.5) * TILE_SIZE;
+      const cz0 = (c.y + 0.5) * TILE_SIZE;
+      const cx1 = (c.x + dx + 0.5) * TILE_SIZE;
+      const cz1 = (c.y + dy + 0.5) * TILE_SIZE;
+      const midX = (cx0 + cx1) / 2;
+      const midZ = (cz0 + cz1) / 2;
+      // Strip dimension: thin perpendicular, wide along the connection axis.
+      const w = dx !== 0 ? 1.10 : 0.18;
+      const d = dy !== 0 ? 1.10 : 0.18;
+      out.push({ makeGeom: () => box(w, 0.012, d), color: path, dx: midX, dy: 0.027, dz: midZ });
+    }
+  }
+
+  // 3. Perimeter rail fence. For each tile, look at the 4 cardinal
+  // edges; if the neighbour isn't a forestry tile, emit a fence
+  // segment running along that edge. Two posts + a top rail.
+  const fenceColor = lerpColor(0x4a3a28, 0x6e5a3a, health);
+  const fenceLen = 0.85;
+  const fencePostH = 0.10;
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const sides: Array<[number, number, [number, number]]> = [
+      [0, -1, [0, -0.50]],   // N edge
+      [1, 0, [0.50, 0]],     // E edge
+      [0, 1, [0, 0.50]],     // S edge
+      [-1, 0, [-0.50, 0]]    // W edge
+    ];
+    for (const [ndx, ndy, [ex, ez]] of sides) {
+      if (isMember(c.x + ndx, c.y + ndy)) continue;
+      const horizontal = ndy !== 0;
+      const railW = horizontal ? fenceLen : 0.018;
+      const railD = horizontal ? 0.018 : fenceLen;
+      // Top rail.
+      out.push({ makeGeom: () => box(railW, 0.018, railD), color: fenceColor, dx: cx + ex, dy: 0.085, dz: cz + ez });
+      // Two posts.
+      const postOff = horizontal ? [(-fenceLen / 2 + 0.04), (fenceLen / 2 - 0.04)] : [];
+      const postOffZ = !horizontal ? [(-fenceLen / 2 + 0.04), (fenceLen / 2 - 0.04)] : [];
+      if (horizontal) {
+        for (const po of postOff) {
+          out.push({ makeGeom: () => box(0.022, fencePostH, 0.022), color: fenceColor, dx: cx + ex + po, dy: 0.05, dz: cz + ez });
+        }
+      } else {
+        for (const po of postOffZ) {
+          out.push({ makeGeom: () => box(0.022, fencePostH, 0.022), color: fenceColor, dx: cx + ex, dy: 0.05, dz: cz + ez + po });
+        }
+      }
+    }
+  }
+
+  // 4. Per-tile roles. Sequence weaves orchards in between primary
+  // features so even a small cluster shows the tree-farm side, and a
+  // big cluster reads as a real industrial complex.
+  const ROLES: ForestryRole[] = [
+    'hut', 'sawmill', 'orchard', 'log_pile', 'drying_yard',
+    'orchard', 'log_truck', 'crane', 'orchard', 'kiln',
+    'fuel_tank', 'office', 'orchard', 'conveyor', 'rail'
+  ];
+  // For clusters bigger than ROLES.length, repeat orchards at the end.
   for (let i = 0; i < sorted.length; i++) {
     const c = sorted[i]!;
     const cx = (c.x + 0.5) * TILE_SIZE;
     const cz = (c.y + 0.5) * TILE_SIZE;
-    emitForestryFeature(out, i, cx, cz, woodMain, woodPale, tinRoof, log, thriving);
+    const role: ForestryRole = i < ROLES.length ? ROLES[i]! : 'orchard';
+    emitForestryFeature(out, role, cx, cz, woodMain, woodPale, tinRoof, log, thriving);
   }
 
   return out;
 }
 
+type ForestryRole =
+  | 'hut' | 'sawmill' | 'orchard' | 'log_pile' | 'drying_yard'
+  | 'log_truck' | 'crane' | 'kiln' | 'fuel_tank' | 'office'
+  | 'conveyor' | 'rail';
+
 function emitForestryFeature(
-  out: CityBuildingPart[], idx: number,
+  out: CityBuildingPart[], role: ForestryRole,
   cx: number, cz: number,
   woodMain: number, woodPale: number, tinRoof: number, log: number,
   thriving: boolean
 ): void {
-  const featureIdx = idx % 12;
-  switch (featureIdx) {
-    case 0: {
+  switch (role) {
+    case 'hut': {
       // Logger's hut: small wood box + gabled tin roof + door.
       out.push({ makeGeom: () => box(0.42, 0.30, 0.42), color: woodMain, dx: cx, dy: 0.165, dz: cz });
       out.push({ makeGeom: () => cone(0.32, 0.18, 4), color: tinRoof, dx: cx, dy: 0.30 + 0.09, dz: cz });
@@ -1399,22 +1483,7 @@ function emitForestryFeature(
       }
       break;
     }
-    case 1: {
-      // Log pile — three logs stacked.
-      for (let k = 0; k < 3; k++) {
-        const g = new CylinderGeometry(0.06, 0.06, 0.55, 7);
-        g.rotateZ(Math.PI / 2);
-        out.push({ makeGeom: () => g, color: log, dx: cx, dy: 0.06 + k * 0.10, dz: cz - 0.18 });
-      }
-      // Two perpendicular cross-logs for the second row.
-      for (let k = 0; k < 2; k++) {
-        const g = new CylinderGeometry(0.06, 0.06, 0.55, 7);
-        g.rotateZ(Math.PI / 2);
-        out.push({ makeGeom: () => g, color: log, dx: cx, dy: 0.16 + k * 0.10, dz: cz + 0.05 });
-      }
-      break;
-    }
-    case 2: {
+    case 'sawmill': {
       // Sawmill — bigger gabled barn with a tin roof + tall chimney.
       out.push({ makeGeom: () => box(0.62, 0.42, 0.50), color: woodMain, dx: cx, dy: 0.21, dz: cz });
       out.push({ makeGeom: () => cone(0.42, 0.22, 4), color: tinRoof, dx: cx, dy: 0.42 + 0.11, dz: cz });
@@ -1425,23 +1494,50 @@ function emitForestryFeature(
       }
       break;
     }
-    case 3: {
-      // Drying yard — three log racks: parallel rails carrying logs.
+    case 'orchard': {
+      // Tree farm — 3 rows × 4 small spruce saplings on the dirt pad.
+      // The orchard is what makes the operation feel sustainable / real.
+      const greens = [0x2f6a2d, 0x3a7a3a, 0x4a8e3a];
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 4; col++) {
+          const ox = -0.30 + col * 0.20;
+          const oz = -0.30 + row * 0.30;
+          // Small trunk + cone foliage. Skip the trunk for distance —
+          // at this size it's barely visible anyway.
+          out.push({ makeGeom: () => cone(0.06, 0.20, 5), color: greens[(row + col) % 3]!, dx: cx + ox, dy: 0.13, dz: cz + oz });
+        }
+      }
+      break;
+    }
+    case 'log_pile': {
+      // Log pile — three logs stacked + cross-row.
+      for (let k = 0; k < 3; k++) {
+        const g = new CylinderGeometry(0.06, 0.06, 0.55, 7);
+        g.rotateZ(Math.PI / 2);
+        out.push({ makeGeom: () => g, color: log, dx: cx, dy: 0.06 + k * 0.10, dz: cz - 0.18 });
+      }
+      for (let k = 0; k < 2; k++) {
+        const g = new CylinderGeometry(0.06, 0.06, 0.55, 7);
+        g.rotateZ(Math.PI / 2);
+        out.push({ makeGeom: () => g, color: log, dx: cx, dy: 0.16 + k * 0.10, dz: cz + 0.05 });
+      }
+      break;
+    }
+    case 'drying_yard': {
+      // Three log racks: parallel rails carrying logs.
       for (let r = 0; r < 3; r++) {
         const off = (r - 1) * 0.18;
         out.push({ makeGeom: () => box(0.50, 0.04, 0.04), color: 0x4a3020, dx: cx, dy: 0.05, dz: cz + off });
-        // Log on top.
         const g = new CylinderGeometry(0.045, 0.045, 0.50, 7);
         g.rotateZ(Math.PI / 2);
         out.push({ makeGeom: () => g, color: log, dx: cx, dy: 0.115, dz: cz + off });
       }
       break;
     }
-    case 4: {
-      // Log truck — chassis box + cab + log payload.
+    case 'log_truck': {
+      // Chassis box + cab + log payload.
       out.push({ makeGeom: () => box(0.60, 0.06, 0.20), color: 0x4a4a4a, dx: cx, dy: 0.04, dz: cz });
       out.push({ makeGeom: () => box(0.18, 0.16, 0.20), color: 0xb14a4a, dx: cx - 0.20, dy: 0.14, dz: cz });
-      // Logs on the bed.
       for (let k = 0; k < 3; k++) {
         const g = new CylinderGeometry(0.05, 0.05, 0.32, 7);
         g.rotateZ(Math.PI / 2);
@@ -1449,17 +1545,14 @@ function emitForestryFeature(
       }
       break;
     }
-    case 5: {
-      // Crane — vertical post + horizontal boom.
+    case 'crane': {
       out.push({ makeGeom: () => box(0.06, 0.55, 0.06), color: 0xc9a437, dx: cx, dy: 0.275, dz: cz });
       out.push({ makeGeom: () => box(0.42, 0.04, 0.04), color: 0xc9a437, dx: cx + 0.18, dy: 0.55, dz: cz });
-      // Cable + hook.
       out.push({ makeGeom: () => box(0.012, 0.20, 0.012), color: 0x222222, dx: cx + 0.34, dy: 0.45, dz: cz });
       out.push({ makeGeom: () => box(0.05, 0.05, 0.05), color: 0x4a4a4a, dx: cx + 0.34, dy: 0.32, dz: cz });
       break;
     }
-    case 6: {
-      // Kiln — round cylinder + dome cap. Steam puff when thriving.
+    case 'kiln': {
       out.push({ makeGeom: () => cyl(0.18, 0.40, 10), color: 0xa68260, dx: cx, dy: 0.20, dz: cz });
       out.push({ makeGeom: () => cone(0.18, 0.10, 10), color: 0x6e4a30, dx: cx, dy: 0.40 + 0.05, dz: cz });
       if (thriving) {
@@ -1467,8 +1560,7 @@ function emitForestryFeature(
       }
       break;
     }
-    case 7: {
-      // Fuel tank — fat horizontal cylinder on a frame.
+    case 'fuel_tank': {
       const g = new CylinderGeometry(0.16, 0.16, 0.52, 10);
       g.rotateZ(Math.PI / 2);
       out.push({ makeGeom: () => g, color: 0xb14a3a, dx: cx, dy: 0.20, dz: cz });
@@ -1476,27 +1568,14 @@ function emitForestryFeature(
       out.push({ makeGeom: () => box(0.06, 0.06, 0.10), color: 0x222222, dx: cx + 0.20, dy: 0.06, dz: cz });
       break;
     }
-    case 8: {
-      // Office trailer — long flat box on stilts + door + window strip.
+    case 'office': {
       out.push({ makeGeom: () => box(0.65, 0.22, 0.35), color: woodPale, dx: cx, dy: 0.16, dz: cz });
       out.push({ makeGeom: () => box(0.66, 0.02, 0.36), color: 0x4a4a44, dx: cx, dy: 0.28, dz: cz });
       out.push({ makeGeom: () => box(0.50, 0.06, 0.018), color: 0x2a3a4a, dx: cx, dy: 0.20, dz: cz - 0.18 });
       out.push({ makeGeom: () => box(0.10, 0.14, 0.018), color: 0x3a2a18, dx: cx + 0.18, dy: 0.13, dz: cz + 0.18 });
       break;
     }
-    case 9: {
-      // Second log pile — bigger / messier.
-      for (let row = 0; row < 4; row++) {
-        for (let k = 0; k < 3; k++) {
-          const g = new CylinderGeometry(0.055, 0.055, 0.50, 7);
-          g.rotateZ(Math.PI / 2);
-          out.push({ makeGeom: () => g, color: log, dx: cx + (k - 1) * 0.04, dy: 0.06 + row * 0.10, dz: cz - 0.05 });
-        }
-      }
-      break;
-    }
-    case 10: {
-      // Conveyor belt — angled box from low to mid height.
+    case 'conveyor': {
       const belt = new BoxGeometry(0.55, 0.04, 0.16);
       belt.rotateZ(-Math.PI / 8);
       out.push({ makeGeom: () => belt, color: 0x222222, dx: cx, dy: 0.18, dz: cz });
@@ -1504,11 +1583,9 @@ function emitForestryFeature(
       out.push({ makeGeom: () => box(0.06, 0.04, 0.18), color: 0x4a4a4a, dx: cx + 0.24, dy: 0.26, dz: cz });
       break;
     }
-    case 11: {
-      // Rail siding — two parallel rails + ties.
+    case 'rail': {
       out.push({ makeGeom: () => box(0.85, 0.018, 0.04), color: 0x6a6a6a, dx: cx, dy: 0.012, dz: cz - 0.10 });
       out.push({ makeGeom: () => box(0.85, 0.018, 0.04), color: 0x6a6a6a, dx: cx, dy: 0.012, dz: cz + 0.10 });
-      // Sleepers.
       for (let k = 0; k < 5; k++) {
         const off = -0.30 + k * 0.16;
         out.push({ makeGeom: () => box(0.10, 0.014, 0.30), color: 0x4a3020, dx: cx + off, dy: 0.008, dz: cz });
@@ -1523,6 +1600,320 @@ function emitForestryFeature(
  * Used by both the forestry health palette and (Alpha 2.7) the
  * happiness-based building tinting.
  */
+/**
+ * Modular farm renderer (Alpha 2.7.1). Same cohesive-cluster approach as
+ * forestry: continuous green pad, perimeter rail fence, paved connector
+ * paths between adjacent tiles, and per-tile roles drawn from a sequence
+ * that weaves crop fields between primary structures so even a small
+ * farm reads as fields-plus-buildings.
+ *
+ * Roles (tile order in lex-sorted cluster):
+ *  hut (farmhouse) → barn → crops → silo → crops → animal_pen → tractor
+ *  → crops → greenhouse → water_tank → crops → orchard → windmill →
+ *  compost
+ *
+ * `health` ∈ [0, 1] modulates colour saturation, crop fullness, paint
+ * vibrancy, and whether the windmill blades are healthy white vs faded.
+ */
+function farmClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+  health: number
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+  const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  const member = new Set<string>();
+  for (const c of sorted) member.add(c.x + ',' + c.y);
+  const isMember = (x: number, y: number) => member.has(x + ',' + y);
+
+  const grass = lerpColor(0x4a6f3a, 0x6a9054, health);
+  const dirt = lerpColor(0x5a4830, 0x7a6240, health);
+  const woodMain = lerpColor(0x9a4a3a, 0xc06750, health);   // barn-red, faded → vivid
+  const woodPale = lerpColor(0xc0a87a, 0xe8d4a4, health);
+  const tinRoof = lerpColor(0x4a4a44, 0x707064, health);
+  const cropMature = lerpColor(0x9aa838, 0xd6c64a, health);
+  const cropYoung = lerpColor(0x6a8a30, 0x9ab644, health);
+  const struggling = health < 0.45;
+  const thriving = health > 0.85;
+
+  // 1. Continuous green pad — like a managed pasture under everything.
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(1.04, 0.025, 1.04), color: grass, dx: cx, dy: 0.013, dz: cz });
+  }
+
+  // 2. Internal connector paths — dirt strips so adjacent farm tiles
+  // visibly link into one operation.
+  const dirs: Array<[number, number]> = [[1, 0], [0, 1]];
+  for (const c of sorted) {
+    for (const [dx, dy] of dirs) {
+      if (!isMember(c.x + dx, c.y + dy)) continue;
+      const cx0 = (c.x + 0.5) * TILE_SIZE;
+      const cz0 = (c.y + 0.5) * TILE_SIZE;
+      const cx1 = (c.x + dx + 0.5) * TILE_SIZE;
+      const cz1 = (c.y + dy + 0.5) * TILE_SIZE;
+      const midX = (cx0 + cx1) / 2;
+      const midZ = (cz0 + cz1) / 2;
+      const w = dx !== 0 ? 1.10 : 0.16;
+      const d = dy !== 0 ? 1.10 : 0.16;
+      out.push({ makeGeom: () => box(w, 0.012, d), color: dirt, dx: midX, dy: 0.027, dz: midZ });
+    }
+  }
+
+  // 3. Perimeter rail fence (white) — classic country farm look.
+  const fenceColor = lerpColor(0xb0a890, 0xe8e2cc, health);
+  const fenceLen = 0.85;
+  const fencePostH = 0.10;
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const sides: Array<[number, number, [number, number]]> = [
+      [0, -1, [0, -0.50]],
+      [1, 0, [0.50, 0]],
+      [0, 1, [0, 0.50]],
+      [-1, 0, [-0.50, 0]]
+    ];
+    for (const [ndx, ndy, [ex, ez]] of sides) {
+      if (isMember(c.x + ndx, c.y + ndy)) continue;
+      const horizontal = ndy !== 0;
+      // Two parallel rails (looks like classic 3-board farm fence).
+      for (const railY of [0.06, 0.105]) {
+        const railW = horizontal ? fenceLen : 0.018;
+        const railD = horizontal ? 0.018 : fenceLen;
+        out.push({ makeGeom: () => box(railW, 0.014, railD), color: fenceColor, dx: cx + ex, dy: railY, dz: cz + ez });
+      }
+      const postOff = horizontal ? [(-fenceLen / 2 + 0.04), 0, (fenceLen / 2 - 0.04)] : [];
+      const postOffZ = !horizontal ? [(-fenceLen / 2 + 0.04), 0, (fenceLen / 2 - 0.04)] : [];
+      if (horizontal) {
+        for (const po of postOff) {
+          out.push({ makeGeom: () => box(0.022, fencePostH, 0.022), color: fenceColor, dx: cx + ex + po, dy: 0.05, dz: cz + ez });
+        }
+      } else {
+        for (const po of postOffZ) {
+          out.push({ makeGeom: () => box(0.022, fencePostH, 0.022), color: fenceColor, dx: cx + ex, dy: 0.05, dz: cz + ez + po });
+        }
+      }
+    }
+  }
+
+  // 4. Per-tile roles. Crops fill in between primary buildings.
+  const ROLES: FarmRole[] = [
+    'farmhouse', 'barn', 'crops', 'silo', 'crops',
+    'animal_pen', 'tractor', 'crops', 'greenhouse', 'water_tank',
+    'crops', 'orchard', 'windmill', 'compost'
+  ];
+  for (let i = 0; i < sorted.length; i++) {
+    const c = sorted[i]!;
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const role: FarmRole = i < ROLES.length ? ROLES[i]! : 'crops';
+    emitFarmFeature(out, role, cx, cz, woodMain, woodPale, tinRoof, dirt, cropMature, cropYoung, thriving, struggling);
+  }
+
+  return out;
+}
+
+type FarmRole =
+  | 'farmhouse' | 'barn' | 'crops' | 'silo' | 'animal_pen'
+  | 'tractor' | 'greenhouse' | 'water_tank' | 'orchard'
+  | 'windmill' | 'compost';
+
+function emitFarmFeature(
+  out: CityBuildingPart[], role: FarmRole,
+  cx: number, cz: number,
+  woodMain: number, woodPale: number, tinRoof: number, dirt: number,
+  cropMature: number, cropYoung: number,
+  thriving: boolean, struggling: boolean
+): void {
+  switch (role) {
+    case 'farmhouse': {
+      // Two-storey farmhouse: cream body + red gable roof + chimney.
+      out.push({ makeGeom: () => box(0.48, 0.36, 0.40), color: woodPale, dx: cx, dy: 0.18, dz: cz });
+      out.push({ makeGeom: () => cone(0.35, 0.20, 4), color: woodMain, dx: cx, dy: 0.36 + 0.10, dz: cz });
+      out.push({ makeGeom: () => box(0.07, 0.18, 0.07), color: 0x6e4a3a, dx: cx + 0.16, dy: 0.36 + 0.09, dz: cz - 0.08 });
+      // Front door + window.
+      out.push({ makeGeom: () => box(0.10, 0.18, 0.018), color: 0x3a2a18, dx: cx, dy: 0.09, dz: cz + 0.20 + 0.009 });
+      out.push({ makeGeom: () => box(0.08, 0.06, 0.018), color: 0x2a3a4a, dx: cx + 0.14, dy: 0.22, dz: cz + 0.20 + 0.009 });
+      if (thriving) {
+        out.push({ makeGeom: () => sphereLite(0.06), color: 0xe0e6ec, dx: cx + 0.16, dy: 0.36 + 0.22, dz: cz - 0.08 });
+      }
+      break;
+    }
+    case 'barn': {
+      // Big red barn — wider gable + tall roof + hayloft door.
+      out.push({ makeGeom: () => box(0.65, 0.42, 0.55), color: woodMain, dx: cx, dy: 0.21, dz: cz });
+      out.push({ makeGeom: () => cone(0.46, 0.24, 4), color: 0x4a3020, dx: cx, dy: 0.42 + 0.12, dz: cz });
+      // White trim on the doors.
+      out.push({ makeGeom: () => box(0.30, 0.32, 0.018), color: woodPale, dx: cx, dy: 0.16, dz: cz + 0.275 + 0.009 });
+      // X-brace on the doors.
+      out.push({ makeGeom: () => box(0.30, 0.022, 0.020), color: woodMain, dx: cx, dy: 0.16, dz: cz + 0.275 + 0.018 });
+      out.push({ makeGeom: () => box(0.022, 0.32, 0.020), color: woodMain, dx: cx, dy: 0.16, dz: cz + 0.275 + 0.018 });
+      // Hayloft door.
+      out.push({ makeGeom: () => box(0.10, 0.08, 0.020), color: 0x3a2a18, dx: cx, dy: 0.40, dz: cz + 0.275 + 0.020 });
+      break;
+    }
+    case 'crops': {
+      // Crop field — 5 rows × 6 short rectangular crop strips. Mature
+      // when thriving (taller, golden), young when struggling.
+      const rows = 5;
+      const cols = 6;
+      const stripW = 0.10;
+      const stripD = 0.13;
+      const stripH = thriving ? 0.10 : (struggling ? 0.04 : 0.07);
+      for (let r = 0; r < rows; r++) {
+        for (let col = 0; col < cols; col++) {
+          const ox = -0.36 + col * 0.144;
+          const oz = -0.30 + r * 0.15;
+          const c = (r + col) % 2 === 0 ? cropMature : cropYoung;
+          out.push({ makeGeom: () => box(stripW, stripH, stripD * 0.5), color: c, dx: cx + ox, dy: stripH / 2, dz: cz + oz });
+        }
+      }
+      // Furrow lines between rows.
+      for (let r = 0; r <= rows; r++) {
+        out.push({ makeGeom: () => box(0.86, 0.012, 0.020), color: dirt, dx: cx, dy: 0.026, dz: cz - 0.36 + r * 0.15 });
+      }
+      break;
+    }
+    case 'silo': {
+      // Tall metal silo + dome cap + ladder strip.
+      out.push({ makeGeom: () => cyl(0.18, 0.70, 12), color: 0xb8b8b0, dx: cx, dy: 0.35, dz: cz });
+      out.push({ makeGeom: () => cone(0.18, 0.10, 12), color: 0x707064, dx: cx, dy: 0.70 + 0.05, dz: cz });
+      // Ladder.
+      for (let k = 0; k < 5; k++) {
+        out.push({ makeGeom: () => box(0.05, 0.018, 0.014), color: 0x3a3a3a, dx: cx + 0.18 + 0.012, dy: 0.10 + k * 0.13, dz: cz });
+      }
+      // Conveyor pipe dropping from silo to barn-side.
+      out.push({ makeGeom: () => box(0.18, 0.05, 0.06), color: 0x707064, dx: cx + 0.10, dy: 0.50, dz: cz });
+      break;
+    }
+    case 'animal_pen': {
+      // Small open shelter + 4 sheep / cows (just colored cubes for the
+      // low-poly aesthetic).
+      out.push({ makeGeom: () => box(0.50, 0.18, 0.30), color: woodMain, dx: cx - 0.18, dy: 0.09, dz: cz });
+      out.push({ makeGeom: () => cone(0.35, 0.10, 4), color: tinRoof, dx: cx - 0.18, dy: 0.18 + 0.05, dz: cz });
+      // Animals — small white (sheep) + brown (cow) blobs.
+      const animals = [
+        { x: 0.10, z: -0.18, c: 0xeae3d0 },
+        { x: 0.22, z: 0.10, c: 0xeae3d0 },
+        { x: 0.28, z: -0.05, c: 0x6a4a3a },
+        { x: 0.05, z: 0.20, c: 0xeae3d0 }
+      ];
+      for (const a of animals) {
+        out.push({ makeGeom: () => box(0.10, 0.07, 0.07), color: a.c, dx: cx + a.x, dy: 0.04, dz: cz + a.z });
+      }
+      break;
+    }
+    case 'tractor': {
+      // Small green tractor — body + cab + 4 wheels.
+      out.push({ makeGeom: () => box(0.32, 0.10, 0.18), color: 0x5e8e3a, dx: cx, dy: 0.07, dz: cz });
+      out.push({ makeGeom: () => box(0.12, 0.10, 0.16), color: 0x5e8e3a, dx: cx + 0.04, dy: 0.16, dz: cz });
+      // Wheels (large rear, small front).
+      for (const w of [
+        { x: -0.10, z: -0.12, r: 0.07 },
+        { x: -0.10, z:  0.12, r: 0.07 },
+        { x:  0.12, z: -0.10, r: 0.045 },
+        { x:  0.12, z:  0.10, r: 0.045 }
+      ]) {
+        const g = new CylinderGeometry(w.r, w.r, 0.04, 8);
+        g.rotateX(Math.PI / 2);
+        out.push({ makeGeom: () => g, color: 0x222222, dx: cx + w.x, dy: w.r, dz: cz + w.z });
+      }
+      // Exhaust stack.
+      out.push({ makeGeom: () => cyl(0.018, 0.12, 6), color: 0x222222, dx: cx + 0.10, dy: 0.27, dz: cz - 0.06 });
+      break;
+    }
+    case 'greenhouse': {
+      // Glass A-frame: pale frame body + light-blue gable roof.
+      out.push({ makeGeom: () => box(0.55, 0.16, 0.40), color: woodPale, dx: cx, dy: 0.08, dz: cz });
+      // Glass roof — gable. Build positions in tile-local space so the
+      // outer translate(p.dx, p.dy, p.dz) works correctly.
+      out.push({
+        makeGeom: () => {
+          const positions = new Float32Array([
+            -0.275, 0.16, -0.20,
+             0.275, 0.16, -0.20,
+             0.275, 0.16,  0.20,
+            -0.275, 0.16,  0.20,
+                 0, 0.36, -0.20,
+                 0, 0.36,  0.20
+          ]);
+          const indices = new Uint32Array([
+            0, 1, 4, 4, 1, 5,
+            3, 5, 2, 5, 1, 2,
+            0, 4, 3, 3, 4, 5,
+            1, 5, 4
+          ]);
+          const g = new BufferGeometry();
+          g.setAttribute('position', new BufferAttribute(positions, 3));
+          g.setIndex(new BufferAttribute(indices, 1));
+          return g;
+        },
+        color: 0xa6c8d4,
+        dx: cx, dy: 0, dz: cz
+      });
+      // Door on the south face.
+      out.push({ makeGeom: () => box(0.08, 0.10, 0.018), color: woodPale, dx: cx, dy: 0.05, dz: cz + 0.20 + 0.009 });
+      break;
+    }
+    case 'water_tank': {
+      // Round blue water tank on stilts.
+      for (const dx of [-0.16, 0.16]) for (const dz of [-0.16, 0.16]) {
+        out.push({ makeGeom: () => box(0.04, 0.30, 0.04), color: 0x2f3f4a, dx: cx + dx, dy: 0.15, dz: cz + dz });
+      }
+      out.push({ makeGeom: () => cyl(0.22, 0.22, 12), color: 0x4d8eb9, dx: cx, dy: 0.30 + 0.11, dz: cz });
+      out.push({ makeGeom: () => cone(0.22, 0.10, 12), color: 0x3e7aa0, dx: cx, dy: 0.30 + 0.22 + 0.05, dz: cz });
+      // Spigot pipe.
+      out.push({ makeGeom: () => cyl(0.018, 0.30, 6), color: 0x707880, dx: cx + 0.16, dy: 0.15, dz: cz });
+      break;
+    }
+    case 'orchard': {
+      // 9 small fruit trees in a 3x3 grid.
+      for (let r = 0; r < 3; r++) {
+        for (let col = 0; col < 3; col++) {
+          const ox = -0.30 + col * 0.30;
+          const oz = -0.30 + r * 0.30;
+          out.push({ makeGeom: () => cyl(0.025, 0.10, 5), color: 0x6e4a30, dx: cx + ox, dy: 0.05, dz: cz + oz });
+          out.push({ makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx: cx + ox, dy: 0.16, dz: cz + oz });
+          // Fruit dots when thriving.
+          if (thriving) {
+            out.push({ makeGeom: () => sphereLite(0.022), color: 0xb14a3a, dx: cx + ox + 0.05, dy: 0.18, dz: cz + oz });
+          }
+        }
+      }
+      break;
+    }
+    case 'windmill': {
+      // Tower + blades.
+      out.push({ makeGeom: () => box(0.10, 0.55, 0.10), color: woodPale, dx: cx, dy: 0.275, dz: cz });
+      // Hub.
+      out.push({ makeGeom: () => cyl(0.05, 0.05, 8), color: 0x4a4a4a, dx: cx, dy: 0.55, dz: cz - 0.05 });
+      // Four blades — long thin boxes radiating from the hub.
+      const bladeColor = thriving ? 0xfafbfc : 0xc8bdac;
+      const angles = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+      for (const a of angles) {
+        const blade = new BoxGeometry(0.30, 0.04, 0.012);
+        blade.translate(0.15, 0, 0);
+        blade.rotateZ(a);
+        blade.translate(cx, 0.55, cz - 0.05);
+        out.push({ makeGeom: () => blade, color: bladeColor, dx: 0, dy: 0, dz: 0 });
+      }
+      break;
+    }
+    case 'compost': {
+      // Three covered compost bins side by side.
+      for (let k = -1; k <= 1; k++) {
+        const ox = k * 0.20;
+        out.push({ makeGeom: () => box(0.16, 0.10, 0.20), color: 0x4a3a28, dx: cx + ox, dy: 0.05, dz: cz });
+        out.push({ makeGeom: () => box(0.18, 0.018, 0.22), color: 0x6a5a40, dx: cx + ox, dy: 0.10 + 0.009, dz: cz });
+        // Crumbly visible top.
+        out.push({ makeGeom: () => box(0.10, 0.04, 0.16), color: 0x3a2a1a, dx: cx + ox, dy: 0.07, dz: cz });
+      }
+      break;
+    }
+  }
+}
+
 function lerpColor(a: number, b: number, t: number): number {
   const u = Math.max(0, Math.min(1, t));
   const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;

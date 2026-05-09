@@ -256,7 +256,8 @@ export type Building =
   | 'water_tower'
   | 'park'
   | 'bus_stop'
-  | 'bus_depot';
+  | 'bus_depot'
+  | 'forestry';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -267,7 +268,10 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   water_tower: 4000,
   park: 1500,
   bus_stop: 800,
-  bus_depot: 4000
+  bus_depot: 4000,
+  // Forestry (Alpha 2.7) — modest sticker price; the lumber revenue is
+  // the long-tail return. Only placeable on forest terrain.
+  forestry: 1200
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -276,8 +280,24 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   water_tower: 250,
   park: 80,
   bus_stop: 60,
-  bus_depot: 300
+  bus_depot: 300,
+  forestry: 90
 };
+
+/**
+ * Forestry global-market parameters (Alpha 2.7). Per-tile per-month
+ * lumber output × current global price × city's connection bonus.
+ * Tuning targets: a 4-tile forestry op connected to the world should
+ * earn roughly $400-$600/month at average market price.
+ */
+export const FORESTRY_BASE_REVENUE_PER_TILE = 110;
+/** Multiplier on revenue when the city is NOT connected to the outside
+ *  world by a highway-to-edge. Tradeable goods can still move locally
+ *  but at a steep discount. */
+export const FORESTRY_DISCONNECTED_MULT = 0.40;
+/** Lumber-price oscillation: 1 ± LUMBER_AMP, period in sim months. */
+export const LUMBER_AMP = 0.30;
+export const LUMBER_PERIOD_MONTHS = 18;
 
 /**
  * Service coverage radii in tile units. Buildings within a building's radius
@@ -358,6 +378,7 @@ export type Tool =
   | 'place_power'
   | 'place_water'
   | 'place_park'
+  | 'place_forestry'
   | 'place_bus_stop'
   | 'place_bus_depot'
   | 'place_stop_sign'
@@ -394,6 +415,7 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_power', 'power_plant' as const],
   ['place_water', 'water_tower' as const],
   ['place_park', 'park' as const],
+  ['place_forestry', 'forestry' as const],
   ['place_bus_stop', 'bus_stop' as const],
   ['place_bus_depot', 'bus_depot' as const]
 ]);

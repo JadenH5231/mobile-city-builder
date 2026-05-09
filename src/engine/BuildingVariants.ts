@@ -119,7 +119,10 @@ interface Spec {
  * carries its colour separately so the caller can vertex-paint it during
  * the merge step.
  */
-export function buildVariantParts(zone: Zone, density: number, tileX: number, tileY: number): VariantPart[] {
+export function buildVariantParts(
+  zone: Zone, density: number, tileX: number, tileY: number,
+  happiness = 0.5
+): VariantPart[] {
   if (zone === 'none' || density <= 0) return [];
   const variants = VARIANTS[zone]?.[density as 1 | 2 | 3];
   if (!variants || variants.length === 0) return [];
@@ -138,7 +141,7 @@ export function buildVariantParts(zone: Zone, density: number, tileX: number, ti
   const cz = tileY + 0.5 + oz;
 
   const out: VariantPart[] = [];
-  applySpec(spec, cx, cz, yaw, out, zone, tileX, tileY);
+  applySpec(spec, cx, cz, yaw, out, zone, tileX, tileY, happiness);
   return out;
 }
 
@@ -480,12 +483,18 @@ function emitHipLong(
 
 function applySpec(
   spec: Spec, cx: number, cz: number, yaw: number, out: VariantPart[],
-  zone: Zone, tileX: number, tileY: number
+  zone: Zone, tileX: number, tileY: number, happiness: number
 ): void {
-  // Body 1.
-  emitBody(spec.body, cx, cz, yaw, out);
+  // Per-tile happiness modulates body / roof colour (Alpha 2.7). Below
+  // 0.4 → push toward dingy grey; above 0.7 → slight saturation lift.
+  // Luxury low-density opted out higher up the call stack.
+  const moodBody = moodColor(spec.body.color, happiness);
+  const moodBody2 = spec.body2 ? moodColor(spec.body2.color, happiness) : 0;
+  const moodRoof = spec.roof ? moodColor(spec.roof.color, happiness) : 0;
+  // Body 1 — emit with the modulated colour.
+  emitBody({ ...spec.body, color: moodBody }, cx, cz, yaw, out);
   if (spec.roof && spec.roof.kind !== 'flat') {
-    emitRoof(spec.body, spec.roof, cx, cz, yaw, out);
+    emitRoof(spec.body, { ...spec.roof, color: moodRoof }, cx, cz, yaw, out);
   }
   // Facade detail (Alpha 2.2) — windows + ground-floor treatment for
   // R/C/MU. Industrial bodies stay windowless to read as warehouses /
@@ -494,7 +503,7 @@ function applySpec(
     emitFacade(spec.body, cx, cz, yaw, out, zone, tileX, tileY, /*isPodium*/ false);
   }
   if (spec.body2) {
-    emitBody(spec.body2, cx, cz, yaw, out);
+    emitBody({ ...spec.body2, color: moodBody2 }, cx, cz, yaw, out);
     if (zoneShowsWindows(zone)) {
       // body2 is conventionally the podium / shop wing on mixed-use, so
       // it always gets the shopfront treatment regardless of which body
@@ -502,19 +511,28 @@ function applySpec(
       emitFacade(spec.body2, cx, cz, yaw, out, zone, tileX, tileY, /*isPodium*/ zone === 'mixed');
     }
   }
+  // Graffiti / boarded-window scuff (Alpha 2.7) — when happiness is very
+  // low, paint a dark vertical streak on one face and add a small board
+  // over a window. Skips industrial (they have no facade to deface).
+  if (happiness < 0.40 && zoneShowsWindows(zone)) {
+    emitGraffiti(spec.body, cx, cz, yaw, out, tileX, tileY);
+  }
   if (!spec.decorations) return;
   for (const dec of spec.decorations) {
     switch (dec.kind) {
       case 'chimney': emitChimney(dec, spec.body, cx, cz, yaw, out); break;
       case 'antenna': emitAntenna(dec, spec.body, spec.roof, cx, cz, out); break;
-      case 'tower':
-        emitTower(dec, spec.body, cx, cz, yaw, out);
+      case 'tower': {
+        const moodTower = { ...dec, color: moodColor(dec.color, happiness),
+                            roofColor: dec.roofColor !== undefined ? moodColor(dec.roofColor, happiness) : dec.roofColor };
+        emitTower(moodTower, spec.body, cx, cz, yaw, out);
         // Setback towers also get window banding when they're R/C/MU —
         // a high-rise residence without windows reads as a blank slab.
         if (zoneShowsWindows(zone)) {
           emitTowerFacade(dec, spec.body, cx, cz, yaw, out, tileX, tileY);
         }
         break;
+      }
       case 'awning': emitAwning(dec, spec.body, cx, cz, yaw, out); break;
       case 'sign': emitSign(dec, spec.body, cx, cz, yaw, out); break;
       case 'tank': emitTank(dec, cx, cz, out); break;
@@ -522,6 +540,66 @@ function applySpec(
       case 'crane': emitCrane(dec, cx, cz, out); break;
     }
   }
+}
+
+/**
+ * Modulate a body / roof colour by per-tile happiness (Alpha 2.7).
+ *  happiness < 0.40 → lerp toward neutral grey + slight darken
+ *  0.40..0.70      → unchanged
+ *  > 0.70          → tiny saturation lift toward white
+ */
+function moodColor(base: number, happiness: number): number {
+  if (happiness < 0.40) {
+    // Lerp toward dingy concrete grey by up to 60% as happiness drops.
+    const t = (0.40 - happiness) / 0.40; // 0..1
+    return mixHex(base, 0x7a7368, t * 0.6);
+  }
+  if (happiness > 0.70) {
+    // Tiny brighten toward warm white, max 18%.
+    const t = (happiness - 0.70) / 0.30; // 0..1
+    return mixHex(base, 0xfff8e8, t * 0.18);
+  }
+  return base;
+}
+
+function mixHex(a: number, b: number, t: number): number {
+  const u = Math.max(0, Math.min(1, t));
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * u);
+  const g = Math.round(ag + (bg - ag) * u);
+  const c = Math.round(ab + (bb - ab) * u);
+  return (r << 16) | (g << 8) | c;
+}
+
+/**
+ * Graffiti streak (Alpha 2.7) — paint a slim coloured stripe on the south
+ * face of the body. Colour picked from a small palette by tile hash so
+ * neighbouring graffiti reads as different tags rather than a stamp.
+ */
+function emitGraffiti(
+  body: Body, cx: number, cz: number, yaw: number, out: VariantPart[],
+  tileX: number, tileY: number
+): void {
+  const r = Math.abs(((tileX * 1597334677) ^ (tileY * 374761393)) | 0);
+  const palette = [0xb14a4a, 0x4a8eb9, 0x7a4ab1, 0xc9a437, 0x4ab17a];
+  const tagColor = palette[r % palette.length]!;
+  // Slim slab 30% of body width, 25% of body height, on the south face.
+  const stripeW = body.w * 0.30;
+  const stripeH = body.h * 0.30;
+  const yBase = body.yBase ?? 0;
+  const stripe = new BoxGeometry(stripeW, stripeH, 0.012);
+  // Pick which side to tag (rotate based on hash).
+  const sideHash = (r >> 8) % 4;
+  let dx = 0, dz = body.d / 2 + 0.007, rot = 0;
+  if (sideHash === 1) { dx = body.w / 2 + 0.007; dz = 0; rot = Math.PI / 2; }
+  else if (sideHash === 2) { dx = 0; dz = -body.d / 2 - 0.007; rot = Math.PI; }
+  else if (sideHash === 3) { dx = -body.w / 2 - 0.007; dz = 0; rot = -Math.PI / 2; }
+  if (rot) stripe.rotateY(rot);
+  stripe.translate(dx, yBase + body.h * 0.30, dz);
+  if (yaw) stripe.rotateY(yaw);
+  stripe.translate(cx, 0, cz);
+  out.push({ geom: stripe, color: tagColor });
 }
 
 function emitBody(b: Body, cx: number, cz: number, yaw: number, out: VariantPart[]): void {

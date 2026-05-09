@@ -16,6 +16,8 @@ export interface TileInfo {
   zoneCap: 0 | 1 | 2 | 3;
   density: number;
   building: Building;
+  /** Walking-path bit (Alpha 1.6). Mutually exclusive with road and zone. */
+  path: boolean;
   hasPower: boolean;
   hasWater: boolean;
   hasPark: boolean;
@@ -60,6 +62,7 @@ export class TileInfoPanel {
       parts.push(label);
     }
     if (info.building !== 'none') parts.push(info.building.replace(/_/g, ' '));
+    if (info.path) parts.push('walking path');
     if (info.zone !== 'none') {
       const tierLabel = info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'med' : info.zoneCap === 3 ? 'high' : '';
       const zoneLabel = tierLabel ? `${info.zone}·${tierLabel}` : info.zone;

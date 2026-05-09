@@ -1,10 +1,22 @@
-import type { RoadGraph } from './RoadGraph';
+import type { Neighbor } from './RoadGraph';
 
 /**
- * Vanilla A* over the road graph. Heuristic = Euclidean distance in tile
- * units. Per-call buffers (gScore, cameFrom, openSet) are reused so only the
- * returned path array allocates. Open-set "pop min" is a linear scan — promote
- * to a binary heap only if a fully-developed Medium map shows it as a hotspot.
+ * Minimal interface a graph must satisfy to be searched by A*. Both
+ * {@link RoadGraph} and {@link PathGraph} implement this — the pathfinder
+ * is graph-agnostic, so the same instance can pathfind cars on roads OR
+ * pedestrians on paths/sidewalks.
+ */
+export interface PathfindGraph {
+  readonly adj: ReadonlyMap<number, ReadonlyArray<Neighbor>>;
+  has(idx: number): boolean;
+}
+
+/**
+ * Vanilla A* over a {@link PathfindGraph}. Heuristic = Euclidean distance
+ * in tile units. Per-call buffers (gScore, cameFrom, openSet) are reused so
+ * only the returned path array allocates. Open-set "pop min" is a linear
+ * scan — promote to a binary heap only if a fully-developed Medium map
+ * shows it as a hotspot.
  */
 export class Pathfinding {
   private readonly gScore = new Map<number, number>();
@@ -23,7 +35,7 @@ export class Pathfinding {
    *   null if no path exists. Both endpoints must be present in the graph.
    */
   findPath(
-    graph: RoadGraph,
+    graph: PathfindGraph,
     start: number,
     end: number,
     gridWidth: number,

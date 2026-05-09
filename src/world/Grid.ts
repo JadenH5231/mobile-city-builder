@@ -92,6 +92,8 @@ export class Grid {
       t.zone = 'none';
       t.zoneCap = 0;
       t.resetDevelopment();
+      // Roads also overwrite walking paths on the same tile.
+      t.path = false;
       return true;
     } else {
       if (!t.road) return false;
@@ -127,6 +129,40 @@ export class Grid {
     if (t.stopSign === on) return false;
     t.stopSign = on;
     return true;
+  }
+
+  // --- Walking paths (Alpha 1.6) ----------------------------------------
+
+  /**
+   * Set or clear a walking path on a tile. Refuses to write a path on a road
+   * tile (paths CANNOT remove roads — see CLAUDE.md / SPEC.md). Painting a
+   * path on a zoned tile clears the zone (paths CAN remove zoning) and resets
+   * any in-progress development. Returns true iff the bit changed.
+   */
+  setPath(x: number, y: number, on: boolean): boolean {
+    const t = this.get(x, y);
+    if (!t) return false;
+    if (on) {
+      if (t.road) return false;
+      if (t.path) return false;
+      t.path = true;
+      // Paths can sit on grass that was zoned; clear the zone so the
+      // development pipeline doesn't try to grow a building underneath.
+      if (t.zone !== 'none') {
+        t.zone = 'none';
+        t.zoneCap = 0;
+        t.resetDevelopment();
+      }
+      return true;
+    } else {
+      if (!t.path) return false;
+      t.path = false;
+      return true;
+    }
+  }
+
+  hasPath(x: number, y: number): boolean {
+    return this.get(x, y)?.path === true;
   }
 
   /** True if any 4-connected neighbour of (x, y) is a road tile. */

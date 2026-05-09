@@ -138,6 +138,12 @@ export interface Stats {
 
   // Forest preservation.
   forestTilesRemaining: number;
+
+  /** Walking-path tiles painted on the map (Alpha 1.6). Pedestrian
+   *  infrastructure — read by transit/safer-streets/environmentalists for
+   *  big bonuses, by working_families/hometown/yimbys/nimbys/chamber for
+   *  modest bonuses, and by taxpayers as a tiny maintenance penalty. */
+  walkingPathTiles: number;
 }
 
 function emptyStats(): Stats {
@@ -150,7 +156,8 @@ function emptyStats(): Stats {
     density1Tiles: 0, density2Tiles: 0, density3Tiles: 0,
     parks: 0, busStops: 0, busDepots: 0, powerPlants: 0, waterTowers: 0, stopSigns: 0,
     localEdges: 0, avenueEdges: 0, highwayEdges: 0, totalRoadEdges: 0,
-    servicesFullyCoveredTiles: 0, forestTilesRemaining: 0
+    servicesFullyCoveredTiles: 0, forestTilesRemaining: 0,
+    walkingPathTiles: 0
   };
 }
 
@@ -188,6 +195,7 @@ function buildStats(grid: Grid, economy: Economy, population: Population, traffi
     else if (t.building === 'power_plant') s.powerPlants++;
     else if (t.building === 'water_tower') s.waterTowers++;
     if (t.stopSign) s.stopSigns++;
+    if (t.path) s.walkingPathTiles++;
   }
 
   for (const e of grid.iterRoadEdges()) {
@@ -234,6 +242,9 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.10 * sat(s.totalRoadEdges, 250);
       h += 0.20 * sat(s.parks, 4);
       h += 0.10 * sat(s.zonedLow, 30);
+      // Walking paths feel quaint and small-town when modestly applied —
+      // mild positive that caps quickly.
+      h += 0.08 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {
@@ -281,6 +292,8 @@ export const FACTIONS: readonly Faction[] = [
       // Sprawl penalty — lots of L1 zones drag us down.
       const lowRatio = s.zonedLow / Math.max(1, s.zonedLow + s.zonedMed + s.zonedHigh);
       h -= 0.35 * lowRatio;
+      // Walkable density is the YIMBY platform — paths get a real bonus.
+      h += 0.15 * sat(s.walkingPathTiles, 30);
       return clamp(h);
     },
     comments: {
@@ -328,6 +341,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.25 * s.trafficStress;
       // Highways are a particular sin (per mile they emit way more).
       h -= 0.20 * sat(s.highwayEdges, 30);
+      // Walking infrastructure = fewer car trips. Big love.
+      h += 0.20 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {
@@ -374,6 +389,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.20 * sat(s.totalResidents, 1500);
       h -= 0.15 * sat(s.totalRoadEdges, 200);
       h += 0.15 * sat(s.zonedLow, 40);
+      // Walking paths feel like the old town — sidewalks past white picket fences.
+      h += 0.10 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {
@@ -421,6 +438,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.40 * sat(Math.max(0, s.taxC - 10), 10);
       h -= 0.30 * sat(Math.max(0, s.taxI - 11), 10);
       h += 0.15 * sat(s.totalCJobs + s.totalIJobs, 250);
+      // Walkable streetscape brings foot traffic past storefronts. Modest plus.
+      h += 0.07 * sat(s.walkingPathTiles, 30);
       return clamp(h);
     },
     comments: {
@@ -470,6 +489,8 @@ export const FACTIONS: readonly Faction[] = [
       const carPressure = s.trafficStress;
       if (transitScore < 4) h -= 0.30 * carPressure;
       h -= 0.15 * sat(s.highwayEdges, 30);
+      // Walking paths are multimodal infrastructure — major bonus.
+      h += 0.25 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {
@@ -612,6 +633,8 @@ export const FACTIONS: readonly Faction[] = [
       const coverage = zoned > 0 ? s.servicesFullyCoveredTiles / zoned : 0;
       h += 0.30 * coverage;
       h += 0.10 * sat(s.parks, 5);
+      // Pedestrian infrastructure = lives saved. Largest boost on the matrix.
+      h += 0.25 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {
@@ -665,6 +688,9 @@ export const FACTIONS: readonly Faction[] = [
       h += 0.20 * coverage;
       // Affordable density (medium) is good; tons of high-density without jobs is suspect.
       h += 0.15 * sat(s.density2Tiles, 20);
+      // Walking is free transportation — material help for people who can't
+      // afford a second car.
+      h += 0.10 * sat(s.walkingPathTiles, 25);
       return clamp(h);
     },
     comments: {

@@ -38,6 +38,14 @@ const ICON_HIGHWAY = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="2" stroke-linecap="round"
         stroke-linejoin="round" fill="none"/>
 </svg>`;
+const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+  <circle cx="6" cy="20" r="0.9" fill="currentColor"/>
+  <circle cx="9" cy="14" r="0.9" fill="currentColor"/>
+  <circle cx="13" cy="9" r="0.9" fill="currentColor"/>
+  <circle cx="17" cy="4" r="0.9" fill="currentColor"/>
+</svg>`;
 const ICON_R = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M4 11l8-7 8 7v9H4z M10 20v-5h4v5"
         stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
@@ -80,7 +88,8 @@ const ITEMS: readonly ToolbarItem[] = [
     members: [
       { kind: 'tool', tool: 'road_local',   label: 'Local',   icon: ICON_LOCAL },
       { kind: 'tool', tool: 'road_avenue',  label: 'Avenue',  icon: ICON_AVENUE },
-      { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY }
+      { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY },
+      { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH }
     ]
   },
   {

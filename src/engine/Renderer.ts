@@ -29,9 +29,16 @@ import {
   BUILDING_COLORS,
   BUILDING_DIMS,
   DIR_OFFSETS,
+  MAX_PEDESTRIANS,
   MAX_VEHICLES,
+  PATH_COLOR,
+  PATH_LIFT,
+  PATH_WIDTH,
   ROAD_LIFT,
   ROAD_TIER,
+  SIDEWALK_COLOR,
+  SIDEWALK_LIFT,
+  SIDEWALK_PAD,
   TILE_SIZE,
   ZONE_COLORS,
   ZONE_LIFT,
@@ -39,6 +46,7 @@ import {
   type Zone
 } from '../types';
 import type { Buses } from '../simulation/Buses';
+import type { Pedestrians } from '../simulation/Pedestrians';
 import type { Vehicles } from '../simulation/Vehicles';
 
 /**
@@ -74,6 +82,10 @@ export class Renderer {
   private readonly worldGroup = new Group();
   private terrainMesh: Mesh | null = null;
   private zoneMesh: Mesh | null = null;
+  /** Sidewalk strips on local + avenue tiles. Rebuilt with roads. */
+  private sidewalkMesh: Mesh | null = null;
+  /** Walking-path strips. Rebuilt when path tiles change. */
+  private pathMesh: Mesh | null = null;
   private roadMesh: Mesh | null = null;
   private roadLanes: LineSegments | null = null;
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
@@ -85,6 +97,7 @@ export class Renderer {
   private heatmapMesh: Mesh | null = null;
   private carsMesh: InstancedMesh;
   private busesMesh: InstancedMesh;
+  private pedestriansMesh: InstancedMesh;
   private selectionMesh: Mesh;
   // Reusable scratch objects for per-frame car updates — avoid GC churn.
   private readonly tmpObj = new Object3D();
@@ -149,6 +162,17 @@ export class Renderer {
     this.busesMesh.count = 0;
     this.busesMesh.frustumCulled = false;
     this.worldGroup.add(this.busesMesh);
+
+    // Pedestrians — tiny vertical box (a "pawn") sized to read at the
+    // 3/4 ortho zoom without dominating the road. Per-instance colour set
+    // each frame from PEDESTRIAN_PALETTE.
+    const pedGeom = new BoxGeometry(0.09, 0.16, 0.09);
+    pedGeom.translate(0, 0.08, 0);
+    const pedMat = new MeshLambertMaterial({ flatShading: true });
+    this.pedestriansMesh = new InstancedMesh(pedGeom, pedMat, MAX_PEDESTRIANS);
+    this.pedestriansMesh.count = 0;
+    this.pedestriansMesh.frustumCulled = false;
+    this.worldGroup.add(this.pedestriansMesh);
   }
 
   setSize(width: number, height: number): void {
@@ -222,7 +246,8 @@ export class Renderer {
     }
   }
 
-  /** Rebuild the road mesh from current grid edges + stubs. */
+  /** Rebuild the road mesh from current grid edges + stubs. Sidewalks rebuild
+   *  alongside roads (they're a derived render artefact of non-highway tiles). */
   drawRoads(grid: Grid): void {
     if (this.roadMesh) {
       this.worldGroup.remove(this.roadMesh);
@@ -241,6 +266,17 @@ export class Renderer {
       this.worldGroup.remove(this.roadOrnaments);
       this.roadOrnaments = null;
     }
+    if (this.sidewalkMesh) {
+      this.worldGroup.remove(this.sidewalkMesh);
+      this.sidewalkMesh.geometry.dispose();
+      (this.sidewalkMesh.material as MeshLambertMaterial).dispose();
+      this.sidewalkMesh = null;
+    }
+    const sidewalk = buildSidewalkMesh(grid);
+    if (sidewalk) {
+      this.sidewalkMesh = sidewalk;
+      this.worldGroup.add(this.sidewalkMesh);
+    }
     const built = buildRoadMesh(grid);
     if (built) {
       this.roadMesh = built.mesh;
@@ -254,6 +290,21 @@ export class Renderer {
     if (ornaments) {
       this.roadOrnaments = ornaments;
       this.worldGroup.add(ornaments);
+    }
+  }
+
+  /** Rebuild the walking-path mesh from current path tiles. */
+  drawPaths(grid: Grid): void {
+    if (this.pathMesh) {
+      this.worldGroup.remove(this.pathMesh);
+      this.pathMesh.geometry.dispose();
+      (this.pathMesh.material as MeshLambertMaterial).dispose();
+      this.pathMesh = null;
+    }
+    const built = buildPathMesh(grid);
+    if (built) {
+      this.pathMesh = built;
+      this.worldGroup.add(this.pathMesh);
     }
   }
 
@@ -332,6 +383,51 @@ export class Renderer {
     this.heatmapMesh.geometry.dispose();
     (this.heatmapMesh.material as MeshLambertMaterial).dispose();
     this.heatmapMesh = null;
+  }
+
+  /**
+   * Per-frame pedestrian positions. Walkers move slower than cars and don't
+   * yaw quite as obviously — set rotation along the segment for a tiny head-
+   * direction cue. Slight perpendicular offset (sideOffset) spreads a stream
+   * of walkers across the sidewalk width instead of a single conga line.
+   */
+  updatePedestrians(pedestrians: Pedestrians, gridWidth: number): void {
+    const obj = this.tmpObj;
+    const c = this.tmpColor;
+    let visible = 0;
+    for (let i = 0; i < pedestrians.walkers.length; i++) {
+      const w = pedestrians.walkers[i]!;
+      if (w.pathTiles.length < 2) continue;
+      const a = w.pathTiles[w.segmentIdx]!;
+      const b = w.pathTiles[w.segmentIdx + 1]!;
+      const ax = (a % gridWidth) + 0.5;
+      const az = Math.floor(a / gridWidth) + 0.5;
+      const bx = (b % gridWidth) + 0.5;
+      const bz = Math.floor(b / gridWidth) + 0.5;
+      const t = w.segmentT;
+      // Lerp position then offset perpendicular to direction (so they walk
+      // along the sidewalk, not the centerline).
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.hypot(dx, dz) || 1;
+      const px = -dz / len;
+      const pz = dx / len;
+      obj.position.set(
+        (ax + dx * t + px * w.sideOffset) * TILE_SIZE,
+        SIDEWALK_LIFT + 0.005,
+        (az + dz * t + pz * w.sideOffset) * TILE_SIZE
+      );
+      obj.rotation.set(0, Math.atan2(dx, dz), 0);
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      this.pedestriansMesh.setMatrixAt(visible, obj.matrix);
+      c.setHex(w.color);
+      this.pedestriansMesh.setColorAt(visible, c);
+      visible++;
+    }
+    this.pedestriansMesh.count = visible;
+    this.pedestriansMesh.instanceMatrix.needsUpdate = true;
+    if (this.pedestriansMesh.instanceColor) this.pedestriansMesh.instanceColor.needsUpdate = true;
   }
 
   /** Per-frame bus positions, mirror of `updateCars`. */
@@ -1057,6 +1153,148 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     group.add(mesh);
   }
   return group;
+}
+
+// --- Walking paths ------------------------------------------------------
+
+/**
+ * One small flagstone-coloured quad per path tile, with extensions toward
+ * each 4-connected path neighbour so a run of paths reads as a continuous
+ * strip. Roads are NOT path neighbours visually — paths terminate at road
+ * tiles per the spec ("the path does not cross the road visually").
+ */
+function buildPathMesh(grid: Grid): Mesh | null {
+  const tiles: { x: number; y: number }[] = [];
+  for (const t of grid.iter()) {
+    if (t.path && !t.road) tiles.push({ x: t.x, y: t.y });
+  }
+  if (tiles.length === 0) return null;
+
+  // Up to 5 quads per tile (centre + 4 stub extensions). Allocate worst case.
+  const maxQuads = tiles.length * 5;
+  const positions = new Float32Array(maxQuads * 4 * 3);
+  const colours = new Float32Array(maxQuads * 4 * 3);
+  const indices = new Uint32Array(maxQuads * 6);
+  const c = new Color();
+  c.setHex(PATH_COLOR);
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+  const half = PATH_WIDTH / 2;
+  const stubLen = TILE_SIZE * 0.5; // half a tile, meets the neighbour's centre-stub
+
+  for (const tile of tiles) {
+    const cx = (tile.x + 0.5) * TILE_SIZE;
+    const cz = (tile.y + 0.5) * TILE_SIZE;
+
+    // Centre quad — square, half-width on each side.
+    pushQuad(
+      positions, colours, indices,
+      cx - half, cz - half, cx + half, cz + half,
+      PATH_LIFT, c, vi, ci, ii, v
+    );
+    vi += 12; ci += 12; ii += 6; v += 4;
+
+    // Stub extensions toward each 4-neighbour that is also a path tile.
+    if (grid.hasPath(tile.x, tile.y - 1)) {
+      pushQuad(positions, colours, indices,
+        cx - half, cz - stubLen, cx + half, cz - half,
+        PATH_LIFT, c, vi, ci, ii, v);
+      vi += 12; ci += 12; ii += 6; v += 4;
+    }
+    if (grid.hasPath(tile.x + 1, tile.y)) {
+      pushQuad(positions, colours, indices,
+        cx + half, cz - half, cx + stubLen, cz + half,
+        PATH_LIFT, c, vi, ci, ii, v);
+      vi += 12; ci += 12; ii += 6; v += 4;
+    }
+    if (grid.hasPath(tile.x, tile.y + 1)) {
+      pushQuad(positions, colours, indices,
+        cx - half, cz + half, cx + half, cz + stubLen,
+        PATH_LIFT, c, vi, ci, ii, v);
+      vi += 12; ci += 12; ii += 6; v += 4;
+    }
+    if (grid.hasPath(tile.x - 1, tile.y)) {
+      pushQuad(positions, colours, indices,
+        cx - stubLen, cz - half, cx - half, cz + half,
+        PATH_LIFT, c, vi, ci, ii, v);
+      vi += 12; ci += 12; ii += 6; v += 4;
+    }
+  }
+
+  // Trim to the actual used range so unused tail doesn't render zero-area tris.
+  const usedQuads = ii / 6;
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions.slice(0, usedQuads * 4 * 3), 3));
+  geom.setAttribute('color', new BufferAttribute(colours.slice(0, usedQuads * 4 * 3), 3));
+  geom.setIndex(new BufferAttribute(indices.slice(0, usedQuads * 6), 1));
+  geom.computeVertexNormals();
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(geom, mat);
+}
+
+/**
+ * Sidewalk strips on every non-highway road tile. One slightly larger pad
+ * per tile — the road overlay sits on top, so what shows is the SIDEWALK_PAD
+ * border around the road. Highway tiles are skipped (they're vehicle-only).
+ */
+function buildSidewalkMesh(grid: Grid): Mesh | null {
+  const tiles: { x: number; y: number; tier: 'local' | 'avenue' }[] = [];
+  for (const t of grid.iter()) {
+    if (!t.road) continue;
+    if (t.roadType === 'highway') continue;
+    tiles.push({ x: t.x, y: t.y, tier: t.roadType });
+  }
+  if (tiles.length === 0) return null;
+
+  const positions = new Float32Array(tiles.length * 4 * 3);
+  const colours = new Float32Array(tiles.length * 4 * 3);
+  const indices = new Uint32Array(tiles.length * 6);
+  const c = new Color();
+  c.setHex(SIDEWALK_COLOR);
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+  for (const tile of tiles) {
+    const cx = (tile.x + 0.5) * TILE_SIZE;
+    const cz = (tile.y + 0.5) * TILE_SIZE;
+    // Pad extends past the road edge on both sides. For local roads
+    // (width 0.45) the pad runs from 0.45/2 outward by SIDEWALK_PAD; for
+    // avenue (0.65) similarly.
+    const roadHalf = ROAD_TIER[tile.tier].width / 2;
+    const half = roadHalf + SIDEWALK_PAD;
+    pushQuad(
+      positions, colours, indices,
+      cx - half, cz - half, cx + half, cz + half,
+      SIDEWALK_LIFT, c, vi, ci, ii, v
+    );
+    vi += 12; ci += 12; ii += 6; v += 4;
+  }
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('color', new BufferAttribute(colours, 3));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(geom, mat);
+}
+
+/** Push a flat quad on the XZ plane at height `y`. Mutates the buffers in place. */
+function pushQuad(
+  positions: Float32Array, colours: Float32Array, indices: Uint32Array,
+  x0: number, z0: number, x1: number, z1: number,
+  y: number, c: Color, vi: number, ci: number, ii: number, v: number
+): void {
+  positions[vi + 0] = x0; positions[vi + 1] = y; positions[vi + 2] = z0;
+  positions[vi + 3] = x1; positions[vi + 4] = y; positions[vi + 5] = z0;
+  positions[vi + 6] = x1; positions[vi + 7] = y; positions[vi + 8] = z1;
+  positions[vi + 9] = x0; positions[vi + 10] = y; positions[vi + 11] = z1;
+  for (let k = 0; k < 4; k++) {
+    colours[ci + k * 3 + 0] = c.r;
+    colours[ci + k * 3 + 1] = c.g;
+    colours[ci + k * 3 + 2] = c.b;
+  }
+  indices[ii + 0] = v;     indices[ii + 1] = v + 2; indices[ii + 2] = v + 1;
+  indices[ii + 3] = v;     indices[ii + 4] = v + 3; indices[ii + 5] = v + 2;
 }
 
 /** Flat triangle pointing +Z (north → "up" in world space at default rotation). */

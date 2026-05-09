@@ -2,7 +2,9 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 1.5** (tagged on `main`). Alpha 1.0's full simulation (three road tiers, traffic + collisions, services, transit, money pressure) plus a complete civic-political layer: 10 named-leader factions with mood-bucketed Facebook-style comments, per-resident faction assignment, yearly elections (player as mayor, always wins ≥ 50.0001%), 4-seat council with cost multipliers + zoning gate + population boost, and four player civic actions (Endorse / Coalition / Photo-op / Mayoral Override) powered by a slow-accruing Political Capital resource. Saves on a 30 s auto-cadence.
+**Status: Alpha 1.6.** Adds a pedestrian layer on top of Alpha 1.5: walking paths as a placeable (per-tile, narrower than roads, can't remove roads), auto-rendered sidewalks on local + avenue tiles, a `PathGraph` + `Pedestrians` sim that walks residents to commercial / industrial destinations, path-coverage suppression of car spawns, and **car return trips** (cars now drive back home after an 8–22 sec visit so traffic feels two-way). Save schema bumped to v5 to persist the per-tile path bit.
+
+Alpha 1.5 baseline still holds: 10 named-leader factions, yearly elections, 4-seat council, four civic actions powered by Political Capital. Saves on a 30 s auto-cadence.
 
 ## Setup
 
@@ -66,12 +68,13 @@ Open the Network URL and try:
 2. **Roads:** drag from one side to another — you should get clean diagonal segments, not stair-step. Drag back to retract.
 3. **Zoning:** paint R/C/I next to a road, watch low-poly buildings sprout over a few seconds.
 4. **Demand:** RCI bars should react when you have lots of houses but no commercial, etc.
-5. **Cars:** once you have some R + C, cars appear and route along your roads.
+5. **Cars + return trips:** once you have some R + C, cars appear and route along your roads. After arriving they sit at the destination for 8–22 sec, then a return car drives back. Traffic should read as two-way.
 6. **Services:** drop a power plant + water tower + park near zones; tiles within radius unlock L3 (taller buildings) over time.
 7. **Buses:** place a depot + a few stops; a yellow bus should auto-cycle the stops, and nearby R should spawn fewer cars.
-8. **Heatmap:** toggle on with congested traffic — green→yellow→red overlay on roads.
-9. **Budget:** tap the treasury pill, slide R tax to 0% and watch demand spike (and revenue tank).
-10. **Save:** reload the page — your city should come back exactly.
+8. **Walking paths + pedestrians (Alpha 1.6):** open the Roads popover and pick **Path**. Drag to paint between R and C tiles. Pedestrians should spawn and walk along the new path AND along the sidewalks of adjacent local/avenue roads (highway tiles never get a sidewalk). Cars should noticeably thin out on routes covered by paths.
+9. **Heatmap:** toggle on with congested traffic — green→yellow→red overlay on roads.
+10. **Budget:** tap the treasury pill, slide R tax to 0% and watch demand spike (and revenue tank).
+11. **Save:** reload the page — your city should come back exactly, including any paths.
 
 If anything's off — jitter, slow zoom, mis-aligned roads, sub-30fps on a mid-range phone — tell me what device + OS version and I'll fix it.
 
@@ -86,16 +89,18 @@ src/
     Game.ts          owns loop, paint logic, undo stack
     Camera.ts        3D ortho camera (panBy / zoomAt / screenToWorld)
     Input.ts         pointer-events gesture handler (navigate / paint modes)
-    Renderer.ts      Three.js scene (terrain, roads, trees, buildings, cars, heatmap)
+    Renderer.ts      Three.js scene (terrain, roads, sidewalks, paths, trees, buildings, cars, pedestrians, heatmap)
   world/
-    Grid.ts          tile container + road-edge graph
-    Tile.ts          single-tile struct
+    Grid.ts          tile container + road-edge graph + walking-path bit
+    Tile.ts          single-tile struct (terrain, road, path, …)
   simulation/
     Population.ts    residents/jobs aggregation, RCI demand
     Development.ts   demand-driven density growth, service gates
-    RoadGraph.ts     adjacency list rebuilt on road changes
-    Pathfinding.ts   A* with reusable buffers
-    Vehicles.ts      car spawn (sim) + motion (render)
+    RoadGraph.ts     car adjacency rebuilt on road changes
+    PathGraph.ts     pedestrian adjacency: paths + non-highway road tiles
+    Pathfinding.ts   A* over any PathfindGraph, reusable buffers
+    Vehicles.ts      cars + park-then-return + path-coverage suppression
+    Pedestrians.ts   walker spawn + motion on the pedestrian graph
     Buses.ts         per-depot buses; nearBusStop spawn suppression
     Economy.ts       treasury, monthly settlement, tax demand penalty
     Services.ts      radius-sweep coverage flags

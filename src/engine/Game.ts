@@ -15,7 +15,9 @@ import { Traffic } from '../simulation/Traffic';
 import { Vehicles } from '../simulation/Vehicles';
 import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
+import { CouncilPanel } from '../ui/CouncilPanel';
 import { Happiness } from '../simulation/Happiness';
+import { Council, type StanceKey } from '../simulation/Council';
 import { SaveGame, applySave, serialize, type SaveData } from '../persistence/SaveGame';
 import {
   BUILDING_COSTS,
@@ -33,7 +35,8 @@ import {
   type MapSize,
   type RoadType,
   type Tool,
-  type Zone
+  type Zone,
+  type ZoneTier
 } from '../types';
 
 /** Fixed sim-tick interval, in ms. 100ms = 10 Hz. */
@@ -72,8 +75,11 @@ export class Game {
   toolbar!: Toolbar;
   budgetPanel!: BudgetPanel;
   happinessPanel!: HappinessPanel;
+  councilPanel!: CouncilPanel;
   /** Happiness state: faction map, recomputed when the panel refreshes. */
   readonly happiness = new Happiness();
+  /** Council state: current term's councillors, opponent, last election result. */
+  readonly council = new Council();
 
   selected: { x: number; y: number } | null = null;
   tool: Tool = 'pan';
@@ -161,11 +167,13 @@ export class Game {
     this.budgetPanel = new BudgetPanel(this.economy);
     this.happinessPanel = new HappinessPanel({
       happiness: this.happiness,
+      council: this.council,
       grid: () => this.grid,
       economy: this.economy,
       population: this.population,
       traffic: this.traffic
     });
+    this.councilPanel = new CouncilPanel(this.council);
 
     // Try to restore an existing save before drawing initial state. Failures
     // (no save / version mismatch / IDB unavailable) silently fall through
@@ -245,13 +253,22 @@ export class Game {
         // upstream state.
         this.traffic.tickEma(this.grid);
         // Happiness is computed first each tick so Population can read it
-        // when distributing residents across factions. The reverse direction
-        // (happiness depending on totalResidents etc.) is one tick stale,
-        // which is invisible at 10 Hz.
+        // when distributing residents across factions.
         this.happiness.computeAll(this.grid, this.economy, this.population, this.traffic);
-        this.population.tick(this.grid, this.economy, this.traffic, this.happiness);
+        this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council);
         if (this.development.tick(this.grid)) buildingsDirty = true;
+        const monthsBefore = this.economy.monthsElapsed;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population);
+        // Election cycle — every 3 months. Runs after Economy bumps the
+        // month counter so the election sees the latest happiness.
+        if (this.economy.monthsElapsed > monthsBefore) {
+          const fired = this.council.maybeRunElection(
+            this.economy.monthsElapsed,
+            this.happiness,
+            this.population
+          );
+          if (fired) this.councilPanel.show();
+        }
         this.vehicles.spawnTick(
           SIM_STEP_MS,
           this.grid,
@@ -526,7 +543,11 @@ export class Game {
    * nothing on bulldoze — keep the prototype simple.
    */
   private placeBuilding(x: number, y: number, kind: Exclude<Building, 'none'>): boolean {
-    const cost = BUILDING_COSTS[kind];
+    const baseCost = BUILDING_COSTS[kind];
+    const stanceKey = kind as StanceKey;
+    const mult = this.council.costMultiplier(stanceKey);
+    if (!isFinite(mult)) return false; // banned by council
+    const cost = Math.round(baseCost * mult);
     if (this.economy.treasury < cost) return false;
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
@@ -543,9 +564,12 @@ export class Game {
     const t = this.grid.get(x, y);
     if (!t || !t.road || t.stopSign) return false;
     if (this.grid.incidentRoadEdgeCount(x, y) < 3) return false;
-    if (this.economy.treasury < STOP_SIGN_COST) return false;
+    const mult = this.council.costMultiplier('stop_sign');
+    if (!isFinite(mult)) return false; // banned by council
+    const cost = Math.round(STOP_SIGN_COST * mult);
+    if (this.economy.treasury < cost) return false;
     if (!this.grid.setStopSign(x, y, true)) return false;
-    this.economy.treasury -= STOP_SIGN_COST;
+    this.economy.treasury -= cost;
     this.renderer.drawRoads(this.grid);
     return true;
   }
@@ -723,6 +747,12 @@ export class Game {
 
     let changed = false;
 
+    // Council zoning-change gate: re-zoning an already-zoned tile to a
+    // different zone-or-tier needs ≥2 councillors with non-negative stance.
+    // Painting fresh grass is always allowed. Pre-compute once per stroke.
+    const tier: ZoneTier = cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high';
+    const changeAllowed = this.council.canChangeZone(zone, tier);
+
     // Revert tiles whose zone we changed in earlier moves but that no longer
     // fall on the rubber band.
     for (const [idx, original] of this.strokeZones) {
@@ -734,12 +764,17 @@ export class Game {
 
     // Apply desired zone+cap where eligible. Invalid tiles (road, no road
     // adjacent, off-map) are silently skipped — feels nicer than rejecting
-    // a whole stroke.
+    // a whole stroke. Rezoning an existing zone tile additionally requires
+    // council approval; if the council blocks the change, skip that tile.
     for (const idx of desired) {
       const { x, y } = this.unpackTile(idx);
       const tile = this.grid.get(x, y);
       if (!tile) continue;
       if (tile.zone === zone && tile.zoneCap === cap) continue;
+      // If the tile is already zoned to something different, this is a
+      // "change" and needs council approval.
+      const isChange = tile.zone !== 'none';
+      if (isChange && !changeAllowed) continue;
       // Snapshot original ONCE per tile per stroke so a wiggle restores
       // correctly even if we touched the cell multiple times.
       if (!this.strokeZones.has(idx)) {

@@ -648,6 +648,276 @@ body {
   transition: width 250ms ease, background-color 250ms ease;
 }
 
+.happiness__badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  background: rgba(255, 216, 77, 0.15);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.4);
+  vertical-align: middle;
+}
+
+.happiness__row[data-role="opponent"] .happiness__badge {
+  background: rgba(208, 106, 138, 0.15);
+  color: #ffb0c5;
+  border-color: rgba(208, 106, 138, 0.4);
+}
+
+.happiness__row[data-role="council"] {
+  background: rgba(255, 216, 77, 0.06);
+}
+
+/* ---- Council / election modal --------------------------------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal__sheet {
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pill-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  padding: 18px 18px 22px;
+  max-width: 520px;
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+.modal__close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--pill-border);
+  color: var(--pill-fg);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.modal__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.modal__sub {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.55);
+  margin-bottom: 14px;
+}
+
+.modal__cta {
+  margin-top: 16px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 216, 77, 0.4);
+  background: rgba(255, 216, 77, 0.16);
+  color: #ffe98a;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.council__headline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 14px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.council__contender {
+  text-align: center;
+}
+
+.council__role {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(207, 232, 214, 0.55);
+}
+
+.council__contender .council__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.council__pct {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  color: #ffe98a;
+}
+
+.council__contender--opponent .council__pct {
+  color: #ffb0c5;
+}
+
+.council__win {
+  font-size: 10px;
+  color: #6dd06a;
+  font-weight: 700;
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+
+.council__loss {
+  font-size: 10px;
+  color: rgba(207, 232, 214, 0.45);
+  font-weight: 500;
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+
+.council__vs {
+  font-size: 12px;
+  color: rgba(207, 232, 214, 0.45);
+  font-style: italic;
+}
+
+.council__section-title {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(207, 232, 214, 0.55);
+  margin: 16px 0 6px;
+}
+
+.council__seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.council__member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  border-left: 4px solid currentColor;
+}
+
+.council__member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.council__member-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.council__member-title {
+  font-size: 10px;
+  color: rgba(207, 232, 214, 0.55);
+}
+
+.council__vote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.council__vote-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.council__vote-row[data-tag="council"] {
+  background: rgba(255, 216, 77, 0.1);
+}
+
+.council__vote-row[data-tag="opponent"] {
+  background: rgba(208, 106, 138, 0.1);
+}
+
+.council__vote-faction {
+  flex: 1 1 auto;
+  color: var(--pill-fg);
+}
+
+.council__vote-pct {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: rgba(207, 232, 214, 0.7);
+}
+
+.council__vote-tag {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(207, 232, 214, 0.65);
+}
+
+.council__vote-row[data-tag="council"] .council__vote-tag {
+  background: rgba(255, 216, 77, 0.18);
+  color: #ffe98a;
+}
+
+.council__vote-row[data-tag="opponent"] .council__vote-tag {
+  background: rgba(208, 106, 138, 0.2);
+  color: #ffb0c5;
+}
+
 .budget__sliders {
   display: flex;
   flex-direction: column;

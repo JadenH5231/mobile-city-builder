@@ -10,9 +10,11 @@ import {
   type Faction,
   type Happiness
 } from '../simulation/Happiness';
+import { COUNCIL_COMMENTS, type Council } from '../simulation/Council';
 
 interface Deps {
   readonly happiness: Happiness;
+  readonly council: Council;
   readonly grid: () => Grid;
   readonly economy: Economy;
   readonly population: Population;
@@ -101,15 +103,25 @@ export class HappinessPanel {
       if (!row) continue;
       const bucket = bucketOf(h);
       const salt = months + bucketToSalt(bucket) * 7;
-      row.commentEl.textContent = pickComment(f, h, salt);
+      const onCouncil = this.deps.council.isCouncillor(f.id);
+      const isOpponent = this.deps.council.isOpponent(f.id);
+      // Council members shift to "city hall mode" — replaces the regular
+      // mood-bucketed comment with a fixed council-voice line.
+      row.commentEl.textContent = onCouncil
+        ? COUNCIL_COMMENTS[f.id]
+        : pickComment(f, h, salt);
       row.barFill.style.width = `${happinessToPct(h)}%`;
       row.barFill.style.background = barColor(h);
       row.el.dataset.bucket = bucket;
       row.moodEl.textContent = bucketLabel(bucket);
 
-      // Faction population + share-of-city. Both the count and the
-      // denominator for the percentage come from rounded integers so the
-      // displayed values are consistent.
+      // Council / opponent badges.
+      const role = onCouncil ? 'council' : isOpponent ? 'opponent' : '';
+      row.el.dataset.role = role;
+      row.badgeEl.textContent = onCouncil ? '★ COUNCIL' : isOpponent ? '✕ RAN AGAINST' : '';
+      row.badgeEl.style.display = role ? 'inline-block' : 'none';
+
+      // Faction population + share-of-city.
       const factionPop = Math.round(this.deps.population.factionPopulation.get(f.id) ?? 0);
       const sharePct = totalDisplayed > 0 ? (factionPop / totalDisplayed) * 100 : 0;
       row.popEl.textContent = `${factionPop.toLocaleString()} residents · ${sharePct.toFixed(1)}%`;
@@ -126,6 +138,7 @@ interface FactionRow {
   moodEl: HTMLElement;
   popEl: HTMLElement;
   shareFill: HTMLElement;
+  badgeEl: HTMLElement;
 }
 
 function makeFactionRow(f: Faction): FactionRow {
@@ -137,6 +150,7 @@ function makeFactionRow(f: Faction): FactionRow {
     <div class="happiness__body">
       <div class="happiness__head">
         <span class="happiness__name">${escapeHtml(f.leaderName)}</span>
+        <span class="happiness__badge"></span>
         <span class="happiness__mood"></span>
       </div>
       <div class="happiness__title">${escapeHtml(f.leaderTitle)} — ${escapeHtml(f.name)}</div>
@@ -152,7 +166,8 @@ function makeFactionRow(f: Faction): FactionRow {
   const moodEl = wrap.querySelector('.happiness__mood') as HTMLElement;
   const popEl = wrap.querySelector('.happiness__pop') as HTMLElement;
   const shareFill = wrap.querySelector('.happiness__share-fill') as HTMLElement;
-  return { el: wrap, commentEl, barFill, moodEl, popEl, shareFill };
+  const badgeEl = wrap.querySelector('.happiness__badge') as HTMLElement;
+  return { el: wrap, commentEl, barFill, moodEl, popEl, shareFill, badgeEl };
 }
 
 function avatarInitials(name: string): string {

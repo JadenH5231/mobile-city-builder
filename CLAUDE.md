@@ -145,6 +145,26 @@ make `transit` happier and `drivers` angrier; a power plant makes
 `safer_streets`. The answer is rarely "none." When in doubt, add a small
 delta to the relevant faction's `compute` and let testing tune it.
 
+**Governance hooks** (`src/simulation/Council.ts`): Happiness drives the
+3-month election cycle. The 2nd-most-angry faction's leader runs as the
+mayor's opponent (and is excluded from the council that term). 4 of the
+remaining 9 take seats, ranked by `vote = factionPop × turnout` where
+turnout climbs with anger. Councillors do three things in office:
+
+1. **Cost multiplier** on every buildable: `mult = 1 − sumStances × 0.25`
+   clamped [0.20, 2.5]. If every councillor strongly opposes (all
+   stances ≤ −0.4), the action is **banned** for the term.
+2. **Zoning-change gate**: re-zoning an already-zoned tile to a different
+   (zone, tier) needs ≥ 2 councillors with stance ≥ 0 for the new
+   combination. Fresh zoning is always allowed.
+3. **Population boost**: each councillor's faction gets +10% on its
+   target share, normalised so total stays ≤ capacity.
+
+When you add a new buildable, place it in `FACTION_STANCES` for every
+faction. Skipping a row implicitly defaults to neutral (0) — fine for
+neutral-everywhere items but the council mechanic only generates real
+political pressure when the stance matrix has opinions in it.
+
 **Tone for leader comments:** flamboyant local-community-Facebook —
 heavy caps for emphasis, exclamation marks, hashtags where natural,
 emoji where natural, the unmistakable cadence of someone Showing Up.

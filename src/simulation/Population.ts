@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Economy } from './Economy';
 import type { Traffic } from './Traffic';
 import { FACTION_NATURAL_SHARE, type FactionId, type Happiness } from './Happiness';
+import type { Council } from './Council';
 import {
   COMMERCIAL_JOBS,
   INDUSTRIAL_JOBS,
@@ -69,7 +70,7 @@ export class Population {
     }
   }
 
-  tick(grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness): void {
+  tick(grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness, council: Council): void {
     // Capacity = how many residents the built buildings COULD hold; jobs =
     // built C / I jobs. Same pattern as before for jobs.
     let capacity = 0;
@@ -93,15 +94,29 @@ export class Population {
     this.totalCommercialJobs = cJobs;
     this.totalIndustrialJobs = iJobs;
 
-    // Lerp each faction's population toward (capacity × share × willingness).
+    // Lerp each faction's population toward (capacity × share × willingness × councilBoost).
     // Willingness: 0 → 1 as happiness goes from -1 → 0; clamped at 1 for
     // any positive happiness. So a happy or content faction stays at full
-    // share; a furious one empties out.
-    let totalResidents = 0;
+    // share; a furious one empties out. Councillors get +10% on their
+    // faction's target, drawing from the pool — normalised so the sum of
+    // all targets never exceeds capacity.
+    let totalRawTarget = 0;
+    const rawTargets = new Map<FactionId, number>();
     for (const id of Object.keys(FACTION_NATURAL_SHARE) as FactionId[]) {
       const h = happiness.get(id);
       const willingness = Math.max(0, Math.min(1, 1 + h));
-      const target = capacity * FACTION_NATURAL_SHARE[id] * willingness;
+      const boost = council.populationBoost(id);
+      const raw = capacity * FACTION_NATURAL_SHARE[id] * willingness * boost;
+      rawTargets.set(id, raw);
+      totalRawTarget += raw;
+    }
+    // If the boosts pushed total demand above capacity, scale every target
+    // down proportionally so the city can't over-fill.
+    const scale = totalRawTarget > capacity && capacity > 0 ? capacity / totalRawTarget : 1;
+
+    let totalResidents = 0;
+    for (const id of Object.keys(FACTION_NATURAL_SHARE) as FactionId[]) {
+      const target = (rawTargets.get(id) ?? 0) * scale;
       const current = this.factionPopulation.get(id) ?? 0;
       const next = current + (target - current) * FACTION_POP_LERP;
       this.factionPopulation.set(id, next);

@@ -414,36 +414,54 @@ export class Renderer {
   }
 
   /**
-   * Per-frame pedestrian positions. Walkers move slower than cars and don't
-   * yaw quite as obviously — set rotation along the segment for a tiny head-
-   * direction cue. Slight perpendicular offset (sideOffset) spreads a stream
-   * of walkers across the sidewalk width instead of a single conga line.
+   * Per-frame pedestrian positions. Walkers travel along sidewalks of
+   * road tiles or along walking-path tiles. The perpendicular offset is
+   * resolved per-frame from the *current* tile's type and width:
+   *
+   *  - Non-highway road tile: offset = side × (roadHalf + SIDEWALK_PAD/2),
+   *    placing the walker on the sidewalk strip outside the road surface.
+   *  - Path tile: offset = side × small spread (path is narrow, both
+   *    sides walkable but kept near centre).
+   *  - Anything else (shouldn't happen for a planned path, but defensive):
+   *    offset 0.
+   *
+   * Lerping the offset between the from-tile value and the to-tile value
+   * gives a smooth sidewalk-to-path transition instead of a snap.
    */
-  updatePedestrians(pedestrians: Pedestrians, gridWidth: number): void {
+  updatePedestrians(pedestrians: Pedestrians, grid: Grid): void {
     const obj = this.tmpObj;
     const c = this.tmpColor;
+    const gridWidth = grid.width;
     let visible = 0;
     for (let i = 0; i < pedestrians.walkers.length; i++) {
       const w = pedestrians.walkers[i]!;
       if (w.pathTiles.length < 2) continue;
       const a = w.pathTiles[w.segmentIdx]!;
       const b = w.pathTiles[w.segmentIdx + 1]!;
-      const ax = (a % gridWidth) + 0.5;
-      const az = Math.floor(a / gridWidth) + 0.5;
-      const bx = (b % gridWidth) + 0.5;
-      const bz = Math.floor(b / gridWidth) + 0.5;
+      const aTileX = a % gridWidth;
+      const aTileY = Math.floor(a / gridWidth);
+      const bTileX = b % gridWidth;
+      const bTileY = Math.floor(b / gridWidth);
+      const ax = aTileX + 0.5;
+      const az = aTileY + 0.5;
+      const bx = bTileX + 0.5;
+      const bz = bTileY + 0.5;
       const t = w.segmentT;
-      // Lerp position then offset perpendicular to direction (so they walk
-      // along the sidewalk, not the centerline).
       const dx = bx - ax;
       const dz = bz - az;
       const len = Math.hypot(dx, dz) || 1;
+      // Perpendicular unit vector — `+side` puts the walker to the right
+      // of travel direction, `-side` to the left.
       const px = -dz / len;
       const pz = dx / len;
+      // Resolve per-tile offset and lerp between the from and to tiles.
+      const offA = pedestrianOffsetForTile(grid, aTileX, aTileY) * w.side;
+      const offB = pedestrianOffsetForTile(grid, bTileX, bTileY) * w.side;
+      const off = offA + (offB - offA) * t;
       obj.position.set(
-        (ax + dx * t + px * w.sideOffset) * TILE_SIZE,
+        (ax + dx * t + px * off) * TILE_SIZE,
         SIDEWALK_LIFT + 0.005,
-        (az + dz * t + pz * w.sideOffset) * TILE_SIZE
+        (az + dz * t + pz * off) * TILE_SIZE
       );
       obj.rotation.set(0, Math.atan2(dx, dz), 0);
       obj.scale.set(1, 1, 1);
@@ -1597,6 +1615,32 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
 }
 
 /** True if the tile at (x, y) is a non-highway road — i.e. it has a sidewalk. */
+/**
+ * Perpendicular offset (in tile units, unsigned) where a pedestrian
+ * should walk on this tile. Multiply by ±side to place them left or
+ * right of travel direction.
+ *
+ * For a non-highway road the band sits squarely on the sidewalk pad
+ * (just outside the road surface). For a path tile we use a small
+ * spread so two-direction streams visibly split. Highways and grass
+ * default to 0 — a planned route shouldn't put walkers there, but if
+ * one slips through the renderer doesn't push them sideways into
+ * nothing.
+ */
+function pedestrianOffsetForTile(grid: Grid, x: number, y: number): number {
+  const t = grid.get(x, y);
+  if (!t) return 0;
+  if (t.road && t.roadType !== 'highway') {
+    // Place on the sidewalk pad: just outside the road's half-width,
+    // halfway through the SIDEWALK_PAD strip.
+    return ROAD_TIER[t.roadType].width / 2 + SIDEWALK_PAD * 0.5;
+  }
+  if (t.path) {
+    return 0.05; // small spread on a narrow path
+  }
+  return 0;
+}
+
 function isSidewalkTile(grid: Grid, x: number, y: number): boolean {
   const t = grid.get(x, y);
   if (!t) return false;

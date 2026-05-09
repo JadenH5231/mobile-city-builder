@@ -403,7 +403,7 @@ export class Game {
       this.buses.update(dt, this.grid, this.grid.width, this.roadGraph, this.pathfinder);
       this.renderer.updateBuses(this.buses, this.grid.width);
       this.pedestrians.update(dt, this.grid.width);
-      this.renderer.updatePedestrians(this.pedestrians, this.grid.width);
+      this.renderer.updatePedestrians(this.pedestrians, this.grid);
       // Heatmap rebuild is the most expensive optional layer (full road
       // mesh rebuild). Throttle to 5 Hz when visible — the EMA only moves
       // that fast anyway. Memory: feedback_traffic_pressure (heatmap must

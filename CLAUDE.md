@@ -82,6 +82,7 @@ src/
     Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
     Input.ts          pointer-events gesture handler (navigate / paint modes)
     Renderer.ts       Three.js scene: terrain, roads, sidewalks, paths, trees, selection
+    BuildingVariants.ts spec catalogue + builder for 36 building variants
   world/
     Grid.ts           tile container + road-edge graph
     Tile.ts           single-tile struct (terrain, road, path bool)
@@ -266,7 +267,23 @@ on a different machine isn't a forensic exercise.
 - **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
 - **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
 
-## Status: Alpha 2.0
+## Status: Alpha 2.1
+
+Visual polish pass on top of Alpha 2.0:
+
+- **36-variant building kit** in `src/engine/BuildingVariants.ts` — three
+  visually distinct silhouettes per (zone, density) pair across R / C /
+  I / Mixed-use × low / med / high. Tiles pick a variant from their
+  (x, y) hash so a block reads as a streetscape rather than a stamp.
+- **Park overhaul** — green pad + paved path + pond + 2 benches + 3
+  trees of varying sizes.
+- **Cars and buses** got proper silhouettes (chassis + cabin, bus body +
+  roof) instead of single-box slabs.
+- Rendering switch: the buildings layer is now a single merged Mesh of
+  all per-tile variant geometries (one draw call). The previous
+  InstancedMesh-of-boxes is gone.
+
+### Status: Alpha 2.0 (carryover)
 
 Pedestrian/transit/traffic overhaul + UX polish on top of Alpha 1.6.
 Save schema v6. Highlights (full write-up in `docs/PROGRESS.md`):

@@ -25,9 +25,8 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
+import { buildVariantParts } from './BuildingVariants';
 import {
-  BUILDING_COLORS,
-  BUILDING_DIMS,
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
   MAX_VEHICLES,
@@ -91,7 +90,8 @@ export class Renderer {
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
   private roadOrnaments: Group | null = null;
   private treesMesh: InstancedMesh | null = null;
-  private buildingsMesh: InstancedMesh | null = null;
+  /** Merged buildings geometry (Alpha 2.1 — variant-driven). */
+  private buildingsMesh: Mesh | null = null;
   /** One Group containing per-kind city building Mesh objects. Rebuilt on change. */
   private readonly cityBuildingsGroup = new Group();
   private heatmapMesh: Mesh | null = null;
@@ -146,8 +146,17 @@ export class Renderer {
     // Cars: a fixed-capacity InstancedMesh that we reuse, varying its
     // `count` to match active cars. Per-instance colour + matrix updated
     // each render frame in `updateCars`.
-    const carGeom = new BoxGeometry(0.18, 0.10, 0.30);
-    carGeom.translate(0, 0.05, 0);
+    // Car silhouette (Alpha 2.1) — chassis + cabin merged into one
+    // geometry so each instance reads as a recognisable sedan rather than
+    // a flat slab. Per-instance color (set in updateCars) tints the whole
+    // body uniformly; that's the right look for low-poly cars.
+    const chassis = new BoxGeometry(0.20, 0.07, 0.34);
+    chassis.translate(0, 0.035, 0);
+    const cabin = new BoxGeometry(0.16, 0.07, 0.18);
+    cabin.translate(0, 0.07 + 0.035, -0.02);
+    const carGeom = mergeGeoms([chassis, cabin], [0xffffff, 0xffffff]);
+    // vertexColors: false so the merged white vertex colours don't fight
+    // the per-instance color tint set by updateCars.
     const carMat = new MeshLambertMaterial({ flatShading: true });
     this.carsMesh = new InstancedMesh(carGeom, carMat, MAX_VEHICLES);
     this.carsMesh.count = 0;
@@ -155,8 +164,13 @@ export class Renderer {
     this.worldGroup.add(this.carsMesh);
 
     // Buses — bigger silhouette so they read as transit, separate from cars.
-    const busGeom = new BoxGeometry(0.24, 0.15, 0.55);
-    busGeom.translate(0, 0.075, 0);
+    // Bus silhouette (Alpha 2.1) — chunky body with a slight cab notch
+    // and a low roofline, so it reads as a transit bus rather than a slab.
+    const busBody = new BoxGeometry(0.24, 0.15, 0.55);
+    busBody.translate(0, 0.075, 0);
+    const busRoof = new BoxGeometry(0.20, 0.025, 0.50);
+    busRoof.translate(0, 0.16, 0);
+    const busGeom = mergeGeoms([busBody, busRoof], [0xffffff, 0xffffff]);
     const busMat = new MeshLambertMaterial({ flatShading: true });
     this.busesMesh = new InstancedMesh(busGeom, busMat, 16);
     this.busesMesh.count = 0;
@@ -676,53 +690,45 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
 
 // --- Buildings ----------------------------------------------------------
 
-function buildBuildingsMesh(grid: Grid): InstancedMesh | null {
-  let count = 0;
-  for (const t of grid.iter()) {
-    if (t.zone !== 'none' && !t.road && t.density > 0) count++;
-  }
-  if (count === 0) return null;
-
-  // Unit box, anchored at its base so per-instance scale grows upward.
-  const geom = new BoxGeometry(1, 1, 1);
-  geom.translate(0, 0.5, 0);
-  // flatShading + Lambert gives the chunky low-poly look without textures.
-  const mat = new MeshLambertMaterial({ flatShading: true });
-  const im = new InstancedMesh(geom, mat, count);
-
-  const obj = new Object3D();
-  const c = new Color();
-  let i = 0;
-
+/**
+ * Build the merged buildings mesh from the variant catalogue (Alpha 2.1).
+ *
+ * Each developed tile picks one of three variants per (zone, density)
+ * deterministically from its (x, y) hash, so the mix is consistent
+ * across reloads. {@link buildVariantParts} returns world-positioned
+ * BufferGeometry parts (already scaled, rotated, and translated to the
+ * tile centre); we accumulate every part across every developed tile and
+ * fuse them into a single vertex-coloured Mesh.
+ *
+ * Why merge instead of per-variant InstancedMesh: variants compose 1-5
+ * primitives each, so a city of ~1000 tiles produces ~3000 primitives.
+ * One merged mesh is a single draw call versus 36 InstancedMeshes that
+ * each do small-N batches. Rebuild cost is comparable to the previous
+ * single-InstancedMesh approach (sub-millisecond on Small/Medium).
+ */
+function buildBuildingsMesh(grid: Grid): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  // ROAD_LIFT * 0.5 lift so building bases sit just above the terrain plane
+  // and avoid z-fighting with the zone overlay underneath.
+  const yLift = ROAD_LIFT * 0.5;
   for (const t of grid.iter()) {
     if (t.zone === 'none' || t.road || t.density === 0) continue;
-    const dims = BUILDING_DIMS[t.density]!;
-
-    // Tiny per-tile jitter so a row of identical density-1 cottages doesn't
-    // line up like graph paper. Deterministic from the cell coords.
-    const r = Math.abs(((t.x * 374761393) ^ (t.y * 668265263)) | 0);
-    const ox = ((r % 1000) / 1000 - 0.5) * 0.08;
-    const oz = (((r >> 10) % 1000) / 1000 - 0.5) * 0.08;
-    const yaw = ((r >> 20) & 3) * (Math.PI / 2); // 0/90/180/270
-
-    obj.position.set(
-      (t.x + 0.5) * TILE_SIZE + ox,
-      ROAD_LIFT * 0.5,
-      (t.y + 0.5) * TILE_SIZE + oz
-    );
-    obj.rotation.set(0, yaw, 0);
-    obj.scale.set(dims.w * TILE_SIZE, dims.h * TILE_SIZE, dims.w * TILE_SIZE);
-    obj.updateMatrix();
-    im.setMatrixAt(i, obj.matrix);
-
-    const palette = BUILDING_COLORS[t.zone as Exclude<Zone, 'none'>];
-    c.setHex(palette[t.density]!);
-    im.setColorAt(i, c);
-    i++;
+    const parts = buildVariantParts(t.zone, t.density, t.x, t.y);
+    for (const p of parts) {
+      // BuildingVariants positions geometry in tile units; convert to world.
+      // (TILE_SIZE = 1 for now so this is a no-op, but stays correct if the
+      // tile pitch ever changes.)
+      if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      if (yLift !== 0) p.geom.translate(0, yLift, 0);
+      geoms.push(p.geom);
+      colours.push(p.color);
+    }
   }
-  im.instanceMatrix.needsUpdate = true;
-  if (im.instanceColor) im.instanceColor.needsUpdate = true;
-  return im;
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(merged, mat);
 }
 
 // --- Traffic heatmap ----------------------------------------------------
@@ -860,10 +866,34 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => cyl(0.32, 0.40, 12), color: 0x4d8eb9, dx: 0, dy: 0.55 + 0.20, dz: 0 }
       ];
     case 'park':
+      // Polished park (Alpha 2.1) — green pad, central pond, two
+      // benches flanking a paved path, and three trees in different
+      // sizes for visual variety. Reads as a real city park rather
+      // than a single tree on a green dot.
       return [
+        // Lawn pad.
         { makeGeom: () => box(0.85, 0.04, 0.85), color: 0x4a8c3a, dx: 0, dy: 0.02, dz: 0 },
-        { makeGeom: () => cyl(0.06, 0.18, 6), color: 0x6b3f1f, dx: 0, dy: 0.04 + 0.09, dz: 0 },
-        { makeGeom: () => cone(0.22, 0.36, 8), color: 0x2f6a2d, dx: 0, dy: 0.04 + 0.18 + 0.18, dz: 0 }
+        // Diagonal stone path strip.
+        { makeGeom: () => box(0.18, 0.05, 0.85), color: 0xc7c2b3, dx: 0, dy: 0.025, dz: 0 },
+        // Round pond.
+        { makeGeom: () => cyl(0.18, 0.06, 12), color: 0x4d8eb9, dx: -0.20, dy: 0.025, dz: -0.18 },
+        // Bench 1 — slats + 2 legs.
+        { makeGeom: () => box(0.18, 0.025, 0.04), color: 0x6b4f3a, dx: 0.22, dy: 0.07, dz: 0.18 },
+        { makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: 0.30, dy: 0.045, dz: 0.18 },
+        { makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: 0.14, dy: 0.045, dz: 0.18 },
+        // Bench 2 — opposite side.
+        { makeGeom: () => box(0.18, 0.025, 0.04), color: 0x6b4f3a, dx: -0.22, dy: 0.07, dz: 0.18 },
+        { makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: -0.14, dy: 0.045, dz: 0.18 },
+        { makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: -0.30, dy: 0.045, dz: 0.18 },
+        // Tree A — large central-back.
+        { makeGeom: () => cyl(0.04, 0.16, 6), color: 0x6b3f1f, dx: 0.22, dy: 0.11, dz: -0.22 },
+        { makeGeom: () => cone(0.20, 0.34, 8), color: 0x2f6a2d, dx: 0.22, dy: 0.36, dz: -0.22 },
+        // Tree B — medium left.
+        { makeGeom: () => cyl(0.035, 0.13, 6), color: 0x6b3f1f, dx: -0.32, dy: 0.095, dz: -0.05 },
+        { makeGeom: () => cone(0.16, 0.26, 8), color: 0x3a7a3a, dx: -0.32, dy: 0.30, dz: -0.05 },
+        // Tree C — small right.
+        { makeGeom: () => cyl(0.028, 0.10, 6), color: 0x6b3f1f, dx: 0.32, dy: 0.08, dz: 0.05 },
+        { makeGeom: () => cone(0.13, 0.20, 8), color: 0x4a8e44, dx: 0.32, dy: 0.25, dz: 0.05 }
       ];
     case 'bus_stop':
       return [

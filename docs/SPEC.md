@@ -33,6 +33,10 @@ Build a **low-poly 3D city builder** (orthographic camera at a fixed 3/4 angle, 
 
 ## Core Features (all delivered in alpha)
 
+### 0. Visual style (Alpha 2.1 polish pass)
+
+Buildings render from a **36-variant catalogue** in `src/engine/BuildingVariants.ts`: three visually distinct silhouettes per (zone, density) pair across R / C / I / Mixed-use × low / med / high. Each variant is a spec object — a body box, optional roof (flat / gable / hip / pyramid), optional secondary body, and decorations (chimney, antenna, awning, sign, tank, stack, crane, setback tower). Tiles deterministically pick a variant from their (x, y) hash. The whole buildings layer renders as a single merged Mesh (one draw call). Cars and buses use chassis + cabin / body + roof merged geometry rather than single boxes. Parks render lawn + path + pond + benches + 3 trees of varying sizes.
+
 ### 1. Map & Rendering
 - Tile-based grid in a 3D scene. Vertex-coloured terrain, instanced cone-trees, instanced low-poly building meshes.
 - **Three map sizes:** Small 64×64, Medium 128×128, Large 256×256. (Currently hard-coded to Small in `main.ts` — UI selector is a polish item.)

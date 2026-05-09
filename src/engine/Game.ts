@@ -399,9 +399,9 @@ export class Game {
           }
         }
       }
-      this.renderer.updateCars(this.vehicles, this.grid.width);
+      this.renderer.updateCars(this.vehicles, this.grid);
       this.buses.update(dt, this.grid, this.grid.width, this.roadGraph, this.pathfinder);
-      this.renderer.updateBuses(this.buses, this.grid.width);
+      this.renderer.updateBuses(this.buses, this.grid);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
       // Heatmap rebuild is the most expensive optional layer (full road

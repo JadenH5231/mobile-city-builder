@@ -365,21 +365,31 @@ export class Renderer {
    * the box along the segment direction. Sets `count` to the active count
    * so the InstancedMesh renders only live cars.
    */
-  updateCars(vehicles: Vehicles, gridWidth: number): void {
+  updateCars(vehicles: Vehicles, grid: Grid): void {
     const obj = this.tmpObj;
     const c = this.tmpColor;
+    const gridWidth = grid.width;
     for (let i = 0; i < vehicles.cars.length; i++) {
       const car = vehicles.cars[i]!;
       const a = car.pathTiles[car.segmentIdx]!;
       const b = car.pathTiles[car.segmentIdx + 1]!;
-      const ax = (a % gridWidth) + 0.5;
-      const az = Math.floor(a / gridWidth) + 0.5;
-      const bx = (b % gridWidth) + 0.5;
-      const bz = Math.floor(b / gridWidth) + 0.5;
+      const aTileX = a % gridWidth;
+      const aTileY = Math.floor(a / gridWidth);
+      const bTileX = b % gridWidth;
+      const bTileY = Math.floor(b / gridWidth);
+      const ax = aTileX + 0.5;
+      const az = aTileY + 0.5;
+      const bx = bTileX + 0.5;
+      const bz = bTileY + 0.5;
       const t = car.segmentT;
+      // Lerp y between the two tile elevations (Alpha 2.4) so cars climb
+      // hills and dip into valleys instead of clipping through them. Bridge
+      // tiles override to the absolute deck height.
+      const yA = roadSurfaceY(grid, aTileX, aTileY);
+      const yB = roadSurfaceY(grid, bTileX, bTileY);
       obj.position.set(
         (ax + (bx - ax) * t) * TILE_SIZE,
-        ROAD_LIFT + 0.05,
+        yA + (yB - yA) * t + 0.05,
         (az + (bz - az) * t) * TILE_SIZE
       );
       // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
@@ -468,9 +478,14 @@ export class Renderer {
       const offA = pedestrianOffsetForTile(grid, aTileX, aTileY) * w.side;
       const offB = pedestrianOffsetForTile(grid, bTileX, bTileY) * w.side;
       const off = offA + (offB - offA) * t;
+      // Lerp y between the two tile surface heights so walkers follow the
+      // ground (Alpha 2.4). Bridge tiles use the bridge deck height; path
+      // tiles use PATH_LIFT + elevation; everything else uses sidewalk.
+      const yA = walkerSurfaceY(grid, aTileX, aTileY);
+      const yB = walkerSurfaceY(grid, bTileX, bTileY);
       obj.position.set(
         (ax + dx * t + px * off) * TILE_SIZE,
-        SIDEWALK_LIFT + 0.005,
+        yA + (yB - yA) * t + 0.005,
         (az + dz * t + pz * off) * TILE_SIZE
       );
       obj.rotation.set(0, Math.atan2(dx, dz), 0);
@@ -487,9 +502,10 @@ export class Renderer {
   }
 
   /** Per-frame bus positions, mirror of `updateCars`. */
-  updateBuses(buses: Buses, gridWidth: number): void {
+  updateBuses(buses: Buses, grid: Grid): void {
     const obj = this.tmpObj;
     const c = this.tmpColor;
+    const gridWidth = grid.width;
     let visible = 0;
     for (let i = 0; i < buses.buses.length; i++) {
       const bus = buses.buses[i]!;
@@ -497,10 +513,14 @@ export class Renderer {
       if (bus.pathTiles.length < 2) continue;
       const a = bus.pathTiles[bus.segmentIdx]!;
       const b = bus.pathTiles[bus.segmentIdx + 1]!;
-      const ax = (a % gridWidth) + 0.5;
-      const az = Math.floor(a / gridWidth) + 0.5;
-      const bx = (b % gridWidth) + 0.5;
-      const bz = Math.floor(b / gridWidth) + 0.5;
+      const aTileX = a % gridWidth;
+      const aTileY = Math.floor(a / gridWidth);
+      const bTileX = b % gridWidth;
+      const bTileY = Math.floor(b / gridWidth);
+      const ax = aTileX + 0.5;
+      const az = aTileY + 0.5;
+      const bx = bTileX + 0.5;
+      const bz = bTileY + 0.5;
       const t = bus.segmentT;
       // Pull-over offset: when dwelling at a stop, slide the bus to the
       // sidewalk on the building-side (perpendicular to direction). The
@@ -516,9 +536,11 @@ export class Renderer {
       const len = Math.hypot(dx, dz) || 1;
       const px = -dz / len * lateral;
       const pz = dx / len * lateral;
+      const yA = roadSurfaceY(grid, aTileX, aTileY);
+      const yB = roadSurfaceY(grid, bTileX, bTileY);
       obj.position.set(
         (ax + dx * t + px) * TILE_SIZE,
-        ROAD_LIFT + 0.07,
+        yA + (yB - yA) * t + 0.07,
         (az + dz * t + pz) * TILE_SIZE
       );
       obj.rotation.set(0, Math.atan2(dx, dz), 0);
@@ -850,7 +872,7 @@ function buildHeatmapMesh(grid: Grid): Mesh | null {
   const indices = new Uint32Array(count * 6);
   const c = new Color();
   const inset = 0.05;
-  const y = ROAD_LIFT + 0.04;
+  const baseY = ROAD_LIFT + 0.04;
 
   let vi = 0;
   let ci = 0;
@@ -866,6 +888,9 @@ function buildHeatmapMesh(grid: Grid): Mesh | null {
     const x1 = (t.x + 1) * TILE_SIZE - inset;
     const z0 = t.y * TILE_SIZE + inset;
     const z1 = (t.y + 1) * TILE_SIZE - inset;
+    // Lift heatmap by tile elevation so it follows the road surface
+    // (Alpha 2.4); bridges sit absolute at BRIDGE_LIFT + tiny offset.
+    const y = t.bridge ? BRIDGE_LIFT + 0.04 : baseY + t.elevation;
 
     positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
     positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
@@ -1114,10 +1139,12 @@ function buildZoneMesh(grid: Grid): Mesh | null {
     const z0 = t.y * TILE_SIZE + inset;
     const z1 = (t.y + 1) * TILE_SIZE - inset;
 
-    positions[vi++] = x0; positions[vi++] = ZONE_LIFT; positions[vi++] = z0;
-    positions[vi++] = x1; positions[vi++] = ZONE_LIFT; positions[vi++] = z0;
-    positions[vi++] = x1; positions[vi++] = ZONE_LIFT; positions[vi++] = z1;
-    positions[vi++] = x0; positions[vi++] = ZONE_LIFT; positions[vi++] = z1;
+    // Lift by tile elevation so zones drape over hilly terrain (Alpha 2.4).
+    const yz = ZONE_LIFT + t.elevation;
+    positions[vi++] = x0; positions[vi++] = yz; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = yz; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = yz; positions[vi++] = z1;
+    positions[vi++] = x0; positions[vi++] = yz; positions[vi++] = z1;
 
     for (let i = 0; i < 4; i++) {
       colours[ci++] = c.r;
@@ -1212,12 +1239,14 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const px = -dz / len * half;
     const pz = dx / len * half;
 
-    // Per-endpoint elevation: bridge tiles lift the road deck to
-    // BRIDGE_LIFT; land roads stay at ROAD_LIFT. A bridge tile next to
-    // a land tile naturally produces a ramp because the two endpoint
-    // y values differ along the segment.
-    const yA = ta?.bridge ? BRIDGE_LIFT : yLift;
-    const yB = tb?.bridge ? BRIDGE_LIFT : yLift;
+    // Per-endpoint elevation (Alpha 2.3+): bridge tiles lift the road
+    // deck to BRIDGE_LIFT; land roads stay at ROAD_LIFT plus the tile's
+    // terrain elevation so the road sits ON the hill instead of being
+    // buried in it. A bridge tile next to a land tile naturally
+    // produces a ramp because the two endpoint y values differ along
+    // the segment, and a road climbing a hill ramps the same way.
+    const yA = ta?.bridge ? BRIDGE_LIFT : (yLift + (ta?.elevation ?? 0));
+    const yB = tb?.bridge ? BRIDGE_LIFT : (yLift + (tb?.elevation ?? 0));
     positions[vi++] = ax + px; positions[vi++] = yA; positions[vi++] = az + pz;
     positions[vi++] = bx + px; positions[vi++] = yB; positions[vi++] = bz + pz;
     positions[vi++] = bx - px; positions[vi++] = yB; positions[vi++] = bz - pz;
@@ -1235,16 +1264,20 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     //  - Highway: white solid edge stripes near each shoulder.
     // Bridges keep stripes if both ends are land-level; if either end is
     // bridge we skip stripes (they'd float in mid-air on the ramp).
-    const yStripe = yLift + 0.001;
+    // Lane stripes lift to slightly above the road deck per-endpoint
+    // (Alpha 2.4 — was a single yStripe constant; now stripes follow
+    // the road as it ramps over hills).
+    const yStripeA = yA + 0.001;
+    const yStripeB = yB + 0.001;
     if (ta?.bridge || tb?.bridge) {
       // Skip stripes on bridge segments; deck colour is enough.
     } else
     if (tier === 'local') {
       yellowLanePositions.push(
-        ax + dx * 0.18, yStripe, az + dz * 0.18,
-        ax + dx * 0.42, yStripe, az + dz * 0.42,
-        ax + dx * 0.58, yStripe, az + dz * 0.58,
-        ax + dx * 0.82, yStripe, az + dz * 0.82
+        ax + dx * 0.18, yStripeA + (yStripeB - yStripeA) * 0.18, az + dz * 0.18,
+        ax + dx * 0.42, yStripeA + (yStripeB - yStripeA) * 0.42, az + dz * 0.42,
+        ax + dx * 0.58, yStripeA + (yStripeB - yStripeA) * 0.58, az + dz * 0.58,
+        ax + dx * 0.82, yStripeA + (yStripeB - yStripeA) * 0.82, az + dz * 0.82
       );
     } else if (tier === 'avenue') {
       // Two solid yellow lines straddling the centreline by ~0.04 tile.
@@ -1252,10 +1285,10 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
       const opx = px / half * off;
       const opz = pz / half * off;
       yellowLanePositions.push(
-        ax + opx, yStripe, az + opz,
-        bx + opx, yStripe, bz + opz,
-        ax - opx, yStripe, az - opz,
-        bx - opx, yStripe, bz - opz
+        ax + opx, yStripeA, az + opz,
+        bx + opx, yStripeB, bz + opz,
+        ax - opx, yStripeA, az - opz,
+        bx - opx, yStripeB, bz - opz
       );
     } else {
       // Highway — white edge stripes just inside the shoulder.
@@ -1263,10 +1296,10 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
       const sx = px - (px / half) * inset;
       const sz = pz - (pz / half) * inset;
       whiteLanePositions.push(
-        ax + sx, yStripe, az + sz,
-        bx + sx, yStripe, bz + sz,
-        ax - sx, yStripe, az - sz,
-        bx - sx, yStripe, bz - sz
+        ax + sx, yStripeA, az + sz,
+        bx + sx, yStripeB, bz + sz,
+        ax - sx, yStripeA, az - sz,
+        bx - sx, yStripeB, bz - sz
       );
     }
   }
@@ -1280,7 +1313,7 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     c.setHex(tierProps.color);
     const cx = (s.x + 0.5) * TILE_SIZE;
     const cz = (s.y + 0.5) * TILE_SIZE;
-    const stubY = t?.bridge ? BRIDGE_LIFT : yLift;
+    const stubY = t?.bridge ? BRIDGE_LIFT : (yLift + (t?.elevation ?? 0));
     positions[vi++] = cx - half; positions[vi++] = stubY; positions[vi++] = cz - half;
     positions[vi++] = cx + half; positions[vi++] = stubY; positions[vi++] = cz - half;
     positions[vi++] = cx + half; positions[vi++] = stubY; positions[vi++] = cz + half;
@@ -1343,6 +1376,9 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
 
   for (const t of grid.iter()) {
     if (!t.road) continue;
+    // Bridge tiles override elevation: their deck floats over water at
+    // BRIDGE_LIFT regardless of the (negative) underlying elevation.
+    const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
     if (t.roadType === 'highway' && t.highwayDir >= 0 && t.highwayDir < 8) {
       const cx = (t.x + 0.5) * TILE_SIZE;
       const cz = (t.y + 0.5) * TILE_SIZE;
@@ -1352,7 +1388,7 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
       const arrow = makeArrowGeom(0.18, 0.22);
       const yaw = Math.atan2(offset[0], offset[1]);
       arrow.rotateY(-yaw);
-      arrow.translate(cx, ROAD_LIFT + 0.003, cz);
+      arrow.translate(cx, tileY + 0.003, cz);
       arrows.push(arrow);
       arrowColours.push(HIGHWAY_ARROW_COLOR);
     }
@@ -1380,20 +1416,20 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
 
         // Smaller than before — these are roadside furniture, not landmarks.
         const post = new CylinderGeometry(0.012, 0.012, 0.10, 6);
-        post.translate(px, ROAD_LIFT + 0.05, pz);
+        post.translate(px, tileY + 0.05, pz);
         stops.push(post);
         stopColours.push(0x666666);
 
         const sign = new CylinderGeometry(0.05, 0.05, 0.02, 8);
         sign.rotateX(Math.PI / 2);
-        sign.translate(px, ROAD_LIFT + 0.10, pz);
+        sign.translate(px, tileY + 0.10, pz);
         stops.push(sign);
         stopColours.push(STOP_SIGN_COLOR);
 
         // White face hint for the silhouette of a stop sign.
         const face = new CylinderGeometry(0.035, 0.035, 0.003, 8);
         face.rotateX(Math.PI / 2);
-        face.translate(px, ROAD_LIFT + 0.111, pz);
+        face.translate(px, tileY + 0.111, pz);
         stops.push(face);
         stopColours.push(STOP_SIGN_TEXT);
       }
@@ -1409,6 +1445,7 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     if (grid.incidentRoadEdgeCount(t.x, t.y) < 3) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
+    const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
     const roadHalf = ROAD_TIER[t.roadType].width / 2;
     const sides: Array<[number, number]> = [
       [0, -1], [1, 0], [0, 1], [-1, 0]
@@ -1432,7 +1469,7 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
         );
         stripe.translate(
           cx + dx * (roadHalf + 0.02) + (Math.abs(dz) > 0 ? 0 : stripeOffset),
-          ROAD_LIFT + 0.005,
+          tileY + 0.005,
           cz + dz * (roadHalf + 0.02) + (Math.abs(dz) > 0 ? stripeOffset : 0)
         );
         stops.push(stripe);
@@ -1448,6 +1485,7 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     if (!t.road || t.roadType === 'highway' || !t.busStop) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
+    const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
     const side = pickStopSide(grid, t.x, t.y);
     // Sidewalk-edge offset perpendicular to the road centre, on `side`.
     const off = TILE_SIZE * 0.35;
@@ -1455,16 +1493,16 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     const sz = cz + side[1] * off;
     // Bench: a low flat box.
     const bench = new BoxGeometry(0.18, 0.04, 0.07);
-    bench.translate(sx, ROAD_LIFT + 0.04, sz);
+    bench.translate(sx, tileY + 0.04, sz);
     stops.push(bench);
     stopColours.push(0x6f5f43);
     // Sign post — yellow lollipop on a thin stem.
     const stem = new CylinderGeometry(0.013, 0.013, 0.18, 6);
-    stem.translate(sx + side[0] * 0.06, ROAD_LIFT + 0.09, sz + side[1] * 0.06);
+    stem.translate(sx + side[0] * 0.06, tileY + 0.09, sz + side[1] * 0.06);
     stops.push(stem);
     stopColours.push(0x444444);
     const head = new BoxGeometry(0.07, 0.05, 0.02);
-    head.translate(sx + side[0] * 0.06, ROAD_LIFT + 0.20, sz + side[1] * 0.06);
+    head.translate(sx + side[0] * 0.06, tileY + 0.20, sz + side[1] * 0.06);
     stops.push(head);
     stopColours.push(0xe5c25a);
   }
@@ -1479,19 +1517,20 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     if (!t.trafficLight) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
+    const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
     // Pole.
     const pole = new CylinderGeometry(0.015, 0.015, 0.32, 6);
-    pole.translate(cx, ROAD_LIFT + 0.16, cz);
+    pole.translate(cx, tileY + 0.16, cz);
     lights.push(pole);
     lightColours.push(0x444444);
     // Housing.
     const housing = new CylinderGeometry(0.05, 0.05, 0.18, 6);
-    housing.translate(cx, ROAD_LIFT + 0.32 + 0.09, cz);
+    housing.translate(cx, tileY + 0.32 + 0.09, cz);
     lights.push(housing);
     lightColours.push(0x222222);
     // Three lenses — red, amber, green stack.
     const lensRadius = 0.025;
-    const lensZ = ROAD_LIFT + 0.32;
+    const lensZ = tileY + 0.32;
     const lenses: Array<[number, number]> = [
       [lensZ + 0.045, 0xd03a3a], // red on top
       [lensZ + 0.090, 0xf2cd5c], // amber middle
@@ -1602,12 +1641,16 @@ function buildPathMesh(grid: Grid): Mesh | null {
   for (const tile of tiles) {
     const cx = (tile.x + 0.5) * TILE_SIZE;
     const cz = (tile.y + 0.5) * TILE_SIZE;
+    // Lift the path quad by terrain elevation (Alpha 2.4) so the path
+    // sits on hilly ground instead of being buried in it.
+    const t = grid.get(tile.x, tile.y);
+    const yPath = PATH_LIFT + (t?.elevation ?? 0);
 
     // Centre quad — square, half-width on each side.
     pushQuad(
       positions, colours, indices,
       cx - half, cz - half, cx + half, cz + half,
-      PATH_LIFT, c, vi, ci, ii, v
+      yPath, c, vi, ci, ii, v
     );
     vi += 12; ci += 12; ii += 6; v += 4;
 
@@ -1623,25 +1666,25 @@ function buildPathMesh(grid: Grid): Mesh | null {
     if (connectN) {
       pushQuad(positions, colours, indices,
         cx - half, cz - stubLen, cx + half, cz - half,
-        PATH_LIFT, c, vi, ci, ii, v);
+        yPath, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
     if (connectE) {
       pushQuad(positions, colours, indices,
         cx + half, cz - half, cx + stubLen, cz + half,
-        PATH_LIFT, c, vi, ci, ii, v);
+        yPath, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
     if (connectS) {
       pushQuad(positions, colours, indices,
         cx - half, cz + half, cx + half, cz + stubLen,
-        PATH_LIFT, c, vi, ci, ii, v);
+        yPath, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
     if (connectW) {
       pushQuad(positions, colours, indices,
         cx - stubLen, cz - half, cx - half, cz + half,
-        PATH_LIFT, c, vi, ci, ii, v);
+        yPath, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
   }
@@ -1668,11 +1711,15 @@ function buildPathMesh(grid: Grid): Mesh | null {
  * cleanly even though paths and sidewalks live in different meshes.
  */
 function buildSidewalkMesh(grid: Grid): Mesh | null {
-  const tiles: { x: number; y: number; tier: 'local' | 'avenue' }[] = [];
+  const tiles: { x: number; y: number; tier: 'local' | 'avenue'; elevation: number }[] = [];
   for (const t of grid.iter()) {
     if (!t.road) continue;
     if (t.roadType === 'highway') continue;
-    tiles.push({ x: t.x, y: t.y, tier: t.roadType });
+    // Bridges over water don't get a sidewalk pad — there's nothing
+    // for it to sit on (it would float underwater) and the bridge
+    // deck reads cleanly without one.
+    if (t.bridge) continue;
+    tiles.push({ x: t.x, y: t.y, tier: t.roadType, elevation: t.elevation });
   }
   if (tiles.length === 0) return null;
 
@@ -1699,7 +1746,7 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
     pushQuad(
       positions, colours, indices,
       cx - halfW, cz - halfN, cx + halfE, cz + halfS,
-      SIDEWALK_LIFT, c, vi, ci, ii, v
+      SIDEWALK_LIFT + tile.elevation, c, vi, ci, ii, v
     );
     vi += 12; ci += 12; ii += 6; v += 4;
   }
@@ -1726,6 +1773,33 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
  * one slips through the renderer doesn't push them sideways into
  * nothing.
  */
+/**
+ * Y of the road driving surface at the given tile (Alpha 2.4). Bridges
+ * sit at the absolute deck height; everything else rides the terrain.
+ * Off-grid lookups fall back to the flat road lift so vehicles wrapping
+ * the edge don't snap to y=0.
+ */
+function roadSurfaceY(grid: Grid, x: number, y: number): number {
+  const t = grid.get(x, y);
+  if (!t) return ROAD_LIFT;
+  return t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
+}
+
+/**
+ * Y of the walking surface at the given tile (Alpha 2.4). Mirrors
+ * roadSurfaceY but uses the slightly higher SIDEWALK_LIFT for road
+ * tiles (walker is on the sidewalk pad) and PATH_LIFT for path tiles.
+ * Bridges still override to the deck height — pedestrians cross
+ * bridges at the same level as the road.
+ */
+function walkerSurfaceY(grid: Grid, x: number, y: number): number {
+  const t = grid.get(x, y);
+  if (!t) return SIDEWALK_LIFT;
+  if (t.bridge) return BRIDGE_LIFT;
+  if (t.path && !t.road) return PATH_LIFT + t.elevation;
+  return SIDEWALK_LIFT + t.elevation;
+}
+
 function pedestrianOffsetForTile(grid: Grid, x: number, y: number): number {
   const t = grid.get(x, y);
   if (!t) return 0;

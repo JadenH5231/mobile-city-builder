@@ -2,7 +2,11 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 2.0.** Big pedestrian/transit/traffic overhaul plus UX polish on top of Alpha 1.6. Highlights:
+**Status: Alpha 2.1** — visual polish pass. The placeholder colored boxes for buildings are gone; the city now renders **36 distinct building silhouettes** (3 variants per zone × density tier across R / C / I / Mixed-use × low / med / high). Parks have paths, ponds, benches, and three trees of varying sizes. Cars and buses got real chassis-plus-cabin silhouettes. A street of identical-density tiles now reads as a streetscape.
+
+Below is the rolling Alpha 2.0 baseline:
+
+**Alpha 2.0:** Big pedestrian/transit/traffic overhaul plus UX polish on top of Alpha 1.6. Highlights:
 
 - **Mixed-use C+R zoning** with its own MU low/med/high paint tools. Each tile contributes residents AND commercial jobs. YIMBYs love it, Hometown hates it.
 - **Adaptive traffic lights** — a two-phase controller that measures queue length and allocates green time proportionally. Costs more than a stop sign ($1500 vs $250) but moves ~2-3× the cars at busy junctions because green-direction cars never sit still.

@@ -86,17 +86,18 @@ src/
     Grid.ts           tile container + road-edge graph
     Tile.ts           single-tile struct (terrain, road, path bool)
   simulation/
-    Population.ts     aggregate residents + jobs, derive RCI demand
+    Population.ts     aggregate residents + jobs (incl. mixed-use), derive RCI demand
     Development.ts    demand-driven density growth tick (10 Hz), service-gated L3
     RoadGraph.ts      car adjacency rebuilt on road changes
     PathGraph.ts      pedestrian adjacency: paths + non-highway road tiles
     Pathfinding.ts    A* over any PathfindGraph (RoadGraph or PathGraph)
     Vehicles.ts       car spawn + park-then-return + path-coverage suppression
     Pedestrians.ts    walker spawn + path-following on the pedestrian graph
-    Economy.ts        treasury, tax rates, monthly settlement tick
+    Economy.ts        treasury, tax rates (incl. mixed avg), monthly settlement
     Services.ts       radius sweep that flags hasPower / hasWater / hasPark
     Traffic.ts        per-tile EMA + city-wide stress for demand feedback
-    Buses.ts          bus spawn (sim) + path-following movement; spawn suppression
+    Buses.ts          bus spawn + path-following + sidewalk pull-over dwell
+    TrafficLights.ts  adaptive 2-phase controller: queue-aware green allocation
   persistence/
     SaveGame.ts       IndexedDB single-slot auto-save + restore
   ui/
@@ -241,7 +242,38 @@ on a different machine isn't a forensic exercise.
 - A road tool that paints proper 3D mesh segments (orthogonal **and** diagonal) using an 8-connected diagonal-first rubber band; bulldoze tool reverses it; toolbar at the bottom switches modes.
 - See [`docs/PROGRESS.md`](docs/PROGRESS.md) for per-step detail.
 
-## Status: Alpha 1.6
+## Status: Alpha 2.0
+
+Pedestrian/transit/traffic overhaul + UX polish on top of Alpha 1.6.
+Save schema v6. Highlights (full write-up in `docs/PROGRESS.md`):
+
+- **Mixed-use C+R zoning** — new `mixed` Zone with MU low/med/high paint
+  tools. Each tile contributes half-rate residents AND half-rate
+  commercial jobs; valid R origin AND C destination for cars/walkers.
+  Faction stances: YIMBYs/Transit love, Hometown/NIMBYs hate.
+- **Adaptive traffic lights** (`src/simulation/TrafficLights.ts`) —
+  alternative to stop signs at $1500. Two-phase cycle (vert/horiz);
+  end-of-phase the controller measures the upcoming queue and allocates
+  the next green between [4, 12] sec proportional to demand. Beats
+  stop signs ~2-3× at busy junctions because green-direction cars never
+  sit still.
+- **Sidewalk-side bus stops** — new `Tile.busStop` road attachment.
+  Place via the existing Bus Stop tool on any non-highway road tile;
+  renders as bench + sign on the sidewalk. Buses pull over for ~1.6 s
+  per stop, perpendicularly offset toward the sidewalk so cars pass
+  freely.
+- **Pedestrians 2.5×** — cap 200 → 500, spawn rate 0.0018 → 0.005.
+  Streets feel populated.
+- **Crosswalks** at every walkable intersection.
+- **Pause + variable sim speed** (HUD pill cycles ▶ → ▶▶ → ▶▶▶ → ⏸).
+- **Photo mode** (HUD-hide toggle).
+- **Skippable tutorial** on first launch; re-openable from the budget panel.
+- **Per-cell residents/jobs** in the long-press tile-info panel.
+- **Multi-tile bulldoze toast** with one-tap Undo for strokes > 5 tiles.
+- **Reset City** swapped to inline two-tap arm (iOS standalone-mode
+  ate the previous `confirm()` dialog).
+
+### Status: Alpha 1.6 (carryover)
 
 Pedestrian update on top of Alpha 1.5. Five interlocking pieces (see
 `docs/PROGRESS.md` for the longer write-up):

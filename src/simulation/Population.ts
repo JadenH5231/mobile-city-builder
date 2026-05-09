@@ -6,6 +6,8 @@ import type { Council } from './Council';
 import {
   COMMERCIAL_JOBS,
   INDUSTRIAL_JOBS,
+  MIXED_COMMERCIAL_JOBS,
+  MIXED_RESIDENT_CAPACITY,
   RESIDENT_CAPACITY,
   type Zone
 } from '../types';
@@ -19,7 +21,9 @@ import {
 const STRESS_PENALTY: Record<Exclude<Zone, 'none'>, number> = {
   residential: 0.7,
   commercial: 0.55,
-  industrial: 0.25
+  industrial: 0.25,
+  // Mixed-use takes the average of R and C — half its tile is each.
+  mixed: 0.625
 };
 
 /**
@@ -87,6 +91,11 @@ export class Population {
           break;
         case 'industrial':
           iJobs += INDUSTRIAL_JOBS[t.density] ?? 0;
+          break;
+        case 'mixed':
+          // Mixed-use: half-rate residents AND half-rate commercial jobs.
+          capacity += MIXED_RESIDENT_CAPACITY[t.density] ?? 0;
+          cJobs += MIXED_COMMERCIAL_JOBS[t.density] ?? 0;
           break;
       }
     }

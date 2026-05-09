@@ -459,12 +459,26 @@ export class Renderer {
       const bx = (b % gridWidth) + 0.5;
       const bz = Math.floor(b / gridWidth) + 0.5;
       const t = bus.segmentT;
+      // Pull-over offset: when dwelling at a stop, slide the bus to the
+      // sidewalk on the building-side (perpendicular to direction). The
+      // road centreline stays clear so cars pass freely.
+      let lateral = 0;
+      if (bus.dwellRemaining > 0) {
+        // Offset toward the right of travel — close enough to the bus bay
+        // visual on a typical road tile.
+        lateral = 0.22;
+      }
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.hypot(dx, dz) || 1;
+      const px = -dz / len * lateral;
+      const pz = dx / len * lateral;
       obj.position.set(
-        (ax + (bx - ax) * t) * TILE_SIZE,
+        (ax + dx * t + px) * TILE_SIZE,
         ROAD_LIFT + 0.07,
-        (az + (bz - az) * t) * TILE_SIZE
+        (az + dz * t + pz) * TILE_SIZE
       );
-      obj.rotation.set(0, Math.atan2(bx - ax, bz - az), 0);
+      obj.rotation.set(0, Math.atan2(dx, dz), 0);
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.busesMesh.setMatrixAt(visible, obj.matrix);
@@ -1153,7 +1167,102 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
-  if (arrows.length === 0 && stops.length === 0) return null;
+  // Crosswalks at walkable intersections (Alpha 2.0). Render two thin
+  // light strips (zebra stripes simplified to a single pad) on each side
+  // of an intersection for non-highway road tiles with 3+ neighbours.
+  for (const t of grid.iter()) {
+    if (!t.road || t.roadType === 'highway') continue;
+    if (grid.incidentRoadEdgeCount(t.x, t.y) < 3) continue;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    const roadHalf = ROAD_TIER[t.roadType].width / 2;
+    // Four crosswalk pads — one on each cardinal side, only where the
+    // adjacent tile is also a road (so we have a "thru" approach).
+    const sides: Array<[number, number]> = [
+      [0, -1], [1, 0], [0, 1], [-1, 0]
+    ];
+    for (const [dx, dz] of sides) {
+      const nbr = grid.get(t.x + dx, t.y + dz);
+      if (!nbr || !nbr.road) continue;
+      // Place a small pale pad just outside the road centre, perpendicular
+      // to the approach.
+      const pad = new BoxGeometry(
+        Math.abs(dz) > 0 ? roadHalf * 1.6 : 0.06,
+        0.005,
+        Math.abs(dz) > 0 ? 0.06 : roadHalf * 1.6
+      );
+      pad.translate(cx + dx * (roadHalf + 0.04), ROAD_LIFT + 0.005, cz + dz * (roadHalf + 0.04));
+      stops.push(pad);
+      stopColours.push(0xe8e4d6); // light cement
+    }
+  }
+
+  // Road-attached bus stops (Alpha 2.0). A small bench + sign rendered on
+  // the sidewalk pad of the road tile. Choose the side facing the most
+  // adjacent buildings/zones — that's where the riders are.
+  for (const t of grid.iter()) {
+    if (!t.road || t.roadType === 'highway' || !t.busStop) continue;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    const side = pickStopSide(grid, t.x, t.y);
+    // Sidewalk-edge offset perpendicular to the road centre, on `side`.
+    const off = TILE_SIZE * 0.35;
+    const sx = cx + side[0] * off;
+    const sz = cz + side[1] * off;
+    // Bench: a low flat box.
+    const bench = new BoxGeometry(0.18, 0.04, 0.07);
+    bench.translate(sx, ROAD_LIFT + 0.04, sz);
+    stops.push(bench);
+    stopColours.push(0x6f5f43);
+    // Sign post — yellow lollipop on a thin stem.
+    const stem = new CylinderGeometry(0.013, 0.013, 0.18, 6);
+    stem.translate(sx + side[0] * 0.06, ROAD_LIFT + 0.09, sz + side[1] * 0.06);
+    stops.push(stem);
+    stopColours.push(0x444444);
+    const head = new BoxGeometry(0.07, 0.05, 0.02);
+    head.translate(sx + side[0] * 0.06, ROAD_LIFT + 0.20, sz + side[1] * 0.06);
+    stops.push(head);
+    stopColours.push(0xe5c25a);
+  }
+
+  // Traffic lights — a tall pole at the centre of each lit intersection
+  // with three small disc "lenses" (red/amber/green stack). Static, no
+  // phase animation here; phase state lives in TrafficLights and a future
+  // pass can light up the active lens via vertex colour swap.
+  const lights: BufferGeometry[] = [];
+  const lightColours: number[] = [];
+  for (const t of grid.iter()) {
+    if (!t.trafficLight) continue;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    // Pole.
+    const pole = new CylinderGeometry(0.015, 0.015, 0.32, 6);
+    pole.translate(cx, ROAD_LIFT + 0.16, cz);
+    lights.push(pole);
+    lightColours.push(0x444444);
+    // Housing.
+    const housing = new CylinderGeometry(0.05, 0.05, 0.18, 6);
+    housing.translate(cx, ROAD_LIFT + 0.32 + 0.09, cz);
+    lights.push(housing);
+    lightColours.push(0x222222);
+    // Three lenses — red, amber, green stack.
+    const lensRadius = 0.025;
+    const lensZ = ROAD_LIFT + 0.32;
+    const lenses: Array<[number, number]> = [
+      [lensZ + 0.045, 0xd03a3a], // red on top
+      [lensZ + 0.090, 0xf2cd5c], // amber middle
+      [lensZ + 0.135, 0x4ad06d]  // green bottom
+    ];
+    for (const [y, color] of lenses) {
+      const lens = new CylinderGeometry(lensRadius, lensRadius, 0.012, 8);
+      lens.rotateZ(Math.PI / 2);
+      lens.translate(cx + 0.055, y, cz);
+      lights.push(lens);
+      lightColours.push(color);
+    }
+  }
+
+  if (arrows.length === 0 && stops.length === 0 && lights.length === 0) return null;
   const group = new Group();
   if (arrows.length > 0) {
     const merged = mergeGeoms(arrows, arrowColours);
@@ -1162,6 +1271,11 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
   }
   if (stops.length > 0) {
     const merged = mergeGeoms(stops, stopColours);
+    const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    group.add(mesh);
+  }
+  if (lights.length > 0) {
+    const merged = mergeGeoms(lights, lightColours);
     const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
     group.add(mesh);
   }
@@ -1314,6 +1428,39 @@ function isSidewalkTile(grid: Grid, x: number, y: number): boolean {
   const t = grid.get(x, y);
   if (!t) return false;
   return t.road && t.roadType !== 'highway';
+}
+
+/**
+ * Pick which 4-neighbour side of a road tile to put the bus stop on. Prefers
+ * the direction with a developed building (zone tile with density > 0); falls
+ * back to whichever side isn't a road tile. Returns a unit-length direction
+ * (dx, dz) in tile-space.
+ */
+function pickStopSide(grid: Grid, x: number, y: number): [number, number] {
+  const candidates: Array<[number, number]> = [
+    [0, -1], // N
+    [1, 0],  // E
+    [0, 1],  // S
+    [-1, 0]  // W
+  ];
+  // Score each side by how built-up the neighbour is.
+  let bestSide: [number, number] = candidates[0]!;
+  let bestScore = -Infinity;
+  for (const [dx, dz] of candidates) {
+    const n = grid.get(x + dx, y + dz);
+    let score = 0;
+    if (!n) score = -100;
+    else if (n.road) score = -10;            // can't sit a stop on a road tile
+    else if (n.zone !== 'none' && n.density > 0) score = 5;
+    else if (n.zone !== 'none') score = 2;   // zoned, undeveloped
+    else if (n.building !== 'none') score = 4;
+    else score = 0;                           // grass — fine, just not preferred
+    if (score > bestScore) {
+      bestScore = score;
+      bestSide = [dx, dz];
+    }
+  }
+  return bestSide;
 }
 
 /** Push a flat quad on the XZ plane at height `y`. Mutates the buffers in place. */

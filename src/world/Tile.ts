@@ -22,6 +22,21 @@ export class Tile {
   /** Player-placed stop sign on this road tile. Only meaningful at intersections. */
   stopSign = false;
   /**
+   * Player-placed traffic light on this intersection (Alpha 2.0). Mutually
+   * exclusive with stopSign. Per-tile dynamic state (current phase, queue
+   * estimates) lives in {@link TrafficLights} — the bool here is the
+   * persistent placement flag.
+   */
+  trafficLight = false;
+  /**
+   * Bus stop attached to this road tile (Alpha 2.0). Renders as a sidewalk
+   * fixture, doesn't block car traffic. Different from `Tile.building ===
+   * 'bus_stop'` which is the older standalone-tile form (still supported
+   * for save-game compat). Both forms count for `nearBusStop` suppression
+   * and bus-route waypoints.
+   */
+  busStop = false;
+  /**
    * Walking-path bit (Alpha 1.6). Per-tile, no edge graph — pedestrians treat
    * paths as 4-connected walkable surfaces. Mutually exclusive with road
    * (paths refuse to overwrite roads); CAN sit on top of zoned tiles, in

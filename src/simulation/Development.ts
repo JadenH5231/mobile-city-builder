@@ -75,6 +75,9 @@ export class Development {
       case 'residential': return this.population.demandR;
       case 'commercial': return this.population.demandC;
       case 'industrial': return this.population.demandI;
+      // Mixed-use grows on the average of R + C demand — a healthy
+      // mixed-use tile needs both housing AND commercial pull.
+      case 'mixed': return (this.population.demandR + this.population.demandC) / 2;
       default: return 0;
     }
   }

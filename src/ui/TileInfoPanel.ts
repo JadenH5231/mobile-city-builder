@@ -1,4 +1,14 @@
-import type { Building, RoadType, TerrainType, Zone } from '../types';
+import {
+  COMMERCIAL_JOBS,
+  INDUSTRIAL_JOBS,
+  MIXED_COMMERCIAL_JOBS,
+  MIXED_RESIDENT_CAPACITY,
+  RESIDENT_CAPACITY,
+  type Building,
+  type RoadType,
+  type TerrainType,
+  type Zone
+} from '../types';
 
 export interface TileInfo {
   x: number;
@@ -11,6 +21,8 @@ export interface TileInfo {
   highwayDir: number;
   /** Player-placed stop sign on this road tile. */
   stopSign: boolean;
+  /** Player-placed traffic light on this road tile (Alpha 2.0). */
+  trafficLight: boolean;
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. */
   zoneCap: 0 | 1 | 2 | 3;
@@ -59,6 +71,7 @@ export class TileInfoPanel {
         label += ` →${DIR_LABELS[info.highwayDir]}`;
       }
       if (info.stopSign) label += ' · stop';
+      if (info.trafficLight) label += ' · light';
       parts.push(label);
     }
     if (info.building !== 'none') parts.push(info.building.replace(/_/g, ' '));
@@ -73,6 +86,15 @@ export class TileInfoPanel {
     if (info.hasWater) services.push('water');
     if (info.hasPark) services.push('park');
     if (services.length > 0) parts.push(services.join('+'));
+    // Per-cell capacity readout (Alpha 2.0). Shows residents and jobs the
+    // built tile contributes — zero for undeveloped or unzoned cells.
+    const cap = capacityFor(info.zone, info.density);
+    if (cap.residents > 0 || cap.jobs > 0) {
+      const bits: string[] = [];
+      if (cap.residents > 0) bits.push(`${cap.residents} residents`);
+      if (cap.jobs > 0) bits.push(`${cap.jobs} jobs`);
+      parts.push(bits.join(' · '));
+    }
     this.terrainEl.textContent = parts.join(' · ');
     this.el.classList.remove('hidden');
     this.el.setAttribute('aria-hidden', 'false');
@@ -81,6 +103,25 @@ export class TileInfoPanel {
   hide(): void {
     this.el.classList.add('hidden');
     this.el.setAttribute('aria-hidden', 'true');
+  }
+}
+
+/**
+ * Per-cell residents + jobs derived from zone × density. Mirrors the math
+ * Population.tick uses, so the readout matches what the cell actually
+ * contributes to the citywide aggregates.
+ */
+function capacityFor(zone: Zone, density: number): { residents: number; jobs: number } {
+  if (density <= 0) return { residents: 0, jobs: 0 };
+  switch (zone) {
+    case 'residential': return { residents: RESIDENT_CAPACITY[density] ?? 0, jobs: 0 };
+    case 'commercial': return { residents: 0, jobs: COMMERCIAL_JOBS[density] ?? 0 };
+    case 'industrial': return { residents: 0, jobs: INDUSTRIAL_JOBS[density] ?? 0 };
+    case 'mixed': return {
+      residents: MIXED_RESIDENT_CAPACITY[density] ?? 0,
+      jobs: MIXED_COMMERCIAL_JOBS[density] ?? 0
+    };
+    default: return { residents: 0, jobs: 0 };
   }
 }
 

@@ -60,6 +60,12 @@ const ICON_I = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M3 20V10l5 4V10l5 4V8l8 4v8z"
         stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
 </svg>`;
+const ICON_MU = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M5 11l7-6 7 6v9H5z"
+        stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+  <path d="M9 20v-4h6v4 M5 14h14"
+        stroke="currentColor" stroke-width="1.6" fill="none"/>
+</svg>`;
 /** Tier glyph — same shape, the size hint reads at-a-glance. */
 const ICON_TIER_LOW = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <rect x="9" y="14" width="6" height="6" stroke="currentColor"
@@ -125,6 +131,17 @@ const ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'industrial_high',   label: 'High', icon: ICON_TIER_HIGH }
     ]
   },
+  {
+    kind: 'group',
+    id: 'mixed',
+    label: 'MU',
+    icon: ICON_MU,
+    members: [
+      { kind: 'tool', tool: 'mixed_low',    label: 'Low',  icon: ICON_TIER_LOW },
+      { kind: 'tool', tool: 'mixed_medium', label: 'Med',  icon: ICON_TIER_MED },
+      { kind: 'tool', tool: 'mixed_high',   label: 'High', icon: ICON_TIER_HIGH }
+    ]
+  },
   { kind: 'tool', tool: 'place_power', label: 'Power', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M13 2L4 14h7l-1 8 9-12h-7z"
           stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
@@ -151,6 +168,13 @@ const ITEMS: readonly ToolbarItem[] = [
     <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"
           stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
     <path d="M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>` },
+  { kind: 'tool', tool: 'place_traffic_light', label: 'Light', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="9" y="3" width="6" height="18" rx="1.5"
+          stroke="currentColor" stroke-width="1.6" fill="none"/>
+    <circle cx="12" cy="7"  r="1.4" fill="currentColor"/>
+    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+    <circle cx="12" cy="17" r="1.4" fill="currentColor"/>
   </svg>` },
   { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"

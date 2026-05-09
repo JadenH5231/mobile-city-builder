@@ -34,6 +34,8 @@
       <button id="hud-treasury" type="button" class="pill mono treasury" aria-label="Open budget">$50,000</button>
       <button id="hud-undo" type="button" class="pill action" aria-label="Undo last change" disabled>Undo</button>
       <button id="hud-heatmap" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle traffic heatmap">Heat</button>
+      <button id="hud-speed" type="button" class="pill action speed" aria-label="Cycle simulation speed">▶</button>
+      <button id="hud-photo" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle photo mode">Photo</button>
       <div id="hud-fps" class="pill mono">— fps</div>
     </div>
     <section
@@ -125,6 +127,7 @@
       </div>
 
       <button id="budget-reset" type="button" class="budget__reset">Reset city</button>
+      <button id="budget-show-tutorial" type="button" class="budget__link">Show tutorial again</button>
     </section>
     <section
       id="happiness-panel"
@@ -162,6 +165,50 @@
       </div>
       <div id="happiness-list" class="happiness__list"></div>
     </section>
+    <div
+      id="tutorial"
+      class="tutorial hidden"
+      role="dialog"
+      aria-label="Welcome to Greenmeadow"
+      aria-hidden="true"
+    >
+      <div class="tutorial__sheet">
+        <div class="tutorial__title">Welcome to Greenmeadow</div>
+        <div class="tutorial__step" data-step="1">
+          <div class="tutorial__step-num">1 / 4</div>
+          <div class="tutorial__body">
+            <strong>Roads first.</strong> Pick the Roads tool from the bottom bar and drag to paint. Diagonals work — try a curve.
+          </div>
+        </div>
+        <div class="tutorial__step hidden" data-step="2">
+          <div class="tutorial__step-num">2 / 4</div>
+          <div class="tutorial__body">
+            <strong>Zone next to a road.</strong> Pick R / C / I and drag-paint on grass touching a road. Buildings sprout over a few seconds.
+          </div>
+        </div>
+        <div class="tutorial__step hidden" data-step="3">
+          <div class="tutorial__step-num">3 / 4</div>
+          <div class="tutorial__body">
+            <strong>Drop services.</strong> Power, Water, and a Park within reach unlock high-density. The treasury pill opens taxes + reset.
+          </div>
+        </div>
+        <div class="tutorial__step hidden" data-step="4">
+          <div class="tutorial__step-num">4 / 4</div>
+          <div class="tutorial__body">
+            <strong>Watch the city react.</strong> Tap the Pop pill to read what your factions are saying. Yearly elections decide who sits on your council and what they'll let you build.
+          </div>
+        </div>
+        <div class="tutorial__actions">
+          <button id="tutorial-skip" type="button" class="tutorial__skip">Skip</button>
+          <button id="tutorial-prev" type="button" class="tutorial__nav" disabled>Back</button>
+          <button id="tutorial-next" type="button" class="tutorial__cta">Next</button>
+        </div>
+      </div>
+    </div>
+    <div id="bulldoze-toast" class="toast hidden" role="status" aria-live="polite">
+      <span id="bulldoze-toast-text" class="toast__text">Bulldozed 0 tiles</span>
+      <button id="bulldoze-toast-undo" type="button" class="toast__action">Undo</button>
+    </div>
     <div id="photo-op-banner" class="photo-op hidden" role="alert" aria-live="polite">
       <div id="photo-op-avatar" class="photo-op__avatar">??</div>
       <div id="photo-op-text" class="photo-op__text"></div>

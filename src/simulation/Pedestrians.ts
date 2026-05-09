@@ -20,8 +20,14 @@ import { MAX_PEDESTRIANS, PEDESTRIAN_PALETTE } from '../types';
  */
 
 const MAX_WALK_TILES = 18;
-/** Spawn attempts per resident per real-time second. About 1/3 of car rate. */
-const SPAWN_PER_RESIDENT_PER_SEC = 0.0018;
+/**
+ * Spawn attempts per resident per real-time second. Bumped in Alpha 2.0
+ * — at the previous 0.0018 the streets felt empty for the size of the
+ * cap. 0.005 is roughly equal to the car spawn rate; combined with cap
+ * 500 the visual density now matches a mid-sized European downtown at
+ * peak (~1 walker per tile on busy blocks).
+ */
+const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
 /** Walking speed in tile units per second. Real-feeling: ~5 km/h on a 1m grid. */
 const WALK_SPEED = 0.85;
 
@@ -122,7 +128,13 @@ function pickRandomDevelopedTile(
   let chosen: { x: number; y: number } | null = null;
   let count = 0;
   for (const t of grid.iter()) {
-    if (t.zone !== zone || t.density === 0 || t.road) continue;
+    if (t.density === 0 || t.road) continue;
+    // Mixed-use tiles count as both R origin and C destination — they
+    // hold residents AND commercial jobs.
+    const matches =
+      t.zone === zone ||
+      (t.zone === 'mixed' && (zone === 'residential' || zone === 'commercial'));
+    if (!matches) continue;
     count++;
     if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
   }

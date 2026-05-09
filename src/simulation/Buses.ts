@@ -29,7 +29,17 @@ export interface Bus {
   routeStops: number[];
   /** Index into `routeStops`. -1 means heading from depot to the first stop. */
   legIdx: number;
+  /**
+   * Real-time seconds the bus is dwelling at a stop. While > 0 the bus
+   * holds position, segmentT frozen, and the renderer offsets it
+   * perpendicular to its direction toward the sidewalk to suggest a
+   * pull-over. Set when the bus rolls onto a busStop road tile.
+   */
+  dwellRemaining: number;
 }
+
+/** Real-time seconds buses linger at a stop on arrival. */
+const STOP_DWELL_SEC = 1.6;
 
 /**
  * Buses: one per `bus_depot`, each cycling through every `bus_stop` on the
@@ -55,6 +65,9 @@ export class Buses {
     for (const t of grid.iter()) {
       if (t.building === 'bus_depot') depotTiles.push(t.y * grid.width + t.x);
       else if (t.building === 'bus_stop') stopTiles.push(t.y * grid.width + t.x);
+      // Road-attached stops (Alpha 2.0) join the route directly — their
+      // own road tile IS the stop tile, no nearestRoadTile lookup needed.
+      else if (t.busStop && t.road) stopTiles.push(t.y * grid.width + t.x);
     }
     if (depotTiles.length === 0 || stopTiles.length === 0) return;
 
@@ -91,7 +104,8 @@ export class Buses {
         color: BUS_COLOR,
         depotTile: depotIdx,
         routeStops: stopTiles.slice(),
-        legIdx: -1
+        legIdx: -1,
+        dwellRemaining: 0
       });
     }
   }
@@ -112,6 +126,12 @@ export class Buses {
         }
         continue;
       }
+      // Pull-over dwell: bus is parked at a stop. Freeze movement.
+      if (bus.dwellRemaining > 0) {
+        bus.dwellRemaining = Math.max(0, bus.dwellRemaining - dt);
+        continue;
+      }
+
       const aIdx = bus.pathTiles[bus.segmentIdx]!;
       const bIdx = bus.pathTiles[bus.segmentIdx + 1]!;
       const ax = aIdx % gridWidth;
@@ -130,10 +150,27 @@ export class Buses {
         bus.segmentT -= 1;
         bus.segmentIdx++;
         if (bus.segmentIdx >= bus.pathTiles.length - 1) {
-          // Arrived at the end of the current leg. Plan the next stop.
+          // Arrived at the end of the current leg. Dwell at the stop, then
+          // plan the next leg.
+          const lastIdx = bus.pathTiles[bus.pathTiles.length - 1]!;
+          const lx = lastIdx % gridWidth;
+          const ly = (lastIdx - lx) / gridWidth;
+          const lastTile = grid.get(lx, ly);
+          if (lastTile?.busStop || lastTile?.building === 'bus_stop') {
+            bus.dwellRemaining = STOP_DWELL_SEC;
+          }
           if (!this.replanLeg(bus, grid, roadGraph, pathfinder)) {
             this.buses.splice(i, 1);
           }
+          break;
+        }
+        // Mid-leg pull-over: when crossing into a busStop tile, dwell.
+        const arrivedTile = grid.get(
+          bus.pathTiles[bus.segmentIdx]! % gridWidth,
+          (bus.pathTiles[bus.segmentIdx]! - bus.pathTiles[bus.segmentIdx]! % gridWidth) / gridWidth
+        );
+        if (arrivedTile?.busStop) {
+          bus.dwellRemaining = STOP_DWELL_SEC;
           break;
         }
       }
@@ -195,7 +232,10 @@ export function nearBusStop(grid: Grid, x: number, y: number): boolean {
   const maxY = Math.min(grid.height - 1, y + STOP_CATCHMENT);
   for (let yy = minY; yy <= maxY; yy++) {
     for (let xx = minX; xx <= maxX; xx++) {
-      if (grid.get(xx, yy)?.building === 'bus_stop') return true;
+      const t = grid.get(xx, yy);
+      if (!t) continue;
+      if (t.building === 'bus_stop') return true;
+      if (t.busStop && t.road) return true;
     }
   }
   return false;

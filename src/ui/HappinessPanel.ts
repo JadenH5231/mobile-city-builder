@@ -7,6 +7,7 @@ import {
   bucketOf,
   overallLabel,
   pickComment,
+  pickOppositionTweet,
   type Faction,
   type FactionId,
   type Happiness
@@ -154,8 +155,14 @@ export class HappinessPanel {
       const salt = months + bucketToSalt(bucket) * 7;
       const onCouncil = this.deps.council.isCouncillor(f.id);
       const isOpponent = this.deps.council.isOpponent(f.id);
+      // Opposition leader (Alpha 2.7.2) — replaces the regular mood
+      // comment with a mean tweet attacking the mayor's leadership.
+      // Council members keep their council-mode comment; everyone else
+      // posts the regular bucketed faction comment.
       row.commentEl.textContent = onCouncil
         ? COUNCIL_COMMENTS[f.id]
+        : isOpponent
+        ? pickOppositionTweet(f.id, salt)
         : pickComment(f, h, salt);
       row.barFill.style.width = `${happinessToPct(h)}%`;
       row.barFill.style.background = barColor(h);

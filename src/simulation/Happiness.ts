@@ -769,6 +769,98 @@ export function pickComment(faction: Faction, happiness: number, salt: number): 
 }
 
 /**
+ * Mean-tweet quotes posted by the leader who ran against the player and
+ * lost (Alpha 2.7.2). Each set keeps that leader's voice — Karen's caps
+ * and exclamation points, Marcus's lowercase wonk-Twitter, Bud's folksy
+ * grumbling, Eleanor's fiscal-hawk dry, etc. — but every line is an
+ * attack on the mayor's leadership / record / character. Used in the
+ * Happiness panel: when a faction's row is the opposition, the comment
+ * is replaced with one of these instead of their normal mood comment.
+ */
+export const OPPOSITION_TWEETS: Record<FactionId, readonly string[]> = {
+  nimbys: [
+    "MAYOR. Walk OUR streets and tell me with a straight face this is the city you promised. SHAMEFUL 🏡😡 #Recall",
+    "I LITERALLY warned the council about this. ON THE RECORD. They ignored me. Now look 📋🚫",
+    "Calling this leadership is GENEROUS. We ran a yard-sale better than this administration runs City Hall ✋ #StillKaren",
+    "Three election promises. THREE. Not one delivered. Add it to the list 🧾",
+    "Drove past the lot today. Unsightly. The mayor doesn't care about HOMEOWNERS, only headlines 📰"
+  ],
+  yimbys: [
+    "another month of nothing. the mayor talks about ‘strong neighborhoods' but won't upzone a single corridor 🤡",
+    "looked at the latest budget. priorities are SO out of whack it's almost impressive 📈 down",
+    "if i had a dollar for every time the mayor punted on housing i could afford a down payment 🏚️",
+    "the mayor's idea of bold leadership is a ribbon cutting at the same intersection for the third time 🎀",
+    "mayor of a city with no plan, no spine, and no idea how supply curves work. anyway 🧵"
+  ],
+  environmentalists: [
+    "The mayor's environmental record reads like a corporate press release. The bees deserve better. We all do 🐝",
+    "Concerned to see the administration once again prioritising vanity projects over the canopy plan we submitted in 2024 🌳",
+    "I have submitted comments. I have testified. I have begged. The mayor does not listen 📝",
+    "Our streams will outlive this administration. Probably barely 🏞️",
+    "Calling oneself a 'green mayor' while greenlighting heavy industry is a special kind of doublespeak 🌍"
+  ],
+  hometown: [
+    "Used to be you could walk down Main without seein a backhoe. Mayor wouldn't know our town if it bit em 🚜",
+    "My grandfather built half the buildings on this block with his bare hands. Mayor's bulldozin em with a smile 😤",
+    "Said it before, sayin it again — this fella's runnin our town like a stranger. Cause that's what he is 🇺🇸",
+    "Asked the mayor's office about the corner store closin. Got a press release. PRESS RELEASE 📰",
+    "Whole council let this happen. The mayor most of all. Folks remember at the ballot box 🗳️"
+  ],
+  chamber: [
+    "Met with the mayor about the corridor study. Mayor brought no materials, no plan, and no clue. We need leadership 📊",
+    "City under this administration is the only one in the region with declining permit volume. Coincidence? Doubt it 📉",
+    "I run a business. I sign payroll. The mayor signs photo-op cards. There is a difference 💼",
+    "The mayor's economic strategy is hoping the cycle turns before the next election. It won't 📅",
+    "Investors are noticing. They're moving capital elsewhere. THIS is what bad leadership looks like 🏗️"
+  ],
+  transit: [
+    "the mayor's transit plan is a one-line tweet. that is not a plan, that is a tweet 🚌",
+    "the bus i took to the press conference broke down. the mayor was 30 min late by car. nothing to add",
+    "honestly impressive that an administration can claim to support transit while underfunding the system every single year 📉",
+    "asked the mayor about frequency. they said ‘we're looking at it.' they have been looking at it for THREE YEARS 🚏",
+    "every world-class city has world-class transit. the mayor would not know world-class if it ran them over (with a bus) 🌍"
+  ],
+  drivers: [
+    "Mayor declared war on cars and pretends not to. Look at the budget. Look at the lane diets 🚗💢",
+    "Sat in traffic for 35 min today thanks to the mayor's ‘calming' projects. Calming for who?? 🚦",
+    "This mayor has never met a bus stop they wouldn't put in front of MY driveway. Unbelievable 🛻",
+    "Mayor of a city that's increasingly hostile to the people who actually pay the bills (drivers) 💸",
+    "Bring back the highways. Honestly the only platform I'd run on at this point 🛣️"
+  ],
+  taxpayers: [
+    "Reviewed the line items. Spending is up 14% YoY with no measurable improvement in services. That is mismanagement, plain and simple 📊",
+    "The mayor mistakes activity for accomplishment. There is a difference. The audit will reveal much 🧾",
+    "Asked City Hall for the consultant invoices. Stonewalled. Transparency is not optional 🔎",
+    "Every penny the mayor wastes is a penny our seniors don't get for the things they actually need 👵",
+    "I would describe this administration's fiscal discipline as ‘theoretical.' Generously 💰"
+  ],
+  safer_streets: [
+    "The mayor's safety record is a public-health crisis. We have the data. They do not have the will 🚸",
+    "Another preventable crash this week. Asked the mayor for action. Got thoughts and prayers 🙏",
+    "I am a doctor. I am telling you the trends are bad. The mayor is telling us the trends are fine. One of us is reading the chart 📋",
+    "Lowering speed limits costs nothing. The mayor still won't do it. Why?? 🛑",
+    "Children are walking past intersections we have flagged for YEARS. The mayor's office has not responded. Disgraceful 👧"
+  ],
+  working_families: [
+    "Knocked doors all weekend. Same story everywhere — the mayor's not delivering for regular folks 🚪",
+    "Rent is up. Wages aren't. Mayor's response: a press release. Cool, very helpful 🙃",
+    "Childcare is a crisis. Healthcare is a crisis. The mayor's vacation photos are NOT 📸",
+    "We elected this mayor expecting fight for working families. We got fight for headlines instead 🥊",
+    "Tag your council member. Then tag the mayor. THEN show up to the meeting. They count on us not showing up ✊"
+  ]
+};
+
+/** Pick an opposition tweet for the given faction. `salt` rotates the
+ *  selection slowly (e.g., months elapsed) so the same tweet stays up
+ *  for a while but eventually rolls. */
+export function pickOppositionTweet(faction: FactionId, salt: number): string {
+  const arr = OPPOSITION_TWEETS[faction];
+  if (!arr || arr.length === 0) return '...';
+  const idx = ((salt % arr.length) + arr.length) % arr.length;
+  return arr[idx]!;
+}
+
+/**
  * Owns the per-faction happiness map. Recomputed on demand (panel open,
  * monthly tick, etc.) — pure function of city state, no internal accumulator
  * yet. Future: hook into events for momentum / decay.

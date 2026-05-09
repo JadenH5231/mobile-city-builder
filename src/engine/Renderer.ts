@@ -246,8 +246,9 @@ export class Renderer {
     }
   }
 
-  /** Rebuild the road mesh from current grid edges + stubs. Sidewalks rebuild
-   *  alongside roads (they're a derived render artefact of non-highway tiles). */
+  /** Rebuild the road mesh from current grid edges + stubs. Sidewalks AND
+   *  paths rebuild alongside roads — both have stub-extensions that depend
+   *  on which neighbouring tiles are roads. */
   drawRoads(grid: Grid): void {
     if (this.roadMesh) {
       this.worldGroup.remove(this.roadMesh);
@@ -266,17 +267,8 @@ export class Renderer {
       this.worldGroup.remove(this.roadOrnaments);
       this.roadOrnaments = null;
     }
-    if (this.sidewalkMesh) {
-      this.worldGroup.remove(this.sidewalkMesh);
-      this.sidewalkMesh.geometry.dispose();
-      (this.sidewalkMesh.material as MeshLambertMaterial).dispose();
-      this.sidewalkMesh = null;
-    }
-    const sidewalk = buildSidewalkMesh(grid);
-    if (sidewalk) {
-      this.sidewalkMesh = sidewalk;
-      this.worldGroup.add(this.sidewalkMesh);
-    }
+    this.rebuildSidewalks(grid);
+    this.rebuildPaths(grid);
     const built = buildRoadMesh(grid);
     if (built) {
       this.roadMesh = built.mesh;
@@ -293,8 +285,15 @@ export class Renderer {
     }
   }
 
-  /** Rebuild the walking-path mesh from current path tiles. */
+  /** Rebuild the walking-path mesh from current path tiles. Sidewalks
+   *  rebuild too because their per-side extension depends on which
+   *  neighbours are paths. */
   drawPaths(grid: Grid): void {
+    this.rebuildPaths(grid);
+    this.rebuildSidewalks(grid);
+  }
+
+  private rebuildPaths(grid: Grid): void {
     if (this.pathMesh) {
       this.worldGroup.remove(this.pathMesh);
       this.pathMesh.geometry.dispose();
@@ -305,6 +304,20 @@ export class Renderer {
     if (built) {
       this.pathMesh = built;
       this.worldGroup.add(this.pathMesh);
+    }
+  }
+
+  private rebuildSidewalks(grid: Grid): void {
+    if (this.sidewalkMesh) {
+      this.worldGroup.remove(this.sidewalkMesh);
+      this.sidewalkMesh.geometry.dispose();
+      (this.sidewalkMesh.material as MeshLambertMaterial).dispose();
+      this.sidewalkMesh = null;
+    }
+    const built = buildSidewalkMesh(grid);
+    if (built) {
+      this.sidewalkMesh = built;
+      this.worldGroup.add(this.sidewalkMesh);
     }
   }
 
@@ -1194,26 +1207,34 @@ function buildPathMesh(grid: Grid): Mesh | null {
     );
     vi += 12; ci += 12; ii += 6; v += 4;
 
-    // Stub extensions toward each 4-neighbour that is also a path tile.
-    if (grid.hasPath(tile.x, tile.y - 1)) {
+    // Stub extensions toward each 4-neighbour that's another path tile OR a
+    // walkable (non-highway) road tile. Extending toward roads is what makes
+    // a path "feed into" the road's sidewalk visually — without this the
+    // path would terminate one half-tile shy of the road and read as
+    // disconnected.
+    const connectN = grid.hasPath(tile.x, tile.y - 1) || isSidewalkTile(grid, tile.x, tile.y - 1);
+    const connectE = grid.hasPath(tile.x + 1, tile.y) || isSidewalkTile(grid, tile.x + 1, tile.y);
+    const connectS = grid.hasPath(tile.x, tile.y + 1) || isSidewalkTile(grid, tile.x, tile.y + 1);
+    const connectW = grid.hasPath(tile.x - 1, tile.y) || isSidewalkTile(grid, tile.x - 1, tile.y);
+    if (connectN) {
       pushQuad(positions, colours, indices,
         cx - half, cz - stubLen, cx + half, cz - half,
         PATH_LIFT, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
-    if (grid.hasPath(tile.x + 1, tile.y)) {
+    if (connectE) {
       pushQuad(positions, colours, indices,
         cx + half, cz - half, cx + stubLen, cz + half,
         PATH_LIFT, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
-    if (grid.hasPath(tile.x, tile.y + 1)) {
+    if (connectS) {
       pushQuad(positions, colours, indices,
         cx - half, cz + half, cx + half, cz + stubLen,
         PATH_LIFT, c, vi, ci, ii, v);
       vi += 12; ci += 12; ii += 6; v += 4;
     }
-    if (grid.hasPath(tile.x - 1, tile.y)) {
+    if (connectW) {
       pushQuad(positions, colours, indices,
         cx - stubLen, cz - half, cx - half, cz + half,
         PATH_LIFT, c, vi, ci, ii, v);
@@ -1233,9 +1254,14 @@ function buildPathMesh(grid: Grid): Mesh | null {
 }
 
 /**
- * Sidewalk strips on every non-highway road tile. One slightly larger pad
- * per tile — the road overlay sits on top, so what shows is the SIDEWALK_PAD
- * border around the road. Highway tiles are skipped (they're vehicle-only).
+ * Sidewalk strips on every non-highway road tile. One pad per tile — the
+ * road overlay sits on top, so what shows is the SIDEWALK_PAD border
+ * around the road. Highway tiles are skipped (they're vehicle-only).
+ *
+ * Per-side extension: when a 4-neighbour is a walking-path tile, the pad
+ * stretches all the way to the tile boundary on that side so the path's
+ * stub meets it without a grass gap. Result: paths feed into sidewalks
+ * cleanly even though paths and sidewalks live in different meshes.
  */
 function buildSidewalkMesh(grid: Grid): Mesh | null {
   const tiles: { x: number; y: number; tier: 'local' | 'avenue' }[] = [];
@@ -1251,19 +1277,24 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
   const indices = new Uint32Array(tiles.length * 6);
   const c = new Color();
   c.setHex(SIDEWALK_COLOR);
+  const halfTile = TILE_SIZE * 0.5;
 
   let vi = 0, ci = 0, ii = 0, v = 0;
   for (const tile of tiles) {
     const cx = (tile.x + 0.5) * TILE_SIZE;
     const cz = (tile.y + 0.5) * TILE_SIZE;
-    // Pad extends past the road edge on both sides. For local roads
-    // (width 0.45) the pad runs from 0.45/2 outward by SIDEWALK_PAD; for
-    // avenue (0.65) similarly.
     const roadHalf = ROAD_TIER[tile.tier].width / 2;
-    const half = roadHalf + SIDEWALK_PAD;
+    const baseHalf = roadHalf + SIDEWALK_PAD;
+
+    // Asymmetric pad — extend toward each path-tile neighbour.
+    const halfN = grid.hasPath(tile.x, tile.y - 1) ? halfTile : baseHalf;
+    const halfE = grid.hasPath(tile.x + 1, tile.y) ? halfTile : baseHalf;
+    const halfS = grid.hasPath(tile.x, tile.y + 1) ? halfTile : baseHalf;
+    const halfW = grid.hasPath(tile.x - 1, tile.y) ? halfTile : baseHalf;
+
     pushQuad(
       positions, colours, indices,
-      cx - half, cz - half, cx + half, cz + half,
+      cx - halfW, cz - halfN, cx + halfE, cz + halfS,
       SIDEWALK_LIFT, c, vi, ci, ii, v
     );
     vi += 12; ci += 12; ii += 6; v += 4;
@@ -1276,6 +1307,13 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
   geom.computeVertexNormals();
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(geom, mat);
+}
+
+/** True if the tile at (x, y) is a non-highway road — i.e. it has a sidewalk. */
+function isSidewalkTile(grid: Grid, x: number, y: number): boolean {
+  const t = grid.get(x, y);
+  if (!t) return false;
+  return t.road && t.roadType !== 'highway';
 }
 
 /** Push a flat quad on the XZ plane at height `y`. Mutates the buffers in place. */

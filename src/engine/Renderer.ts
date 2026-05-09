@@ -11,10 +11,10 @@ import {
   EdgesGeometry,
   Group,
   HemisphereLight,
+  IcosahedronGeometry,
   InstancedMesh,
   LineBasicMaterial,
   LineSegments,
-  Matrix4,
   Mesh,
   MeshLambertMaterial,
   MeshStandardMaterial,
@@ -89,7 +89,8 @@ export class Renderer {
   private roadLanes: LineSegments | null = null;
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
   private roadOrnaments: Group | null = null;
-  private treesMesh: InstancedMesh | null = null;
+  /** Trees mesh — merged variant geometry per forest tile (Alpha 2.2). */
+  private treesMesh: Mesh | null = null;
   /** Merged buildings geometry (Alpha 2.1 — variant-driven). */
   private buildingsMesh: Mesh | null = null;
   /** One Group containing per-kind city building Mesh objects. Rebuilt on change. */
@@ -587,46 +588,93 @@ function buildTerrainMesh(grid: Grid): Mesh {
 
 // --- Trees --------------------------------------------------------------
 
-function buildTreesMesh(grid: Grid): InstancedMesh | null {
-  // Count forest tiles first to size the InstancedMesh exactly.
-  let count = 0;
-  for (const t of grid.iter()) if (t.terrain === 'forest') count++;
-  if (count === 0) return null;
-
-  // A simple stylized tree: cone leaves on a stubby cylinder trunk, merged
-  // into one geometry so each instance is one draw.
-  const trunkH = 0.18;
-  const leafH = 0.55;
-  const trunk = new CylinderGeometry(0.06, 0.06, trunkH, 6);
-  trunk.translate(0, trunkH / 2, 0);
-  const leaves = new ConeGeometry(0.28, leafH, 8);
-  leaves.translate(0, trunkH + leafH / 2, 0);
-
-  // Merge into one geometry by hand (avoids importing addons).
-  const tg = mergeGeoms([trunk, leaves], [TREE_TRUNK, TREE_LEAF]);
-
-  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const im = new InstancedMesh(tg, mat, count);
-  const m = new Matrix4();
-  const tmp = new Object3D();
-
-  let i = 0;
+function buildTreesMesh(grid: Grid): Mesh | null {
+  // Tree variety (Alpha 2.2). Each forest tile deterministically picks
+  // one of three silhouettes:
+  //   0 — cone tree: broad single cone on a stout trunk (the original)
+  //   1 — pine tree: narrow tall cone with a stacked smaller cone
+  //   2 — round tree: low sphere-ish foliage on a short trunk
+  // Plus subtle per-tile variation in trunk height, leaf scale, and
+  // foliage tint so a forest reads as woodland rather than a uniform
+  // stamp pattern.
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
   for (const t of grid.iter()) {
     if (t.terrain !== 'forest') continue;
-    // Slight per-tile pseudo-random offset & rotation so the forest looks
-    // less gridded. Deterministic from coords.
     const r = Math.abs(((t.x * 374761393) ^ (t.y * 668265263)) | 0);
     const ox = ((r % 1000) / 1000 - 0.5) * 0.4;
     const oz = (((r >> 10) % 1000) / 1000 - 0.5) * 0.4;
     const rot = ((r >> 20) % 1000) / 1000 * Math.PI * 2;
-    tmp.position.set((t.x + 0.5) * TILE_SIZE + ox, 0, (t.y + 0.5) * TILE_SIZE + oz);
-    tmp.rotation.y = rot;
-    tmp.updateMatrix();
-    m.copy(tmp.matrix);
-    im.setMatrixAt(i++, m);
+    const variant = (r >> 8) % 3;
+    // Scale wobble: 0.85..1.15 — keeps the forest visually loose.
+    const scale = 0.85 + ((r >> 14) & 0xFF) / 255 * 0.30;
+    // Leaf tint variation — three closely related greens.
+    const leafTints = [TREE_LEAF, 0x3a7a3a, 0x4a8e3a];
+    const leafColor = leafTints[(r >> 22) % leafTints.length]!;
+    const cx = (t.x + 0.5) * TILE_SIZE + ox;
+    const cz = (t.y + 0.5) * TILE_SIZE + oz;
+
+    if (variant === 0) {
+      // Cone tree
+      const trunkH = 0.18 * scale;
+      const leafH = 0.55 * scale;
+      const trunk = new CylinderGeometry(0.055 * scale, 0.06 * scale, trunkH, 6);
+      trunk.translate(0, trunkH / 2, 0);
+      trunk.rotateY(rot);
+      trunk.translate(cx, 0, cz);
+      geoms.push(trunk); colours.push(TREE_TRUNK);
+      const leaves = new ConeGeometry(0.28 * scale, leafH, 8);
+      leaves.translate(0, trunkH + leafH / 2, 0);
+      leaves.rotateY(rot);
+      leaves.translate(cx, 0, cz);
+      geoms.push(leaves); colours.push(leafColor);
+    } else if (variant === 1) {
+      // Pine — taller, narrower, two stacked cones for a layered look.
+      const trunkH = 0.16 * scale;
+      const trunk = new CylinderGeometry(0.04 * scale, 0.05 * scale, trunkH, 6);
+      trunk.translate(0, trunkH / 2, 0);
+      trunk.rotateY(rot);
+      trunk.translate(cx, 0, cz);
+      geoms.push(trunk); colours.push(TREE_TRUNK);
+      const lowerH = 0.40 * scale;
+      const lower = new ConeGeometry(0.22 * scale, lowerH, 8);
+      lower.translate(0, trunkH + lowerH / 2, 0);
+      lower.rotateY(rot);
+      lower.translate(cx, 0, cz);
+      geoms.push(lower); colours.push(leafColor);
+      const upperH = 0.30 * scale;
+      const upper = new ConeGeometry(0.15 * scale, upperH, 8);
+      upper.translate(0, trunkH + lowerH * 0.7 + upperH / 2, 0);
+      upper.rotateY(rot);
+      upper.translate(cx, 0, cz);
+      geoms.push(upper); colours.push(leafColor);
+    } else {
+      // Round / oak-style tree — short trunk, octahedral foliage.
+      const trunkH = 0.14 * scale;
+      const trunk = new CylinderGeometry(0.06 * scale, 0.07 * scale, trunkH, 6);
+      trunk.translate(0, trunkH / 2, 0);
+      trunk.rotateY(rot);
+      trunk.translate(cx, 0, cz);
+      geoms.push(trunk); colours.push(TREE_TRUNK);
+      // Octahedron — sphere-ish low-poly leaf cluster.
+      const leafR = 0.30 * scale;
+      const leaves = new ConeGeometry(leafR, leafR * 1.6, 6);
+      leaves.translate(0, trunkH + leafR * 0.8, 0);
+      leaves.rotateY(rot);
+      leaves.translate(cx, 0, cz);
+      geoms.push(leaves); colours.push(leafColor);
+      // Second offset blob for a fuller crown.
+      const blob = new ConeGeometry(leafR * 0.7, leafR * 1.2, 6);
+      blob.translate(leafR * 0.3, trunkH + leafR * 0.8, leafR * 0.2);
+      blob.rotateY(rot);
+      blob.translate(cx, 0, cz);
+      geoms.push(blob); colours.push(leafColor);
+    }
   }
-  im.instanceMatrix.needsUpdate = true;
-  return im;
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(merged, mat);
 }
 
 function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry {
@@ -852,18 +900,45 @@ interface CityBuildingPart {
 function cityBuildingParts(b: string): CityBuildingPart[] {
   switch (b) {
     case 'power_plant':
+      // Polished power plant (Alpha 2.2) — main hall, hyperboloid-ish
+      // cooling tower (cylinder narrowing to a smaller top), exhaust
+      // stack with red cap, plus a vapour puff above the cooling tower.
       return [
-        { makeGeom: () => box(0.65, 0.5, 0.65), color: 0x484848, dx: 0, dy: 0.25, dz: 0 },
-        { makeGeom: () => cyl(0.10, 0.75, 8), color: 0x6e6e6e, dx: 0.18, dy: 0.5 + 0.375, dz: 0 },
-        { makeGeom: () => cyl(0.10, 0.10, 8), color: 0xb14a4a, dx: 0.18, dy: 0.5 + 0.75 + 0.05, dz: 0 }
+        // Main hall.
+        { makeGeom: () => box(0.65, 0.45, 0.55), color: 0x484848, dx: 0, dy: 0.225, dz: 0 },
+        // Roof banding to break up the slab.
+        { makeGeom: () => box(0.66, 0.04, 0.56), color: 0x2e2e2e, dx: 0, dy: 0.46, dz: 0 },
+        // Cooling tower base (wide cylinder).
+        { makeGeom: () => cyl(0.18, 0.25, 12), color: 0x9a9a9a, dx: -0.20, dy: 0.125, dz: 0.18 },
+        // Cooling tower waist (narrower).
+        { makeGeom: () => cyl(0.13, 0.45, 12), color: 0xb0b0b0, dx: -0.20, dy: 0.25 + 0.225, dz: 0.18 },
+        // Cooling tower lip.
+        { makeGeom: () => cyl(0.16, 0.04, 12), color: 0x808080, dx: -0.20, dy: 0.25 + 0.45 + 0.02, dz: 0.18 },
+        // Vapour puff above the cooling tower.
+        { makeGeom: () => sphereLite(0.18), color: 0xe0e6ec, dx: -0.20, dy: 0.25 + 0.45 + 0.20, dz: 0.18 },
+        // Exhaust stack on the hall roof.
+        { makeGeom: () => cyl(0.08, 0.55, 8), color: 0x6e6e6e, dx: 0.20, dy: 0.45 + 0.275, dz: -0.10 },
+        // Stack red top band.
+        { makeGeom: () => cyl(0.085, 0.06, 8), color: 0xb14a4a, dx: 0.20, dy: 0.45 + 0.55 + 0.03, dz: -0.10 }
       ];
     case 'water_tower':
+      // Polished water tower (Alpha 2.2) — cross-braced legs, ladder
+      // strip up one side, dome top, drain pipe.
       return [
-        { makeGeom: () => box(0.10, 0.55, 0.10), color: 0x2f3f4a, dx: -0.15, dy: 0.275, dz: -0.15 },
-        { makeGeom: () => box(0.10, 0.55, 0.10), color: 0x2f3f4a, dx: 0.15, dy: 0.275, dz: -0.15 },
-        { makeGeom: () => box(0.10, 0.55, 0.10), color: 0x2f3f4a, dx: -0.15, dy: 0.275, dz: 0.15 },
-        { makeGeom: () => box(0.10, 0.55, 0.10), color: 0x2f3f4a, dx: 0.15, dy: 0.275, dz: 0.15 },
-        { makeGeom: () => cyl(0.32, 0.40, 12), color: 0x4d8eb9, dx: 0, dy: 0.55 + 0.20, dz: 0 }
+        // Four corner legs.
+        { makeGeom: () => box(0.07, 0.55, 0.07), color: 0x2f3f4a, dx: -0.18, dy: 0.275, dz: -0.18 },
+        { makeGeom: () => box(0.07, 0.55, 0.07), color: 0x2f3f4a, dx:  0.18, dy: 0.275, dz: -0.18 },
+        { makeGeom: () => box(0.07, 0.55, 0.07), color: 0x2f3f4a, dx: -0.18, dy: 0.275, dz:  0.18 },
+        { makeGeom: () => box(0.07, 0.55, 0.07), color: 0x2f3f4a, dx:  0.18, dy: 0.275, dz:  0.18 },
+        // Cross-braces (X pattern on the south face).
+        { makeGeom: () => box(0.42, 0.022, 0.022), color: 0x222a32, dx: 0, dy: 0.32, dz: -0.18 },
+        { makeGeom: () => box(0.42, 0.022, 0.022), color: 0x222a32, dx: 0, dy: 0.20, dz:  0.18 },
+        // Tank — fatter cylinder.
+        { makeGeom: () => cyl(0.32, 0.40, 12), color: 0x4d8eb9, dx: 0, dy: 0.55 + 0.20, dz: 0 },
+        // Cap dome (cone) on top.
+        { makeGeom: () => cone(0.32, 0.14, 12), color: 0x3e7aa0, dx: 0, dy: 0.55 + 0.40 + 0.07, dz: 0 },
+        // Drain pipe down one leg to the ground.
+        { makeGeom: () => cyl(0.018, 0.55, 6), color: 0x707880, dx: 0.20, dy: 0.275, dz: 0 }
       ];
     case 'park':
       // Polished park (Alpha 2.1) — green pad, central pond, two
@@ -901,9 +976,23 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => box(0.30, 0.04, 0.18), color: 0xe5c25a, dx: 0, dy: 0.45 + 0.02, dz: 0 }
       ];
     case 'bus_depot':
+      // Polished depot (Alpha 2.2) — main building + 3 yellow bay-marker
+      // strips on the apron + a roof sign so it reads as a transit depot.
       return [
-        { makeGeom: () => box(0.85, 0.45, 0.65), color: 0xc77a2a, dx: 0, dy: 0.225, dz: 0 },
-        { makeGeom: () => box(0.85, 0.06, 0.65), color: 0x854f1c, dx: 0, dy: 0.48, dz: 0 }
+        // Apron base.
+        { makeGeom: () => box(0.85, 0.04, 0.85), color: 0x6a6a6a, dx: 0, dy: 0.02, dz: 0 },
+        // Bay markers — three yellow stripes on the apron.
+        { makeGeom: () => box(0.04, 0.05, 0.30), color: 0xeec453, dx: -0.20, dy: 0.025, dz: 0.22 },
+        { makeGeom: () => box(0.04, 0.05, 0.30), color: 0xeec453, dx:  0.00, dy: 0.025, dz: 0.22 },
+        { makeGeom: () => box(0.04, 0.05, 0.30), color: 0xeec453, dx:  0.20, dy: 0.025, dz: 0.22 },
+        // Main depot building (set back from the apron).
+        { makeGeom: () => box(0.85, 0.42, 0.45), color: 0xc77a2a, dx: 0, dy: 0.04 + 0.21, dz: -0.18 },
+        // Roof line.
+        { makeGeom: () => box(0.85, 0.05, 0.45), color: 0x854f1c, dx: 0, dy: 0.04 + 0.42 + 0.025, dz: -0.18 },
+        // Garage door — wide darker panel on the apron-facing wall.
+        { makeGeom: () => box(0.55, 0.32, 0.012), color: 0x6a3818, dx: 0, dy: 0.04 + 0.16, dz: -0.18 + 0.225 + 0.005 },
+        // Yellow sign at the roofline.
+        { makeGeom: () => box(0.30, 0.10, 0.014), color: 0xeec453, dx: 0, dy: 0.04 + 0.42 + 0.05, dz: -0.18 + 0.225 + 0.008 }
       ];
     default:
       return [];
@@ -913,6 +1002,11 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
 function box(w: number, h: number, d: number): BufferGeometry {
   const g = new BoxGeometry(w, h, d);
   return g;
+}
+function sphereLite(r: number): BufferGeometry {
+  // Detail 0 = octahedron, detail 1 = 42 verts. Detail 1 reads as a
+  // believable cloud puff or rounded cap without the smooth-sphere cost.
+  return new IcosahedronGeometry(r, 1);
 }
 function cyl(r: number, h: number, segs: number): BufferGeometry {
   const g = new CylinderGeometry(r, r, h, segs);
@@ -1033,7 +1127,10 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   const yLift = ROAD_LIFT;
 
   // --- edge quads ---
-  const lanePositions: number[] = [];
+  // Yellow stripes: local dashed centerline + avenue solid double-yellow.
+  const yellowLanePositions: number[] = [];
+  // White stripes: highway shoulder lines.
+  const whiteLanePositions: number[] = [];
   for (const e of edges) {
     const ta = grid.get(e.ax, e.ay);
     const tb = grid.get(e.bx, e.by);
@@ -1067,15 +1164,39 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 3;
     v += 4;
 
-    // Centre-line stripe — drawn for local + avenue. Highway gets directional
-    // arrows instead (see buildRoadOrnamentsGroup).
-    if (tier !== 'highway') {
-      const yStripe = yLift + 0.001;
-      lanePositions.push(
+    // Lane stripes (Alpha 2.2 polish):
+    //  - Local: dashed yellow centreline (two short dashes per edge).
+    //  - Avenue: solid double-yellow centreline (two parallel solid lines).
+    //  - Highway: white solid edge stripes near each shoulder.
+    const yStripe = yLift + 0.001;
+    if (tier === 'local') {
+      yellowLanePositions.push(
         ax + dx * 0.18, yStripe, az + dz * 0.18,
         ax + dx * 0.42, yStripe, az + dz * 0.42,
         ax + dx * 0.58, yStripe, az + dz * 0.58,
         ax + dx * 0.82, yStripe, az + dz * 0.82
+      );
+    } else if (tier === 'avenue') {
+      // Two solid yellow lines straddling the centreline by ~0.04 tile.
+      const off = 0.04;
+      const opx = px / half * off;
+      const opz = pz / half * off;
+      yellowLanePositions.push(
+        ax + opx, yStripe, az + opz,
+        bx + opx, yStripe, bz + opz,
+        ax - opx, yStripe, az - opz,
+        bx - opx, yStripe, bz - opz
+      );
+    } else {
+      // Highway — white edge stripes just inside the shoulder.
+      const inset = 0.04; // pulled in slightly from the actual edge
+      const sx = px - (px / half) * inset;
+      const sz = pz - (pz / half) * inset;
+      whiteLanePositions.push(
+        ax + sx, yStripe, az + sz,
+        bx + sx, yStripe, bz + sz,
+        ax - sx, yStripe, az - sz,
+        bx - sx, yStripe, bz - sz
       );
     }
   }
@@ -1114,11 +1235,22 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   });
   const mesh = new Mesh(geom, mat);
 
+  // Two LineSegments objects — yellow (local + avenue centerlines) and
+  // white (highway shoulder stripes). Returning the white set as part of
+  // the mesh group is cleaner than a third return field; we tack it onto
+  // the mesh as a child so worldGroup tracks both via the same root.
   let lanes: LineSegments | null = null;
-  if (lanePositions.length > 0) {
+  if (yellowLanePositions.length > 0) {
     const lg = new BufferGeometry();
-    lg.setAttribute('position', new BufferAttribute(new Float32Array(lanePositions), 3));
+    lg.setAttribute('position', new BufferAttribute(new Float32Array(yellowLanePositions), 3));
     lanes = new LineSegments(lg, new LineBasicMaterial({ color: ROAD_LANE }));
+  }
+  if (whiteLanePositions.length > 0) {
+    const wg = new BufferGeometry();
+    wg.setAttribute('position', new BufferAttribute(new Float32Array(whiteLanePositions), 3));
+    const whiteLines = new LineSegments(wg, new LineBasicMaterial({ color: 0xe8e8e8 }));
+    if (lanes) lanes.add(whiteLines);
+    else lanes = whiteLines;
   }
 
   return { mesh, lanes };
@@ -1197,33 +1329,44 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
-  // Crosswalks at walkable intersections (Alpha 2.0). Render two thin
-  // light strips (zebra stripes simplified to a single pad) on each side
-  // of an intersection for non-highway road tiles with 3+ neighbours.
+  // Zebra crosswalks (Alpha 2.2 — was a single pad in 2.0). Four cardinal
+  // approaches at each walkable intersection get a striped pattern: 4
+  // alternating white pads spanning the road width, perpendicular to the
+  // approach direction. Reads unmistakably as a crosswalk.
   for (const t of grid.iter()) {
     if (!t.road || t.roadType === 'highway') continue;
     if (grid.incidentRoadEdgeCount(t.x, t.y) < 3) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
     const roadHalf = ROAD_TIER[t.roadType].width / 2;
-    // Four crosswalk pads — one on each cardinal side, only where the
-    // adjacent tile is also a road (so we have a "thru" approach).
     const sides: Array<[number, number]> = [
       [0, -1], [1, 0], [0, 1], [-1, 0]
     ];
+    const STRIPE_COUNT = 4;
+    const STRIPE_WIDTH = 0.04;
+    const STRIPE_GAP = 0.02;
+    const totalSpan = STRIPE_COUNT * STRIPE_WIDTH + (STRIPE_COUNT - 1) * STRIPE_GAP;
     for (const [dx, dz] of sides) {
       const nbr = grid.get(t.x + dx, t.y + dz);
       if (!nbr || !nbr.road) continue;
-      // Place a small pale pad just outside the road centre, perpendicular
-      // to the approach.
-      const pad = new BoxGeometry(
-        Math.abs(dz) > 0 ? roadHalf * 1.6 : 0.06,
-        0.005,
-        Math.abs(dz) > 0 ? 0.06 : roadHalf * 1.6
-      );
-      pad.translate(cx + dx * (roadHalf + 0.04), ROAD_LIFT + 0.005, cz + dz * (roadHalf + 0.04));
-      stops.push(pad);
-      stopColours.push(0xe8e4d6); // light cement
+      // Lay stripes spanning the road width (perpendicular to approach).
+      // For an N approach (dx=0, dz=-1), stripes are oriented E-W and
+      // stacked along Z (the approach direction).
+      for (let s = 0; s < STRIPE_COUNT; s++) {
+        const stripeOffset = -totalSpan / 2 + s * (STRIPE_WIDTH + STRIPE_GAP) + STRIPE_WIDTH / 2;
+        const stripe = new BoxGeometry(
+          Math.abs(dz) > 0 ? roadHalf * 1.7 : STRIPE_WIDTH,
+          0.005,
+          Math.abs(dz) > 0 ? STRIPE_WIDTH : roadHalf * 1.7
+        );
+        stripe.translate(
+          cx + dx * (roadHalf + 0.02) + (Math.abs(dz) > 0 ? 0 : stripeOffset),
+          ROAD_LIFT + 0.005,
+          cz + dz * (roadHalf + 0.02) + (Math.abs(dz) > 0 ? stripeOffset : 0)
+        );
+        stops.push(stripe);
+        stopColours.push(0xf2efe5); // bright white
+      }
     }
   }
 

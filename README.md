@@ -2,7 +2,9 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 2.1** — visual polish pass. The placeholder colored boxes for buildings are gone; the city now renders **36 distinct building silhouettes** (3 variants per zone × density tier across R / C / I / Mixed-use × low / med / high). Parks have paths, ponds, benches, and three trees of varying sizes. Cars and buses got real chassis-plus-cabin silhouettes. A street of identical-density tiles now reads as a streetscape.
+**Status: Alpha 2.2** — second visual polish pass: every R / C / MU building now wears window bands and a ground-floor door or lit shopfront; trees come in three silhouettes (cone, layered pine, round oak); avenues have a solid double-yellow median; highways have white shoulder stripes; intersections show proper zebra crosswalks; the power plant grew a hyperboloid cooling tower with a vapour puff; the water tower has cross-bracing, a dome cap, and a drain pipe; bus depots got a marked apron with bay stripes and signage. Industrial stays windowless to keep the warehouse genre cue.
+
+**Alpha 2.1** — visual polish pass. The placeholder colored boxes for buildings are gone; the city now renders **36 distinct building silhouettes** (3 variants per zone × density tier across R / C / I / Mixed-use × low / med / high). Parks have paths, ponds, benches, and three trees of varying sizes. Cars and buses got real chassis-plus-cabin silhouettes. A street of identical-density tiles now reads as a streetscape.
 
 Below is the rolling Alpha 2.0 baseline:
 

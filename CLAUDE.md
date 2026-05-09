@@ -267,7 +267,28 @@ on a different machine isn't a forensic exercise.
 - **Save/load** to IndexedDB, schema v6, auto-save every 30 s.
 - **HUD QOL:** pause + 2× / 3× sim speed, photo mode, skippable tutorial, multi-tile bulldoze toast, traffic heatmap, undo (20-deep).
 
-## Status: Alpha 2.1
+## Status: Alpha 2.2
+
+Second visual polish pass on top of 2.1:
+
+- **Facade detail** auto-emitted on every R / C / MU body: window
+  bands wrapping all four faces (count scales with body height) +
+  ground-floor element (door for residential, lit shopfront for
+  commercial / mixed-use podium). Setback towers also get window
+  banding so high-rises don't read as blank slabs. Industrial stays
+  windowless to keep the warehouse genre cue.
+- **Tree variety** — three silhouettes picked deterministically per
+  forest tile (cone, layered pine, round oak with octahedral foliage),
+  per-tile scale and leaf-tint wobble.
+- **Road striping** — local stays dashed yellow; avenues now have a
+  solid double-yellow median; highways get white shoulder edge stripes.
+- **Zebra crosswalks** — replaced the single pad with 4 alternating
+  bright-white stripes per cardinal approach.
+- **City building polish** — power plant has a hyperboloid-ish cooling
+  tower with vapour puff; water tower has cross-bracing, dome cap, and
+  drain pipe; bus depot has apron + yellow bay markers + signage.
+
+### Status: Alpha 2.1 (carryover)
 
 Visual polish pass on top of Alpha 2.0:
 

@@ -1,5 +1,10 @@
 import type { Grid } from '../world/Grid';
-import { LUMBER_AMP, LUMBER_PERIOD_MONTHS } from '../types';
+import {
+  LUMBER_AMP,
+  LUMBER_PERIOD_MONTHS,
+  PRODUCE_AMP,
+  PRODUCE_PERIOD_MONTHS
+} from '../types';
 
 /**
  * Global market simulation (Alpha 2.7) — the slice of the world
@@ -60,5 +65,18 @@ export class GlobalMarket {
     const primary = Math.sin(t * Math.PI * 2);
     const secondary = Math.sin(t * Math.PI * 5) * 0.18;
     return 1.0 + LUMBER_AMP * (primary + secondary);
+  }
+
+  /**
+   * Multiplier on global-market produce revenue this month (Alpha 2.7.1).
+   * Same shape as `lumberPrice` but with a 12-month period offset by π so
+   * lumber and produce don't peak at the same month — diversifying
+   * smooths cash flow.
+   */
+  producePrice(monthsElapsed: number): number {
+    const t = (monthsElapsed % PRODUCE_PERIOD_MONTHS) / PRODUCE_PERIOD_MONTHS;
+    const primary = Math.sin(t * Math.PI * 2 + Math.PI);
+    const secondary = Math.sin(t * Math.PI * 4 + 0.7) * 0.20;
+    return 1.0 + PRODUCE_AMP * (primary + secondary);
   }
 }

@@ -305,6 +305,8 @@ export class Grid {
       if (t.road || t.zone !== 'none' || t.building !== 'none') return false;
       // Forestry-specific: only on forest terrain (Alpha 2.7).
       if (b === 'forestry' && t.terrain !== 'forest') return false;
+      // Farm-specific: only on grass terrain (Alpha 2.7.1).
+      if (b === 'farm' && t.terrain !== 'grass') return false;
     }
     if (t.building === b) return false;
     t.building = b;

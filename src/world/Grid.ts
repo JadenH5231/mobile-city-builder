@@ -1,5 +1,6 @@
 import { Tile } from './Tile';
-import type { Building, RoadType, TerrainType, Zone } from '../types';
+import { generateTerrain } from './TerrainGenerator';
+import type { Building, RoadType, Zone } from '../types';
 
 /**
  * A road edge connects two adjacent tiles (4- or 8-connected). We pack the
@@ -33,22 +34,26 @@ export class Grid {
   }
 
   /**
-   * Deterministic placeholder generator. Mostly grass with sprinkled forests
-   * — gives the eye something to anchor on while we test camera + zoom.
+   * Procedural map generator (Alpha 2.3). Two octaves of value noise drive
+   * an elevation field; low pockets become lakes, mid-elevation grass
+   * gets forest clusters, and there's a 70% chance of a meandering river
+   * carved from one map edge to another. Sand spawns automatically along
+   * any water shoreline. See {@link generateTerrain} for the algorithm.
+   *
+   * Seed comes from `Date.now()` on a fresh map so each "Reset City" gets
+   * a different world — but the per-tile result is what `SaveGame`
+   * persists, so reload restores the exact same world.
    */
   private generate(): void {
+    const specs = generateTerrain(this.width, this.height, { seed: Date.now() });
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        const terrain = this.placeholderTerrain(x, y);
-        this.tiles[y * this.width + x] = new Tile(x, y, terrain);
+        const spec = specs[y * this.width + x]!;
+        const tile = new Tile(x, y, spec.terrain);
+        tile.elevation = spec.elevation;
+        this.tiles[y * this.width + x] = tile;
       }
     }
-  }
-
-  private placeholderTerrain(x: number, y: number): TerrainType {
-    const h = Math.abs(((x * 374761393) ^ (y * 668265263)) | 0) % 100;
-    if (h < 6) return 'forest';
-    return 'grass';
   }
 
   // --- Tile access -------------------------------------------------------
@@ -94,6 +99,10 @@ export class Grid {
       t.resetDevelopment();
       // Roads also overwrite walking paths on the same tile.
       t.path = false;
+      // Auto-bridge: a road painted on a water tile becomes a bridge.
+      // The renderer elevates the road plane and drops support pillars.
+      // Land roads have bridge=false (set defensively).
+      t.bridge = t.terrain === 'water';
       return true;
     } else {
       if (!t.road) return false;

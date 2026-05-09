@@ -33,6 +33,7 @@ import {
   PATH_COLOR,
   PATH_LIFT,
   PATH_WIDTH,
+  BRIDGE_LIFT,
   ROAD_LIFT,
   ROAD_TIER,
   SIDEWALK_COLOR,
@@ -60,11 +61,20 @@ import type { Vehicles } from '../simulation/Vehicles';
  * art lives in code.
  */
 const TERRAIN_COLORS: Record<TerrainType, number> = {
+  // Slight ground-tone variation by terrain. Grass is the alpha-1 colour.
+  // Forest is darker green so cone-trees pop. Water is a richer blue
+  // (Alpha 2.3 — the old 0x3a7ec2 felt washed out next to land). Sand
+  // is the alpha-1 dune colour.
   grass: 0x6aa84f,
   forest: 0x4d8442,
-  water: 0x3a7ec2,
+  water: 0x2c6fa8,
   sand: 0xddc174
 };
+
+/** Slight tint applied to elevated tiles so hills aren't pure flat colour. */
+const HILL_HIGHLIGHT = 0x7bb558;
+/** Darker shade for valley floors / shaded grass. */
+const VALLEY_TINT = 0x5d9744;
 
 const ROAD_LANE = 0xf2cd5c;
 const SELECTION_COLOR = 0xffd84d;
@@ -551,14 +561,33 @@ export class Renderer {
 // --- Terrain ------------------------------------------------------------
 
 function buildTerrainMesh(grid: Grid): Mesh {
-  // One vertex-coloured plane covering the whole grid. We split it into
-  // (width × height) quads so each tile can have its own colour. Two
-  // triangles per tile, vertex-coloured.
+  // Vertex-coloured plane covering the whole grid (Alpha 2.3 — corner
+  // vertices average elevation across the up-to-4 tiles meeting there
+  // so hills slope smoothly instead of stair-stepping). Each tile is
+  // still 4 unique vertices so per-tile colour can vary, but Y values
+  // are derived from the shared corner average, giving the visual of
+  // shared corners without losing per-tile colour control.
   const totalTiles = grid.width * grid.height;
   const positions = new Float32Array(totalTiles * 4 * 3);
   const colours = new Float32Array(totalTiles * 4 * 3);
   const indices = new Uint32Array(totalTiles * 6);
   const c = new Color();
+
+  // Pre-compute corner elevations: corner (cx, cy) sits at the meeting
+  // of tiles (cx-1, cy-1), (cx, cy-1), (cx-1, cy), (cx, cy). Average
+  // their elevations (treating off-map as 0).
+  const cornerElev = (cx: number, cy: number): number => {
+    let sum = 0;
+    let n = 0;
+    for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]] as const) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= grid.width || ny >= grid.height) continue;
+      sum += grid.get(nx, ny)!.elevation;
+      n++;
+    }
+    return n === 0 ? 0 : sum / n;
+  };
 
   let vi = 0;
   let ii = 0;
@@ -567,18 +596,31 @@ function buildTerrainMesh(grid: Grid): Mesh {
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
       const tile = grid.get(x, y)!;
-      c.setHex(TERRAIN_COLORS[tile.terrain] ?? TERRAIN_COLORS.grass);
+      // Tint by elevation: brighten hilltops, darken valleys for grass
+      // so terrain reads as 3D even on flat-shaded vertex colours.
+      const baseHex = TERRAIN_COLORS[tile.terrain] ?? TERRAIN_COLORS.grass;
+      if (tile.terrain === 'grass' && tile.elevation > 0.10) {
+        c.setHex(HILL_HIGHLIGHT);
+      } else if (tile.terrain === 'grass' && tile.elevation < -0.02) {
+        c.setHex(VALLEY_TINT);
+      } else {
+        c.setHex(baseHex);
+      }
 
       const x0 = x * TILE_SIZE;
       const x1 = (x + 1) * TILE_SIZE;
       const z0 = y * TILE_SIZE;
       const z1 = (y + 1) * TILE_SIZE;
+      // Four corner elevations (averaged across neighbours).
+      const yNW = cornerElev(x,     y);
+      const yNE = cornerElev(x + 1, y);
+      const ySE = cornerElev(x + 1, y + 1);
+      const ySW = cornerElev(x,     y + 1);
 
-      // Four corners (y=0, the ground plane).
-      positions[vi++] = x0; positions[vi++] = 0; positions[vi++] = z0;
-      positions[vi++] = x1; positions[vi++] = 0; positions[vi++] = z0;
-      positions[vi++] = x1; positions[vi++] = 0; positions[vi++] = z1;
-      positions[vi++] = x0; positions[vi++] = 0; positions[vi++] = z1;
+      positions[vi++] = x0; positions[vi++] = yNW; positions[vi++] = z0;
+      positions[vi++] = x1; positions[vi++] = yNE; positions[vi++] = z0;
+      positions[vi++] = x1; positions[vi++] = ySE; positions[vi++] = z1;
+      positions[vi++] = x0; positions[vi++] = ySW; positions[vi++] = z1;
 
       for (let i = 0; i < 4; i++) {
         colours[v * 3 + i * 3 + 0] = c.r;
@@ -775,16 +817,15 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
 function buildBuildingsMesh(grid: Grid): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
-  // ROAD_LIFT * 0.5 lift so building bases sit just above the terrain plane
-  // and avoid z-fighting with the zone overlay underneath.
-  const yLift = ROAD_LIFT * 0.5;
+  // Per-tile lift = ROAD_LIFT/2 (avoid z-fighting with zone overlay)
+  // PLUS the tile's terrain elevation (Alpha 2.3) so buildings sit on
+  // the actual hill rather than buried in it.
+  const baseLift = ROAD_LIFT * 0.5;
   for (const t of grid.iter()) {
     if (t.zone === 'none' || t.road || t.density === 0) continue;
     const parts = buildVariantParts(t.zone, t.density, t.x, t.y);
+    const yLift = baseLift + t.elevation;
     for (const p of parts) {
-      // BuildingVariants positions geometry in tile units; convert to world.
-      // (TILE_SIZE = 1 for now so this is a no-op, but stays correct if the
-      // tile pitch ever changes.)
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       if (yLift !== 0) p.geom.translate(0, yLift, 0);
       geoms.push(p.geom);
@@ -1171,10 +1212,16 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const px = -dz / len * half;
     const pz = dx / len * half;
 
-    positions[vi++] = ax + px; positions[vi++] = yLift; positions[vi++] = az + pz;
-    positions[vi++] = bx + px; positions[vi++] = yLift; positions[vi++] = bz + pz;
-    positions[vi++] = bx - px; positions[vi++] = yLift; positions[vi++] = bz - pz;
-    positions[vi++] = ax - px; positions[vi++] = yLift; positions[vi++] = az - pz;
+    // Per-endpoint elevation: bridge tiles lift the road deck to
+    // BRIDGE_LIFT; land roads stay at ROAD_LIFT. A bridge tile next to
+    // a land tile naturally produces a ramp because the two endpoint
+    // y values differ along the segment.
+    const yA = ta?.bridge ? BRIDGE_LIFT : yLift;
+    const yB = tb?.bridge ? BRIDGE_LIFT : yLift;
+    positions[vi++] = ax + px; positions[vi++] = yA; positions[vi++] = az + pz;
+    positions[vi++] = bx + px; positions[vi++] = yB; positions[vi++] = bz + pz;
+    positions[vi++] = bx - px; positions[vi++] = yB; positions[vi++] = bz - pz;
+    positions[vi++] = ax - px; positions[vi++] = yA; positions[vi++] = az - pz;
     for (let k = 0; k < 4; k++) {
       colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
     }
@@ -1186,7 +1233,12 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     //  - Local: dashed yellow centreline (two short dashes per edge).
     //  - Avenue: solid double-yellow centreline (two parallel solid lines).
     //  - Highway: white solid edge stripes near each shoulder.
+    // Bridges keep stripes if both ends are land-level; if either end is
+    // bridge we skip stripes (they'd float in mid-air on the ramp).
     const yStripe = yLift + 0.001;
+    if (ta?.bridge || tb?.bridge) {
+      // Skip stripes on bridge segments; deck colour is enough.
+    } else
     if (tier === 'local') {
       yellowLanePositions.push(
         ax + dx * 0.18, yStripe, az + dz * 0.18,
@@ -1228,10 +1280,11 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     c.setHex(tierProps.color);
     const cx = (s.x + 0.5) * TILE_SIZE;
     const cz = (s.y + 0.5) * TILE_SIZE;
-    positions[vi++] = cx - half; positions[vi++] = yLift; positions[vi++] = cz - half;
-    positions[vi++] = cx + half; positions[vi++] = yLift; positions[vi++] = cz - half;
-    positions[vi++] = cx + half; positions[vi++] = yLift; positions[vi++] = cz + half;
-    positions[vi++] = cx - half; positions[vi++] = yLift; positions[vi++] = cz + half;
+    const stubY = t?.bridge ? BRIDGE_LIFT : yLift;
+    positions[vi++] = cx - half; positions[vi++] = stubY; positions[vi++] = cz - half;
+    positions[vi++] = cx + half; positions[vi++] = stubY; positions[vi++] = cz - half;
+    positions[vi++] = cx + half; positions[vi++] = stubY; positions[vi++] = cz + half;
+    positions[vi++] = cx - half; positions[vi++] = stubY; positions[vi++] = cz + half;
     for (let k = 0; k < 4; k++) {
       colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
     }
@@ -1453,7 +1506,48 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
-  if (arrows.length === 0 && stops.length === 0 && lights.length === 0) return null;
+  // Bridge pillars (Alpha 2.3) — for each bridge tile (road tile flagged
+  // as bridge by Grid.setRoad), drop two short stone pillars from the
+  // water surface up to the bridge deck, on either side of the road
+  // perpendicular axis. Determines axis from the dominant incident-edge
+  // direction so pillars stand sensibly under E-W or N-S spans alike.
+  const pillars: BufferGeometry[] = [];
+  const pillarColours: number[] = [];
+  for (const t of grid.iter()) {
+    if (!t.road || !t.bridge) continue;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    // Approximate axis: look at incident road edges; if any edge is
+    // horizontal (dx != 0, dz == 0) treat the bridge as east-west, else
+    // north-south. Pillars sit perpendicular to that axis so they're
+    // under the edges of the road deck.
+    let horizontal = false;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (dx === 0 && dy === 0) continue;
+        if (grid.hasRoadEdge(t.x, t.y, t.x + dx, t.y + dy)) {
+          if (Math.abs(dx) > Math.abs(dy)) horizontal = true;
+        }
+      }
+    }
+    const tierProps = ROAD_TIER[t.roadType];
+    const half = tierProps.width / 2;
+    const pillarH = BRIDGE_LIFT + 0.10; // span from below water to deck
+    // Pillar ascends from y = -0.10 (below water) up to BRIDGE_LIFT.
+    const pillarYBase = -0.10;
+    const pillarOffset = half + 0.04;
+    const offsets: Array<[number, number]> = horizontal
+      ? [[0, -pillarOffset], [0, pillarOffset]]
+      : [[-pillarOffset, 0], [pillarOffset, 0]];
+    for (const [ox, oz] of offsets) {
+      const pillar = new BoxGeometry(0.05, pillarH, 0.05);
+      pillar.translate(cx + ox, pillarYBase + pillarH / 2, cz + oz);
+      pillars.push(pillar);
+      pillarColours.push(0x6e6e6e);
+    }
+  }
+
+  if (arrows.length === 0 && stops.length === 0 && lights.length === 0 && pillars.length === 0) return null;
   const group = new Group();
   if (arrows.length > 0) {
     const merged = mergeGeoms(arrows, arrowColours);
@@ -1467,6 +1561,11 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
   }
   if (lights.length > 0) {
     const merged = mergeGeoms(lights, lightColours);
+    const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    group.add(mesh);
+  }
+  if (pillars.length > 0) {
+    const merged = mergeGeoms(pillars, pillarColours);
     const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
     group.add(mesh);
   }

@@ -1285,3 +1285,16 @@ body {
 .budget__reset:active {
   background: rgba(255, 100, 100, 0.20);
 }
+
+.budget__reset--armed {
+  background: rgba(255, 100, 100, 0.30);
+  border-color: rgba(255, 120, 120, 0.65);
+  color: #ffe1e1;
+  font-weight: 600;
+  animation: budget-reset-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes budget-reset-pulse {
+  from { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0.0); }
+  to   { box-shadow: 0 0 0 4px rgba(255, 100, 100, 0.20); }
+}

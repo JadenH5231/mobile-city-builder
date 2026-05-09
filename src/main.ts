@@ -43,12 +43,37 @@ if (undoBtn) {
   });
 }
 
-const resetBtn = document.getElementById('budget-reset');
+// Reset button uses an inline two-tap confirmation rather than confirm().
+// Reason: iOS Safari standalone mode (page added to home screen via the
+// apple-mobile-web-app-capable meta tag) silently no-ops confirm/alert/prompt,
+// so the previous flow looked broken on a phone-installed copy of the game.
+const resetBtn = document.getElementById('budget-reset') as HTMLButtonElement | null;
 if (resetBtn) {
-  resetBtn.addEventListener('click', () => {
-    if (confirm('Reset the city? This clears your save.')) {
-      void game.resetCity();
+  const RESET_LABEL = 'Reset city';
+  const ARMED_LABEL = 'Tap again to RESET — wipes your save';
+  const ARMED_CLASS = 'budget__reset--armed';
+  const ARM_WINDOW_MS = 3000;
+  let armed = false;
+  let armTimer: number | undefined;
+  const disarm = (): void => {
+    armed = false;
+    resetBtn.textContent = RESET_LABEL;
+    resetBtn.classList.remove(ARMED_CLASS);
+    if (armTimer !== undefined) {
+      clearTimeout(armTimer);
+      armTimer = undefined;
     }
+  };
+  resetBtn.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      resetBtn.textContent = ARMED_LABEL;
+      resetBtn.classList.add(ARMED_CLASS);
+      armTimer = window.setTimeout(disarm, ARM_WINDOW_MS);
+      return;
+    }
+    disarm();
+    void game.resetCity();
   });
 }
 

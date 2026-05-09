@@ -209,6 +209,27 @@ export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32];
 export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24];
 
 /**
+ * Luxury low-density residential (Alpha 2.5). One luxury home spans a
+ * 2-tile pair; each tile holds half the residents (so a pair = 4 total,
+ * matching a single regular R1 tile's count). Premium tax rate is layered
+ * on top in Economy via `LUXURY_TAX_BONUS`.
+ */
+export const LUXURY_RESIDENT_CAPACITY_PER_TILE = 2;
+
+/**
+ * Multiplier on a luxury resident's tax contribution. 1.5 means a luxury
+ * resident pays 2.5x the regular rate (1.0x base from totalResidents +
+ * 1.5x luxury bonus on top).
+ */
+export const LUXURY_TAX_BONUS = 1.5;
+
+/**
+ * Up-front placement cost for a luxury low-density pair (Alpha 2.5).
+ * Charged once, on placement of the pair (not at development time).
+ */
+export const LUXURY_LOW_COST = 800;
+
+/**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —
  * 250 lets a fully-developed Medium map saturate without the spawner silently
  * dropping cars. Memory: feedback_traffic_pressure (post-alpha pass 2).
@@ -324,6 +345,7 @@ export type Tool =
   | 'residential_low'
   | 'residential_medium'
   | 'residential_high'
+  | 'residential_luxury_low'
   | 'commercial_low'
   | 'commercial_medium'
   | 'commercial_high'

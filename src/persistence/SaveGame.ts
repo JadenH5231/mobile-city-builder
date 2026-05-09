@@ -9,14 +9,13 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 7 (Alpha 2.3): adds per-tile `elevation` (terrain height) and
- * `bridge` bit (road over water gets elevated). v6 saves load with
- * elevation=0 and bridge=false everywhere — those maps are flat by
- * construction so this is correct. v5..v6 still load with their
- * existing defaults (trafficLight, busStop, path defaulted to false).
- * Schema 1 (pre-Alpha-1.0) is silently dropped.
+ * Schema 8 (Alpha 2.5): adds per-tile `luxury` bit for the new
+ * residential-luxury low-density zone (2-tile pair). v7 saves load with
+ * luxury=false everywhere. Schema 7 (Alpha 2.3) added elevation + bridge.
+ * v5..v6 still load with their existing defaults (trafficLight, busStop,
+ * path defaulted to false). Schema 1 (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 7;
+const SCHEMA = 8;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -48,6 +47,8 @@ export interface TileSnapshot {
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
   zoneCap?: 0 | 1 | 2 | 3;
+  /** Luxury low-density bit. Schema 8+. */
+  luxury?: boolean;
   density: number;
   pressure: number;
   building: Building;
@@ -156,6 +157,7 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
       bridge: t.bridge,
       zone: t.zone,
       zoneCap: t.zoneCap,
+      luxury: t.luxury,
       density: t.density,
       pressure: t.developmentPressure,
       building: t.building,
@@ -222,6 +224,8 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy, council?
     // any zoned tile, mirroring pre-1.1 behaviour where services alone
     // gated L3.
     t.zoneCap = snap.zoneCap ?? (snap.zone === 'none' ? 0 : 3);
+    // Luxury bit is schema 8+. Older saves had no luxury zone.
+    t.luxury = snap.luxury ?? false;
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
     t.building = snap.building;

@@ -148,6 +148,336 @@ function pickVariant(x: number, y: number, n: number): number {
   return h % n;
 }
 
+/* ---- Luxury low-density (Alpha 2.5) -------------------------------- */
+
+/**
+ * Build a single luxury home spanning two adjacent tiles. Caller passes
+ * the lex-smaller tile's coords first; partner is one of the 4-neighbours.
+ *
+ * Design: a grand 2-storey home, peaked gabled roof along the long axis,
+ * an attached 1-storey garage on one end, dormer windows, twin chimneys,
+ * a manicured lawn pad, a paved front walk, and 2 ornamental shrubs. Three
+ * deterministic variants per pair (mansion, ranch, modern-glass).
+ */
+export function buildLuxuryParts(
+  ax: number, ay: number, bx: number, by: number
+): VariantPart[] {
+  const out: VariantPart[] = [];
+  // Pair centre (midpoint between the two tile centres).
+  const cx = (ax + bx) / 2 + 0.5;
+  const cz = (ay + by) / 2 + 0.5;
+  // Long-axis = direction from a to b.
+  const longX = bx !== ax;
+  // 2-tile span: 2 units along long axis, 1 unit perpendicular.
+  // Variant pick keyed off the lex-smaller tile so it's stable across
+  // re-renders.
+  const variantIdx = pickVariant(ax, ay, LUXURY_VARIANTS.length);
+  const v = LUXURY_VARIANTS[variantIdx]!;
+
+  // Lawn pad — soft green, slightly inset, sits at ground.
+  const lawnW = longX ? 1.85 : 0.85;
+  const lawnD = longX ? 0.85 : 1.85;
+  const lawn = new BoxGeometry(lawnW, 0.015, lawnD);
+  lawn.translate(cx, 0.0075, cz);
+  out.push({ geom: lawn, color: v.lawnColor });
+
+  // Paved walkway from front of house to road side. Pick the side that
+  // doesn't have the garage. Simplification: just lay a small T of
+  // pavement in the middle.
+  const walkW = longX ? 0.9 : 0.18;
+  const walkD = longX ? 0.18 : 0.9;
+  const walk = new BoxGeometry(walkW, 0.018, walkD);
+  walk.translate(cx, 0.009, cz);
+  out.push({ geom: walk, color: 0xb6ad9b });
+
+  // Main body — wider on long axis. Sits centred but biased a touch
+  // toward the "back" so the front lawn reads.
+  const bodyLong = 1.40;
+  const bodyShort = 0.62;
+  const bodyH = v.twoStorey ? 0.55 : 0.32;
+  const bodyW = longX ? bodyLong : bodyShort;
+  const bodyD = longX ? bodyShort : bodyLong;
+  const body: Body = {
+    w: bodyW, h: bodyH, d: bodyD, color: v.bodyColor
+  };
+  emitBody(body, cx, cz, 0, out);
+
+  // Roof — long gable along the long axis.
+  if (v.roof === 'gable') {
+    emitGableLong(body, v.roofColor, longX, cx, cz, out);
+  } else if (v.roof === 'hip') {
+    emitHipLong(body, v.roofColor, longX, cx, cz, out);
+  } else {
+    // flat — emit a slim parapet so it doesn't read as bare.
+    const parapet = new BoxGeometry(bodyW + 0.04, 0.04, bodyD + 0.04);
+    parapet.translate(cx, bodyH + 0.02, cz);
+    out.push({ geom: parapet, color: v.roofColor });
+  }
+
+  // Garage wing — 1-storey block attached to one end of the long axis.
+  // Picks the "right" end deterministically per variant.
+  const garageH = 0.24;
+  const garageLong = 0.55;
+  const garageShort = 0.50;
+  const garageW = longX ? garageLong : garageShort;
+  const garageD = longX ? garageShort : garageLong;
+  const garageOffset = (bodyLong / 2 + garageLong / 2 - 0.05) * (v.garageSide === 'b' ? 1 : -1);
+  const garageCx = longX ? cx + garageOffset : cx;
+  const garageCz = longX ? cz : cz + garageOffset;
+  const garage: Body = {
+    w: garageW, h: garageH, d: garageD, color: v.garageColor
+  };
+  emitBody(garage, garageCx, garageCz, 0, out);
+  // Garage flat roof slab.
+  const garageRoof = new BoxGeometry(garageW + 0.02, 0.025, garageD + 0.02);
+  garageRoof.translate(garageCx, garageH + 0.0125, garageCz);
+  out.push({ geom: garageRoof, color: v.roofColor });
+  // Garage door panel (front face).
+  const doorPanel = new BoxGeometry(
+    longX ? garageW * 0.5 : 0.02,
+    garageH * 0.7,
+    longX ? 0.02 : garageD * 0.5
+  );
+  doorPanel.translate(
+    garageCx,
+    garageH * 0.4,
+    longX ? garageCz + garageD / 2 + 0.005 : garageCz
+  );
+  if (!longX) {
+    // Door faces along the perpendicular axis when the long axis is z.
+    doorPanel.translate(garageW / 2 + 0.005 - garageCx, 0, 0);
+    doorPanel.translate(garageCx, 0, 0);
+  }
+  out.push({ geom: doorPanel, color: 0x3a3a3a });
+
+  // Two chimneys on the main body, one near each gable end.
+  const chHeight = v.twoStorey ? 0.18 : 0.14;
+  const chOffset = (longX ? bodyW : bodyD) * 0.32;
+  if (longX) {
+    const ch1 = new BoxGeometry(0.08, chHeight, 0.08);
+    ch1.translate(cx - chOffset, bodyH + chHeight / 2, cz - bodyD * 0.20);
+    out.push({ geom: ch1, color: v.chimneyColor });
+    const ch2 = new BoxGeometry(0.08, chHeight, 0.08);
+    ch2.translate(cx + chOffset, bodyH + chHeight / 2, cz + bodyD * 0.20);
+    out.push({ geom: ch2, color: v.chimneyColor });
+  } else {
+    const ch1 = new BoxGeometry(0.08, chHeight, 0.08);
+    ch1.translate(cx - bodyW * 0.20, bodyH + chHeight / 2, cz - chOffset);
+    out.push({ geom: ch1, color: v.chimneyColor });
+    const ch2 = new BoxGeometry(0.08, chHeight, 0.08);
+    ch2.translate(cx + bodyW * 0.20, bodyH + chHeight / 2, cz + chOffset);
+    out.push({ geom: ch2, color: v.chimneyColor });
+  }
+
+  // Window strip — single thin slab wrapping the long faces of the
+  // body. Reads as multi-window facade without per-pane geometry.
+  const winY = bodyH * (v.twoStorey ? 0.65 : 0.55);
+  const winThick = 0.02;
+  const winSpan = (longX ? bodyW : bodyD) * 0.78;
+  const winHeight = v.twoStorey ? 0.10 : 0.08;
+  if (longX) {
+    const winN = new BoxGeometry(winSpan, winHeight, winThick);
+    winN.translate(cx, winY, cz - bodyD / 2 - winThick / 2);
+    out.push({ geom: winN, color: 0x2a3a4a });
+    const winS = new BoxGeometry(winSpan, winHeight, winThick);
+    winS.translate(cx, winY, cz + bodyD / 2 + winThick / 2);
+    out.push({ geom: winS, color: 0x2a3a4a });
+    if (v.twoStorey) {
+      const winN2 = new BoxGeometry(winSpan, winHeight * 0.8, winThick);
+      winN2.translate(cx, winY - 0.18, cz - bodyD / 2 - winThick / 2);
+      out.push({ geom: winN2, color: 0x2a3a4a });
+      const winS2 = new BoxGeometry(winSpan, winHeight * 0.8, winThick);
+      winS2.translate(cx, winY - 0.18, cz + bodyD / 2 + winThick / 2);
+      out.push({ geom: winS2, color: 0x2a3a4a });
+    }
+  } else {
+    const winE = new BoxGeometry(winThick, winHeight, winSpan);
+    winE.translate(cx + bodyW / 2 + winThick / 2, winY, cz);
+    out.push({ geom: winE, color: 0x2a3a4a });
+    const winW = new BoxGeometry(winThick, winHeight, winSpan);
+    winW.translate(cx - bodyW / 2 - winThick / 2, winY, cz);
+    out.push({ geom: winW, color: 0x2a3a4a });
+    if (v.twoStorey) {
+      const winE2 = new BoxGeometry(winThick, winHeight * 0.8, winSpan);
+      winE2.translate(cx + bodyW / 2 + winThick / 2, winY - 0.18, cz);
+      out.push({ geom: winE2, color: 0x2a3a4a });
+      const winW2 = new BoxGeometry(winThick, winHeight * 0.8, winSpan);
+      winW2.translate(cx - bodyW / 2 - winThick / 2, winY - 0.18, cz);
+      out.push({ geom: winW2, color: 0x2a3a4a });
+    }
+  }
+
+  // Front door panel (centred on the front of the body, opposite garage).
+  const doorH = bodyH * 0.45;
+  const doorW = 0.10;
+  const doorThick = 0.02;
+  const doorFront = longX ? new BoxGeometry(doorW, doorH, doorThick) : new BoxGeometry(doorThick, doorH, doorW);
+  if (longX) {
+    doorFront.translate(cx, doorH / 2, cz + bodyD / 2 + doorThick / 2);
+  } else {
+    doorFront.translate(cx + bodyW / 2 + doorThick / 2, doorH / 2, cz);
+  }
+  out.push({ geom: doorFront, color: 0x4a3020 });
+
+  // Two ornamental shrubs flanking the door — small cones.
+  const shrubR = 0.07;
+  const shrubH = 0.10;
+  const shrubColor = 0x4f6b3a;
+  const shrubGap = 0.18;
+  if (longX) {
+    const s1 = new ConeGeometry(shrubR, shrubH, 6);
+    s1.translate(cx - shrubGap, shrubH / 2, cz + bodyD / 2 + 0.10);
+    out.push({ geom: s1, color: shrubColor });
+    const s2 = new ConeGeometry(shrubR, shrubH, 6);
+    s2.translate(cx + shrubGap, shrubH / 2, cz + bodyD / 2 + 0.10);
+    out.push({ geom: s2, color: shrubColor });
+  } else {
+    const s1 = new ConeGeometry(shrubR, shrubH, 6);
+    s1.translate(cx + bodyW / 2 + 0.10, shrubH / 2, cz - shrubGap);
+    out.push({ geom: s1, color: shrubColor });
+    const s2 = new ConeGeometry(shrubR, shrubH, 6);
+    s2.translate(cx + bodyW / 2 + 0.10, shrubH / 2, cz + shrubGap);
+    out.push({ geom: s2, color: shrubColor });
+  }
+
+  return out;
+}
+
+interface LuxuryVariant {
+  bodyColor: number;
+  roofColor: number;
+  garageColor: number;
+  lawnColor: number;
+  chimneyColor: number;
+  twoStorey: boolean;
+  roof: 'gable' | 'hip' | 'flat';
+  /** 'a' = garage at the lex-smaller end, 'b' = the partner end. */
+  garageSide: 'a' | 'b';
+}
+
+const LUXURY_VARIANTS: LuxuryVariant[] = [
+  // Classic mansion — cream-and-brick with a steep gable.
+  {
+    bodyColor: 0xe8d5b0, roofColor: 0x6f3a25, garageColor: 0xd6c0a0,
+    lawnColor: 0x5e8a4c, chimneyColor: 0x6e4a3a,
+    twoStorey: true, roof: 'gable', garageSide: 'b'
+  },
+  // Modern ranch — long single-storey with a low hip.
+  {
+    bodyColor: 0xeee2ce, roofColor: 0x4a4034, garageColor: 0xd9cdb8,
+    lawnColor: 0x6a9054, chimneyColor: 0x4a3a2a,
+    twoStorey: false, roof: 'hip', garageSide: 'a'
+  },
+  // Contemporary — flat roof, taupe with charcoal accents.
+  {
+    bodyColor: 0xc9b89c, roofColor: 0x3a3a3a, garageColor: 0xa9947a,
+    lawnColor: 0x547a44, chimneyColor: 0x222222,
+    twoStorey: true, roof: 'flat', garageSide: 'b'
+  }
+];
+
+function emitGableLong(
+  body: Body, roofColor: number, longX: boolean,
+  cx: number, cz: number, out: VariantPart[]
+): void {
+  const yTop = body.h;
+  const ridgeHeight = 0.22;
+  // Ridge runs along the long axis. Two trapezoidal slopes.
+  if (longX) {
+    const positions = new Float32Array([
+      cx - body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2, yTop + ridgeHeight, cz,
+      cx + body.w / 2, yTop + ridgeHeight, cz
+    ]);
+    const indices = new Uint32Array([
+      0, 4, 1, 1, 4, 5,        // north slope
+      3, 2, 5, 3, 5, 4,        // south slope
+      0, 3, 4,                 // west gable
+      1, 5, 2                  // east gable
+    ]);
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(positions, 3));
+    g.setIndex(new BufferAttribute(indices, 1));
+    g.computeVertexNormals();
+    out.push({ geom: g, color: roofColor });
+  } else {
+    const positions = new Float32Array([
+      cx - body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2, yTop, cz + body.d / 2,
+      cx, yTop + ridgeHeight, cz - body.d / 2,
+      cx, yTop + ridgeHeight, cz + body.d / 2
+    ]);
+    const indices = new Uint32Array([
+      0, 1, 4,                 // north gable
+      3, 5, 2,                 // south gable
+      0, 4, 3, 3, 4, 5,        // west slope
+      1, 2, 5, 1, 5, 4         // east slope
+    ]);
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(positions, 3));
+    g.setIndex(new BufferAttribute(indices, 1));
+    g.computeVertexNormals();
+    out.push({ geom: g, color: roofColor });
+  }
+}
+
+function emitHipLong(
+  body: Body, roofColor: number, longX: boolean,
+  cx: number, cz: number, out: VariantPart[]
+): void {
+  // Hip = gable with shortened ridge. Build with the ridge running along
+  // the long axis, ending well before the gable face.
+  const yTop = body.h;
+  const h = 0.15;
+  const ridgeRecess = (longX ? body.w : body.d) * 0.30;
+  if (longX) {
+    const positions = new Float32Array([
+      cx - body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2 + ridgeRecess, yTop + h, cz,
+      cx + body.w / 2 - ridgeRecess, yTop + h, cz
+    ]);
+    const indices = new Uint32Array([
+      0, 4, 1, 1, 4, 5,
+      3, 2, 5, 3, 5, 4,
+      0, 3, 4,
+      1, 5, 2
+    ]);
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(positions, 3));
+    g.setIndex(new BufferAttribute(indices, 1));
+    g.computeVertexNormals();
+    out.push({ geom: g, color: roofColor });
+  } else {
+    const positions = new Float32Array([
+      cx - body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz - body.d / 2,
+      cx + body.w / 2, yTop, cz + body.d / 2,
+      cx - body.w / 2, yTop, cz + body.d / 2,
+      cx, yTop + h, cz - body.d / 2 + ridgeRecess,
+      cx, yTop + h, cz + body.d / 2 - ridgeRecess
+    ]);
+    const indices = new Uint32Array([
+      0, 1, 4,
+      3, 5, 2,
+      0, 4, 3, 3, 4, 5,
+      1, 2, 5, 1, 5, 4
+    ]);
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(positions, 3));
+    g.setIndex(new BufferAttribute(indices, 1));
+    g.computeVertexNormals();
+    out.push({ geom: g, color: roofColor });
+  }
+}
+
 function applySpec(
   spec: Spec, cx: number, cz: number, yaw: number, out: VariantPart[],
   zone: Zone, tileX: number, tileY: number

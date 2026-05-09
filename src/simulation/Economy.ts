@@ -1,6 +1,6 @@
 import type { Grid } from '../world/Grid';
 import type { Population } from './Population';
-import { BUILDING_UPKEEP, ROAD_TIER, type Building, type Zone } from '../types';
+import { BUILDING_UPKEEP, LUXURY_TAX_BONUS, ROAD_TIER, type Building, type Zone } from '../types';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -103,8 +103,15 @@ export class Economy {
   }
 
   private runMonth(grid: Grid, population: Population): void {
+    // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
+    // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
+    // pays 2.5x the regular R rate. The base portion is already inside
+    // population.totalResidents below — we just add the premium delta.
+    const luxuryBonusRevenue =
+      population.luxuryResidents * this.taxR * REV_PER_RESIDENT * LUXURY_TAX_BONUS;
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
+      luxuryBonusRevenue +
       population.totalCommercialJobs * this.taxC * REV_PER_C_JOB +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB;
 

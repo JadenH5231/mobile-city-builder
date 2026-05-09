@@ -401,7 +401,7 @@ function emitGableLong(
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(positions, 3));
     g.setIndex(new BufferAttribute(indices, 1));
-    g.computeVertexNormals();
+    // Flat-shaded: skip normals.
     out.push({ geom: g, color: roofColor });
   } else {
     const positions = new Float32Array([
@@ -421,7 +421,7 @@ function emitGableLong(
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(positions, 3));
     g.setIndex(new BufferAttribute(indices, 1));
-    g.computeVertexNormals();
+    // Flat-shaded: skip normals.
     out.push({ geom: g, color: roofColor });
   }
 }
@@ -453,7 +453,7 @@ function emitHipLong(
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(positions, 3));
     g.setIndex(new BufferAttribute(indices, 1));
-    g.computeVertexNormals();
+    // Flat-shaded: skip normals.
     out.push({ geom: g, color: roofColor });
   } else {
     const positions = new Float32Array([
@@ -473,7 +473,7 @@ function emitHipLong(
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(positions, 3));
     g.setIndex(new BufferAttribute(indices, 1));
-    g.computeVertexNormals();
+    // Flat-shaded: skip normals.
     out.push({ geom: g, color: roofColor });
   }
 }
@@ -579,7 +579,7 @@ function emitRoof(body: Body, r: Roof, cx: number, cz: number, yaw: number, out:
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(positions, 3));
     g.setIndex(new BufferAttribute(indices, 1));
-    g.computeVertexNormals();
+    // Flat-shaded: skip normals.
     if (yaw) g.rotateY(yaw);
     g.translate(cx, 0, cz);
     out.push({ geom: g, color: r.color });

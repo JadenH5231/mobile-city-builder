@@ -401,8 +401,10 @@ export class Renderer {
       this.carsMesh.setColorAt(i, c);
     }
     this.carsMesh.count = vehicles.cars.length;
-    this.carsMesh.instanceMatrix.needsUpdate = true;
-    if (this.carsMesh.instanceColor) this.carsMesh.instanceColor.needsUpdate = true;
+    if (vehicles.cars.length > 0) {
+      this.carsMesh.instanceMatrix.needsUpdate = true;
+      if (this.carsMesh.instanceColor) this.carsMesh.instanceColor.needsUpdate = true;
+    }
   }
 
   /**
@@ -497,8 +499,10 @@ export class Renderer {
       visible++;
     }
     this.pedestriansMesh.count = visible;
-    this.pedestriansMesh.instanceMatrix.needsUpdate = true;
-    if (this.pedestriansMesh.instanceColor) this.pedestriansMesh.instanceColor.needsUpdate = true;
+    if (visible > 0) {
+      this.pedestriansMesh.instanceMatrix.needsUpdate = true;
+      if (this.pedestriansMesh.instanceColor) this.pedestriansMesh.instanceColor.needsUpdate = true;
+    }
   }
 
   /** Per-frame bus positions, mirror of `updateCars`. */
@@ -552,8 +556,10 @@ export class Renderer {
       visible++;
     }
     this.busesMesh.count = visible;
-    this.busesMesh.instanceMatrix.needsUpdate = true;
-    if (this.busesMesh.instanceColor) this.busesMesh.instanceColor.needsUpdate = true;
+    if (visible > 0) {
+      this.busesMesh.instanceMatrix.needsUpdate = true;
+      if (this.busesMesh.instanceColor) this.busesMesh.instanceColor.needsUpdate = true;
+    }
   }
 
   drawSelection(gx: number, gy: number): void {
@@ -662,7 +668,7 @@ function buildTerrainMesh(grid: Grid): Mesh {
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normal computation (Alpha 2.5 perf pass).
 
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(geom, mat);
@@ -759,6 +765,15 @@ function buildTreesMesh(grid: Grid): Mesh | null {
   return new Mesh(merged, mat);
 }
 
+/**
+ * Merge a batch of source geometries into one BufferGeometry, vertex-
+ * painting each source with its colour from `colours[]`. All consumers of
+ * this function attach a `flatShading: true` material, so we deliberately
+ * skip the normal attribute and `computeVertexNormals` — Three.js's flat-
+ * shading fragment shader derives the face normal via dFdx/dFdy of the
+ * view-space position, leaving any precomputed normals unread. Skipping
+ * them saves CPU per rebuild AND GPU memory + upload bandwidth per draw.
+ */
 function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry {
   let totalVerts = 0;
   let totalIndices = 0;
@@ -769,7 +784,6 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
   }
 
   const positions = new Float32Array(totalVerts * 3);
-  const normals = new Float32Array(totalVerts * 3);
   const cols = new Float32Array(totalVerts * 3);
   const indices = new Uint32Array(totalIndices);
 
@@ -778,9 +792,7 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
   const c = new Color();
   for (let gi = 0; gi < geoms.length; gi++) {
     const g = geoms[gi]!;
-    g.computeVertexNormals();
     const p = g.getAttribute('position');
-    const n = g.getAttribute('normal');
     const idx = g.getIndex();
     c.setHex(colours[gi]!);
 
@@ -788,9 +800,6 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
       positions[(vOff + i) * 3 + 0] = p.getX(i);
       positions[(vOff + i) * 3 + 1] = p.getY(i);
       positions[(vOff + i) * 3 + 2] = p.getZ(i);
-      normals[(vOff + i) * 3 + 0] = n.getX(i);
-      normals[(vOff + i) * 3 + 1] = n.getY(i);
-      normals[(vOff + i) * 3 + 2] = n.getZ(i);
       cols[(vOff + i) * 3 + 0] = c.r;
       cols[(vOff + i) * 3 + 1] = c.g;
       cols[(vOff + i) * 3 + 2] = c.b;
@@ -810,7 +819,6 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
 
   const out = new BufferGeometry();
   out.setAttribute('position', new BufferAttribute(positions, 3));
-  out.setAttribute('normal', new BufferAttribute(normals, 3));
   out.setAttribute('color', new BufferAttribute(cols, 3));
   out.setIndex(new BufferAttribute(indices, 1));
   // Dispose source geometries — their buffers are now copied into `out`.
@@ -940,7 +948,7 @@ function buildHeatmapMesh(grid: Grid): Mesh | null {
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normals.
   const mat = new MeshLambertMaterial({
     vertexColors: true,
     transparent: true,
@@ -1191,7 +1199,7 @@ function buildZoneMesh(grid: Grid): Mesh | null {
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normals.
 
   const mat = new MeshLambertMaterial({
     vertexColors: true,
@@ -1359,7 +1367,7 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normals.
   const mat = new MeshStandardMaterial({
     vertexColors: true,
     roughness: 0.9,
@@ -1724,7 +1732,7 @@ function buildPathMesh(grid: Grid): Mesh | null {
   geom.setAttribute('position', new BufferAttribute(positions.slice(0, usedQuads * 4 * 3), 3));
   geom.setAttribute('color', new BufferAttribute(colours.slice(0, usedQuads * 4 * 3), 3));
   geom.setIndex(new BufferAttribute(indices.slice(0, usedQuads * 6), 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normals.
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(geom, mat);
 }
@@ -1784,7 +1792,7 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
-  geom.computeVertexNormals();
+  // Flat-shaded: skip normals.
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(geom, mat);
 }
@@ -1912,6 +1920,6 @@ function makeArrowGeom(width: number, length: number): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(positions, 3));
   g.setIndex(new BufferAttribute(indices, 1));
-  g.computeVertexNormals();
+  // Flat-shaded: skip normals.
   return g;
 }

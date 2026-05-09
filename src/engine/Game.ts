@@ -220,6 +220,8 @@ export class Game {
     this.panel = new TileInfoPanel();
     this.toolbar = new Toolbar();
     this.toolbar.onChange = (tool) => this.setTool(tool);
+    // Refresh banned-tool indicators on first paint and after any election.
+    this.refreshToolbarBans();
     this.budgetPanel = new BudgetPanel(this.economy);
     this.happinessPanel = new HappinessPanel({
       happiness: this.happiness,
@@ -273,6 +275,45 @@ export class Game {
 
     window.addEventListener('resize', this.handleResize);
     this.startLoop();
+  }
+
+  /**
+   * Recompute which Tools are banned by the current council and push the
+   * set into the Toolbar so it can flip the visual state. Called on init
+   * and after every election so the player sees instantly what's blocked.
+   */
+  private refreshToolbarBans(): void {
+    const banned = new Set<Tool>();
+    // Each tool maps to its FACTION_STANCES key. Walking-path and
+    // traffic-light have no stance row by design — never banned.
+    const toolToKey: Array<[Tool, StanceKey]> = [
+      ['road_local', 'road_local'],
+      ['road_avenue', 'road_avenue'],
+      ['road_highway', 'road_highway'],
+      ['residential_low', 'r_low'],
+      ['residential_medium', 'r_medium'],
+      ['residential_high', 'r_high'],
+      ['residential_luxury_low', 'r_lux'],
+      ['commercial_low', 'c_low'],
+      ['commercial_medium', 'c_medium'],
+      ['commercial_high', 'c_high'],
+      ['industrial_low', 'i_low'],
+      ['industrial_medium', 'i_medium'],
+      ['industrial_high', 'i_high'],
+      ['mixed_low', 'mu_low'],
+      ['mixed_medium', 'mu_medium'],
+      ['mixed_high', 'mu_high'],
+      ['place_power', 'power_plant'],
+      ['place_water', 'water_tower'],
+      ['place_park', 'park'],
+      ['place_bus_stop', 'bus_stop'],
+      ['place_bus_depot', 'bus_depot'],
+      ['place_stop_sign', 'stop_sign']
+    ];
+    for (const [tool, key] of toolToKey) {
+      if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
+    }
+    this.toolbar.setBannedTools(banned);
   }
 
   setTool(tool: Tool): void {
@@ -357,7 +398,10 @@ export class Game {
             this.happiness,
             this.population
           );
-          if (fired) this.councilPanel.show();
+          if (fired) {
+            this.councilPanel.show();
+            this.refreshToolbarBans();
+          }
         }
         this.vehicles.spawnTick(
           SIM_STEP_MS,

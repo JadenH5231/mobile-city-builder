@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -16,11 +17,13 @@ import {
   LineBasicMaterial,
   LineSegments,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   Scene,
+  SRGBColorSpace,
   WebGLRenderer
 } from 'three';
 import type { Camera } from './Camera';
@@ -80,6 +83,8 @@ const ROAD_LANE = 0xf2cd5c;
 const SELECTION_COLOR = 0xffd84d;
 const TREE_TRUNK = 0x6e3e1d;
 const TREE_LEAF = 0x2f6a2d;
+/** Subtle dark green shadow disc under each tree (Alpha 2.6). */
+const TREE_SHADOW = 0x2a3a22;
 const HIGHWAY_ARROW_COLOR = 0xf2cd5c;
 const STOP_SIGN_COLOR = 0xc83838;
 const STOP_SIGN_TEXT = 0xffffff;
@@ -127,6 +132,15 @@ export class Renderer {
 
     this.scene.add(this.worldGroup);
     this.worldGroup.add(this.cityBuildingsGroup);
+    // Sky gradient (Alpha 2.6 visual pass) — vertical gradient texture so
+    // the canvas backdrop reads as sky instead of a flat dark colour.
+    // Three.js doesn't support a true vertical gradient on Scene.background
+    // directly, but a 1×N CanvasTexture works perfectly and is essentially
+    // free at runtime (one tiny upload at init, no per-frame cost).
+    this.scene.background = makeSkyGradient();
+    // A few stylized clouds far above the world. Static — added to the
+    // scene root so they don't pan with worldGroup.
+    this.scene.add(makeClouds());
     this.scene.add(new AmbientLight(0xffffff, 0.55));
     this.scene.add(new HemisphereLight(0xbcd9ff, 0x223322, 0.45));
     const sun = new DirectionalLight(0xffffff, 0.85);
@@ -702,6 +716,15 @@ function buildTreesMesh(grid: Grid): Mesh | null {
     const cx = (t.x + 0.5) * TILE_SIZE + ox;
     const cz = (t.y + 0.5) * TILE_SIZE + oz;
 
+    // Shadow disc (Alpha 2.6 visual pass) — slim dark octagonal pad
+    // under each tree at the terrain surface. Reads as a soft cast
+    // shadow without the cost of a real shadow map. Sits 0.005 above
+    // tile elevation to avoid z-fighting with the terrain mesh.
+    const shadowR = 0.32 * scale;
+    const shadow = new CylinderGeometry(shadowR, shadowR * 0.92, 0.005, 8);
+    shadow.translate(cx, t.elevation + 0.0035, cz);
+    geoms.push(shadow); colours.push(TREE_SHADOW);
+
     if (variant === 0) {
       // Cone tree
       const trunkH = 0.18 * scale;
@@ -991,8 +1014,26 @@ function buildCityBuildingsMesh(grid: Grid): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
 
+  // Modular parks (Alpha 2.6): instead of rendering each park tile as
+  // its own copy of the same little park, group adjacent park tiles into
+  // clusters and emit ONE bigger structure spanning the cluster, picked
+  // by size (1/2/3/4+). Non-park city buildings still render per-tile.
+  const visitedParks = new Set<number>();
   for (const t of grid.iter()) {
     if (t.building === 'none') continue;
+    if (t.building === 'park') {
+      const key = t.y * grid.width + t.x;
+      if (visitedParks.has(key)) continue;
+      const cluster = floodPark(grid, t.x, t.y, visitedParks);
+      const parts = parkClusterParts(cluster);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(p.color);
+      }
+      continue;
+    }
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
     const parts = cityBuildingParts(t.building);
@@ -1008,6 +1049,240 @@ function buildCityBuildingsMesh(grid: Grid): Mesh | null {
   const merged = mergeGeoms(geoms, colours);
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
+}
+
+/**
+ * 4-connected flood-fill of 'park' tiles starting at (sx,sy). Marks each
+ * visited tile in `visited` (packed as y*width+x) so the outer loop
+ * doesn't revisit the cluster. Returns the list of {x,y} tiles.
+ */
+function floodPark(
+  grid: Grid, sx: number, sy: number, visited: Set<number>
+): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  const stack: Array<[number, number]> = [[sx, sy]];
+  const w = grid.width;
+  while (stack.length > 0) {
+    const [x, y] = stack.pop()!;
+    const key = y * w + x;
+    if (visited.has(key)) continue;
+    const t = grid.get(x, y);
+    if (!t || t.building !== 'park') continue;
+    visited.add(key);
+    out.push({ x, y });
+    stack.push([x + 1, y]);
+    stack.push([x - 1, y]);
+    stack.push([x, y + 1]);
+    stack.push([x, y - 1]);
+  }
+  return out;
+}
+
+/**
+ * Modular park renderer (Alpha 2.6). Returns a list of geometry parts
+ * positioned in absolute world space (not tile-local) since a cluster
+ * spans multiple tiles. Cluster size determines layout:
+ *
+ *   1 tile  → cottage park (current style: lawn, pond, 2 benches, 3 trees)
+ *   2 tiles → community park: doubled lawn, paved diagonal path,
+ *             playground (slide + swing pair), pond, 4 trees
+ *   3 tiles → neighbourhood park: pavilion, central pond + fountain,
+ *             scattered benches + trees, paved S-curve path
+ *   4+ tiles → grand park: bandstand or fountain centerpiece, ring path,
+ *              dense tree borders, multiple benches, perimeter shrubs
+ *
+ * The cluster's "centroid" (average tile position) anchors the central
+ * features; lawns and trees are emitted per-tile so the cluster shape
+ * stays organic.
+ */
+function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+  // Centroid in world space.
+  let sumX = 0, sumZ = 0;
+  for (const c of cluster) {
+    sumX += (c.x + 0.5) * TILE_SIZE;
+    sumZ += (c.y + 0.5) * TILE_SIZE;
+  }
+  const centerX = sumX / cluster.length;
+  const centerZ = sumZ / cluster.length;
+  const size = cluster.length;
+
+  // Lawn pad on every tile — the green base regardless of cluster size.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(0.92, 0.04, 0.92), color: 0x4a8c3a, dx: cx, dy: 0.02, dz: cz });
+  }
+
+  if (size === 1) {
+    // === 1-tile cottage park ===
+    const c = cluster[0]!;
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    // Diagonal stone path strip.
+    out.push({ makeGeom: () => box(0.18, 0.05, 0.85), color: 0xc7c2b3, dx: cx, dy: 0.025, dz: cz });
+    // Round pond.
+    out.push({ makeGeom: () => cyl(0.18, 0.06, 12), color: 0x4d8eb9, dx: cx - 0.20, dy: 0.025, dz: cz - 0.18 });
+    // Two benches.
+    out.push({ makeGeom: () => box(0.18, 0.025, 0.04), color: 0x6b4f3a, dx: cx + 0.22, dy: 0.07, dz: cz + 0.18 });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: cx + 0.30, dy: 0.045, dz: cz + 0.18 });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: cx + 0.14, dy: 0.045, dz: cz + 0.18 });
+    out.push({ makeGeom: () => box(0.18, 0.025, 0.04), color: 0x6b4f3a, dx: cx - 0.22, dy: 0.07, dz: cz + 0.18 });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: cx - 0.14, dy: 0.045, dz: cz + 0.18 });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.04), color: 0x3a2a20, dx: cx - 0.30, dy: 0.045, dz: cz + 0.18 });
+    // Three trees.
+    out.push({ makeGeom: () => cyl(0.04, 0.16, 6), color: 0x6b3f1f, dx: cx + 0.22, dy: 0.11, dz: cz - 0.22 });
+    out.push({ makeGeom: () => cone(0.20, 0.34, 8), color: 0x2f6a2d, dx: cx + 0.22, dy: 0.36, dz: cz - 0.22 });
+    out.push({ makeGeom: () => cyl(0.035, 0.13, 6), color: 0x6b3f1f, dx: cx - 0.32, dy: 0.095, dz: cz - 0.05 });
+    out.push({ makeGeom: () => cone(0.16, 0.26, 8), color: 0x3a7a3a, dx: cx - 0.32, dy: 0.30, dz: cz - 0.05 });
+    out.push({ makeGeom: () => cyl(0.028, 0.10, 6), color: 0x6b3f1f, dx: cx + 0.32, dy: 0.08, dz: cz + 0.05 });
+    out.push({ makeGeom: () => cone(0.13, 0.20, 8), color: 0x4a8e44, dx: cx + 0.32, dy: 0.25, dz: cz + 0.05 });
+    return out;
+  }
+
+  if (size === 2) {
+    // === 2-tile community park: playground + pond + paths ===
+    // Determine axis: tiles share an x or share a y.
+    const a = cluster[0]!;
+    const b = cluster[1]!;
+    const horizontal = a.y === b.y;
+    // Centre between the two tiles.
+    const cx = centerX;
+    const cz = centerZ;
+    // Long paved path connecting both tile centers.
+    if (horizontal) {
+      out.push({ makeGeom: () => box(1.85, 0.05, 0.18), color: 0xc7c2b3, dx: cx, dy: 0.025, dz: cz });
+    } else {
+      out.push({ makeGeom: () => box(0.18, 0.05, 1.85), color: 0xc7c2b3, dx: cx, dy: 0.025, dz: cz });
+    }
+    // Playground: slide (angled box) + swing frame on the lex-smaller tile.
+    const pgX = (a.x + 0.5) * TILE_SIZE + (horizontal ? -0.05 : 0);
+    const pgZ = (a.y + 0.5) * TILE_SIZE + (horizontal ? 0 : -0.05);
+    // Swing frame (A-shape).
+    out.push({ makeGeom: () => box(0.30, 0.022, 0.022), color: 0xb14a4a, dx: pgX, dy: 0.22, dz: pgZ - 0.20 });
+    out.push({ makeGeom: () => box(0.022, 0.22, 0.022), color: 0xb14a4a, dx: pgX - 0.13, dy: 0.11, dz: pgZ - 0.20 });
+    out.push({ makeGeom: () => box(0.022, 0.22, 0.022), color: 0xb14a4a, dx: pgX + 0.13, dy: 0.11, dz: pgZ - 0.20 });
+    // Two swing seats.
+    out.push({ makeGeom: () => box(0.05, 0.018, 0.04), color: 0x3a2a20, dx: pgX - 0.05, dy: 0.10, dz: pgZ - 0.20 });
+    out.push({ makeGeom: () => box(0.05, 0.018, 0.04), color: 0x3a2a20, dx: pgX + 0.05, dy: 0.10, dz: pgZ - 0.20 });
+    // Slide — sloped box.
+    out.push({ makeGeom: () => box(0.10, 0.18, 0.30), color: 0x4d8eb9, dx: pgX + 0.18, dy: 0.09, dz: pgZ + 0.05 });
+    out.push({ makeGeom: () => box(0.06, 0.06, 0.06), color: 0xb14a4a, dx: pgX + 0.18, dy: 0.21, dz: pgZ - 0.05 });
+    // Pond on the partner tile.
+    const pondX = (b.x + 0.5) * TILE_SIZE;
+    const pondZ = (b.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => cyl(0.22, 0.06, 12), color: 0x4d8eb9, dx: pondX, dy: 0.025, dz: pondZ + 0.10 });
+    // Trees scattered.
+    out.push({ makeGeom: () => cyl(0.04, 0.14, 6), color: 0x6b3f1f, dx: cx + 0.30, dy: 0.10, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cone(0.18, 0.30, 8), color: 0x2f6a2d, dx: cx + 0.30, dy: 0.32, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx - 0.35, dy: 0.09, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x3a7a3a, dx: cx - 0.35, dy: 0.28, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: pondX - 0.30, dy: 0.09, dz: pondZ - 0.30 });
+    out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: pondX - 0.30, dy: 0.28, dz: pondZ - 0.30 });
+    return out;
+  }
+
+  if (size === 3) {
+    // === 3-tile neighbourhood park: pavilion + central pond + path ===
+    // Pavilion (open-air shelter) at centroid.
+    out.push({ makeGeom: () => box(0.50, 0.025, 0.40), color: 0x6f4a2c, dx: centerX, dy: 0.32, dz: centerZ });
+    // Roof (pyramid).
+    out.push({ makeGeom: () => cone(0.34, 0.18, 4), color: 0x4a3020, dx: centerX, dy: 0.40, dz: centerZ });
+    // Four pavilion posts.
+    out.push({ makeGeom: () => box(0.025, 0.30, 0.025), color: 0x4a3a2a, dx: centerX - 0.22, dy: 0.15, dz: centerZ - 0.18 });
+    out.push({ makeGeom: () => box(0.025, 0.30, 0.025), color: 0x4a3a2a, dx: centerX + 0.22, dy: 0.15, dz: centerZ - 0.18 });
+    out.push({ makeGeom: () => box(0.025, 0.30, 0.025), color: 0x4a3a2a, dx: centerX - 0.22, dy: 0.15, dz: centerZ + 0.18 });
+    out.push({ makeGeom: () => box(0.025, 0.30, 0.025), color: 0x4a3a2a, dx: centerX + 0.22, dy: 0.15, dz: centerZ + 0.18 });
+    // Central round pond near the pavilion.
+    out.push({ makeGeom: () => cyl(0.30, 0.06, 16), color: 0x4d8eb9, dx: centerX + 0.5, dy: 0.025, dz: centerZ });
+    // Small fountain post in the middle of the pond.
+    out.push({ makeGeom: () => cyl(0.05, 0.18, 8), color: 0x9a9a9a, dx: centerX + 0.5, dy: 0.09, dz: centerZ });
+    out.push({ makeGeom: () => sphereLite(0.08), color: 0xe0e6ec, dx: centerX + 0.5, dy: 0.22, dz: centerZ });
+    // Connecting paths from each tile center to centroid.
+    for (const c of cluster) {
+      const cx = (c.x + 0.5) * TILE_SIZE;
+      const cz = (c.y + 0.5) * TILE_SIZE;
+      const dx = centerX - cx;
+      const dz = centerZ - cz;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.05) continue;
+      // Approximate a path quad oriented along the (cx,cz)→centroid axis.
+      // Just lay short axis-aligned pads — the cluster is rectilinear so
+      // this looks fine without rotation math.
+      const horiz = Math.abs(dx) > Math.abs(dz);
+      if (horiz) {
+        out.push({ makeGeom: () => box(len, 0.05, 0.16), color: 0xc7c2b3, dx: (cx + centerX) / 2, dy: 0.026, dz: cz });
+      } else {
+        out.push({ makeGeom: () => box(0.16, 0.05, len), color: 0xc7c2b3, dx: cx, dy: 0.026, dz: (cz + centerZ) / 2 });
+      }
+    }
+    // Trees scattered around.
+    for (let i = 0; i < cluster.length; i++) {
+      const c = cluster[i]!;
+      const cx = (c.x + 0.5) * TILE_SIZE;
+      const cz = (c.y + 0.5) * TILE_SIZE;
+      out.push({ makeGeom: () => cyl(0.04, 0.14, 6), color: 0x6b3f1f, dx: cx - 0.32, dy: 0.10, dz: cz + 0.32 });
+      out.push({ makeGeom: () => cone(0.18, 0.30, 8), color: i === 0 ? 0x2f6a2d : 0x3a7a3a, dx: cx - 0.32, dy: 0.32, dz: cz + 0.32 });
+      out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx + 0.32, dy: 0.09, dz: cz - 0.32 });
+      out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: cx + 0.32, dy: 0.28, dz: cz - 0.32 });
+    }
+    return out;
+  }
+
+  // === 4+ tile grand park: bandstand centerpiece + ring + dense trees ===
+  // Bandstand: octagonal raised platform with a tiered roof.
+  out.push({ makeGeom: () => cyl(0.42, 0.06, 8), color: 0xc4a684, dx: centerX, dy: 0.05, dz: centerZ });
+  out.push({ makeGeom: () => cyl(0.34, 0.15, 8), color: 0xd9c08a, dx: centerX, dy: 0.13, dz: centerZ });
+  // Bandstand posts.
+  for (let p = 0; p < 8; p++) {
+    const ang = (p / 8) * Math.PI * 2;
+    const px = centerX + Math.cos(ang) * 0.30;
+    const pz = centerZ + Math.sin(ang) * 0.30;
+    out.push({ makeGeom: () => box(0.025, 0.28, 0.025), color: 0x4a3020, dx: px, dy: 0.20 + 0.14, dz: pz });
+  }
+  // Bandstand roof — wide cone.
+  out.push({ makeGeom: () => cone(0.45, 0.18, 8), color: 0xb14a4a, dx: centerX, dy: 0.20 + 0.30, dz: centerZ });
+  // Roof finial.
+  out.push({ makeGeom: () => cone(0.06, 0.10, 6), color: 0xe5c25a, dx: centerX, dy: 0.20 + 0.45, dz: centerZ });
+  // Per-tile decoration: bench on each tile facing the bandstand.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    // Skip the centroid tile (covered by bandstand).
+    if (Math.hypot(cx - centerX, cz - centerZ) < 0.5) continue;
+    // Bench facing centroid.
+    const dx = centerX - cx;
+    const dz = centerZ - cz;
+    const len = Math.hypot(dx, dz) || 1;
+    const off = 0.30;
+    const bx = cx + (dx / len) * off;
+    const bz = cz + (dz / len) * off;
+    out.push({ makeGeom: () => box(0.20, 0.025, 0.05), color: 0x6b4f3a, dx: bx, dy: 0.07, dz: bz });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.05), color: 0x3a2a20, dx: bx - 0.08, dy: 0.045, dz: bz });
+    out.push({ makeGeom: () => box(0.018, 0.05, 0.05), color: 0x3a2a20, dx: bx + 0.08, dy: 0.045, dz: bz });
+    // Two trees per tile in opposite corners.
+    out.push({ makeGeom: () => cyl(0.04, 0.14, 6), color: 0x6b3f1f, dx: cx - 0.36, dy: 0.10, dz: cz - 0.36 });
+    out.push({ makeGeom: () => cone(0.18, 0.32, 8), color: 0x2f6a2d, dx: cx - 0.36, dy: 0.34, dz: cz - 0.36 });
+    out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx + 0.36, dy: 0.09, dz: cz + 0.36 });
+    out.push({ makeGeom: () => cone(0.15, 0.26, 8), color: 0x4a8e44, dx: cx + 0.36, dy: 0.30, dz: cz + 0.36 });
+  }
+  // Connecting paved paths from each non-centroid tile to centroid.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const dx = centerX - cx;
+    const dz = centerZ - cz;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.05) continue;
+    const horiz = Math.abs(dx) > Math.abs(dz);
+    if (horiz) {
+      out.push({ makeGeom: () => box(len, 0.05, 0.16), color: 0xc7c2b3, dx: (cx + centerX) / 2, dy: 0.026, dz: cz });
+    } else {
+      out.push({ makeGeom: () => box(0.16, 0.05, len), color: 0xc7c2b3, dx: cx, dy: 0.026, dz: (cz + centerZ) / 2 });
+    }
+  }
+  return out;
 }
 
 interface CityBuildingPart {
@@ -1136,6 +1411,101 @@ function cyl(r: number, h: number, segs: number): BufferGeometry {
 function cone(r: number, h: number, segs: number): BufferGeometry {
   const g = new ConeGeometry(r, h, segs);
   return g;
+}
+
+/**
+ * Vertical sky-gradient texture (Alpha 2.6 visual pass). 1 px wide,
+ * 256 px tall, painted with a CanvasGradient from horizon (warm pale) up
+ * to zenith (saturated blue). Used as `scene.background` so the canvas
+ * reads as sky instead of a flat dark colour. One-time cost at init.
+ */
+function makeSkyGradient(): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0.00, '#5d96d4'); // top — saturated mid-blue
+  grad.addColorStop(0.55, '#a4caea'); // mid — softer blue
+  grad.addColorStop(1.00, '#e6d8be'); // horizon — warm haze
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1, 256);
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * A small Group of stylized clouds floating high above the world (Alpha
+ * 2.6). Each cloud is a cluster of 3-5 IcosahedronGeometry "puffs" merged
+ * into a single mesh, no transparency (low-poly aesthetic), unlit
+ * MeshBasicMaterial so they read uniformly white regardless of scene
+ * lighting changes. Static — added once at init.
+ */
+function makeClouds(): Group {
+  const group = new Group();
+  // Five cloud blobs scattered across the sky at varying heights/sizes.
+  const cloudSpecs: Array<{ x: number; y: number; z: number; scale: number }> = [
+    { x: -22, y: 18, z: -18, scale: 1.0 },
+    { x:  20, y: 22, z: -25, scale: 1.4 },
+    { x:  35, y: 16, z:  10, scale: 0.9 },
+    { x: -30, y: 20, z:  20, scale: 1.2 },
+    { x:   5, y: 24, z:  35, scale: 1.1 }
+  ];
+  for (const spec of cloudSpecs) {
+    const puffs: BufferGeometry[] = [];
+    // Each cloud = 4 puffs in an asymmetric cluster.
+    const offsets: Array<[number, number, number, number]> = [
+      [ 0.0, 0.0,  0.0, 1.0 * spec.scale],
+      [ 1.0, 0.1, -0.2, 0.85 * spec.scale],
+      [-0.9, 0.0,  0.1, 0.80 * spec.scale],
+      [ 0.3, 0.4,  0.5, 0.65 * spec.scale]
+    ];
+    for (const [ox, oy, oz, r] of offsets) {
+      const puff = new IcosahedronGeometry(r, 1);
+      puff.translate(ox, oy, oz);
+      puffs.push(puff);
+    }
+    // Manual merge — concatenate position + index attrs across the puffs.
+    let totalVerts = 0, totalIndices = 0;
+    for (const p of puffs) {
+      totalVerts += p.getAttribute('position').count;
+      const idx = p.getIndex();
+      totalIndices += idx ? idx.count : p.getAttribute('position').count;
+    }
+    const positions = new Float32Array(totalVerts * 3);
+    const indices = new Uint32Array(totalIndices);
+    let vOff = 0, iOff = 0;
+    for (const p of puffs) {
+      const pos = p.getAttribute('position');
+      const idx = p.getIndex();
+      for (let i = 0; i < pos.count; i++) {
+        positions[(vOff + i) * 3 + 0] = pos.getX(i);
+        positions[(vOff + i) * 3 + 1] = pos.getY(i);
+        positions[(vOff + i) * 3 + 2] = pos.getZ(i);
+      }
+      if (idx) {
+        for (let i = 0; i < idx.count; i++) indices[iOff + i] = idx.getX(i) + vOff;
+        iOff += idx.count;
+      } else {
+        for (let i = 0; i < pos.count; i++) indices[iOff + i] = vOff + i;
+        iOff += pos.count;
+      }
+      vOff += pos.count;
+      p.dispose();
+    }
+    const geom = new BufferGeometry();
+    geom.setAttribute('position', new BufferAttribute(positions, 3));
+    geom.setIndex(new BufferAttribute(indices, 1));
+    const mesh = new Mesh(
+      geom,
+      new MeshBasicMaterial({ color: 0xfafbfc })
+    );
+    mesh.position.set(spec.x, spec.y, spec.z);
+    group.add(mesh);
+  }
+  return group;
 }
 
 // --- Zones --------------------------------------------------------------
@@ -1620,6 +1990,145 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
       pillar.translate(cx + ox, pillarYBase + pillarH / 2, cz + oz);
       pillars.push(pillar);
       pillarColours.push(0x6e6e6e);
+    }
+
+    // Bridge railings (Alpha 2.6 visual pass) — slim parapet rails along
+    // both shoulders + a thin "deck stripe" down the median so the deck
+    // doesn't read as a flat slab. Rails span the full tile length on the
+    // bridge's long axis.
+    const railH = 0.08;
+    const railThick = 0.03;
+    const railSpan = TILE_SIZE * 0.95;
+    if (horizontal) {
+      // Rails run east-west, sit on north and south shoulders.
+      const railNorth = new BoxGeometry(railSpan, railH, railThick);
+      railNorth.translate(cx, BRIDGE_LIFT + railH / 2, cz - half - railThick / 2);
+      pillars.push(railNorth);
+      pillarColours.push(0xb6a98a);
+      const railSouth = new BoxGeometry(railSpan, railH, railThick);
+      railSouth.translate(cx, BRIDGE_LIFT + railH / 2, cz + half + railThick / 2);
+      pillars.push(railSouth);
+      pillarColours.push(0xb6a98a);
+      // Median stripe on the deck — slim raised pad so the deck reads.
+      const stripe = new BoxGeometry(railSpan, 0.012, 0.04);
+      stripe.translate(cx, BRIDGE_LIFT + 0.006, cz);
+      pillars.push(stripe);
+      pillarColours.push(0xe8d96a);
+    } else {
+      const railWest = new BoxGeometry(railThick, railH, railSpan);
+      railWest.translate(cx - half - railThick / 2, BRIDGE_LIFT + railH / 2, cz);
+      pillars.push(railWest);
+      pillarColours.push(0xb6a98a);
+      const railEast = new BoxGeometry(railThick, railH, railSpan);
+      railEast.translate(cx + half + railThick / 2, BRIDGE_LIFT + railH / 2, cz);
+      pillars.push(railEast);
+      pillarColours.push(0xb6a98a);
+      const stripe = new BoxGeometry(0.04, 0.012, railSpan);
+      stripe.translate(cx, BRIDGE_LIFT + 0.006, cz);
+      pillars.push(stripe);
+      pillarColours.push(0xe8d96a);
+    }
+  }
+
+  // Sidewalk decorations (Alpha 2.6) — small street furniture on
+  // non-highway road tiles next to a developed-commercial / mixed-use
+  // tile. Distributes hydrants / parking meters / bike racks
+  // deterministically by tile hash so the same block always shows the
+  // same pieces. Only ~25% of eligible tiles get a piece — too many
+  // would crowd the sidewalk visually.
+  for (const t of grid.iter()) {
+    if (!t.road || t.roadType === 'highway') continue;
+    if (t.bridge) continue;
+    if (t.busStop || t.stopSign || t.trafficLight) continue;
+    // Find a commercial / mixed-use 4-neighbour with a developed building
+    // (density > 0). No commercial neighbour = no street furniture.
+    let side: [number, number] | null = null;
+    const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    for (const [dx, dz] of dirs) {
+      const n = grid.get(t.x + dx, t.y + dz);
+      if (!n) continue;
+      if ((n.zone === 'commercial' || n.zone === 'mixed') && n.density > 0) {
+        side = [dx, dz];
+        break;
+      }
+    }
+    if (!side) continue;
+    // Hash gates placement to ~30% of eligible tiles.
+    const h = Math.abs(((t.x * 2654435761) ^ (t.y * 1597334677)) | 0);
+    if ((h % 100) >= 30) continue;
+    const tileY = ROAD_LIFT + t.elevation;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    // Sidewalk pad position: outside the road's half-width on the chosen side.
+    const roadHalf = ROAD_TIER[t.roadType].width / 2;
+    const padOff = roadHalf + 0.06;
+    const sx = cx + side[0] * padOff;
+    const sz = cz + side[1] * padOff;
+    // Pick one of three pieces by a different hash slice.
+    const piece = (h >> 7) % 3;
+    if (piece === 0) {
+      // Hydrant — short red-and-yellow squat cylinder with two side ports.
+      const body = new CylinderGeometry(0.04, 0.045, 0.10, 8);
+      body.translate(sx, tileY + 0.05, sz);
+      stops.push(body);
+      stopColours.push(0xc04a3a);
+      const cap = new CylinderGeometry(0.045, 0.045, 0.022, 8);
+      cap.translate(sx, tileY + 0.111, sz);
+      stops.push(cap);
+      stopColours.push(0xe5c25a);
+    } else if (piece === 1) {
+      // Parking meter — thin grey post + small head box.
+      const post = new CylinderGeometry(0.013, 0.013, 0.18, 6);
+      post.translate(sx, tileY + 0.09, sz);
+      stops.push(post);
+      stopColours.push(0x707070);
+      const head = new BoxGeometry(0.05, 0.08, 0.04);
+      head.translate(sx, tileY + 0.22, sz);
+      stops.push(head);
+      stopColours.push(0x4a4a4a);
+      const screen = new BoxGeometry(0.04, 0.04, 0.005);
+      screen.translate(sx + (Math.abs(side[0]) > 0 ? 0 : 0.025) - (side[0] === 0 ? 0 : side[0] * 0.026),
+                       tileY + 0.23,
+                       sz + (Math.abs(side[1]) > 0 ? 0 : 0.025) - (side[1] === 0 ? 0 : side[1] * 0.026));
+      stops.push(screen);
+      stopColours.push(0x9c9c9c);
+    } else {
+      // Bike rack — three vertical loops on a short crossbar. Approximate
+      // a loop with a top box + two side stems for low-poly silhouette.
+      const horizontal = side[1] !== 0; // axis perpendicular to road runs along x
+      const rackLen = 0.18;
+      const stems: Array<[number, number]> = [
+        [-rackLen / 2, 0],
+        [0, 0],
+        [rackLen / 2, 0]
+      ];
+      // Cross bar.
+      const cross = horizontal
+        ? new BoxGeometry(rackLen, 0.018, 0.022)
+        : new BoxGeometry(0.022, 0.018, rackLen);
+      cross.translate(sx, tileY + 0.10, sz);
+      stops.push(cross);
+      stopColours.push(0x4d6a8e);
+      // Three loops.
+      for (const [ox, _] of stems) {
+        const loopX = horizontal ? sx + ox : sx;
+        const loopZ = horizontal ? sz : sz + ox;
+        const top = horizontal
+          ? new BoxGeometry(0.04, 0.022, 0.022)
+          : new BoxGeometry(0.022, 0.022, 0.04);
+        top.translate(loopX, tileY + 0.18, loopZ);
+        stops.push(top);
+        stopColours.push(0x4d6a8e);
+        // Two thin stems forming the loop.
+        const stemL = new BoxGeometry(0.012, 0.08, 0.012);
+        stemL.translate(loopX - (horizontal ? 0.018 : 0), tileY + 0.14, loopZ - (horizontal ? 0 : 0.018));
+        stops.push(stemL);
+        stopColours.push(0x4d6a8e);
+        const stemR = new BoxGeometry(0.012, 0.08, 0.012);
+        stemR.translate(loopX + (horizontal ? 0.018 : 0), tileY + 0.14, loopZ + (horizontal ? 0 : 0.018));
+        stops.push(stemR);
+        stopColours.push(0x4d6a8e);
+      }
     }
   }
 

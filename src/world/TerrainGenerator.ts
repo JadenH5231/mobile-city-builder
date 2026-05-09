@@ -24,6 +24,22 @@ import type { TerrainType } from '../types';
  *  4. Forest: forest-noise + biome rule (mid-elevation grass).
  */
 
+/**
+ * Flat-terrain feature flag (Alpha 2.4.1). When true, the generator still
+ * uses elevation noise to *decide* where lakes and forests go (so the map
+ * still has natural-looking biome distribution), but every tile's
+ * elevation is forced to 0 in the final spec — the map renders flat.
+ *
+ * Elevation introduced visual artifacts at tile boundaries (sidewalks
+ * stepped, bridge ramps awkward, etc.) that we'd need a corner-shared
+ * vertex-averaging approach to fully fix. Disabled until we have time
+ * to do that pass. Flip back to false to re-enable rolling hills.
+ *
+ * All elevation-aware code in the renderer remains intact and reads
+ * `tile.elevation` — it just sees 0 everywhere when this flag is on.
+ */
+const FLAT_TERRAIN = true;
+
 interface GenOpts {
   seed: number;
   /** Probability that a given map gets a river (some maps stay landlocked). */
@@ -116,7 +132,20 @@ export function generateTerrain(width: number, height: number, opts: GenOpts): G
     }
   }
 
+  // Fourth pass — flatten if the feature flag is on. Biome assignment
+  // (lake/river/forest/sand) above already used the noise; now we throw
+  // away the elevation values so the map renders flat.
+  if (FLAT_TERRAIN) {
+    for (let i = 0; i < out.length; i++) {
+      out[i]!.elevation = 0;
+    }
+  }
+
   return out;
+}
+
+export function isFlatTerrain(): boolean {
+  return FLAT_TERRAIN;
 }
 
 /**

@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Economy } from '../simulation/Economy';
 import type { Council } from '../simulation/Council';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
+import { isFlatTerrain } from '../world/TerrainGenerator';
 
 const DB_NAME = 'city-builder';
 const DB_VERSION = 1;
@@ -211,7 +212,10 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy, council?
     t.trafficLight = snap.trafficLight ?? false;
     if (t.trafficLight) t.stopSign = false;
     t.busStop = snap.busStop ?? false;
-    t.elevation = snap.elevation ?? 0;
+    // Elevation forced to 0 while FLAT_TERRAIN is on (Alpha 2.4.1) so old
+    // v7 saves with rolling hills load flat too. Switch back when the
+    // generator flag flips.
+    t.elevation = isFlatTerrain() ? 0 : (snap.elevation ?? 0);
     t.bridge = snap.bridge ?? false;
     t.zone = snap.zone;
     // zoneCap is schema 3+. v2 saves get the implicit "high" cap (3) for

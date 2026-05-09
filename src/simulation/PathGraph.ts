@@ -2,17 +2,20 @@ import type { Grid } from '../world/Grid';
 import type { Neighbor } from './RoadGraph';
 
 /**
- * Pedestrian adjacency over walkable tiles. Walkable = walking-path tiles
- * OR non-highway road tiles (sidewalks). 4-connected only — pedestrians
- * don't cut diagonals through buildings.
+ * Pedestrian adjacency over walkable tiles. Walkable =
+ *   - walking-path tiles, OR
+ *   - non-highway road tiles (sidewalks), OR
+ *   - park tiles (Alpha 2.6.1) — walkers can cut through parks like
+ *     they cut through paths.
+ * 4-connected only — pedestrians don't cut diagonals through buildings.
  *
  * Highway tiles are never walkable (they're car-only infrastructure with no
  * sidewalk in the spec). The implication: a pedestrian trip whose only
  * route involves a highway has no path, and the spawner will skip it.
  *
  * Shape mirrors {@link RoadGraph} so it can drop into {@link Pathfinding}
- * unchanged. Edge weight is the orthogonal distance (1) — paths and
- * sidewalks all walk at the same speed.
+ * unchanged. Edge weight is the orthogonal distance (1) — paths,
+ * sidewalks, and parks all walk at the same speed.
  *
  * Note on the "cross only at intersections" rule: with a single-centerline
  * sidewalk model (per Tile, not per side), this rule is geometric flavour
@@ -29,7 +32,7 @@ export class PathGraph {
     this.gridWidth = grid.width;
     const w = grid.width;
     for (const t of grid.iter()) {
-      if (!isWalkable(t.path, t.road, t.roadType)) continue;
+      if (!isWalkableTile(t.path, t.road, t.roadType, t.building)) continue;
       const idx = t.y * w + t.x;
       // 4-connected neighbours.
       const neigh = [
@@ -41,7 +44,7 @@ export class PathGraph {
       for (const { nx, ny } of neigh) {
         const n = grid.get(nx, ny);
         if (!n) continue;
-        if (!isWalkable(n.path, n.road, n.roadType)) continue;
+        if (!isWalkableTile(n.path, n.road, n.roadType, n.building)) continue;
         this.push(idx, ny * w + nx, 1);
       }
     }
@@ -64,12 +67,13 @@ export class PathGraph {
   isWalkableAt(grid: Grid, x: number, y: number): boolean {
     const t = grid.get(x, y);
     if (!t) return false;
-    return isWalkable(t.path, t.road, t.roadType);
+    return isWalkableTile(t.path, t.road, t.roadType, t.building);
   }
 }
 
-function isWalkable(path: boolean, road: boolean, roadType: string): boolean {
+function isWalkableTile(path: boolean, road: boolean, roadType: string, building: string): boolean {
   if (path) return true;
   if (road && roadType !== 'highway') return true;
+  if (building === 'park') return true;
   return false;
 }

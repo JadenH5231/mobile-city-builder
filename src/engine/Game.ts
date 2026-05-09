@@ -14,6 +14,7 @@ import { RoadGraph } from '../simulation/RoadGraph';
 import { Buses } from '../simulation/Buses';
 import { Services } from '../simulation/Services';
 import { Traffic } from '../simulation/Traffic';
+import { TrafficLights } from '../simulation/TrafficLights';
 import { Vehicles } from '../simulation/Vehicles';
 import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
@@ -32,6 +33,7 @@ import {
   ROAD_TOOLS,
   STOP_SIGN_COST,
   TILE_SIZE,
+  TRAFFIC_LIGHT_COST,
   ZONE_TIER_CAP,
   ZONE_TOOL_INFO,
   dirBetween,
@@ -92,6 +94,27 @@ export class Game {
   selected: { x: number; y: number } | null = null;
   tool: Tool = 'pan';
 
+  /**
+   * Fired at the end of a bulldoze stroke that touched > 5 tiles. main.ts
+   * subscribes to surface a "Bulldozed N tiles · Undo" toast. The undo
+   * stack already holds a snapshot from the stroke's start, so the toast's
+   * Undo button just calls {@link Game.undo}.
+   */
+  onBigBulldoze?: (tileCount: number) => void;
+
+  /**
+   * Sim speed multiplier. 0 = paused (no sim ticks, no vehicle/walker
+   * motion). 1 = normal. 2 / 3 fast-forward. The render loop continues
+   * regardless so the HUD stays responsive while paused.
+   */
+  simSpeed: 0 | 1 | 2 | 3 = 1;
+  /**
+   * Photo mode hides all HUD chrome (pills, toolbar, panels). Kept on
+   * Game so we can persist it later if we want; today it's purely a CSS
+   * toggle owned by main.ts.
+   */
+  photoMode = false;
+
   private host!: HTMLElement;
 
   // ---- Per-stroke rubber-band state ----
@@ -143,6 +166,8 @@ export class Game {
   private readonly services = new Services();
   // Traffic owns the per-tile EMA + stress aggregate read by Population.
   readonly traffic = new Traffic();
+  // Adaptive traffic-light controller — phases + queue-aware green timing.
+  readonly trafficLights = new TrafficLights();
   private simAccumulatorMs = 0;
   /** Toggle for the traffic heatmap overlay. */
   heatmapVisible = false;
@@ -233,6 +258,7 @@ export class Game {
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
+    this.trafficLights.rebuild(this.grid);
     this.fitCameraToGrid();
     this.handleResize();
 
@@ -282,7 +308,12 @@ export class Game {
 
       // Fixed-rate sim: accumulate real time, run as many fixed steps as fit.
       // Capped per frame so a long stall doesn't trigger a death-spiral catch-up.
-      this.simAccumulatorMs += dtMs;
+      // Pause: simSpeed=0 freezes everything. Fast-forward: simSpeed>1
+      // multiplies the accumulator so more sim steps fit per real frame
+      // AND multiplies the render-rate `dt` later so vehicles/walkers move
+      // proportionally faster on screen too.
+      const simDt = dtMs * this.simSpeed;
+      this.simAccumulatorMs += simDt;
       let steps = 0;
       let buildingsDirty = false;
       while (this.simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS_PER_FRAME) {
@@ -345,9 +376,14 @@ export class Game {
       }
       if (buildingsDirty) this.renderer.drawBuildings(this.grid);
 
-      const dt = dtMs / 1000;
+      // Render-rate dt: scale by simSpeed so vehicles/walkers visually move
+      // faster at 2× / 3× and freeze at 0.
+      const dt = (dtMs * this.simSpeed) / 1000;
       // Cars move smoothly at render rate, decoupled from the sim tick.
-      this.vehicles.update(dt, this.grid, this.grid.width);
+      // Tick traffic-light phases at render rate so visual + sim match.
+      // Scaled by simSpeed so 2× / 3× advance the lights too.
+      this.trafficLights.tick(dt, this.grid, this.vehicles);
+      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights);
       // Drain any crashes that fired this frame: deduct treasury, hit the
       // destination tile's developmentPressure (so business growth slows
       // when crashes prevent shoppers/workers from arriving).
@@ -438,6 +474,7 @@ export class Game {
       roadType: t.roadType,
       highwayDir: t.highwayDir,
       stopSign: t.stopSign,
+      trafficLight: t.trafficLight,
       zone: t.zone,
       zoneCap: t.zoneCap,
       density: t.density,
@@ -477,6 +514,7 @@ export class Game {
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
+    this.trafficLights.rebuild(this.grid);
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
@@ -590,6 +628,35 @@ export class Game {
       return;
     }
 
+    // Traffic light — tap-only on a road tile that's an intersection. Same
+    // shape as stop-sign placement; uses TRAFFIC_LIGHT_COST and rebuilds
+    // the TrafficLights controller so the new light starts cycling.
+    if (this.tool === 'place_traffic_light') {
+      const placed = this.placeTrafficLight(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
+    // Bus stop — if the target tile is a non-highway road, attach the stop
+    // to the road's sidewalk (Alpha 2.0). Otherwise fall through to the
+    // standalone-building path below for backwards-compat with old saves.
+    if (this.tool === 'place_bus_stop') {
+      const t = this.grid.get(tile.x, tile.y);
+      if (t && t.road && t.roadType !== 'highway') {
+        const placed = this.placeRoadBusStop(tile.x, tile.y);
+        if (!placed) {
+          this.undoStack.pop();
+          this.strokeDidSnapshot = false;
+        }
+        this.strokeOrigin = null;
+        return;
+      }
+    }
+
     // Place tools are tap-only (single building per tap). Skip the rubber
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
@@ -616,6 +683,9 @@ export class Game {
   }
 
   private handlePaintEnd(): void {
+    // Capture the bulldozed-tile count BEFORE we clear the stroke set so
+    // the post-stroke toast can mention "Bulldozed 47 tiles".
+    const bulldozedCount = this.strokeBulldozed.size;
     if (this.strokeDidSnapshot) {
       const noop =
         this.strokeEdges.size === 0 &&
@@ -626,6 +696,7 @@ export class Game {
       if (noop) this.undoStack.pop();
       this.strokeDidSnapshot = false;
     }
+    if (bulldozedCount > 5 && this.onBigBulldoze) this.onBigBulldoze(bulldozedCount);
     this.strokeOrigin = null;
     this.strokeEdges.clear();
     this.strokeStubs.clear();
@@ -672,7 +743,47 @@ export class Game {
     if (!this.grid.setStopSign(x, y, true)) return false;
     this.economy.treasury -= cost;
     this.renderer.drawRoads(this.grid);
+    this.trafficLights.rebuild(this.grid);
     this.maybeOfferPhotoOp('stop_sign');
+    return true;
+  }
+
+  /**
+   * Attach a bus stop to a non-highway road tile (Alpha 2.0). Cost mirrors
+   * the standalone-building form. Council stance gating uses the existing
+   * `bus_stop` row in FACTION_STANCES — same key so factions react the
+   * same way.
+   */
+  private placeRoadBusStop(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t || !t.road || t.roadType === 'highway' || t.busStop) return false;
+    const baseCost = BUILDING_COSTS.bus_stop;
+    const mult = this.council.costMultiplier('bus_stop');
+    if (!isFinite(mult)) return false;
+    const cost = Math.round(baseCost * mult);
+    if (this.economy.treasury < cost) return false;
+    if (!this.grid.setBusStop(x, y, true)) return false;
+    this.economy.treasury -= cost;
+    this.renderer.drawRoads(this.grid);
+    this.maybeOfferPhotoOp('bus_stop');
+    return true;
+  }
+
+  /**
+   * Place a traffic light on a road-tile intersection. Mutex with stop
+   * sign — `setTrafficLight` clears any existing stop on the same tile.
+   * Cost is flat in this prototype; council stance gating for lights is a
+   * future pass (no `traffic_light` row in FACTION_STANCES yet).
+   */
+  private placeTrafficLight(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t || !t.road || t.trafficLight) return false;
+    if (this.grid.incidentRoadEdgeCount(x, y) < 3) return false;
+    if (this.economy.treasury < TRAFFIC_LIGHT_COST) return false;
+    if (!this.grid.setTrafficLight(x, y, true)) return false;
+    this.economy.treasury -= TRAFFIC_LIGHT_COST;
+    this.renderer.drawRoads(this.grid);
+    this.trafficLights.rebuild(this.grid);
     return true;
   }
 
@@ -1021,6 +1132,7 @@ export class Game {
         tile.roadType = snap.roadType;
         tile.highwayDir = snap.highwayDir;
         tile.stopSign = snap.stopSign;
+        tile.trafficLight = snap.trafficLight;
       }
     }
     // PHASE 2 — restore zones + density + buildings (bypasses setZone /
@@ -1070,6 +1182,7 @@ export class Game {
         roadType: tile.roadType,
         highwayDir: tile.highwayDir,
         stopSign: tile.stopSign,
+        trafficLight: tile.trafficLight,
         zone: tile.zone,
         zoneCap: tile.zoneCap,
         density: tile.density,
@@ -1132,6 +1245,7 @@ interface BulldozedSnapshot {
   roadType: RoadType;
   highwayDir: number;
   stopSign: boolean;
+  trafficLight: boolean;
   zone: Zone;
   /** Player-set density cap (0..3) at bulldoze time. Restored alongside zone. */
   zoneCap: 0 | 1 | 2 | 3;

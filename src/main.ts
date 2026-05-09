@@ -43,6 +43,129 @@ if (undoBtn) {
   });
 }
 
+// Sim speed cycler — 1× → 2× → 3× → ⏸ → 1×.
+// Glyphs read at-a-glance even in a 12px pill: triangle for play, double
+// for 2x, triple for 3x, the standard pause bars for 0.
+const speedBtn = document.getElementById('hud-speed') as HTMLButtonElement | null;
+if (speedBtn) {
+  const SPEED_GLYPHS: Record<0 | 1 | 2 | 3, string> = {
+    0: '⏸',
+    1: '▶',
+    2: '▶▶',
+    3: '▶▶▶'
+  };
+  const renderSpeed = (): void => {
+    speedBtn.textContent = SPEED_GLYPHS[game.simSpeed];
+    speedBtn.setAttribute('aria-label',
+      game.simSpeed === 0 ? 'Resume simulation' : `Sim speed ${game.simSpeed}× — tap to cycle`);
+    speedBtn.classList.toggle('speed--paused', game.simSpeed === 0);
+  };
+  renderSpeed();
+  speedBtn.addEventListener('click', () => {
+    const next = game.simSpeed === 1 ? 2 : game.simSpeed === 2 ? 3 : game.simSpeed === 3 ? 0 : 1;
+    game.simSpeed = next as 0 | 1 | 2 | 3;
+    renderSpeed();
+  });
+}
+
+// Bulldoze toast: when a stroke wipes > 5 tiles, surface a one-shot
+// "Bulldozed N tiles · Undo" pill near the top of the screen for 5 sec.
+// Game emits onBigBulldoze; we own the DOM bits.
+const bulldozeToast = document.getElementById('bulldoze-toast');
+const bulldozeText = document.getElementById('bulldoze-toast-text');
+const bulldozeUndo = document.getElementById('bulldoze-toast-undo');
+if (bulldozeToast && bulldozeText && bulldozeUndo) {
+  let toastTimer: number | undefined;
+  const hideToast = (): void => {
+    bulldozeToast.classList.add('hidden');
+    bulldozeToast.setAttribute('aria-hidden', 'true');
+    if (toastTimer !== undefined) {
+      clearTimeout(toastTimer);
+      toastTimer = undefined;
+    }
+  };
+  game.onBigBulldoze = (count) => {
+    bulldozeText.textContent = `Bulldozed ${count} tiles`;
+    bulldozeToast.classList.remove('hidden');
+    bulldozeToast.setAttribute('aria-hidden', 'false');
+    if (toastTimer !== undefined) clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(hideToast, 5000);
+  };
+  bulldozeUndo.addEventListener('click', () => {
+    if (game.canUndo()) game.undo();
+    hideToast();
+  });
+}
+
+// "Show tutorial again" link in the budget panel.
+const showTutorialBtn = document.getElementById('budget-show-tutorial');
+if (showTutorialBtn) {
+  showTutorialBtn.addEventListener('click', () => {
+    const f = (window as unknown as { showTutorial?: () => void }).showTutorial;
+    if (f) f();
+  });
+}
+
+// Tutorial — 4-step welcome shown once on first launch. Skipped or
+// completed both write a localStorage flag so we never auto-show again.
+// Player can re-open via the budget panel's "Show tutorial" link.
+const TUTORIAL_SEEN_KEY = 'city-builder-tutorial-seen';
+const tutorial = document.getElementById('tutorial');
+if (tutorial) {
+  const stepEls = Array.from(tutorial.querySelectorAll<HTMLElement>('.tutorial__step'));
+  const prevBtn = document.getElementById('tutorial-prev') as HTMLButtonElement | null;
+  const nextBtn = document.getElementById('tutorial-next') as HTMLButtonElement | null;
+  const skipBtn = document.getElementById('tutorial-skip');
+  let cur = 0;
+  const showStep = (i: number): void => {
+    cur = Math.max(0, Math.min(stepEls.length - 1, i));
+    for (let k = 0; k < stepEls.length; k++) stepEls[k]!.classList.toggle('hidden', k !== cur);
+    if (prevBtn) prevBtn.disabled = cur === 0;
+    if (nextBtn) nextBtn.textContent = cur === stepEls.length - 1 ? "Got it" : 'Next';
+  };
+  const dismiss = (): void => {
+    tutorial.classList.add('hidden');
+    tutorial.setAttribute('aria-hidden', 'true');
+    try { localStorage.setItem(TUTORIAL_SEEN_KEY, '1'); } catch { /* private mode etc. */ }
+  };
+  prevBtn?.addEventListener('click', () => showStep(cur - 1));
+  nextBtn?.addEventListener('click', () => {
+    if (cur === stepEls.length - 1) dismiss();
+    else showStep(cur + 1);
+  });
+  skipBtn?.addEventListener('click', dismiss);
+  // Show on first launch only.
+  let seen = false;
+  try { seen = localStorage.getItem(TUTORIAL_SEEN_KEY) === '1'; } catch { seen = false; }
+  if (!seen) {
+    showStep(0);
+    tutorial.classList.remove('hidden');
+    tutorial.setAttribute('aria-hidden', 'false');
+  }
+  // Expose a re-opener so the budget panel can wire a "Show tutorial" link.
+  (window as unknown as { showTutorial?: () => void }).showTutorial = () => {
+    showStep(0);
+    tutorial.classList.remove('hidden');
+    tutorial.setAttribute('aria-hidden', 'false');
+  };
+}
+
+// Photo mode — hide all HUD chrome via a body-level CSS class so panels
+// and the toolbar disappear together. Tap anywhere on the canvas to exit
+// (the canvas listener is wired further down).
+const photoBtn = document.getElementById('hud-photo') as HTMLButtonElement | null;
+if (photoBtn) {
+  const renderPhoto = (): void => {
+    photoBtn.setAttribute('aria-pressed', String(game.photoMode));
+    document.body.classList.toggle('photo-mode', game.photoMode);
+  };
+  renderPhoto();
+  photoBtn.addEventListener('click', () => {
+    game.photoMode = !game.photoMode;
+    renderPhoto();
+  });
+}
+
 // Reset button uses an inline two-tap confirmation rather than confirm().
 // Reason: iOS Safari standalone mode (page added to home screen via the
 // apple-mobile-web-app-capable meta tag) silently no-ops confirm/alert/prompt,

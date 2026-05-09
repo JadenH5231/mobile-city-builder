@@ -112,6 +112,11 @@ export interface Stats {
   rTiles: number;
   cTiles: number;
   iTiles: number;
+  /** Mixed-use tiles (Alpha 2.0). Each tile counts as a single mu-tile;
+   *  factions that specifically love or hate walkable density read this
+   *  directly. Mixed tiles do NOT also bump rTiles/cTiles to avoid
+   *  double-counting their stance influence. */
+  muTiles: number;
   zonedLow: number;
   zonedMed: number;
   zonedHigh: number;
@@ -151,7 +156,7 @@ function emptyStats(): Stats {
     totalResidents: 0, totalCJobs: 0, totalIJobs: 0,
     trafficStress: 0, totalAccidents: 0, lastAccidentCost: 0,
     monthlyNet: 0, treasury: 0, taxR: 0, taxC: 0, taxI: 0,
-    rTiles: 0, cTiles: 0, iTiles: 0,
+    rTiles: 0, cTiles: 0, iTiles: 0, muTiles: 0,
     zonedLow: 0, zonedMed: 0, zonedHigh: 0,
     density1Tiles: 0, density2Tiles: 0, density3Tiles: 0,
     parks: 0, busStops: 0, busDepots: 0, powerPlants: 0, waterTowers: 0, stopSigns: 0,
@@ -180,7 +185,8 @@ function buildStats(grid: Grid, economy: Economy, population: Population, traffi
     if (t.zone !== 'none') {
       if (t.zone === 'residential') s.rTiles++;
       else if (t.zone === 'commercial') s.cTiles++;
-      else s.iTiles++;
+      else if (t.zone === 'industrial') s.iTiles++;
+      else if (t.zone === 'mixed') s.muTiles++;
       if (t.zoneCap === 1) s.zonedLow++;
       else if (t.zoneCap === 2) s.zonedMed++;
       else if (t.zoneCap === 3) s.zonedHigh++;
@@ -245,6 +251,10 @@ export const FACTIONS: readonly Faction[] = [
       // Walking paths feel quaint and small-town when modestly applied —
       // mild positive that caps quickly.
       h += 0.08 * sat(s.walkingPathTiles, 25);
+      // Mixed-use brings shops below apartments — quaint at small scale,
+      // alarming at scale.
+      h += 0.08 * sat(s.muTiles, 8);
+      h -= 0.20 * sat(Math.max(0, s.muTiles - 10), 20);
       return clamp(h);
     },
     comments: {
@@ -294,6 +304,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.35 * lowRatio;
       // Walkable density is the YIMBY platform — paths get a real bonus.
       h += 0.15 * sat(s.walkingPathTiles, 30);
+      // Mixed-use IS the YIMBY platform. Saturates fast.
+      h += 0.30 * sat(s.muTiles, 12);
       return clamp(h);
     },
     comments: {
@@ -343,6 +355,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.20 * sat(s.highwayEdges, 30);
       // Walking infrastructure = fewer car trips. Big love.
       h += 0.20 * sat(s.walkingPathTiles, 25);
+      // Mixed-use shortens trips and supports transit ridership — moderate love.
+      h += 0.15 * sat(s.muTiles, 12);
       return clamp(h);
     },
     comments: {
@@ -391,6 +405,8 @@ export const FACTIONS: readonly Faction[] = [
       h += 0.15 * sat(s.zonedLow, 40);
       // Walking paths feel like the old town — sidewalks past white picket fences.
       h += 0.10 * sat(s.walkingPathTiles, 25);
+      // Mixed-use is "downtown stuff" — Bud doesn't recognise his town anymore.
+      h -= 0.30 * sat(s.muTiles, 10);
       return clamp(h);
     },
     comments: {
@@ -440,6 +456,8 @@ export const FACTIONS: readonly Faction[] = [
       h += 0.15 * sat(s.totalCJobs + s.totalIJobs, 250);
       // Walkable streetscape brings foot traffic past storefronts. Modest plus.
       h += 0.07 * sat(s.walkingPathTiles, 30);
+      // Mixed-use is "shop downstairs, customers upstairs" — solid for retail.
+      h += 0.20 * sat(s.muTiles, 12);
       return clamp(h);
     },
     comments: {
@@ -491,6 +509,8 @@ export const FACTIONS: readonly Faction[] = [
       h -= 0.15 * sat(s.highwayEdges, 30);
       // Walking paths are multimodal infrastructure — major bonus.
       h += 0.25 * sat(s.walkingPathTiles, 25);
+      // Mixed-use generates trip ends near transit; Priya is fired up.
+      h += 0.25 * sat(s.muTiles, 10);
       return clamp(h);
     },
     comments: {
@@ -635,6 +655,8 @@ export const FACTIONS: readonly Faction[] = [
       h += 0.10 * sat(s.parks, 5);
       // Pedestrian infrastructure = lives saved. Largest boost on the matrix.
       h += 0.25 * sat(s.walkingPathTiles, 25);
+      // Mixed-use puts shops near homes — fewer car trips, fewer crashes.
+      h += 0.10 * sat(s.muTiles, 12);
       return clamp(h);
     },
     comments: {
@@ -691,6 +713,8 @@ export const FACTIONS: readonly Faction[] = [
       // Walking is free transportation — material help for people who can't
       // afford a second car.
       h += 0.10 * sat(s.walkingPathTiles, 25);
+      // Mixed-use means jobs are walking distance from home. Big deal.
+      h += 0.20 * sat(s.muTiles, 12);
       return clamp(h);
     },
     comments: {

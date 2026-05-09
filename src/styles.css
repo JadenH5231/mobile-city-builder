@@ -389,6 +389,33 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.45);
 }
 
+/* Sim-speed pill — tabular glyphs so the triangle stack looks consistent. */
+.pill.speed {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: -1px;
+  min-width: 48px;
+  text-align: center;
+}
+
+.pill.speed--paused {
+  background: rgba(208, 106, 138, 0.16);
+  color: #ffb0c5;
+  box-shadow: inset 0 0 0 1px rgba(208, 106, 138, 0.4);
+}
+
+/* Photo mode — hide every HUD chrome layer so the user can frame a shot
+   of the world unobstructed. The bottom toolbar, HUD pills, info panels,
+   and modals all collapse. The photo pill itself stays so the user can
+   exit the mode. */
+body.photo-mode #hud > *:not(#hud-photo),
+body.photo-mode .toolbar,
+body.photo-mode .info-panel,
+body.photo-mode .tile-info,
+body.photo-mode .modal,
+body.photo-mode .photo-op {
+  display: none !important;
+}
+
 .pill.action:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -670,6 +697,165 @@ body {
 
 .happiness__row[data-role="council"] {
   background: rgba(255, 216, 77, 0.06);
+}
+
+/* ---- Tutorial overlay ----------------------------------------------- */
+
+.tutorial {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 110;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.tutorial.hidden {
+  display: none;
+}
+
+.tutorial__sheet {
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pill-border);
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  max-width: 520px;
+  width: 100%;
+  margin-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.tutorial__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.tutorial__step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.tutorial__step.hidden {
+  display: none;
+}
+
+.tutorial__step-num {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(207, 232, 214, 0.55);
+}
+
+.tutorial__body {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--pill-fg);
+}
+
+.tutorial__body strong {
+  color: #fff;
+}
+
+.tutorial__actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tutorial__skip {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--pill-border);
+  color: rgba(207, 232, 214, 0.7);
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tutorial__nav {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--pill-border);
+  color: var(--pill-fg);
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.tutorial__nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tutorial__cta {
+  appearance: none;
+  background: rgba(255, 216, 77, 0.16);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.4);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* ---- Generic toast (bulldoze count, etc.) --------------------------- */
+
+.toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 70px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pill-border);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 95;
+  font-size: 12px;
+  color: var(--pill-fg);
+  pointer-events: auto;
+  max-width: calc(100vw - 24px);
+}
+
+.toast.hidden {
+  display: none;
+}
+
+.toast__action {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--pill-border);
+  color: var(--pill-fg);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.toast__action:active {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* ---- Photo-op banner ------------------------------------------------- */
@@ -1284,6 +1470,25 @@ body {
 
 .budget__reset:active {
   background: rgba(255, 100, 100, 0.20);
+}
+
+.budget__link {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: rgba(207, 232, 214, 0.55);
+  font-size: 11px;
+  text-align: center;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(207, 232, 214, 0.25);
+}
+
+.budget__link:active {
+  color: var(--pill-fg);
 }
 
 .budget__reset--armed {

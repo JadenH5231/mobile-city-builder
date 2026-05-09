@@ -8,12 +8,15 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 5 (Alpha 1.6): adds `path` bool per tile (walking paths). v4 saves
- * load with `path` defaulted to false. v3 saves load with PC defaulted to 0;
- * v2 also still loads (zoneCap defaulted to 3). Schema 1 (pre-Alpha-1.0) is
- * silently dropped.
+ * Schema 6 (Alpha 2.0): adds `trafficLight` bool per tile, plus the
+ * 'mixed' zone value joins the Zone union (existing parse path is
+ * permissive enough that earlier schemas just won't have any mixed tiles
+ * to deserialise). v5 saves load with trafficLight defaulted to false.
+ * v4 saves load with `path` defaulted to false. v3 saves load with PC
+ * defaulted to 0; v2 also still loads (zoneCap defaulted to 3). Schema 1
+ * (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 5;
+const SCHEMA = 6;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -34,6 +37,10 @@ export interface TileSnapshot {
   roadType: RoadType;
   highwayDir: number;
   stopSign: boolean;
+  /** Player-placed traffic light. Schema 6+. */
+  trafficLight?: boolean;
+  /** Road-attached bus stop. Schema 6+. */
+  busStop?: boolean;
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
   zoneCap?: 0 | 1 | 2 | 3;
@@ -139,6 +146,8 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
       roadType: t.roadType,
       highwayDir: t.highwayDir,
       stopSign: t.stopSign,
+      trafficLight: t.trafficLight,
+      busStop: t.busStop,
       zone: t.zone,
       zoneCap: t.zoneCap,
       density: t.density,
@@ -191,6 +200,12 @@ export function applySave(data: SaveData, grid: Grid, economy: Economy, council?
     t.roadType = snap.roadType ?? 'local';
     t.highwayDir = snap.highwayDir ?? -1;
     t.stopSign = snap.stopSign ?? false;
+    // Traffic light is schema 6+. Older saves had no lights. Defensive
+    // mutex: if both bits ever appear true (corrupt save), prefer the
+    // more powerful traffic light.
+    t.trafficLight = snap.trafficLight ?? false;
+    if (t.trafficLight) t.stopSign = false;
+    t.busStop = snap.busStop ?? false;
     t.zone = snap.zone;
     // zoneCap is schema 3+. v2 saves get the implicit "high" cap (3) for
     // any zoned tile, mirroring pre-1.1 behaviour where services alone

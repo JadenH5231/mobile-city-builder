@@ -11,11 +11,14 @@ const MONTH_MS = 20_000;
  * demand drag (citizens grumble, growth slows). Memory:
  * feedback_challenge_tuning — these are the levers, money has to feel tight.
  */
-const TAX_SWEET = {
+const TAX_SWEET: Record<Exclude<Zone, 'none'>, number> = {
   residential: 9,
   commercial: 10,
-  industrial: 11
-} as const;
+  industrial: 11,
+  // Mixed-use sits between R and C — citizens AND merchants in the same
+  // tile, both averaged.
+  mixed: 9.5
+};
 const TAX_PENALTY_DENOMINATOR = 30;
 
 /**
@@ -148,7 +151,10 @@ export class Economy {
   taxDemandPenalty(zone: Exclude<Zone, 'none'>): number {
     const rate =
       zone === 'residential' ? this.taxR :
-      zone === 'commercial' ? this.taxC : this.taxI;
+      zone === 'commercial' ? this.taxC :
+      zone === 'industrial' ? this.taxI :
+      // Mixed-use trips bear the average of R + C tax pressure.
+      (this.taxR + this.taxC) / 2;
     return (rate - TAX_SWEET[zone]) / TAX_PENALTY_DENOMINATOR;
   }
 }

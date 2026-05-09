@@ -101,6 +101,8 @@ export class Grid {
       t.roadType = 'local';
       t.highwayDir = -1;
       t.stopSign = false;
+      t.trafficLight = false;
+      t.busStop = false;
       return true;
     }
   }
@@ -128,6 +130,32 @@ export class Grid {
     if (!t || !t.road) return false;
     if (t.stopSign === on) return false;
     t.stopSign = on;
+    // Stop sign and traffic light are mutually exclusive — placing one
+    // implicitly removes the other.
+    if (on) t.trafficLight = false;
+    return true;
+  }
+
+  /** Toggle a traffic light on a road tile. Caller enforces "intersection only". */
+  setTrafficLight(x: number, y: number, on: boolean): boolean {
+    const t = this.get(x, y);
+    if (!t || !t.road) return false;
+    if (t.trafficLight === on) return false;
+    t.trafficLight = on;
+    if (on) t.stopSign = false;
+    return true;
+  }
+
+  /**
+   * Toggle a road-attached bus stop. Caller is expected to filter to
+   * non-highway road tiles. Independent of stopSign / trafficLight on the
+   * same tile — the stop sits on the sidewalk, those control the road.
+   */
+  setBusStop(x: number, y: number, on: boolean): boolean {
+    const t = this.get(x, y);
+    if (!t || !t.road) return false;
+    if (t.busStop === on) return false;
+    t.busStop = on;
     return true;
   }
 

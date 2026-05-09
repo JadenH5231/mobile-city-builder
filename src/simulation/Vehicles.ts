@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Pathfinding } from './Pathfinding';
 import type { RoadGraph } from './RoadGraph';
 import type { PathGraph } from './PathGraph';
+import type { TrafficLights } from './TrafficLights';
 import {
   CAR_VISIT_HIGH_SEC,
   CAR_VISIT_LOW_SEC,
@@ -277,7 +278,7 @@ export class Vehicles {
    * stop-sign behaviour. After this call, `crashesThisFrame` holds any
    * collisions that fired — Game inspects it per render frame.
    */
-  update(dt: number, grid: Grid, gridWidth: number): void {
+  update(dt: number, grid: Grid, gridWidth: number, trafficLights?: TrafficLights): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
 
@@ -405,6 +406,23 @@ export class Vehicles {
         continue;
       }
 
+      // Traffic-light approach: same boundary-park behaviour as a stop sign,
+      // but no min-pause — once the light turns green for our approach we
+      // can roll on the next frame. That's what makes lights outperform
+      // stops at busy junctions: green-direction cars never sit still.
+      if (
+        trafficLights &&
+        destTile?.trafficLight === true &&
+        car.segmentT < STOP_PRE_T &&
+        !trafficLights.isGreen(grid, ax, ay, bx, by)
+      ) {
+        const allowedAdvance = Math.max(0, STOP_PRE_T - car.segmentT);
+        advance = Math.min(advance, allowedAdvance);
+        car.segmentT += advance;
+        if (car.segmentT >= STOP_PRE_T - 1e-6) car.segmentT = STOP_PRE_T;
+        continue;
+      }
+
       car.segmentT += advance;
 
       let despawned = false;
@@ -478,10 +496,11 @@ export class Vehicles {
           break;
         }
 
-        // Intersection collision check. Stop-sign intersections never roll —
-        // the car was already paused at the boundary on the previous segment.
+        // Intersection collision check. Stop signs and traffic lights both
+        // suppress the roll: a stop sign forces a yielding handshake on the
+        // previous segment, a traffic light controls the conflict via phase.
         const isIntersection = grid.incidentRoadEdgeCount(arrivedX, arrivedY) >= 3;
-        if (isIntersection && !arrivedTile.stopSign) {
+        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {
@@ -538,11 +557,26 @@ function pickRandomDevelopedTile(
   let chosen: { x: number; y: number } | null = null;
   let count = 0;
   for (const t of grid.iter()) {
-    if (t.zone !== zone || t.density === 0 || t.road) continue;
+    if (t.density === 0 || t.road) continue;
+    if (!tileMatchesRole(t.zone, zone)) continue;
     count++;
     if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
   }
   return chosen;
+}
+
+/**
+ * Mixed-use (Alpha 2.0) — a mu tile holds residents AND commercial jobs,
+ * so it counts as both R origin and C destination. Industrial stays single-
+ * purpose.
+ */
+function tileMatchesRole(
+  tileZone: 'none' | 'residential' | 'commercial' | 'industrial' | 'mixed',
+  role: 'residential' | 'commercial' | 'industrial'
+): boolean {
+  if (tileZone === role) return true;
+  if (tileZone === 'mixed' && (role === 'residential' || role === 'commercial')) return true;
+  return false;
 }
 
 function nearestRoadTile(grid: Grid, x: number, y: number): { x: number; y: number } | null {

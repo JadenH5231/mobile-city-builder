@@ -2,9 +2,17 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 1.6.** Adds a pedestrian layer on top of Alpha 1.5: walking paths as a placeable (per-tile, narrower than roads, can't remove roads), auto-rendered sidewalks on local + avenue tiles, a `PathGraph` + `Pedestrians` sim that walks residents to commercial / industrial destinations, path-coverage suppression of car spawns, and **car return trips** (cars now drive back home after an 8–22 sec visit so traffic feels two-way). Save schema bumped to v5 to persist the per-tile path bit.
+**Status: Alpha 2.0.** Big pedestrian/transit/traffic overhaul plus UX polish on top of Alpha 1.6. Highlights:
 
-Alpha 1.5 baseline still holds: 10 named-leader factions, yearly elections, 4-seat council, four civic actions powered by Political Capital. Saves on a 30 s auto-cadence.
+- **Mixed-use C+R zoning** with its own MU low/med/high paint tools. Each tile contributes residents AND commercial jobs. YIMBYs love it, Hometown hates it.
+- **Adaptive traffic lights** — a two-phase controller that measures queue length and allocates green time proportionally. Costs more than a stop sign ($1500 vs $250) but moves ~2-3× the cars at busy junctions because green-direction cars never sit still.
+- **Sidewalk-side bus stops** — bus stops attach to road tiles' sidewalks rather than taking their own tile. Buses pull over for 1.6 s, cars pass freely.
+- **Pedestrians 2.5×** — cap raised 200 → 500, spawn rate 2.7×.
+- **Crosswalks** auto-render at walkable intersections.
+- **QOL:** pause + 2× / 3× sim speed, photo mode (HUD hide), skippable tutorial, per-cell residents/jobs in the tile-info panel, "Bulldozed N tiles · Undo" toast for big strokes.
+- **Save schema v6** — persists `trafficLight` and `busStop` per tile.
+
+Alpha 1.5 + 1.6 baselines still hold: walking paths, returning cars, 10 named-leader factions, yearly elections, 4-seat council, four civic actions powered by Political Capital. Saves on a 30 s auto-cadence.
 
 ## Setup
 
@@ -62,19 +70,24 @@ Plus a post-alpha tuning pass: tighter money, sharper traffic penalties, and a 2
 
 ## What to test on your phone
 
-Open the Network URL and try:
+Open the Network URL and try (Alpha 2.0 highlights marked):
 
-1. **Camera:** pinch + pan should feel locked-on, no drift, no jitter. FPS pill solid 60.
-2. **Roads:** drag from one side to another — you should get clean diagonal segments, not stair-step. Drag back to retract.
-3. **Zoning:** paint R/C/I next to a road, watch low-poly buildings sprout over a few seconds.
-4. **Demand:** RCI bars should react when you have lots of houses but no commercial, etc.
-5. **Cars + return trips:** once you have some R + C, cars appear and route along your roads. After arriving they sit at the destination for 8–22 sec, then a return car drives back. Traffic should read as two-way.
-6. **Services:** drop a power plant + water tower + park near zones; tiles within radius unlock L3 (taller buildings) over time.
-7. **Buses:** place a depot + a few stops; a yellow bus should auto-cycle the stops, and nearby R should spawn fewer cars.
-8. **Walking paths + pedestrians (Alpha 1.6):** open the Roads popover and pick **Path**. Drag to paint between R and C tiles. Pedestrians should spawn and walk along the new path AND along the sidewalks of adjacent local/avenue roads (highway tiles never get a sidewalk). Cars should noticeably thin out on routes covered by paths.
-9. **Heatmap:** toggle on with congested traffic — green→yellow→red overlay on roads.
-10. **Budget:** tap the treasury pill, slide R tax to 0% and watch demand spike (and revenue tank).
-11. **Save:** reload the page — your city should come back exactly, including any paths.
+1. **Tutorial (Alpha 2.0):** first launch shows a 4-step welcome — skip or step through, then tap "Show tutorial again" in the budget panel to re-read.
+2. **Camera:** pinch + pan should feel locked-on, no drift, no jitter. FPS pill solid 60.
+3. **Roads:** drag from one side to another — you should get clean diagonal segments, not stair-step. Drag back to retract.
+4. **Zoning + mixed-use (Alpha 2.0):** paint R/C/I next to a road; try the new **MU** group (mixed-use) — those tiles contribute residents AND commercial jobs.
+5. **Cars + return trips:** cars appear, route to C/I, sit at destination 8–22 sec, drive back. Traffic should read two-way.
+6. **Adaptive traffic lights (Alpha 2.0):** place a stop sign at one intersection and a Light at another. Watch which one moves more cars per minute — the light should win cleanly. The light's green stays longer on the busier axis.
+7. **Bus stops on the sidewalk (Alpha 2.0):** pick the **BusStop** tool and tap a non-highway road tile. The stop renders on the sidewalk; buses pull over and cars pass freely.
+8. **Pedestrians (Alpha 2.0):** with R + C built up you should see lots of walkers on sidewalks and paths.
+9. **Walking paths:** Roads popover → **Path**, drag between R and C. Cars on covered routes should thin out.
+10. **Sim speed (Alpha 2.0):** the new HUD pill cycles ▶ / ▶▶ / ▶▶▶ / ⏸. Try fast-forwarding the city to 3× to watch growth, then pause to plan.
+11. **Photo mode (Alpha 2.0):** tap the Photo pill, all HUD chrome hides for screenshots. Tap again to bring it back.
+12. **Per-cell info (Alpha 2.0):** long-press a developed tile — info card now shows residents/jobs that specific cell contributes.
+13. **Bulldoze big stroke (Alpha 2.0):** drag the bulldozer over many tiles. A toast appears with an Undo button.
+14. **Heatmap:** toggle on with congested traffic — green→yellow→red overlay on roads.
+15. **Budget:** tap the treasury pill, slide R tax to 0% and watch demand spike (and revenue tank).
+16. **Save:** reload the page — your city should come back exactly.
 
 If anything's off — jitter, slow zoom, mis-aligned roads, sub-30fps on a mid-range phone — tell me what device + OS version and I'll fix it.
 
@@ -89,7 +102,7 @@ src/
     Game.ts          owns loop, paint logic, undo stack
     Camera.ts        3D ortho camera (panBy / zoomAt / screenToWorld)
     Input.ts         pointer-events gesture handler (navigate / paint modes)
-    Renderer.ts      Three.js scene (terrain, roads, sidewalks, paths, trees, buildings, cars, pedestrians, heatmap)
+    Renderer.ts      Three.js scene (terrain, roads, sidewalks, crosswalks, paths, trees, buildings, cars, buses, pedestrians, traffic-lights, heatmap)
   world/
     Grid.ts          tile container + road-edge graph + walking-path bit
     Tile.ts          single-tile struct (terrain, road, path, …)
@@ -101,7 +114,8 @@ src/
     Pathfinding.ts   A* over any PathfindGraph, reusable buffers
     Vehicles.ts      cars + park-then-return + path-coverage suppression
     Pedestrians.ts   walker spawn + motion on the pedestrian graph
-    Buses.ts         per-depot buses; nearBusStop spawn suppression
+    Buses.ts         per-depot buses + sidewalk pull-over dwell
+    TrafficLights.ts adaptive 2-phase queue-aware signal controller
     Economy.ts       treasury, monthly settlement, tax demand penalty
     Services.ts      radius-sweep coverage flags
     Traffic.ts       per-tile EMA + city-wide stress

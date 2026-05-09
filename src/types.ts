@@ -78,8 +78,11 @@ export const SIDEWALK_COLOR = 0xc7c2b3;
 /** How wide a sidewalk extends past the road on each side, as fraction of TILE_SIZE. */
 export const SIDEWALK_PAD = 0.10;
 
-/** Pedestrian InstancedMesh capacity. Smaller geom than cars, can saturate higher. */
-export const MAX_PEDESTRIANS = 200;
+/** Pedestrian InstancedMesh capacity. Bumped to 500 in Alpha 2.0 alongside
+ *  density-scaled spawn rate so cities feel populated. The pawn geom is
+ *  small enough that 500 instances stay well within the InstancedMesh
+ *  budget on Pixel-7-tier devices. */
+export const MAX_PEDESTRIANS = 500;
 /** Pedestrian render colour palette — picked at random when one spawns. */
 export const PEDESTRIAN_PALETTE: readonly number[] = [
   0xeac984, 0xb38f5b, 0x8e6e4a, 0xd8a4a4, 0x9bb685
@@ -112,6 +115,14 @@ export const STOP_SIGN_COST = 250;
 export const STOP_SIGN_PAUSE_SEC = 0.4;
 
 /**
+ * Traffic light (Alpha 2.0) — placed on intersections. Mutex with stop
+ * sign on the same tile. Costs more than a stop sign because at busy
+ * junctions it dramatically out-throughputs one (~3× when adaptive
+ * timing kicks in for the busy axis).
+ */
+export const TRAFFIC_LIGHT_COST = 1500;
+
+/**
  * Per-other-car probability of a collision when arriving at an uncontrolled
  * intersection (3+ road edges, no stop sign). Capped so a single jammed tile
  * doesn't pulverise an entire stream of cars in seconds.
@@ -125,16 +136,18 @@ export const CRASH_DEMAND_PENALTY = 0.15;
 
 export type TerrainType = 'grass' | 'forest' | 'water' | 'sand';
 
-export type Zone = 'none' | 'residential' | 'commercial' | 'industrial';
+export type Zone = 'none' | 'residential' | 'commercial' | 'industrial' | 'mixed';
 
 /**
  * Cities: Skylines convention — green / blue / yellow. Slightly desaturated so
  * the overlay reads as "tinted ground" rather than a solid colour swatch.
+ * Mixed-use is teal — sits between R-green and C-blue intentionally.
  */
 export const ZONE_COLORS: Record<Exclude<Zone, 'none'>, number> = {
   residential: 0x6dd06a,
   commercial: 0x4d8ce8,
-  industrial: 0xeec453
+  industrial: 0xeec453,
+  mixed: 0x5cc4ad
 };
 
 /**
@@ -145,7 +158,10 @@ export const ZONE_COLORS: Record<Exclude<Zone, 'none'>, number> = {
 export const BUILDING_COLORS: Record<Exclude<Zone, 'none'>, readonly [number, number, number, number]> = {
   residential: [0x000000, 0xd9c89e, 0xb89970, 0x8a6f4e],
   commercial:  [0x000000, 0xc0d4ec, 0x7a92b5, 0x52688a],
-  industrial:  [0x000000, 0xb0a080, 0x7e6e58, 0x584c3a]
+  industrial:  [0x000000, 0xb0a080, 0x7e6e58, 0x584c3a],
+  // Mixed-use leans warm-cool — tan podium with a bluish glass tower implied
+  // by the colour ramp. Reads as "shop downstairs, apartments above".
+  mixed:       [0x000000, 0xc8b294, 0x8d92a4, 0x4f5e7a]
 };
 
 /**
@@ -174,6 +190,15 @@ export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48];
 
 /** Jobs per industrial tile by density tier. */
 export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
+
+/**
+ * Mixed-use (Alpha 2.0) — same building footprint, but each tile
+ * contributes residents AND commercial jobs. Half rate of a pure-zone tile
+ * for each axis so a mixed-use block is denser than a single-use block of
+ * the same density tier overall but doesn't double-count.
+ */
+export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32];
+export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24];
 
 /**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —
@@ -297,12 +322,16 @@ export type Tool =
   | 'industrial_low'
   | 'industrial_medium'
   | 'industrial_high'
+  | 'mixed_low'
+  | 'mixed_medium'
+  | 'mixed_high'
   | 'place_power'
   | 'place_water'
   | 'place_park'
   | 'place_bus_stop'
   | 'place_bus_depot'
-  | 'place_stop_sign';
+  | 'place_stop_sign'
+  | 'place_traffic_light';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -317,7 +346,10 @@ export const ZONE_TOOL_INFO: ReadonlyMap<Tool, { zone: Exclude<Zone, 'none'>; ti
   ['commercial_high',    { zone: 'commercial' as const,  tier: 'high' as const }],
   ['industrial_low',     { zone: 'industrial' as const,  tier: 'low' as const }],
   ['industrial_medium',  { zone: 'industrial' as const,  tier: 'medium' as const }],
-  ['industrial_high',    { zone: 'industrial' as const,  tier: 'high' as const }]
+  ['industrial_high',    { zone: 'industrial' as const,  tier: 'high' as const }],
+  ['mixed_low',          { zone: 'mixed' as const,       tier: 'low' as const }],
+  ['mixed_medium',       { zone: 'mixed' as const,       tier: 'medium' as const }],
+  ['mixed_high',         { zone: 'mixed' as const,       tier: 'high' as const }]
 ]);
 
 /** Tools that paint a road, mapped to their road tier. */

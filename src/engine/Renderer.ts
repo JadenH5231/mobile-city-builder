@@ -2343,6 +2343,8 @@ function walkerSurfaceY(grid: Grid, x: number, y: number): number {
   if (!t) return SIDEWALK_LIFT;
   if (t.bridge) return BRIDGE_LIFT;
   if (t.path && !t.road) return PATH_LIFT + t.elevation;
+  // Park tiles (Alpha 2.6.1) — walkers cut through parks at path height.
+  if (t.building === 'park') return PATH_LIFT + t.elevation;
   return SIDEWALK_LIFT + t.elevation;
 }
 
@@ -2357,6 +2359,9 @@ function pedestrianOffsetForTile(grid: Grid, x: number, y: number): number {
   if (t.path) {
     return 0.05; // small spread on a narrow path
   }
+  // Park tiles (Alpha 2.6.1) — wider spread so walkers stream across the
+  // grass without all single-filing through the centre.
+  if (t.building === 'park') return 0.18;
   return 0;
 }
 

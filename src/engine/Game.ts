@@ -797,6 +797,9 @@ export class Game {
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
     this.renderer.drawCityBuildings(this.grid);
+    // Parks are walkable (Alpha 2.6.1) — rebuild the pedestrian graph
+    // so walkers can route through the new park tile immediately.
+    if (kind === 'park') this.pathGraph.rebuild(this.grid);
     this.maybeOfferPhotoOp(stanceKey);
     return true;
   }

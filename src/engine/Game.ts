@@ -103,6 +103,14 @@ export class Game {
   onBigBulldoze?: (tileCount: number) => void;
 
   /**
+   * Short status pill (Alpha 2.4.2). Fired when an action silently fails
+   * for a reason the player should know about — typically "not enough
+   * money" on a Place tool, where the original behaviour was a silent
+   * no-op that looked like the button was broken. main.ts owns the DOM.
+   */
+  onStatusMessage?: (msg: string) => void;
+
+  /**
    * Sim speed multiplier. 0 = paused (no sim ticks, no vehicle/walker
    * motion). 1 = normal. 2 / 3 fast-forward. The render loop continues
    * regardless so the HUD stays responsive while paused.
@@ -717,9 +725,15 @@ export class Game {
     const baseCost = BUILDING_COSTS[kind];
     const stanceKey = kind as StanceKey;
     const mult = this.council.costMultiplier(stanceKey);
-    if (!isFinite(mult)) return false; // banned by council
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
     const cost = Math.round(baseCost * mult);
-    if (this.economy.treasury < cost) return false;
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
+      return false;
+    }
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
@@ -737,9 +751,15 @@ export class Game {
     if (!t || !t.road || t.stopSign) return false;
     if (this.grid.incidentRoadEdgeCount(x, y) < 3) return false;
     const mult = this.council.costMultiplier('stop_sign');
-    if (!isFinite(mult)) return false; // banned by council
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
     const cost = Math.round(STOP_SIGN_COST * mult);
-    if (this.economy.treasury < cost) return false;
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
+      return false;
+    }
     if (!this.grid.setStopSign(x, y, true)) return false;
     this.economy.treasury -= cost;
     this.renderer.drawRoads(this.grid);
@@ -759,9 +779,15 @@ export class Game {
     if (!t || !t.road || t.roadType === 'highway' || t.busStop) return false;
     const baseCost = BUILDING_COSTS.bus_stop;
     const mult = this.council.costMultiplier('bus_stop');
-    if (!isFinite(mult)) return false;
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
     const cost = Math.round(baseCost * mult);
-    if (this.economy.treasury < cost) return false;
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
+      return false;
+    }
     if (!this.grid.setBusStop(x, y, true)) return false;
     this.economy.treasury -= cost;
     this.renderer.drawRoads(this.grid);
@@ -779,7 +805,10 @@ export class Game {
     const t = this.grid.get(x, y);
     if (!t || !t.road || t.trafficLight) return false;
     if (this.grid.incidentRoadEdgeCount(x, y) < 3) return false;
-    if (this.economy.treasury < TRAFFIC_LIGHT_COST) return false;
+    if (this.economy.treasury < TRAFFIC_LIGHT_COST) {
+      this.onStatusMessage?.(`Not enough money — need $${TRAFFIC_LIGHT_COST.toLocaleString()}`);
+      return false;
+    }
     if (!this.grid.setTrafficLight(x, y, true)) return false;
     this.economy.treasury -= TRAFFIC_LIGHT_COST;
     this.renderer.drawRoads(this.grid);

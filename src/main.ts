@@ -97,6 +97,25 @@ if (bulldozeToast && bulldozeText && bulldozeUndo) {
   });
 }
 
+// Status toast: short pill for "Not enough money" and similar silent-fail
+// reasons. Shares .toast styling with the bulldoze toast but no Undo button.
+const statusToast = document.getElementById('status-toast');
+const statusText = document.getElementById('status-toast-text');
+if (statusToast && statusText) {
+  let statusTimer: number | undefined;
+  game.onStatusMessage = (msg) => {
+    statusText.textContent = msg;
+    statusToast.classList.remove('hidden');
+    statusToast.setAttribute('aria-hidden', 'false');
+    if (statusTimer !== undefined) clearTimeout(statusTimer);
+    statusTimer = window.setTimeout(() => {
+      statusToast.classList.add('hidden');
+      statusToast.setAttribute('aria-hidden', 'true');
+      statusTimer = undefined;
+    }, 2500);
+  };
+}
+
 // "Show tutorial again" link in the budget panel.
 const showTutorialBtn = document.getElementById('budget-show-tutorial');
 if (showTutorialBtn) {

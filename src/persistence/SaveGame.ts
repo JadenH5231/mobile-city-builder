@@ -12,12 +12,12 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 11 (Alpha 2.11): persists the Stats history buffer so the
- * monthly graphs survive reload. Schema 10 added events modifiers,
- * Schema 9 highestPop, Schema 8 luxury, Schema 7 elevation+bridge.
- * v10 saves load with empty history; we start sampling fresh.
+ * Schema 12 (Alpha 2.12): persists the upper-layer (Bridge Mode)
+ * road graph + per-tile bridgeRoad / bridgeRoadType / bridgeHighwayDir.
+ * v11 saves load with no overpasses (clean slate). v10 added events;
+ * v9 highestPop; v8 luxury; v7 elevation+bridge.
  */
-const SCHEMA = 11;
+const SCHEMA = 12;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -56,6 +56,10 @@ export interface TileSnapshot {
   building: Building;
   /** Walking-path bit (Alpha 1.6). Schema 5+. */
   path?: boolean;
+  /** Upper-layer Bridge-Mode road bits (Alpha 2.12 / schema 12+). */
+  bridgeRoad?: boolean;
+  bridgeRoadType?: RoadType;
+  bridgeHighwayDir?: number;
 }
 
 export interface SaveData {
@@ -79,6 +83,8 @@ export interface SaveData {
   eventsSnapshot?: EventsSnapshot;
   /** Schema 11+. Monthly time-series for the Stats panel. */
   statsSnapshot?: StatsSnapshot;
+  /** Schema 12+. Upper-layer road graph (Bridge Mode overpasses). */
+  bridgeRoadEdges?: number[];
 }
 
 /**
@@ -172,12 +178,19 @@ export function serialize(
       density: t.density,
       pressure: t.developmentPressure,
       building: t.building,
-      path: t.path
+      path: t.path,
+      bridgeRoad: t.bridgeRoad,
+      bridgeRoadType: t.bridgeRoadType,
+      bridgeHighwayDir: t.bridgeHighwayDir
     };
   }
   const edges: number[] = [];
   for (const e of grid.iterRoadEdges()) {
     edges.push(e.ax, e.ay, e.bx, e.by);
+  }
+  const bridgeEdges: number[] = [];
+  for (const e of grid.iterBridgeRoadEdges()) {
+    bridgeEdges.push(e.ax, e.ay, e.bx, e.by);
   }
   return {
     schemaVersion: SCHEMA,
@@ -194,7 +207,8 @@ export function serialize(
     politicalCapital: council?.politicalCapital ?? 0,
     highestPop: milestones?.highestPop ?? 0,
     eventsSnapshot: events?.serialize(),
-    statsSnapshot: stats?.serialize()
+    statsSnapshot: stats?.serialize(),
+    bridgeRoadEdges: bridgeEdges
   };
 }
 
@@ -258,6 +272,10 @@ export function applySave(
     t.path = snap.path ?? false;
     // Defensive: a path on a road tile would violate the invariant.
     if (t.road) t.path = false;
+    // Bridge Mode upper-layer fields (schema 12+).
+    t.bridgeRoad = snap.bridgeRoad ?? false;
+    t.bridgeRoadType = snap.bridgeRoadType ?? 'local';
+    t.bridgeHighwayDir = snap.bridgeHighwayDir ?? -1;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;
@@ -265,6 +283,8 @@ export function applySave(
 
   // Reload road edges in one go (loadRoadEdges defensively re-flags endpoints).
   grid.loadRoadEdges(data.roadEdges);
+  // Reload upper-layer (Bridge Mode) edges, schema 12+.
+  if (data.bridgeRoadEdges) grid.loadBridgeRoadEdges(data.bridgeRoadEdges);
 
   economy.treasury = data.treasury;
   economy.taxR = data.taxR;

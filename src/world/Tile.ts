@@ -30,6 +30,22 @@ export class Tile {
    * water tile; cleared when the road is removed.
    */
   bridge = false;
+  /**
+   * Upper-layer road (Alpha 2.12, Bridge Mode). Independent from the
+   * ground `road` bit — both layers can co-exist on a single tile so
+   * an overpass crosses an at-grade road without forming an
+   * intersection. Renderer lifts the upper deck to BRIDGE_LIFT and
+   * drops support pillars to the ground.
+   *
+   * v1 (Alpha 2.12): the upper-layer road has its own edge set in
+   * `Grid.bridgeRoadEdges` for future routing, but vehicles still
+   * spawn / route on the ground layer only — overpasses are visual
+   * + structural, not yet drivable. A later pass will wire layer-
+   * aware RoadGraph + Vehicles routing.
+   */
+  bridgeRoad = false;
+  bridgeRoadType: RoadType = 'local';
+  bridgeHighwayDir = -1;
   /** Road tier when `road` is true. Reset to 'local' when `road` flips off. */
   roadType: RoadType = 'local';
   /** Highway flow direction (0..7 from `Dir` enum), -1 when not a highway or

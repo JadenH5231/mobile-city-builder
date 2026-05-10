@@ -25,6 +25,9 @@ export class Grid {
   readonly height: number;
   private readonly tiles: Tile[];
   private readonly roadEdges = new Set<number>();
+  /** Upper-layer (Bridge Mode) road edges. Independent network from
+   *  ground roadEdges — both can coexist on the same tile pair. */
+  private readonly bridgeRoadEdges = new Set<number>();
 
   constructor(width: number, height: number) {
     this.width = width;
@@ -456,6 +459,112 @@ export class Grid {
         by: Math.floor(hi / this.width)
       };
     }
+  }
+
+  // ---- Upper-layer (Bridge Mode) road edge graph (Alpha 2.12) ----------
+
+  /**
+   * Set/clear an UPPER-LAYER road edge between two adjacent tiles.
+   * Independent from the ground edge graph — both layers can co-exist
+   * on the same tile-pair so an overpass crosses an at-grade road
+   * without forming an intersection.
+   */
+  setBridgeRoadEdge(
+    ax: number, ay: number, bx: number, by: number,
+    on: boolean,
+    type: RoadType = 'local'
+  ): boolean {
+    if (!this.inBounds(ax, ay) || !this.inBounds(bx, by)) return false;
+    const dx = bx - ax;
+    const dy = by - ay;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx === 0 && dy === 0)) return false;
+    const key = this.edgeKey(ax, ay, bx, by);
+    const ta = this.get(ax, ay);
+    const tb = this.get(bx, by);
+    if (on) {
+      if (ta) { ta.bridgeRoad = true; ta.bridgeRoadType = type; }
+      if (tb) { tb.bridgeRoad = true; tb.bridgeRoadType = type; }
+      if (this.bridgeRoadEdges.has(key)) return false;
+      this.bridgeRoadEdges.add(key);
+      return true;
+    } else {
+      if (!this.bridgeRoadEdges.has(key)) return false;
+      this.bridgeRoadEdges.delete(key);
+      // Demote tiles to non-bridge-road only if they have no remaining
+      // upper-layer edges.
+      if (!this.tileHasAnyBridgeEdge(ax, ay) && ta) {
+        ta.bridgeRoad = false;
+        ta.bridgeRoadType = 'local';
+        ta.bridgeHighwayDir = -1;
+      }
+      if (!this.tileHasAnyBridgeEdge(bx, by) && tb) {
+        tb.bridgeRoad = false;
+        tb.bridgeRoadType = 'local';
+        tb.bridgeHighwayDir = -1;
+      }
+      return true;
+    }
+  }
+
+  hasBridgeRoadEdge(ax: number, ay: number, bx: number, by: number): boolean {
+    return this.bridgeRoadEdges.has(this.edgeKey(ax, ay, bx, by));
+  }
+
+  *iterBridgeRoadEdges(): IterableIterator<RoadEdge> {
+    for (const key of this.bridgeRoadEdges) {
+      const lo = key % PACK_SHIFT;
+      const hi = Math.floor(key / PACK_SHIFT);
+      yield {
+        ax: lo % this.width,
+        ay: Math.floor(lo / this.width),
+        bx: hi % this.width,
+        by: Math.floor(hi / this.width)
+      };
+    }
+  }
+
+  loadBridgeRoadEdges(edges: readonly number[]): void {
+    this.bridgeRoadEdges.clear();
+    for (let i = 0; i + 3 < edges.length; i += 4) {
+      const ax = edges[i]!;
+      const ay = edges[i + 1]!;
+      const bx = edges[i + 2]!;
+      const by = edges[i + 3]!;
+      if (!this.inBounds(ax, ay) || !this.inBounds(bx, by)) continue;
+      this.bridgeRoadEdges.add(this.edgeKey(ax, ay, bx, by));
+      const ta = this.get(ax, ay);
+      if (ta) ta.bridgeRoad = true;
+      const tb = this.get(bx, by);
+      if (tb) tb.bridgeRoad = true;
+    }
+  }
+
+  private tileHasAnyBridgeEdge(x: number, y: number): boolean {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny)) continue;
+        if (this.bridgeRoadEdges.has(this.edgeKey(x, y, nx, ny))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Number of upper-layer road edges incident to (x, y). */
+  incidentBridgeRoadEdgeCount(x: number, y: number): number {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny)) continue;
+        if (this.bridgeRoadEdges.has(this.edgeKey(x, y, nx, ny))) n++;
+      }
+    }
+    return n;
   }
 
   /** Does the tile have any incident road edge? Used for stub demotion. */

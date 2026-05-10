@@ -349,7 +349,7 @@ export class Game {
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
-    this.renderer.drawBuildings(this.grid, this.cityMood());
+    this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.services.recompute(this.grid);
     this.roadGraph.rebuild(this.grid);
@@ -569,12 +569,16 @@ export class Game {
           }
           this.refreshToolbarLocks();
         }
-        if (this.development.tick(this.grid)) buildingsDirty = true;
+        if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
+          // Monthly patina refresh (Alpha 2.16): even with no new development
+          // we want existing buildings to dim as they age. Cheap rebuild —
+          // sub-millisecond on Small/Medium and only fires on month rollover.
+          buildingsDirty = true;
           // PC accrues every month (before the election so the player
           // walks into election day with the latest balance).
           this.council.awardMonthlyPC(this.happiness);
@@ -660,7 +664,7 @@ export class Game {
       if (steps >= MAX_SIM_STEPS_PER_FRAME && this.simAccumulatorMs > SIM_STEP_MS) {
         this.simAccumulatorMs = 0;
       }
-      if (buildingsDirty) this.renderer.drawBuildings(this.grid, this.cityMood());
+      if (buildingsDirty) this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
 
       // Render-rate dt: scale by simSpeed so vehicles/walkers visually move
       // faster at 2× / 3× and freeze at 0.
@@ -778,6 +782,7 @@ export class Game {
       zone: t.zone,
       zoneCap: t.zoneCap,
       density: t.density,
+      ageMonths: t.developedAt > 0 ? Math.max(0, this.economy.monthsElapsed - t.developedAt) : 0,
       building: t.building,
       path: t.path,
       hasPower: t.hasPower,
@@ -831,7 +836,7 @@ export class Game {
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
-    this.renderer.drawBuildings(this.grid, this.cityMood());
+    this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
@@ -1431,7 +1436,7 @@ export class Game {
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Promoting a zoned tile to road wipes its building.
-      this.renderer.drawBuildings(this.grid, this.cityMood());
+      this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     }
     if (forestChanged) {
       // Terrain colour + tree-instance set both depend on Tile.terrain.
@@ -1548,7 +1553,7 @@ export class Game {
     if (changed) {
       this.renderer.drawZones(this.grid);
       // Re-zoning a developed tile resets its density to 0; rebuild buildings.
-      this.renderer.drawBuildings(this.grid, this.cityMood());
+      this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     }
   }
 
@@ -1600,7 +1605,7 @@ export class Game {
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Clearing a zone wipes any building that was developing on it.
-      this.renderer.drawBuildings(this.grid, this.cityMood());
+      this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     }
   }
 
@@ -1728,7 +1733,7 @@ export class Game {
     if (zonesChanged) {
       this.renderer.drawZones(this.grid);
       // Bulldozing tears down whatever was developing on that tile.
-      this.renderer.drawBuildings(this.grid, this.cityMood());
+      this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     }
     if (cityBuildingsChanged) {
       this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());

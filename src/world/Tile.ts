@@ -96,6 +96,15 @@ export class Tile {
   density = 0;
   /** Sim-tick accumulator. Crossing 1.0 promotes density by one tier. */
   developmentPressure = 0;
+  /**
+   * Months-elapsed value at the moment density first went 0 → 1 on this
+   * tile (Alpha 2.16). Used by the Renderer to apply patina (a darkening
+   * factor that scales with age) so older buildings read as weathered.
+   * Reset to 0 on bulldoze + when a fresh paint cycle starts. Renovating
+   * a building is just bulldoze + rezone — the new structure naturally
+   * stamps a fresh `developedAt`.
+   */
+  developedAt = 0;
   /** City service building occupying this tile. Mutually exclusive with road and zone. */
   building: Building = 'none';
   // Service flags — derived state, recomputed by `Services.recompute` whenever
@@ -119,6 +128,7 @@ export class Tile {
   resetDevelopment(): void {
     this.density = 0;
     this.developmentPressure = 0;
+    this.developedAt = 0;
   }
 
   resetServices(): void {

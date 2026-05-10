@@ -282,15 +282,17 @@ export class Renderer {
     if (built) this.cityBuildingsGroup.add(built);
   }
 
-  /** Rebuild the buildings InstancedMesh from current tile densities. */
-  drawBuildings(grid: Grid, cityMood = 0): void {
+  /** Rebuild the buildings InstancedMesh from current tile densities.
+   *  `monthsElapsed` drives the Alpha 2.16 patina pass — older buildings
+   *  read darker. Defaults to 0 (pre-history; everything looks new). */
+  drawBuildings(grid: Grid, cityMood = 0, monthsElapsed = 0): void {
     if (this.buildingsMesh) {
       this.worldGroup.remove(this.buildingsMesh);
       this.buildingsMesh.geometry.dispose();
       (this.buildingsMesh.material as MeshLambertMaterial).dispose();
       this.buildingsMesh = null;
     }
-    const built = buildBuildingsMesh(grid, cityMood);
+    const built = buildBuildingsMesh(grid, cityMood, monthsElapsed);
     if (built) {
       this.buildingsMesh = built;
       this.worldGroup.add(this.buildingsMesh);
@@ -941,7 +943,7 @@ function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGeometry 
  * each do small-N batches. Rebuild cost is comparable to the previous
  * single-InstancedMesh approach (sub-millisecond on Small/Medium).
  */
-function buildBuildingsMesh(grid: Grid, cityMood: number): Mesh | null {
+function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
   // Per-tile lift = ROAD_LIFT/2 (avoid z-fighting with zone overlay)
@@ -980,19 +982,57 @@ function buildBuildingsMesh(grid: Grid, cityMood: number): Mesh | null {
     if (!t.hasPower) happy -= 0.20;
     if (!t.hasWater) happy -= 0.15;
     happy = Math.max(0, Math.min(1, happy));
+    // Patina (Alpha 2.16): newer buildings stay vibrant, older ones
+    // dim toward a weathered tone over the first decade. The factor is
+    // sampled once per tile and applied to every part's color so a single
+    // building reads consistently weathered (rather than a roof aging
+    // faster than its walls).
+    const ageMonths = Math.max(0, monthsElapsed - t.developedAt);
+    const patina = patinaFactor(ageMonths);
     const parts = buildVariantParts(t.zone, t.density, t.x, t.y, happy);
     const yLift = baseLift + t.elevation;
     for (const p of parts) {
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       if (yLift !== 0) p.geom.translate(0, yLift, 0);
       geoms.push(p.geom);
-      colours.push(p.color);
+      colours.push(patina < 1 ? darkenHex(p.color, patina) : p.color);
     }
   }
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
+}
+
+/**
+ * Patina ramp (Alpha 2.16). Returns a 0..1 multiplier applied to building
+ * vertex colors so older buildings read as weathered.
+ *
+ * - 0 months   → 1.00 (pristine)
+ * - 12 months  → ~0.95
+ * - 60 months  → ~0.85
+ * - 180 months → 0.72 (asymptote)
+ *
+ * Cap at 0.72 so even a 50-year city still reads as a city, not a ruin.
+ * Single ramp covers low / medium / high density; the visual delta is
+ * subtle on L1 cottages and meaningful on L3 towers because the high
+ * density palettes start brighter.
+ */
+function patinaFactor(ageMonths: number): number {
+  const FLOOR = 0.72;
+  const RAMP_MONTHS = 180;
+  if (ageMonths <= 0) return 1.0;
+  if (ageMonths >= RAMP_MONTHS) return FLOOR;
+  return 1.0 - (1.0 - FLOOR) * (ageMonths / RAMP_MONTHS);
+}
+
+/** Multiply each RGB channel of a packed 0xRRGGBB by `factor`, return a new
+ *  packed colour. Channels are clamped at 0; factor < 1 darkens. */
+function darkenHex(hex: number, factor: number): number {
+  const r = Math.max(0, Math.min(255, Math.round(((hex >> 16) & 0xff) * factor)));
+  const g = Math.max(0, Math.min(255, Math.round(((hex >> 8) & 0xff) * factor)));
+  const b = Math.max(0, Math.min(255, Math.round((hex & 0xff) * factor)));
+  return (r << 16) | (g << 8) | b;
 }
 
 /** First 4-neighbour with `luxury && zone==='residential'`, else null. */

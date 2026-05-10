@@ -1839,7 +1839,7 @@ export class Game {
   private applyZoneStroke(
     path: { x: number; y: number }[],
     zone: Exclude<Zone, 'none'>,
-    cap: 1 | 2 | 3
+    cap: 1 | 2 | 3 | 4
   ): void {
     const desired = new Set<number>();
     for (const p of path) desired.add(this.tileIndex(p.x, p.y));

@@ -10,6 +10,7 @@ import { GlobalMarket } from '../simulation/GlobalMarket';
 import { Milestones } from '../simulation/Milestones';
 import { Events, type GameEvent } from '../simulation/Events';
 import { Stats } from '../simulation/Stats';
+import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -133,7 +134,14 @@ export class Game {
 
   resolveEventChoice(event: GameEvent, choiceId: string): void {
     this.events.resolveChoice(event, choiceId, this.economy);
+    this.achievements.recordEventResolved();
   }
+
+  /** Achievement just unlocked (Alpha 2.15). main.ts surfaces a corner toast. */
+  onAchievementUnlocked?: (a: Achievement) => void;
+  /** New council leader the player has never met (Alpha 2.15). main.ts owns
+   *  the modal; Game just emits per faction id, in council order. */
+  onNewLeader?: (id: FactionId) => void;
 
   /**
    * Sim speed multiplier. 0 = paused (no sim ticks, no vehicle/walker
@@ -210,6 +218,8 @@ export class Game {
   readonly events = new Events();
   /** Time-series history (Alpha 2.11). Captured monthly. */
   readonly stats = new Stats();
+  /** Lifetime achievements + leader-bio met set (Alpha 2.15). */
+  readonly achievements = new Achievements();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -303,7 +313,8 @@ export class Game {
       grid: () => this.grid,
       economy: this.economy,
       population: this.population,
-      traffic: this.traffic
+      traffic: this.traffic,
+      achievements: this.achievements
     });
     this.councilPanel = new CouncilPanel(this.council);
     this.photoOpBanner = new PhotoOpBanner();
@@ -328,7 +339,7 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats);
+        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements);
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -575,6 +586,22 @@ export class Game {
           if (fired) {
             this.councilPanel.show();
             this.refreshToolbarBans();
+            this.achievements.recordElection();
+            // Surface bio popups for any new council member or opponent
+            // the player has never met. Each emit is queued in main.ts.
+            // The opponent is the runner-up — players see them every
+            // election cycle, so they're worth introducing too.
+            for (const id of fired.councillors) {
+              if (this.achievements.shouldShowLeaderBio(id)) {
+                this.achievements.markLeaderMet(id);
+                this.onNewLeader?.(id);
+              }
+            }
+            const opp = fired.opponentId;
+            if (opp && this.achievements.shouldShowLeaderBio(opp)) {
+              this.achievements.markLeaderMet(opp);
+              this.onNewLeader?.(opp);
+            }
           }
           // Random events + crises (Alpha 2.9). Run on every month
           // boundary; fires + recessions + lawsuits + referendums all
@@ -587,6 +614,22 @@ export class Game {
           this.stats.capture(
             this.economy.monthsElapsed, this.economy, this.population, this.happiness
           );
+          // Achievements pass (Alpha 2.15) — runs once per month, drains
+          // any newly-unlocked entries to the toast queue via onAchievementUnlocked.
+          this.achievements.evaluateMonth({
+            monthsElapsed: this.economy.monthsElapsed,
+            economy: this.economy,
+            population: this.population,
+            happiness: this.happiness,
+            council: this.council,
+            grid: this.grid,
+            milestones: this.milestones
+          });
+          while (this.achievements.hasPending()) {
+            const a = this.achievements.shiftPending();
+            if (!a) break;
+            this.onAchievementUnlocked?.(a);
+          }
           while (this.events.hasPending()) {
             const e = this.events.shiftPending();
             if (!e) break;
@@ -666,7 +709,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -761,7 +804,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -773,7 +816,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements);
     this.afterStateRestore();
   }
 

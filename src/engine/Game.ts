@@ -243,6 +243,10 @@ export class Game {
   readonly bonds = new Bonds();
   /** Ferry routes between dock pairs (Alpha 2.19). */
   readonly ferries = new Ferries();
+  /** Player-given name for the active save slot (Alpha 2.20). Empty
+   *  string means "use the default 'City N' label". Persisted alongside
+   *  every autosave. */
+  cityName = '';
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -284,7 +288,8 @@ export class Game {
   /** True if we pushed an entry at this stroke's start (so end can untie noops). */
   private strokeDidSnapshot = false;
 
-  async init(host: HTMLElement, mapSize: MapSize = MAP_SIZES.small): Promise<void> {
+  async init(host: HTMLElement, mapSize: MapSize = MAP_SIZES.small, slotKey?: string): Promise<void> {
+    if (slotKey) this.saveGame.useSlot(slotKey);
     this.host = host;
     const canvas = document.createElement('canvas');
     canvas.style.touchAction = 'none';
@@ -363,7 +368,10 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
+        if (data) {
+          applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
+          if (data.cityName) this.cityName = data.cityName;
+        }
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -759,7 +767,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.cityName).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);

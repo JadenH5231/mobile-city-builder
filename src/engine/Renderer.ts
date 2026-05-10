@@ -2526,6 +2526,19 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
   const pillars: BufferGeometry[] = [];
   const pillarColours: number[] = [];
 
+  // Ramp logic (Alpha 2.13.1) — the FIRST and LAST tiles of an upper-
+  // layer bridge segment ramp down to ground if a road exists there
+  // too. A tile is a ramp if it has only ONE incident bridge edge AND
+  // a ground road (so the bridge transitions to the ground network).
+  const yAt = (tx: number, ty: number): number => {
+    const t = grid.get(tx, ty);
+    if (!t || !t.bridgeRoad) return ROAD_LIFT + (t?.elevation ?? 0);
+    const incident = grid.incidentBridgeRoadEdgeCount(tx, ty);
+    // Terminal + ground road → ramp down. Otherwise full deck height.
+    if (incident <= 1 && t.road) return ROAD_LIFT + t.elevation;
+    return BRIDGE_LIFT;
+  };
+
   // Edge decks.
   for (const e of edges) {
     const ta = grid.get(e.ax, e.ay);
@@ -2544,13 +2557,15 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
     const len = Math.hypot(dx, dz);
     const px = -dz / len * half;
     const pz = dx / len * half;
+    const yA = yAt(e.ax, e.ay);
+    const yB = yAt(e.bx, e.by);
 
     const deck = new BufferGeometry();
     const positions = new Float32Array([
-      ax + px, BRIDGE_LIFT, az + pz,
-      bx + px, BRIDGE_LIFT, bz + pz,
-      bx - px, BRIDGE_LIFT, bz - pz,
-      ax - px, BRIDGE_LIFT, az - pz
+      ax + px, yA, az + pz,
+      bx + px, yB, bz + pz,
+      bx - px, yB, bz - pz,
+      ax - px, yA, az - pz
     ]);
     deck.setAttribute('position', new BufferAttribute(positions, 3));
     deck.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
@@ -2558,32 +2573,70 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
     deckColours.push(tierProps.color);
 
     // Rail edges along both shoulders, sit slightly above the deck.
+    // Build with explicit endpoint heights so the rail follows the ramp.
     const railH = 0.06;
-    const railThick = 0.025;
-    // Outer rail north/west.
-    const r1 = new BoxGeometry(railThick, railH, len);
-    const angle = Math.atan2(dx, dz);
-    r1.rotateY(angle);
-    r1.translate((ax + bx) / 2 + px, BRIDGE_LIFT + railH / 2, (az + bz) / 2 + pz);
-    rails.push(r1);
-    railColours.push(0xb6a98a);
-    const r2 = new BoxGeometry(railThick, railH, len);
-    r2.rotateY(angle);
-    r2.translate((ax + bx) / 2 - px, BRIDGE_LIFT + railH / 2, (az + bz) / 2 - pz);
-    rails.push(r2);
-    railColours.push(0xb6a98a);
+    for (const sign of [1, -1]) {
+      const sx = sign * px;
+      const sz = sign * pz;
+      const railPositions = new Float32Array([
+        ax + sx - 0.0, yA + railH * 0.0, az + sz - 0.0,
+        ax + sx,        yA + railH,       az + sz,
+        bx + sx,        yB + railH,       bz + sz,
+        bx + sx - 0.0, yB + railH * 0.0, bz + sz - 0.0
+      ]);
+      // Hoist the rail bar up to floor + railH; build as a thin twisted
+      // strip. Easier: just pair lower + upper line and use them as a
+      // strip via two triangles.
+      const positionsRail = new Float32Array([
+        // lower-left, upper-left, upper-right, lower-right (along axis)
+        ax + sx, yA,         az + sz,
+        ax + sx, yA + railH, az + sz,
+        bx + sx, yB + railH, bz + sz,
+        bx + sx, yB,         bz + sz
+      ]);
+      const railGeom = new BufferGeometry();
+      railGeom.setAttribute('position', new BufferAttribute(positionsRail, 3));
+      railGeom.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
+      // Suppress unused railPositions array (was a previous prototype).
+      void railPositions;
+      // Add a mirror face so the rail isn't culled when viewed from the other side.
+      const back = new BufferGeometry();
+      back.setAttribute('position', new BufferAttribute(positionsRail, 3));
+      back.setIndex(new BufferAttribute(new Uint32Array([0, 2, 1, 0, 3, 2]), 1));
+      rails.push(railGeom);
+      railColours.push(0xb6a98a);
+      rails.push(back);
+      railColours.push(0xb6a98a);
+      // Add slight thickness — push a duplicated rail shifted inward a hair.
+      const inset = 0.012;
+      const insetX = sign * (px === 0 ? 0 : -Math.sign(px) * inset);
+      const insetZ = sign * (pz === 0 ? 0 : -Math.sign(pz) * inset);
+      const inner = new Float32Array([
+        ax + sx + insetX, yA,         az + sz + insetZ,
+        ax + sx + insetX, yA + railH, az + sz + insetZ,
+        bx + sx + insetX, yB + railH, bz + sz + insetZ,
+        bx + sx + insetX, yB,         bz + sz + insetZ
+      ]);
+      const innerGeom = new BufferGeometry();
+      innerGeom.setAttribute('position', new BufferAttribute(inner, 3));
+      innerGeom.setIndex(new BufferAttribute(new Uint32Array([0, 2, 1, 0, 3, 2]), 1));
+      rails.push(innerGeom);
+      railColours.push(0xa0937a);
+    }
   }
 
   // Support pillars at each upper-layer tile that has a bridge edge but
-  // is NOT also auto-bridged over water (water tiles already get pillars
-  // from the existing buildRoadOrnamentsGroup pillar pass). Drop two
-  // pillars perpendicular to the dominant edge axis.
+  // is NOT also auto-bridged over water. Pillar height matches the deck
+  // height at that tile (terminals have shorter pillars matching ramp).
   for (const t of grid.iter()) {
     if (!t.bridgeRoad) continue;
     if (t.bridge) continue; // ground-water bridge already pillared
+    const tileY = yAt(t.x, t.y);
+    // No pillars on a ramped-down terminal (the deck is at ground level
+    // there — pillars would stick up above the road).
+    if (tileY <= ROAD_LIFT + t.elevation + 0.02) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
-    // Determine axis from incident upper-edges.
     let horizontal = false;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -2595,7 +2648,7 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
     }
     const tierProps = ROAD_TIER[t.bridgeRoadType];
     const half = tierProps.width / 2;
-    const pillarH = BRIDGE_LIFT + 0.05;
+    const pillarH = tileY + 0.05;
     const pillarYBase = -0.05;
     const pillarOffset = half + 0.04;
     const offsets: Array<[number, number]> = horizontal

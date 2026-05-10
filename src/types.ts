@@ -258,11 +258,19 @@ export const SKYSCRAPER_C_JOBS_PER_TILE = 56;
 export const SKYSCRAPER_VARIANT_COUNT = 8;
 
 /**
- * Land purchase cost in $ per tile (Alpha 3.1.3). Deliberately steep
- * so expanding the city beyond the starter area feels like a real
- * investment — a 10×10 chunk of new land costs $50,000.
+ * Land purchase cost in $ per tile (Alpha 3.1.3 — kept for back-compat).
+ * The Land tool was retired in Alpha 3.2.1 in favour of the bulk
+ * + button expansion system, but the constant stays referenced from
+ * a few existing call sites.
  */
 export const LAND_PURCHASE_COST_PER_TILE = 500;
+
+/** Cost in $ to expand the city bounds by one block in any direction
+ *  (Alpha 3.2.1). One million dollars per expansion — a big-ticket
+ *  decision that grows the playable area meaningfully. */
+export const CITY_EXPANSION_COST = 1_000_000;
+/** How many tiles each + tap adds to the city bounds in one direction. */
+export const CITY_EXPANSION_BLOCK_SIZE = 4;
 
 /**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —

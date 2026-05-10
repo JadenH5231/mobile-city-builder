@@ -28,6 +28,15 @@ export class Grid {
   /** Upper-layer (Bridge Mode) road edges. Independent network from
    *  ground roadEdges — both can coexist on the same tile pair. */
   private readonly bridgeRoadEdges = new Set<number>();
+  /** City-bounds rectangle (Alpha 3.2.1). Inclusive [x0..x1] × [y0..y1].
+   *  Tiles inside the rectangle are owned automatically; outside is
+   *  for-sale. Player grows the rectangle by tapping the four "+" buttons
+   *  rendered just outside each edge — each tap costs $1M and adds
+   *  EXPANSION_BLOCK_SIZE tiles to that direction. */
+  cityBoundsX0 = 0;
+  cityBoundsX1 = 0;
+  cityBoundsY0 = 0;
+  cityBoundsY1 = 0;
 
   constructor(width: number, height: number) {
     this.width = width;
@@ -49,23 +58,89 @@ export class Grid {
    */
   private generate(): void {
     const specs = generateTerrain(this.width, this.height, { seed: Date.now() });
-    // Initial ownership (Alpha 3.1.3): only the central half of the map is
-    // owned at city start. The outer ring is "for sale" — the player buys
-    // tiles via the Land tool. Sized so a Small map (64×64) starts with
-    // 1024 owned tiles (32×32 centre) and 3072 for-sale tiles surrounding.
+    // Initial ownership (Alpha 3.1.3 / 3.2.1): only the central half of
+    // the map is owned at city start. cityBounds defines the rectangle;
+    // outside is for-sale. Player grows the rectangle by tapping the
+    // "+" buttons rendered just outside each edge.
     const ownedHalfW = Math.floor(this.width / 4);
     const ownedHalfH = Math.floor(this.height / 4);
     const cx = Math.floor(this.width / 2);
     const cy = Math.floor(this.height / 2);
+    this.cityBoundsX0 = Math.max(0, cx - ownedHalfW);
+    this.cityBoundsX1 = Math.min(this.width - 1, cx + ownedHalfW);
+    this.cityBoundsY0 = Math.max(0, cy - ownedHalfH);
+    this.cityBoundsY1 = Math.min(this.height - 1, cy + ownedHalfH);
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const spec = specs[y * this.width + x]!;
         const tile = new Tile(x, y, spec.terrain);
         tile.elevation = spec.elevation;
-        tile.owned = Math.abs(x - cx) <= ownedHalfW && Math.abs(y - cy) <= ownedHalfH;
+        tile.owned = this.isWithinBounds(x, y);
         this.tiles[y * this.width + x] = tile;
       }
     }
+  }
+
+  /** True iff (x, y) is inside the current cityBounds rectangle. */
+  isWithinBounds(x: number, y: number): boolean {
+    return x >= this.cityBoundsX0 && x <= this.cityBoundsX1
+        && y >= this.cityBoundsY0 && y <= this.cityBoundsY1;
+  }
+
+  /** Expand the cityBounds by `amount` tiles in `direction` (Alpha 3.2.1).
+   *  Newly-included tiles flip to owned. Returns the count of tiles that
+   *  actually got included (0 if the bounds already touched the grid edge
+   *  in that direction). The Game layer is responsible for the cost +
+   *  treasury check before calling. */
+  expandBounds(direction: 'N' | 'S' | 'E' | 'W', amount: number): number {
+    let added = 0;
+    if (direction === 'N') {
+      const newY0 = Math.max(0, this.cityBoundsY0 - amount);
+      for (let y = newY0; y < this.cityBoundsY0; y++) {
+        for (let x = this.cityBoundsX0; x <= this.cityBoundsX1; x++) {
+          const t = this.get(x, y);
+          if (t && !t.owned) { t.owned = true; added++; }
+        }
+      }
+      this.cityBoundsY0 = newY0;
+    } else if (direction === 'S') {
+      const newY1 = Math.min(this.height - 1, this.cityBoundsY1 + amount);
+      for (let y = this.cityBoundsY1 + 1; y <= newY1; y++) {
+        for (let x = this.cityBoundsX0; x <= this.cityBoundsX1; x++) {
+          const t = this.get(x, y);
+          if (t && !t.owned) { t.owned = true; added++; }
+        }
+      }
+      this.cityBoundsY1 = newY1;
+    } else if (direction === 'W') {
+      const newX0 = Math.max(0, this.cityBoundsX0 - amount);
+      for (let x = newX0; x < this.cityBoundsX0; x++) {
+        for (let y = this.cityBoundsY0; y <= this.cityBoundsY1; y++) {
+          const t = this.get(x, y);
+          if (t && !t.owned) { t.owned = true; added++; }
+        }
+      }
+      this.cityBoundsX0 = newX0;
+    } else {
+      const newX1 = Math.min(this.width - 1, this.cityBoundsX1 + amount);
+      for (let x = this.cityBoundsX1 + 1; x <= newX1; x++) {
+        for (let y = this.cityBoundsY0; y <= this.cityBoundsY1; y++) {
+          const t = this.get(x, y);
+          if (t && !t.owned) { t.owned = true; added++; }
+        }
+      }
+      this.cityBoundsX1 = newX1;
+    }
+    return added;
+  }
+
+  /** True iff the cityBounds can grow further in `direction` (i.e. there's
+   *  still space inside the underlying grid). */
+  canExpand(direction: 'N' | 'S' | 'E' | 'W'): boolean {
+    if (direction === 'N') return this.cityBoundsY0 > 0;
+    if (direction === 'S') return this.cityBoundsY1 < this.height - 1;
+    if (direction === 'W') return this.cityBoundsX0 > 0;
+    return this.cityBoundsX1 < this.width - 1;
   }
 
   // --- Tile access -------------------------------------------------------

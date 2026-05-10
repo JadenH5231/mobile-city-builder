@@ -5,6 +5,7 @@ import type { Milestones } from '../simulation/Milestones';
 import type { Events, EventsSnapshot } from '../simulation/Events';
 import type { Stats, StatsSnapshot } from '../simulation/Stats';
 import type { Achievements, AchievementsSnapshot } from '../simulation/Achievements';
+import type { Bonds, BondsSnapshot } from '../simulation/Bonds';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
 
@@ -13,16 +14,14 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 15 (Alpha 2.17): persists Economy.lifetimeTourismRevenue. Landmarks
- * (museum / stadium / observatory) get the existing `building` field on
- * Tile so no per-tile schema change is required. v14 saves load with
- * lifetimeTourismRevenue = 0 — fair trade-off, the player starts earning
- * credit toward Cultural Capital from the load forward.
+ * Schema 16 (Alpha 2.18): persists Bonds (active loans + lifetime tally) +
+ * Economy.wealthSurtax slider. v15 saves load with no active bonds and a
+ * 0% surtax — clean slate, no in-flight obligations carry over.
  *
- * Earlier: v14 developedAt patina, v13 achievements, v12 bridges, v11 stats,
+ * Earlier: v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
  * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 15;
+const SCHEMA = 16;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -98,6 +97,10 @@ export interface SaveData {
   achievementsSnapshot?: AchievementsSnapshot;
   /** Schema 15+. Lifetime tourism revenue earned from landmarks. */
   lifetimeTourismRevenue?: number;
+  /** Schema 16+. Active bonds + lifetime issuance tally. */
+  bondsSnapshot?: BondsSnapshot;
+  /** Schema 16+. Player-set wealth surtax % (0..30). */
+  wealthSurtax?: number;
 }
 
 /**
@@ -142,9 +145,9 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds): Promise<void> {
     if (!this.db) return;
-    const data = serialize(grid, economy, council, milestones, events, stats, achievements);
+    const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds);
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, SLOT_KEY);
@@ -170,7 +173,7 @@ export class SaveGame {
  * so we get a single restore path for both.
  */
 export function serialize(
-  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements
+  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds
 ): SaveData {
   const tiles: TileSnapshot[] = new Array(grid.width * grid.height);
   let i = 0;
@@ -224,7 +227,9 @@ export function serialize(
     statsSnapshot: stats?.serialize(),
     bridgeRoadEdges: bridgeEdges,
     achievementsSnapshot: achievements?.serialize(),
-    lifetimeTourismRevenue: economy.lifetimeTourismRevenue
+    lifetimeTourismRevenue: economy.lifetimeTourismRevenue,
+    bondsSnapshot: bonds?.serialize(),
+    wealthSurtax: economy.wealthSurtax
   };
 }
 
@@ -238,7 +243,7 @@ export function serialize(
  * Services.recompute(grid) afterward. Same for the road graph rebuild.
  */
 export function applySave(
-  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements
+  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds
 ): void {
   if (data.width !== grid.width || data.height !== grid.height) return;
   if (council) {
@@ -331,4 +336,6 @@ export function applySave(
   economy.lastAccidentCost = 0;
   economy.accidentsThisMonth = 0;
   economy.lifetimeTourismRevenue = data.lifetimeTourismRevenue ?? 0;
+  economy.wealthSurtax = data.wealthSurtax ?? 0;
+  if (bonds) bonds.restore(data.bondsSnapshot);
 }

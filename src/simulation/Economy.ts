@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Population } from './Population';
 import {
   BUILDING_UPKEEP,
+  COMMERCIAL_JOBS,
   FARM_BASE_REVENUE_PER_TILE,
   FARM_DISCONNECTED_MULT,
   FORESTRY_BASE_REVENUE_PER_TILE,
@@ -9,13 +10,18 @@ import {
   HOSPITAL_PRODUCTIVITY_BONUS,
   LANDMARK_TOURISM_BASE,
   LANDMARK_TOURISM_PER_RESIDENT,
+  LUXURY_RESIDENT_CAPACITY_PER_TILE,
   LUXURY_TAX_BONUS,
+  MIXED_COMMERCIAL_JOBS,
+  RESIDENT_CAPACITY,
   ROAD_TIER,
   type Building,
   type Zone
 } from '../types';
+import type { Tile } from '../world/Tile';
 import type { GlobalMarket } from './GlobalMarket';
 import type { Events } from './Events';
+import type { Bonds } from './Bonds';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -100,6 +106,16 @@ export class Economy {
   lastTourismRevenue = 0;
   /** Lifetime tourism revenue earned. Drives the tourism achievement. */
   lifetimeTourismRevenue = 0;
+  /** Last completed month's bond debt service (Alpha 2.18). Pull-out line
+   *  in the budget panel so the player sees what their borrowing costs. */
+  lastBondPayment = 0;
+  /** Last month's surtax revenue (Alpha 2.18) — high-density / luxury
+   *  tax bracket layered on top of base R/C rates. */
+  lastSurtaxRevenue = 0;
+  /** Player-set wealth surtax (Alpha 2.18). 0..30 (%) added on top of the
+   *  base R/C rate for L3 R, L3 C, and luxury R tiles. Drives a small
+   *  faction effect: taxpayers love surtax revenue, chamber hates it. */
+  wealthSurtax = 0;
   /** Last completed month's accident-related expense (for budget breakdown). */
   lastAccidentCost = 0;
   /** Number of crashes during the current (in-progress) month. */
@@ -111,11 +127,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events);
+      this.runMonth(grid, population, market, events, bonds);
     }
   }
 
@@ -131,7 +147,7 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -170,10 +186,23 @@ export class Economy {
     // bonus applies only where the hospital actually reaches.
     let cJobsCovered = 0;
     let iJobsCovered = 0;
+    // Wealth surtax (Alpha 2.18): per-month sweep over R-L3 + C-L3 +
+    // luxury tiles. Each contributes additional revenue at the surtax
+    // rate (multiplicative on base R/C). 0% by default — opt-in lever
+    // for the player who wants more revenue from the affluent bracket.
+    let surtaxResidents = 0;
+    let surtaxCJobs = 0;
     for (const t of grid.iter()) {
       if (!t.hasHospital || t.density === 0) continue;
       if (t.zone === 'commercial') cJobsCovered++;
       else if (t.zone === 'industrial') iJobsCovered++;
+    }
+    if (this.wealthSurtax > 0) {
+      for (const t of grid.iter()) {
+        if (t.density === 0) continue;
+        if (t.zone === 'residential' && (t.density === 3 || t.luxury)) surtaxResidents += residentsForTile(t);
+        else if (t.zone === 'commercial' && t.density === 3) surtaxCJobs += commercialJobsForTile(t);
+      }
     }
     const hospitalBonus =
       cJobsCovered * this.taxC * REV_PER_C_JOB * HOSPITAL_PRODUCTIVITY_BONUS +
@@ -194,6 +223,12 @@ export class Economy {
     this.lastTourismRevenue = Math.round(tourismRevenue);
     this.lifetimeTourismRevenue += this.lastTourismRevenue;
 
+    const surtaxFraction = this.wealthSurtax / 100;
+    const surtaxRevenue =
+      surtaxResidents * this.taxR * REV_PER_RESIDENT * surtaxFraction +
+      surtaxCJobs * this.taxC * REV_PER_C_JOB * surtaxFraction;
+    this.lastSurtaxRevenue = Math.round(surtaxRevenue);
+
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
@@ -202,7 +237,8 @@ export class Economy {
       forestryRevenue +
       farmRevenue +
       hospitalBonus +
-      tourismRevenue;
+      tourismRevenue +
+      surtaxRevenue;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.
     // Charge the average of the two endpoints' tier so a mixed-tier edge
@@ -227,17 +263,36 @@ export class Economy {
       (population.totalResidents / 1000) * SERVICES_GROWTH_PER_1K;
     expenses += population.totalResidents * ratePerResident;
 
+    // Bond debt service (Alpha 2.18): runs AFTER routine revenue and
+    // expenses settle, so a bond payment can pull the treasury into the
+    // red. The Bonds module deducts directly from treasury and reports
+    // back the cash actually paid (could be 0 on a default).
+    let bondService = 0;
+    if (bonds) bondService = bonds.tickMonth(this);
+    this.lastBondPayment = bondService;
+
     const netRevenue = Math.round(revenue);
     const netExpenses = Math.round(expenses);
     // Accident cost was already deducted from treasury in recordCrash —
     // here we just surface it for the budget panel breakdown.
     this.treasury += netRevenue - netExpenses;
     this.lastRevenue = netRevenue;
-    this.lastExpenses = netExpenses;
+    this.lastExpenses = netExpenses + bondService;
     this.lastAccidentCost = Math.round(this.monthAccidentCost);
     this.monthAccidentCost = 0;
     this.accidentsThisMonth = 0;
     this.monthsElapsed++;
+  }
+
+  /** Surtax demand penalty (Alpha 2.18) — kicks in when the player sets
+   *  wealthSurtax > 0; affects L3 R + L3 C + luxury R demand only. The
+   *  bracket population is small relative to total, so the lever feels
+   *  targeted: cranking the surtax up to 30% won't crater general
+   *  R/C demand the way moving the base R slider would. */
+  surtaxDemandPenalty(zone: Exclude<Zone, 'none'>): number {
+    if (this.wealthSurtax <= 0) return 0;
+    if (zone !== 'residential' && zone !== 'commercial') return 0;
+    return this.wealthSurtax / 100 * 0.5;
   }
 
   /**
@@ -253,4 +308,20 @@ export class Economy {
       (this.taxR + this.taxC) / 2;
     return (rate - TAX_SWEET[zone]) / TAX_PENALTY_DENOMINATOR;
   }
+}
+
+/** Helpers (Alpha 2.18) for the wealth-surtax sweep. They mirror
+ *  Population.tile-residents / commercial-jobs without importing the
+ *  whole module — Economy.runMonth needs the per-tile capacity for
+ *  the L3 / luxury bracket sweep but doesn't carry any other Population
+ *  baggage. */
+function residentsForTile(t: Tile): number {
+  if (t.luxury) return LUXURY_RESIDENT_CAPACITY_PER_TILE;
+  if (t.zone === 'residential') return RESIDENT_CAPACITY[t.density] ?? 0;
+  return 0;
+}
+function commercialJobsForTile(t: Tile): number {
+  if (t.zone === 'commercial') return COMMERCIAL_JOBS[t.density] ?? 0;
+  if (t.zone === 'mixed') return MIXED_COMMERCIAL_JOBS[t.density] ?? 0;
+  return 0;
 }

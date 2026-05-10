@@ -54,7 +54,9 @@ export type AchievementId =
   | 'override_used'
   | 'big_tent'
   | 'cultural_capital'
-  | 'tourist_trap';
+  | 'tourist_trap'
+  | 'bond_issuer'
+  | 'debt_free';
 
 export interface Achievement {
   readonly id: AchievementId;
@@ -102,6 +104,11 @@ export interface Snapshot {
   /** Distinct landmark kinds currently standing (museum / stadium /
    *  observatory). 0..3 — used by the Tourist Trap achievement. */
   uniqueLandmarkKinds: number;
+  /** Lifetime bonds issued (Alpha 2.18). */
+  bondsIssuedLifetime: number;
+  /** True if the player has ever issued a bond AND has zero outstanding
+   *  bonds right now. Used for Debt Free (paid off all debt). */
+  hasPaidOffAllDebt: boolean;
   highwayEdges: number;
   totalRoadEdges: number;
   zonedTiles: number;
@@ -339,6 +346,20 @@ export const ACHIEVEMENT_DEFS: readonly Achievement[] = [
     description: 'Operate a museum, a stadium, and an observatory at once.',
     icon: '🗺️',
     check: (s) => s.uniqueLandmarkKinds >= 3
+  },
+  {
+    id: 'bond_issuer',
+    name: 'Bond Issuer',
+    description: 'Issue your first municipal bond.',
+    icon: '📜',
+    check: (s) => s.bondsIssuedLifetime >= 1
+  },
+  {
+    id: 'debt_free',
+    name: 'Debt-Free',
+    description: 'Pay off every outstanding bond after taking at least one.',
+    icon: '🪙',
+    check: (s) => s.hasPaidOffAllDebt
   }
 ];
 
@@ -389,6 +410,9 @@ export class Achievements {
     council: Council;
     grid: Grid;
     milestones: Milestones;
+    /** Optional Bonds — Achievements need lifetime issuance + active count
+     *  for the Bond Issuer / Debt Free pair. Defaults to no-bond inputs. */
+    bonds?: { lifetimeIssued: number; activeCount: number };
   }): boolean {
     const { economy, population, happiness, grid } = args;
 
@@ -482,6 +506,8 @@ export class Achievements {
       walkingPathTiles,
       busDepots,
       uniqueLandmarkKinds,
+      bondsIssuedLifetime: args.bonds?.lifetimeIssued ?? 0,
+      hasPaidOffAllDebt: (args.bonds?.lifetimeIssued ?? 0) > 0 && (args.bonds?.activeCount ?? 0) === 0,
       highwayEdges,
       totalRoadEdges,
       zonedTiles,

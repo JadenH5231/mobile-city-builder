@@ -123,6 +123,11 @@ export class Renderer {
   private busesMesh: InstancedMesh;
   private ferriesMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
+  /** Sibling head mesh for pedestrians (Alpha 3.2.2). Its matrices are
+   *  kept identical to pedestriansMesh; the head + hair geometry sits
+   *  above the body via baked-in y offsets. Separate material so skin
+   *  tone is independent of per-instance clothing colour. */
+  private pedestriansHeadsMesh!: InstancedMesh;
   private selectionMesh: Mesh;
   // Reusable scratch objects for per-frame car updates — avoid GC churn.
   private readonly tmpObj = new Object3D();
@@ -216,16 +221,52 @@ export class Renderer {
     this.busesMesh.frustumCulled = false;
     this.worldGroup.add(this.busesMesh);
 
-    // Pedestrians — tiny vertical box (a "pawn") sized to read at the
-    // 3/4 ortho zoom without dominating the road. Per-instance colour set
-    // each frame from PEDESTRIAN_PALETTE.
-    const pedGeom = new BoxGeometry(0.09, 0.16, 0.09);
-    pedGeom.translate(0, 0.08, 0);
-    const pedMat = new MeshLambertMaterial({ flatShading: true });
-    this.pedestriansMesh = new InstancedMesh(pedGeom, pedMat, MAX_PEDESTRIANS);
+    // Pedestrians (Alpha 3.2.2): small humanoid silhouette built from
+    // two legs + a torso + arms, sitting under a separate head mesh
+    // with a fixed skin-tone material. Two instanced meshes per frame
+    // (body + head) — still cheap, but reads as people instead of
+    // pawns. Per-instance colour on the body tints the clothing;
+    // the head keeps a uniform skin tone across the population.
+    const legL = new BoxGeometry(0.022, 0.06, 0.022);
+    legL.translate(-0.020, 0.030, 0);
+    const legR = new BoxGeometry(0.022, 0.06, 0.022);
+    legR.translate(0.020, 0.030, 0);
+    const torso = new BoxGeometry(0.070, 0.075, 0.045);
+    torso.translate(0, 0.060 + 0.0375, 0);
+    // Slim arms hang at the torso's sides.
+    const armL = new BoxGeometry(0.018, 0.070, 0.020);
+    armL.translate(-0.045, 0.075, 0);
+    const armR = new BoxGeometry(0.018, 0.070, 0.020);
+    armR.translate(0.045, 0.075, 0);
+    // Body parts merge into one geometry that takes per-instance colour.
+    const bodyGeom = mergeGeoms(
+      [legL, legR, torso, armL, armR],
+      // Legs slightly darker than the rest (reads as pants); torso +
+      // arms tint to the per-instance clothing colour. Arms are a hair
+      // duller than the torso for subtle definition without being noisy.
+      [0xffffff * 0.55, 0xffffff * 0.55, 0xffffff, 0xffffff * 0.85, 0xffffff * 0.85]
+    );
+    const pedMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.pedestriansMesh = new InstancedMesh(bodyGeom, pedMat, MAX_PEDESTRIANS);
     this.pedestriansMesh.count = 0;
     this.pedestriansMesh.frustumCulled = false;
     this.worldGroup.add(this.pedestriansMesh);
+
+    // Heads — separate mesh so the skin tone is independent of the
+    // clothing colour. Single warm beige material, no per-instance tint.
+    const headGeom = new BoxGeometry(0.050, 0.050, 0.045);
+    headGeom.translate(0, 0.180, 0);
+    // Optional hair tuft on top — slim flat slab a touch wider than the
+    // head, in a darker neutral so it reads as hair without picking
+    // a single hair-colour for the population.
+    const hair = new BoxGeometry(0.052, 0.012, 0.047);
+    hair.translate(0, 0.211, 0);
+    const headPlusHairGeom = mergeGeoms([headGeom, hair], [0xf2d4b0, 0x3a2618]);
+    const headMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.pedestriansHeadsMesh = new InstancedMesh(headPlusHairGeom, headMat, MAX_PEDESTRIANS);
+    this.pedestriansHeadsMesh.count = 0;
+    this.pedestriansHeadsMesh.frustumCulled = false;
+    this.worldGroup.add(this.pedestriansHeadsMesh);
 
     // Ferries (Alpha 2.19) — small low-poly boat. Hull below the waterline,
     // cabin above. Same instanced-mesh pattern as cars/buses.
@@ -766,13 +807,18 @@ export class Renderer {
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.pedestriansMesh.setMatrixAt(visible, obj.matrix);
+      // Same matrix on the heads mesh so the head + hair sit above the
+      // body. The y offset is baked into the head geometry already.
+      this.pedestriansHeadsMesh.setMatrixAt(visible, obj.matrix);
       c.setHex(w.color);
       this.pedestriansMesh.setColorAt(visible, c);
       visible++;
     }
     this.pedestriansMesh.count = visible;
+    this.pedestriansHeadsMesh.count = visible;
     if (visible > 0) {
       this.pedestriansMesh.instanceMatrix.needsUpdate = true;
+      this.pedestriansHeadsMesh.instanceMatrix.needsUpdate = true;
       if (this.pedestriansMesh.instanceColor) this.pedestriansMesh.instanceColor.needsUpdate = true;
     }
   }

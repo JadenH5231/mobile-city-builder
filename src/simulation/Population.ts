@@ -197,6 +197,11 @@ export class Population {
     r -= economy.taxDemandPenalty('residential');
     c -= economy.taxDemandPenalty('commercial');
     i -= economy.taxDemandPenalty('industrial');
+    // Wealth-surtax demand penalty (Alpha 2.18). Half-strength of base-tax
+    // penalty since it only hits the L3 / luxury bracket — keeps the lever
+    // useful but firmly impactful when cranked high.
+    r -= economy.surtaxDemandPenalty('residential');
+    c -= economy.surtaxDemandPenalty('commercial');
 
     // Traffic stress penalty.
     const stress = traffic.overallStress(grid);

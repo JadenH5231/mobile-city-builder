@@ -1,4 +1,5 @@
 import type { Economy } from '../simulation/Economy';
+import { BOND_SPECS, MAX_ACTIVE_BONDS, type BondId, type Bonds } from '../simulation/Bonds';
 
 const fmt = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -37,8 +38,11 @@ export class BudgetPanel {
 
   /** Fired when the user closes via the close button. */
   onClose?: () => void;
+  /** Fired when the player taps an "Issue bond" button. Game wires it to
+   *  Game.issueBond which credits the principal + adds to active bonds. */
+  onIssueBond?: (id: BondId) => void;
 
-  constructor(private readonly economy: Economy) {
+  constructor(private readonly economy: Economy, private readonly bonds: Bonds) {
     this.el = mustGet('budget-panel');
     this.closeBtn = mustGet('budget-close');
 
@@ -79,6 +83,29 @@ export class BudgetPanel {
       this.economy.taxI = v;
       this.valueI.textContent = String(v);
     });
+
+    // Wealth surtax slider (Alpha 2.18). 0..30%. Lives in the optional
+    // `tax-surtax` row — guarded so older builds without the slider in
+    // index.html still load.
+    const surtaxSlider = document.getElementById('tax-surtax') as HTMLInputElement | null;
+    const surtaxVal = document.getElementById('tax-surtax-val');
+    if (surtaxSlider && surtaxVal) {
+      surtaxSlider.value = String(economy.wealthSurtax);
+      surtaxVal.textContent = String(economy.wealthSurtax);
+      surtaxSlider.addEventListener('input', () => {
+        const v = Number(surtaxSlider.value);
+        economy.wealthSurtax = v;
+        surtaxVal.textContent = String(v);
+      });
+    }
+
+    // Bond-issuance buttons. One per spec — disabled when at the cap or
+    // when treasury can't make next month's payment plus this one.
+    for (const spec of BOND_SPECS) {
+      const btn = document.getElementById(`bond-issue-${spec.id}`) as HTMLButtonElement | null;
+      if (!btn) continue;
+      btn.addEventListener('click', () => this.onIssueBond?.(spec.id));
+    }
 
     this.closeBtn.addEventListener('click', () => {
       this.hide();
@@ -131,7 +158,51 @@ export class BudgetPanel {
         accidentsRow.classList.add('hidden');
       }
     }
+    this.refreshBondsUI();
   }
+
+  private refreshBondsUI(): void {
+    const activeListEl = document.getElementById('bonds-active-list');
+    if (activeListEl) {
+      activeListEl.innerHTML = '';
+      if (this.bonds.active.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'bonds__empty';
+        empty.textContent = 'No outstanding debt';
+        activeListEl.appendChild(empty);
+      } else {
+        for (const b of this.bonds.active) {
+          const row = document.createElement('div');
+          row.className = 'bonds__active-row' + (b.hasDefaulted ? ' bonds__active-row--defaulted' : '');
+          row.innerHTML = `
+            <span class="bonds__active-name">${labelFor(b.specId)}</span>
+            <span class="bonds__active-pay mono">${formatCurrency(b.monthlyPayment)}/mo</span>
+            <span class="bonds__active-rem mono">${b.monthsRemaining}mo left</span>
+          `;
+          activeListEl.appendChild(row);
+        }
+      }
+    }
+    // Per-bond issue button — disabled when at the cap.
+    const atCap = this.bonds.active.length >= MAX_ACTIVE_BONDS;
+    for (const spec of BOND_SPECS) {
+      const btn = document.getElementById(`bond-issue-${spec.id}`) as HTMLButtonElement | null;
+      if (!btn) continue;
+      btn.disabled = atCap;
+      btn.title = atCap ? `At the bond limit (${MAX_ACTIVE_BONDS} active)` : '';
+    }
+    // Total monthly debt service.
+    const debtEl = document.getElementById('bonds-monthly-debt');
+    if (debtEl) {
+      const total = this.bonds.totalMonthlyDebtService();
+      debtEl.textContent = total > 0 ? `Monthly debt service: ${formatCurrency(total)}` : '';
+    }
+  }
+}
+
+function labelFor(id: BondId): string {
+  const spec = BOND_SPECS.find((s) => s.id === id);
+  return spec ? spec.label : id;
 }
 
 function setNegative(el: HTMLElement, negative: boolean): void {

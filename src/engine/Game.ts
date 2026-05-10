@@ -11,6 +11,7 @@ import { Milestones } from '../simulation/Milestones';
 import { Events, type GameEvent } from '../simulation/Events';
 import { Stats } from '../simulation/Stats';
 import { Achievements, type Achievement } from '../simulation/Achievements';
+import { Bonds, type BondId } from '../simulation/Bonds';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -137,6 +138,23 @@ export class Game {
     this.achievements.recordEventResolved();
   }
 
+  /**
+   * Issue a bond (Alpha 2.18). Credits the principal to the treasury and
+   * adds the bond to the active list. Returns true on success, false if
+   * the player is already at the bond cap. Surfaces a status toast either
+   * way so the budget panel doesn't have to do its own messaging.
+   */
+  issueBond(specId: BondId): boolean {
+    const principal = this.bonds.issue(specId, this.economy.monthsElapsed);
+    if (principal === 0) {
+      this.onStatusMessage?.('Bond declined — already at the limit');
+      return false;
+    }
+    this.economy.treasury += principal;
+    this.onStatusMessage?.(`Bond issued · +$${principal.toLocaleString()}`);
+    return true;
+  }
+
   /** Achievement just unlocked (Alpha 2.15). main.ts surfaces a corner toast. */
   onAchievementUnlocked?: (a: Achievement) => void;
   /** New council leader the player has never met (Alpha 2.15). main.ts owns
@@ -220,6 +238,8 @@ export class Game {
   readonly stats = new Stats();
   /** Lifetime achievements + leader-bio met set (Alpha 2.15). */
   readonly achievements = new Achievements();
+  /** Municipal bonds + active loan tracker (Alpha 2.18). */
+  readonly bonds = new Bonds();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -306,7 +326,8 @@ export class Game {
     // Refresh banned-tool indicators on first paint and after any election.
     this.refreshToolbarBans();
     this.refreshToolbarLocks();
-    this.budgetPanel = new BudgetPanel(this.economy);
+    this.budgetPanel = new BudgetPanel(this.economy, this.bonds);
+    this.budgetPanel.onIssueBond = (id) => { this.issueBond(id); this.budgetPanel.refresh(); };
     this.happinessPanel = new HappinessPanel({
       happiness: this.happiness,
       council: this.council,
@@ -339,7 +360,7 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements);
+        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -575,7 +596,7 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -586,6 +607,18 @@ export class Game {
           // PC accrues every month (before the election so the player
           // walks into election day with the latest balance).
           this.council.awardMonthlyPC(this.happiness);
+          // Bond default penalty (Alpha 2.18). When the treasury can't
+          // cover monthly debt service, taxpayers + chamber take a
+          // multi-month happiness hit and the player loses 5 PC. Surface
+          // a status toast so the player sees what just happened.
+          if (this.bonds.defaultedThisMonth) {
+            this.bonds.defaultedThisMonth = false;
+            this.council.politicalCapital = Math.max(0, this.council.politicalCapital - 5);
+            const cur = this.council.campaignHappinessDelta;
+            cur.set('taxpayers', (cur.get('taxpayers') ?? 0) - 0.30);
+            cur.set('chamber', (cur.get('chamber') ?? 0) - 0.20);
+            this.onStatusMessage?.('Bond defaulted — taxpayers + Chamber are furious');
+          }
           const fired = this.council.maybeRunElection(
             this.economy.monthsElapsed,
             this.happiness,
@@ -631,7 +664,8 @@ export class Game {
             happiness: this.happiness,
             council: this.council,
             grid: this.grid,
-            milestones: this.milestones
+            milestones: this.milestones,
+            bonds: { lifetimeIssued: this.bonds.lifetimeIssued, activeCount: this.bonds.active.length }
           });
           while (this.achievements.hasPending()) {
             const a = this.achievements.shiftPending();
@@ -717,7 +751,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -813,7 +847,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -825,7 +859,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
     this.afterStateRestore();
   }
 

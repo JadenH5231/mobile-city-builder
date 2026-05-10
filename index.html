@@ -124,6 +124,33 @@
           </label>
           <input type="range" id="tax-i" min="0" max="25" value="11" step="1">
         </div>
+        <div class="budget__slider">
+          <label for="tax-surtax">
+            <span>Wealth surtax · L3 + Lux</span>
+            <span class="mono"><span id="tax-surtax-val">0</span>%</span>
+          </label>
+          <input type="range" id="tax-surtax" min="0" max="30" value="0" step="1">
+        </div>
+      </div>
+
+      <div class="bonds">
+        <div class="bonds__title">Municipal Bonds</div>
+        <div class="bonds__sub" id="bonds-monthly-debt"></div>
+        <div id="bonds-active-list" class="bonds__active-list"></div>
+        <div class="bonds__issue-row">
+          <button id="bond-issue-small" type="button" class="bonds__issue">
+            <span class="bonds__issue-label">Small</span>
+            <span class="bonds__issue-detail mono">+$5K · $250/mo × 24</span>
+          </button>
+          <button id="bond-issue-medium" type="button" class="bonds__issue">
+            <span class="bonds__issue-label">Medium</span>
+            <span class="bonds__issue-detail mono">+$15K · $700/mo × 24</span>
+          </button>
+          <button id="bond-issue-large" type="button" class="bonds__issue">
+            <span class="bonds__issue-label">Large</span>
+            <span class="bonds__issue-detail mono">+$40K · $1,800/mo × 24</span>
+          </button>
+        </div>
       </div>
 
       <button id="budget-reset" type="button" class="budget__reset">Reset city</button>

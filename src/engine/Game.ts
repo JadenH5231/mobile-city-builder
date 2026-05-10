@@ -830,6 +830,9 @@ export class Game {
         this.timeOfDay = (this.timeOfDay + dayDelta) % 1;
       }
       this.renderer.applyTimeOfDay(this.timeOfDay);
+      // Push the camera's current ortho size into the renderer so
+      // skyscraper opacity tracks zoom (Alpha 3.1.7).
+      this.renderer.applyCameraZoom(this.camera.orthoSize);
       this.renderer.render(this.camera);
       requestAnimationFrame(frame);
     };

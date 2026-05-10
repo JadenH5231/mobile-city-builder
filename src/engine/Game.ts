@@ -267,6 +267,15 @@ export class Game {
     // Surface the "Unlocks at <Milestone> · NNN pop" toast when a player
     // taps a locked tool (Alpha 2.8).
     this.toolbar.onLocked = (tool) => {
+      // Defensive (Alpha 2.12.1): if the milestone IS earned but the
+      // toolbar's lock state is stale (e.g. mid-restore race or a missed
+      // refresh), refresh + activate instead of toasting an inaccurate
+      // message. Milestones are permanent — once earned, never relock.
+      if (this.milestones.isUnlocked(tool)) {
+        this.refreshToolbarLocks();
+        this.setTool(tool);
+        return;
+      }
       const m = this.milestones.milestoneForTool(tool);
       if (!m) {
         this.onStatusMessage?.('Tool not yet available');
@@ -838,6 +847,10 @@ export class Game {
     this.strokeBridgeEdges.clear();
     this.strokeDidSnapshot = false;
     this.councilBlockNotifiedThisStroke = false;
+    // Defensive (Alpha 2.12.1) — re-derive toolbar lock state at every
+    // stroke so a missed refresh can't strand a player on a "locked"
+    // milestone they actually earned.
+    this.refreshToolbarLocks();
     if (!tile) return;
 
     // Snapshot before any state mutation so we can undo this whole stroke

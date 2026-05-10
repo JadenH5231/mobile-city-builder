@@ -1514,7 +1514,7 @@ const VARIANTS: VariantTable = {
  *   4 = built (full design, no construction equipment)
  */
 
-interface SkyscraperDesign {
+export interface SkyscraperDesign {
   /** Main tower body colour. */
   bodyColor: number;
   /** Window-band glass colour (the dark horizontal stripes on the body). */
@@ -1655,6 +1655,16 @@ const SKY_TABLE: Record<'residential' | 'commercial' | 'mixed', SkyscraperDesign
   commercial: COMMERCIAL_SKY,
   mixed: MIXED_SKY
 };
+
+/** Resolve the design for a placed skyscraper. Used by Renderer to align
+ *  lit-window placements with the actual body geometry instead of guessing
+ *  a fixed footprint (Alpha 3.1.8). */
+export function getSkyscraperDesign(
+  zone: 'residential' | 'commercial' | 'mixed', variant: number
+): SkyscraperDesign {
+  const designs = SKY_TABLE[zone];
+  return designs[variant % designs.length]!;
+}
 
 /**
  * Build the geometry parts for a single skyscraper anchored at (ax, ay).

@@ -29,7 +29,7 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildLuxuryParts, buildSkyscraperParts, buildVariantParts } from './BuildingVariants';
+import { buildLuxuryParts, buildSkyscraperParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -869,7 +869,9 @@ export class Renderer {
     }
     if (this.lampGlowMesh) {
       const mat = this.lampGlowMesh.material as MeshBasicMaterial;
-      mat.opacity = nightOpacity * 0.95;
+      // Slightly dim overall (Alpha 3.1.8) so overlapping lamp pools
+      // don't wash out the road surface they sit on.
+      mat.opacity = nightOpacity * 0.75;
       this.lampGlowMesh.visible = nightOpacity > 0.01;
     }
     if (this.litWindowsMesh) {
@@ -1491,9 +1493,12 @@ function makeRadialGlowTexture(): import('three').Texture {
   const ctx = canvas.getContext('2d')!;
   const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   // Bright warm centre → soft warm mid → fully transparent edge.
-  grad.addColorStop(0, 'rgba(255, 240, 168, 0.95)');
-  grad.addColorStop(0.30, 'rgba(255, 220, 150, 0.55)');
-  grad.addColorStop(0.65, 'rgba(255, 200, 130, 0.18)');
+  // Softer falloff (Alpha 3.1.8) — the previous gradient was washing
+  // out everything under the lamp. Lower centre alpha + earlier
+  // taper keeps the glow readable without flattening the road texture.
+  grad.addColorStop(0, 'rgba(255, 240, 168, 0.65)');
+  grad.addColorStop(0.25, 'rgba(255, 220, 150, 0.38)');
+  grad.addColorStop(0.55, 'rgba(255, 200, 130, 0.12)');
   grad.addColorStop(1, 'rgba(255, 200, 130, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
@@ -1627,28 +1632,65 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       const isAnchor = !cmp(t.x - 1, t.y) && !cmp(t.x, t.y - 1) && !cmp(t.x - 1, t.y - 1)
         && cmp(t.x + 1, t.y) && cmp(t.x, t.y + 1) && cmp(t.x + 1, t.y + 1);
       if (!isAnchor) continue;
-      // Skyscraper anchor centre is at (anchor + 1.0) — offset to the 2×2 centre.
+      // Anchor centre is at (anchor + 1.0). Read the actual design so
+      // window placement matches the body geometry instead of guessing.
+      // Without this, designs with high `inset` or low `setbackAtFrac`
+      // showed windows floating in the air outside the body.
       const acx = t.x + 1.0;
       const acz = t.y + 1.0;
-      const towerH = 7.0; // approximate; real designs vary 6.5-8.5 — close enough for window placement
-      const halfW = 0.55;
-      // Emit a grid of small windows on each of the 4 faces.
-      for (let row = 0; row < 12; row++) {
-        const wy = 0.50 + row * 0.55;
-        if (wy > towerH - 0.40) break;
-        // Each face: 4 windows across.
-        for (let col = 0; col < 4; col++) {
-          const offset = -halfW * 0.7 + col * (halfW * 0.46);
-          // Only some windows lit (deterministic checker).
-          if (((row + col + palIdx) & 3) === 0) continue;
-          // North face (z = acz - halfW)
-          addWindow(acx + offset, wy, acz - halfW - 0.005, 0.10, 0.18, 'X', litColor);
-          // South face
-          addWindow(acx + offset, wy, acz + halfW + 0.005, 0.10, 0.18, 'X', litColor);
-          // East face
-          addWindow(acx + halfW + 0.005, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
-          // West face
-          addWindow(acx - halfW - 0.005, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+      const design = getSkyscraperDesign(t.zone as 'residential' | 'commercial' | 'mixed', t.skyscraperVariant);
+      // The base body width is `2.0 - inset*2` and the setback (if any)
+      // narrows to that × setbackInsetFactor. Windows live on whichever
+      // body section they're inside.
+      const baseHalfW = (2.0 - design.inset * 2) / 2;
+      const towerHalfW = baseHalfW * (design.setbackInsetFactor || 1.0);
+      const setbackY = design.setbackAtFrac > 0 && design.setbackAtFrac < 1
+        ? design.height * design.setbackAtFrac
+        : design.height; // no setback → never narrows
+      // Skip the ground-level zone where podium glass already paints a
+      // dark band (avoids overlap that washes out the glass).
+      const startY = design.hasPodiumGlass ? 0.65 : 0.30;
+      // Window pitch matches the building band spacing (0.55) so windows
+      // sit cleanly between the dark glass bands rather than crashing
+      // into them. End just below the crown band.
+      const pitch = 0.55;
+      const cols = 3;
+      for (let row = 0; ; row++) {
+        const wy = startY + row * pitch;
+        if (wy > design.height - 0.45) break;
+        const halfW = wy < setbackY ? baseHalfW : towerHalfW;
+        if (halfW < 0.20) continue; // tower too narrow for windows at this height
+        for (let col = 0; col < cols; col++) {
+          // Deterministic dim pattern — about half the windows lit at a time.
+          if (((row * 7 + col + palIdx) & 1) === 0) continue;
+          const t01 = (col + 0.5) / cols;
+          const offset = -halfW * 0.85 + t01 * halfW * 1.7;
+          // Inset windows just outside the body face so they don't
+          // z-fight with the dark glass band geometry. The body face is
+          // at ±halfW; windows sit at ±(halfW + 0.008).
+          const surfaceOffset = halfW + 0.008;
+          addWindow(acx + offset, wy, acz - surfaceOffset, 0.10, 0.18, 'X', litColor);
+          addWindow(acx + offset, wy, acz + surfaceOffset, 0.10, 0.18, 'X', litColor);
+          addWindow(acx + surfaceOffset, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+          addWindow(acx - surfaceOffset, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+        }
+        // Second tower (twin designs) — emit windows on it too.
+        if (design.secondTower) {
+          const s = design.secondTower;
+          if (wy > s.h - 0.45) continue;
+          const sHalf = s.w / 2;
+          const sx = acx + s.offsetX;
+          const sz = acz + s.offsetZ;
+          for (let col = 0; col < cols; col++) {
+            if (((row * 11 + col + palIdx + 3) & 1) === 0) continue;
+            const t01 = (col + 0.5) / cols;
+            const offset = -sHalf * 0.85 + t01 * sHalf * 1.7;
+            const surfaceOffset = sHalf + 0.008;
+            addWindow(sx + offset, wy, sz - surfaceOffset, 0.10, 0.18, 'X', litColor);
+            addWindow(sx + offset, wy, sz + surfaceOffset, 0.10, 0.18, 'X', litColor);
+            addWindow(sx + surfaceOffset, wy, sz + offset, 0.10, 0.18, 'Z', litColor);
+            addWindow(sx - surfaceOffset, wy, sz + offset, 0.10, 0.18, 'Z', litColor);
+          }
         }
       }
       continue;

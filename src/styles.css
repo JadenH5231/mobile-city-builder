@@ -2792,3 +2792,34 @@ body.photo-mode .photo-op {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Generic scrollable body for tall info-panels (Alpha 3.0.4).
+ * Used by panels whose content can grow past the viewport — wraps
+ * everything below the title/handle so the close button stays visible
+ * in the panel's non-scrolling header.
+ *
+ * The .info-panel--tall variant already gives the panel display:flex /
+ * flex-direction:column / overflow:hidden, so this body just claims
+ * the remaining vertical space and scrolls. */
+.info-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Keep the close button clear when the body scrolls under it. */
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+/* Make sure the close button stays clickable above any scrolling
+ * content underneath it — the .info-panel surface stops at the panel's
+ * outer rounded box, so the absolute close button is anchored to the
+ * static panel rather than the scroll origin. The padding-top on the
+ * panel's body keeps the body content from sliding under the close. */
+.info-panel--tall {
+  padding-top: 12px;
+}
+.info-panel--tall .info-panel__close {
+  z-index: 2;
+}

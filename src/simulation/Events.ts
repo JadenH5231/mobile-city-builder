@@ -140,29 +140,31 @@ export class Events {
     }
 
     // Industrial fire — chance scales with weighted industrial footprint.
-    if (pickedFireTile && rng() < weightedFireChance) {
+    // (Alpha 2.12.1) Fire chance halved from previous tuning — events
+    // fired too often per playtest feedback. Fire-station damping still
+    // multiplies on top via FIRE_PROTECTION_MULT.
+    if (pickedFireTile && rng() < weightedFireChance * 0.55) {
       this.queueFire(grid, economy, pickedFireTile);
     }
     // Power plant outage — rare per plant.
-    if (powerPlantCount > 0 && rng() < 0.025 * powerPlantCount) {
+    if (powerPlantCount > 0 && rng() < 0.014 * powerPlantCount) {
       this.queuePowerOutage(economy);
     }
     // Tax audit — only when the treasury has notable cash.
-    if (economy.treasury > 100_000 && rng() < 0.025) {
+    if (economy.treasury > 100_000 && rng() < 0.014) {
       this.queueAudit(economy);
     }
 
-    // Big events space themselves out — minimum 8-month gap between any
-    // recession / boom / lawsuit / referendum. This guards against an
-    // unlucky stack in a single year.
-    if (this.monthsSinceBigEvent >= 8) {
+    // Big events space themselves out — minimum 14-month gap (raised
+    // from 8 in Alpha 2.12.1) so a player isn't constantly reacting.
+    if (this.monthsSinceBigEvent >= 14) {
       // Recession or boom — mutually exclusive, low odds.
       const econRoll = rng();
-      if (econRoll < 0.012) {
+      if (econRoll < 0.007) {
         this.queueRecession();
         this.monthsSinceBigEvent = 0;
         return;
-      } else if (econRoll < 0.024) {
+      } else if (econRoll < 0.014) {
         this.queueBoom();
         this.monthsSinceBigEvent = 0;
         return;
@@ -170,14 +172,14 @@ export class Events {
 
       // Trade deal — only if connected (city has a road touching the edge).
       // This is checked by GlobalMarket externally; we keep it simple here.
-      if (rng() < 0.015) {
+      if (rng() < 0.009) {
         this.queueTradeDeal();
         this.monthsSinceBigEvent = 0;
         return;
       }
 
-      // Lawsuit — RARE per user spec. Requires a faction at h <= -0.6.
-      if (rng() < 0.010) {
+      // Lawsuit — RARE per user spec.
+      if (rng() < 0.005) {
         const furious = this.findFurious(happiness);
         if (furious) {
           this.queueLawsuit(furious);
@@ -186,7 +188,7 @@ export class Events {
         }
       }
       // Referendum — RARE. Population gate, plus a faction with notable share.
-      if (population.totalResidents > 800 && rng() < 0.008) {
+      if (population.totalResidents > 800 && rng() < 0.004) {
         const proposer = this.pickReferendumProposer(population, council);
         if (proposer) {
           this.queueReferendum(proposer);

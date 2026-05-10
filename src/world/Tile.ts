@@ -167,4 +167,13 @@ export class Tile {
   /** Variant index (0..5) for the 2×2 skyscraper. Stamped on placement
    *  so the choice stays stable across re-renders. */
   skyscraperVariant: 0 | 1 | 2 | 3 | 4 | 5 = 0;
+  /**
+   * Land ownership (Alpha 3.1.3). True = the player has claimed this
+   * tile and may build on it; false = land for sale. The default is
+   * `true` so existing behaviour and existing saves don't suddenly
+   * lose access to half their map. New cities seed only a central
+   * starter area as owned; the rest is "for sale" and must be bought
+   * through the Land tool.
+   */
+  owned = true;
 }

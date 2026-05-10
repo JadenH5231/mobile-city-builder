@@ -38,6 +38,7 @@ import {
   BUILDING_COSTS,
   CRASH_DEMAND_PENALTY,
   CRASH_TREASURY_PENALTY,
+  LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
   SKYSCRAPER_COST,
   SKYSCRAPER_VARIANT_COUNT,
@@ -530,7 +531,8 @@ export class Game {
       'place_museum', 'place_stadium', 'place_observatory',
       'place_ferry_dock', 'place_subway_entrance',
       'paint_district', 'erase_district',
-      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper'
+      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
+      'buy_land'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -1106,6 +1108,16 @@ export class Game {
     // Skyscrapers — tap-only, take a 2×2 footprint anchored at the tap.
     // Validates the 2×2 area is free + treasury is sufficient + zone is
     // R / C / MU. Stamps all 4 tiles with skyscraper bits at stage 0.
+    if (this.tool === 'buy_land') {
+      const placed = this.buyLand(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     if (
       this.tool === 'residential_skyscraper' ||
       this.tool === 'commercial_skyscraper' ||
@@ -1363,6 +1375,29 @@ export class Game {
     partnerTile.luxury = true;
     this.economy.treasury -= cost;
     this.maybeOfferPhotoOp('r_lux');
+    return true;
+  }
+
+  /**
+   * Buy land (Alpha 3.1.3). Tap-to-buy a single tile of unowned land.
+   * Costs LAND_PURCHASE_COST_PER_TILE per tile. Owned tiles are no-ops.
+   * After purchase the tile becomes buildable and the renderer drops
+   * its "for sale" overlay on the next zone-redraw.
+   */
+  private buyLand(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t) return false;
+    if (t.owned) {
+      this.onStatusMessage?.('You already own that land');
+      return false;
+    }
+    if (this.economy.treasury < LAND_PURCHASE_COST_PER_TILE) {
+      this.onStatusMessage?.(`Not enough money — land costs $${LAND_PURCHASE_COST_PER_TILE.toLocaleString()}/tile`);
+      return false;
+    }
+    t.owned = true;
+    this.economy.treasury -= LAND_PURCHASE_COST_PER_TILE;
+    this.renderer.drawZones(this.grid);
     return true;
   }
 

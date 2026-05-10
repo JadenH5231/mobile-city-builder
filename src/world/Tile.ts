@@ -85,7 +85,7 @@ export class Tile {
    * this and the services-allowed cap (services still gate L3). Memory:
    * feedback_zone_tier_permissions.
    */
-  zoneCap: 0 | 1 | 2 | 3 | 4 = 0;
+  zoneCap: 0 | 1 | 2 | 3 = 0;
   /**
    * Luxury low-density bit (Alpha 2.5). When true and `zone === 'residential'`,
    * this tile is part of a 2-tile luxury home pair. The partner is whichever

@@ -169,6 +169,8 @@ export class Game {
    * one-way operation unless the player Undoes the whole stroke).
    */
   private readonly strokeForestCleared = new Set<number>();
+  /** Council-block toast guard (Alpha 2.9.1): fires once per stroke. */
+  private councilBlockNotifiedThisStroke = false;
 
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
@@ -812,6 +814,7 @@ export class Game {
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
     this.strokeDidSnapshot = false;
+    this.councilBlockNotifiedThisStroke = false;
     if (!tile) return;
 
     // Snapshot before any state mutation so we can undo this whole stroke
@@ -1350,6 +1353,7 @@ export class Game {
     // adjacent, off-map) are silently skipped — feels nicer than rejecting
     // a whole stroke. Rezoning an existing zone tile additionally requires
     // council approval; if the council blocks the change, skip that tile.
+    let blockedByCouncil = 0;
     for (const idx of desired) {
       const { x, y } = this.unpackTile(idx);
       const tile = this.grid.get(x, y);
@@ -1358,13 +1362,31 @@ export class Game {
       // If the tile is already zoned to something different, this is a
       // "change" and needs council approval.
       const isChange = tile.zone !== 'none';
-      if (isChange && !changeAllowed) continue;
+      if (isChange && !changeAllowed) {
+        blockedByCouncil++;
+        continue;
+      }
       // Snapshot original ONCE per tile per stroke so a wiggle restores
       // correctly even if we touched the cell multiple times.
       if (!this.strokeZones.has(idx)) {
         this.strokeZones.set(idx, { zone: tile.zone, cap: tile.zoneCap });
       }
       if (this.grid.setZone(x, y, zone, cap)) changed = true;
+    }
+    // Council-block toast (Alpha 2.9.1) — surface a clear pop-up when
+    // the change was actually blocked, not just for "no road adjacent"
+    // or other silent-skip reasons. Only fire once per stroke.
+    if (blockedByCouncil > 0 && !this.councilBlockNotifiedThisStroke) {
+      this.councilBlockNotifiedThisStroke = true;
+      const zoneName =
+        zone === 'residential' ? 'Residential'
+        : zone === 'commercial' ? 'Commercial'
+        : zone === 'industrial' ? 'Industrial'
+        : 'Mixed-use';
+      const tierName = cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high';
+      this.onStatusMessage?.(
+        `Council blocked re-zoning to ${zoneName} ${tierName} — needs ≥ 2 councillor approvals.`
+      );
     }
 
     if (changed) {

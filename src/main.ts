@@ -15,8 +15,49 @@ const rciFills: Record<'r' | 'c' | 'i', HTMLElement | null> = {
   i: document.querySelector('.rci__bar[data-zone="i"] .rci__fill')
 };
 
+// Active save slot (Alpha 2.20). Persists across reloads in localStorage;
+// defaults to the legacy 'main' slot so a single-slot save from before
+// 2.20 keeps loading on the same slot it was always on.
+const ACTIVE_SLOT_KEY = 'city-builder-active-slot';
+const activeSlot = (() => {
+  try { return localStorage.getItem(ACTIVE_SLOT_KEY) || 'main'; } catch { return 'main'; }
+})();
+
 const game = new Game();
-await game.init(appEl, MAP_SIZES.small);
+await game.init(appEl, MAP_SIZES.small, activeSlot);
+
+// City-name input on the budget panel (Alpha 2.20). Live binding into
+// game.cityName so the next autosave persists it.
+const cityNameInput = document.getElementById('budget-city-name') as HTMLInputElement | null;
+if (cityNameInput) {
+  cityNameInput.value = game.cityName;
+  cityNameInput.addEventListener('input', () => {
+    game.cityName = cityNameInput.value;
+  });
+}
+
+// Slot picker — accessible via the 🏙 HUD pill. Picking a different slot
+// writes to localStorage and reloads so the chosen slot's save is the
+// only one in memory.
+import { SlotPicker } from './ui/SlotPicker';
+const slotPicker = new SlotPicker(game.saveGame);
+slotPicker.onPick = (slotKey) => {
+  if (slotKey === game.saveGame.currentSlot()) {
+    slotPicker.hide();
+    return;
+  }
+  try { localStorage.setItem(ACTIVE_SLOT_KEY, slotKey); } catch { /* private mode */ }
+  // Force a reload — keeps the swap surgical: brand-new init with the
+  // freshly-selected slot. No need to teardown half the game state.
+  location.reload();
+};
+const citiesBtn = document.getElementById('hud-cities');
+if (citiesBtn) {
+  citiesBtn.addEventListener('click', () => {
+    if (slotPicker.isOpen()) slotPicker.hide();
+    else void slotPicker.show();
+  });
+}
 
 if (treasuryEl) {
   treasuryEl.addEventListener('click', () => game.toggleBudget());

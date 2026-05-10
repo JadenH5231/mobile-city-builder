@@ -12,7 +12,14 @@ import { isFlatTerrain } from '../world/TerrainGenerator';
 const DB_NAME = 'city-builder';
 const DB_VERSION = 1;
 const STORE = 'saves';
-const SLOT_KEY = 'main';
+/** Default / legacy slot key. v15-and-earlier saves all live in this slot;
+ *  Alpha 2.20 introduces multi-slot. */
+const DEFAULT_SLOT_KEY = 'main';
+/** Number of save slots exposed to the player. */
+export const NUM_SLOTS = 3;
+/** Slot keys in display order. The first one is `main` for backwards compat
+ *  with single-slot saves — that's where any pre-2.20 city already lives. */
+export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
  * Schema 16 (Alpha 2.18): persists Bonds (active loans + lifetime tally) +
  * Economy.wealthSurtax slider. v15 saves load with no active bonds and a
@@ -101,6 +108,22 @@ export interface SaveData {
   bondsSnapshot?: BondsSnapshot;
   /** Schema 16+. Player-set wealth surtax % (0..30). */
   wealthSurtax?: number;
+  /** Player-given city name (Alpha 2.20). Optional; the slot picker
+   *  falls back to "City 1" / "City 2" / "City 3" if unset. */
+  cityName?: string;
+  /** ISO timestamp of last save (Alpha 2.20). Drives slot-picker sort. */
+  lastPlayedISO?: string;
+}
+
+/** Slim slot-summary shape rendered in the slot picker. */
+export interface SlotSummary {
+  cityName?: string;
+  monthsElapsed: number;
+  treasury: number;
+  highestPop: number;
+  width: number;
+  height: number;
+  lastPlayedISO?: string;
 }
 
 /**
@@ -110,6 +133,17 @@ export interface SaveData {
  */
 export class SaveGame {
   private db: IDBDatabase | null = null;
+  /** Active slot for read/write operations. Set via `useSlot`; defaults to
+   *  `main` so existing single-slot save flow keeps working unchanged. */
+  private slotKey: string = DEFAULT_SLOT_KEY;
+
+  /** Switch to a specific slot. Subsequent load/save/clear target it. */
+  useSlot(slotKey: string): void {
+    this.slotKey = slotKey;
+  }
+  currentSlot(): string {
+    return this.slotKey;
+  }
 
   async open(): Promise<void> {
     if (this.db) return;
@@ -130,7 +164,7 @@ export class SaveGame {
     if (!this.db) return undefined;
     return new Promise<SaveData | undefined>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(SLOT_KEY);
+      const req = tx.objectStore(STORE).get(this.slotKey);
       req.onsuccess = () => {
         const raw = req.result as SaveData | undefined;
         if (!raw) return resolve(undefined);
@@ -145,12 +179,41 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds): Promise<void> {
+  /** Read just the slot summary fields. Used by the slot picker to render
+   *  the city name + pop + treasury without loading the full grid. */
+  async loadSummary(slotKey: string): Promise<SlotSummary | undefined> {
+    if (!this.db) return undefined;
+    return new Promise<SlotSummary | undefined>((resolve, reject) => {
+      const tx = this.db!.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(slotKey);
+      req.onsuccess = () => {
+        const raw = req.result as SaveData | undefined;
+        if (!raw) return resolve(undefined);
+        if (raw.schemaVersion < MIN_LOADABLE_SCHEMA || raw.schemaVersion > SCHEMA) {
+          return resolve(undefined);
+        }
+        resolve({
+          cityName: raw.cityName,
+          monthsElapsed: raw.monthsElapsed,
+          treasury: raw.treasury,
+          highestPop: raw.highestPop ?? 0,
+          width: raw.width,
+          height: raw.height,
+          lastPlayedISO: raw.lastPlayedISO
+        });
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string): Promise<void> {
     if (!this.db) return;
     const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds);
+    if (cityName !== undefined) data.cityName = cityName;
+    data.lastPlayedISO = new Date().toISOString();
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(data, SLOT_KEY);
+      tx.objectStore(STORE).put(data, this.slotKey);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -160,7 +223,7 @@ export class SaveGame {
     if (!this.db) return;
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(SLOT_KEY);
+      tx.objectStore(STORE).delete(this.slotKey);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });

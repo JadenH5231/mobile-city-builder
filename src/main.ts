@@ -166,6 +166,20 @@ import { LeaderBioModal } from './ui/LeaderBioModal';
 const leaderBio = new LeaderBioModal();
 game.onNewLeader = (id) => leaderBio.enqueue(id);
 
+// Districts panel (Alpha 2.22).
+import { DistrictsPanel } from './ui/DistrictsPanel';
+const districtsPanel = new DistrictsPanel(game.districts);
+districtsPanel.onSetActive = (id) => { game.activeDistrictId = id; };
+districtsPanel.onNewDistrict = () => { game.activeDistrictId = 0; };
+districtsPanel.onChange = () => { game.renderer.drawDistricts(game.grid, game.districts); };
+const districtsBtn = document.getElementById('hud-districts');
+if (districtsBtn) {
+  districtsBtn.addEventListener('click', () => {
+    if (districtsPanel.isOpen()) districtsPanel.hide();
+    else districtsPanel.show(game.activeDistrictId);
+  });
+}
+
 // Sim speed cycler — 1× → 2× → 3× → ⏸ → 1×.
 // Glyphs read at-a-glance even in a 12px pill: triangle for play, double
 // for 2x, triple for 3x, the standard pause bars for 0.
@@ -347,7 +361,9 @@ function unlockLabel(tool: string): string {
     place_stadium: 'Stadium',
     place_observatory: 'Observatory',
     place_ferry_dock: 'Ferry dock',
-    place_subway_entrance: 'Subway entrance'
+    place_subway_entrance: 'Subway entrance',
+    paint_district: 'Paint district',
+    erase_district: 'Erase district'
   };
   return map[tool] ?? tool;
 }

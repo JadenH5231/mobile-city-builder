@@ -14,6 +14,7 @@ import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Bonds, type BondId } from '../simulation/Bonds';
 import { Ferries } from '../simulation/Ferries';
 import { Crime } from '../simulation/Crime';
+import { Districts } from '../simulation/Districts';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -247,6 +248,11 @@ export class Game {
   /** Per-tile crime simulation (Alpha 2.21). Recomputed monthly, drives the
    *  Crime heatmap layer + a small commercial-revenue penalty. */
   readonly crime = new Crime();
+  /** District registry + per-tile assignment (Alpha 2.22). */
+  readonly districts = new Districts();
+  /** District being painted by the paint_district tool (Alpha 2.22). 0 means
+   *  "allocate a fresh district on first paint of the stroke". */
+  activeDistrictId = 0;
   /** Player-given name for the active save slot (Alpha 2.20). Empty
    *  string means "use the default 'City N' label". Persisted alongside
    *  every autosave. */
@@ -376,7 +382,7 @@ export class Game {
       } else {
         const data = await this.saveGame.load();
         if (data) {
-          applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
+          applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.districts);
           if (data.cityName) this.cityName = data.cityName;
         }
       }
@@ -515,7 +521,8 @@ export class Game {
       'place_bus_stop', 'place_bus_depot',
       'place_stop_sign', 'place_traffic_light',
       'place_museum', 'place_stadium', 'place_observatory',
-      'place_ferry_dock', 'place_subway_entrance'
+      'place_ferry_dock', 'place_subway_entrance',
+      'paint_district', 'erase_district'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -617,7 +624,7 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -797,7 +804,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.cityName).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.cityName, this.districts).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -894,7 +901,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.districts));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -906,7 +913,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.districts);
     this.afterStateRestore();
   }
 
@@ -924,6 +931,7 @@ export class Game {
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.renderer.drawDistricts(this.grid, this.districts);
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();
@@ -1386,10 +1394,53 @@ export class Game {
       this.applyBulldozeStroke(path);
       return;
     }
+    if (this.tool === 'paint_district') {
+      this.applyDistrictPaintStroke(path);
+      return;
+    }
+    if (this.tool === 'erase_district') {
+      this.applyDistrictEraseStroke(path);
+      return;
+    }
     const zoneInfo = ZONE_TOOL_INFO.get(this.tool);
     if (zoneInfo) {
       this.applyZoneStroke(path, zoneInfo.zone, ZONE_TIER_CAP[zoneInfo.tier]);
     }
+  }
+
+  /** Paint district membership over a 4-connected stroke. If activeDistrictId
+   *  is 0 we allocate a fresh district on the first painted tile and stamp
+   *  every subsequent tile with that id. */
+  private applyDistrictPaintStroke(path: { x: number; y: number }[]): void {
+    let id = this.activeDistrictId;
+    if (id === 0) {
+      const fresh = this.districts.allocate();
+      id = fresh.id;
+      this.activeDistrictId = id;
+    } else if (!this.districts.get(id)) {
+      this.districts.ensure(id);
+    }
+    let touched = false;
+    for (const p of path) {
+      const t = this.grid.get(p.x, p.y);
+      if (!t) continue;
+      if (t.districtId === id) continue;
+      t.districtId = id;
+      touched = true;
+    }
+    if (touched) this.renderer.drawDistricts(this.grid, this.districts);
+  }
+
+  /** Clear district membership on every painted tile. */
+  private applyDistrictEraseStroke(path: { x: number; y: number }[]): void {
+    let touched = false;
+    for (const p of path) {
+      const t = this.grid.get(p.x, p.y);
+      if (!t || t.districtId === 0) continue;
+      t.districtId = 0;
+      touched = true;
+    }
+    if (touched) this.renderer.drawDistricts(this.grid, this.districts);
   }
 
   // --- Road tool stroke ---------------------------------------------------

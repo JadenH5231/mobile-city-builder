@@ -23,6 +23,7 @@ import type { GlobalMarket } from './GlobalMarket';
 import type { Events } from './Events';
 import type { Bonds } from './Bonds';
 import type { Crime } from './Crime';
+import type { Districts } from './Districts';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -128,11 +129,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds, crime);
+      this.runMonth(grid, population, market, events, bonds, crime, districts);
     }
   }
 
@@ -148,7 +149,7 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -225,9 +226,36 @@ export class Economy {
     this.lifetimeTourismRevenue += this.lastTourismRevenue;
 
     const surtaxFraction = this.wealthSurtax / 100;
-    const surtaxRevenue =
+    let surtaxRevenue =
       surtaxResidents * this.taxR * REV_PER_RESIDENT * surtaxFraction +
       surtaxCJobs * this.taxC * REV_PER_C_JOB * surtaxFraction;
+
+    // District surtax (Alpha 2.22): per-tile sweep applies each district's
+    // per-zone surtax % on top of base R/C/I rates. Industrial is included
+    // here too — the lever is district-level, not bracket-level. Skipped
+    // entirely if no districts exist (the common case).
+    if (districts && districts.registry.size > 0) {
+      let districtRevenue = 0;
+      for (const t of grid.iter()) {
+        if (t.districtId === 0 || t.density === 0 || t.zone === 'none') continue;
+        const r = residentsForTile(t);
+        const c = commercialJobsForTile(t);
+        const i = t.zone === 'industrial' ? (t.density === 1 ? 4 : t.density === 2 ? 14 : 50) : 0;
+        if (r > 0) {
+          const surtax = districts.surtaxFor(t.districtId, 'residential') / 100;
+          districtRevenue += r * this.taxR * REV_PER_RESIDENT * surtax;
+        }
+        if (c > 0) {
+          const surtax = districts.surtaxFor(t.districtId, t.zone === 'mixed' ? 'mixed' : 'commercial') / 100;
+          districtRevenue += c * this.taxC * REV_PER_C_JOB * surtax;
+        }
+        if (i > 0) {
+          const surtax = districts.surtaxFor(t.districtId, 'industrial') / 100;
+          districtRevenue += i * this.taxI * REV_PER_I_JOB * surtax;
+        }
+      }
+      surtaxRevenue += districtRevenue;
+    }
     this.lastSurtaxRevenue = Math.round(surtaxRevenue);
 
     // Crime penalty (Alpha 2.21): high city-wide crime drags commercial

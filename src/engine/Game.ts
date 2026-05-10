@@ -15,6 +15,7 @@ import { Bonds, type BondId } from '../simulation/Bonds';
 import { Ferries } from '../simulation/Ferries';
 import { Crime } from '../simulation/Crime';
 import { Districts } from '../simulation/Districts';
+import { Skyscrapers } from '../simulation/Skyscrapers';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -38,6 +39,8 @@ import {
   CRASH_DEMAND_PENALTY,
   CRASH_TREASURY_PENALTY,
   LUXURY_LOW_COST,
+  SKYSCRAPER_COST,
+  SKYSCRAPER_VARIANT_COUNT,
   MAP_SIZES,
   PLACE_TOOL_TO_BUILDING,
   ROAD_TOOLS,
@@ -252,6 +255,8 @@ export class Game {
   readonly crime = new Crime();
   /** District registry + per-tile assignment (Alpha 2.22). */
   readonly districts = new Districts();
+  /** Skyscraper construction simulation (Alpha 3.1.2). */
+  readonly skyscrapers = new Skyscrapers();
   /** District being painted by the paint_district tool (Alpha 2.22). 0 means
    *  "allocate a fresh district on first paint of the stroke". */
   activeDistrictId = 0;
@@ -524,7 +529,8 @@ export class Game {
       'place_stop_sign', 'place_traffic_light',
       'place_museum', 'place_stadium', 'place_observatory',
       'place_ferry_dock', 'place_subway_entrance',
-      'paint_district', 'erase_district'
+      'paint_district', 'erase_district',
+      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -681,6 +687,11 @@ export class Game {
           this.events.tickMonth(
             this.grid, this.economy, this.population, this.council, this.happiness
           );
+          // Skyscraper construction (Alpha 3.1.2): advance any active build
+          // by one month; if any stage tipped over, mark buildings dirty so
+          // the renderer rebuilds the geometry with the new construction
+          // stage visible.
+          if (this.skyscrapers.tickMonth(this.grid)) buildingsDirty = true;
           // Refresh per-tile crime scores once per month (Alpha 2.21).
           // Cheap single grid sweep; drives the heatmap and the
           // commercial-revenue penalty applied next month.
@@ -926,6 +937,7 @@ export class Game {
     this.trafficLights.rebuild(this.grid);
     this.globalMarket.recompute(this.grid);
     this.ferries.reset();
+    this.skyscrapers.reset();
     // Re-derive milestone unlocks from the restored highestPop (Alpha 2.8).
     this.refreshToolbarLocks();
     this.renderer.drawZones(this.grid);
@@ -1083,6 +1095,26 @@ export class Game {
     // no valid partner adjacent.
     if (this.tool === 'residential_luxury_low') {
       const placed = this.placeLuxuryPair(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
+    // Skyscrapers — tap-only, take a 2×2 footprint anchored at the tap.
+    // Validates the 2×2 area is free + treasury is sufficient + zone is
+    // R / C / MU. Stamps all 4 tiles with skyscraper bits at stage 0.
+    if (
+      this.tool === 'residential_skyscraper' ||
+      this.tool === 'commercial_skyscraper' ||
+      this.tool === 'mixed_skyscraper'
+    ) {
+      const zone =
+        this.tool === 'residential_skyscraper' ? 'residential' :
+        this.tool === 'commercial_skyscraper' ? 'commercial' : 'mixed';
+      const placed = this.placeSkyscraper(tile.x, tile.y, zone);
       if (!placed) {
         this.undoStack.pop();
         this.strokeDidSnapshot = false;
@@ -1331,6 +1363,67 @@ export class Game {
     partnerTile.luxury = true;
     this.economy.treasury -= cost;
     this.maybeOfferPhotoOp('r_lux');
+    return true;
+  }
+
+  /**
+   * Skyscraper placement (Alpha 3.1.2). Validates a 2×2 area starting at
+   * (x, y) — all 4 tiles must be free + zoneable + at least one of the
+   * four must be road-adjacent. Treasury is debited by SKYSCRAPER_COST.
+   * On success: stamps all 4 tiles with skyscraper bits at stage 0
+   * (foundation pit). The Skyscrapers sim ticks the stage forward
+   * monthly until stage 4 (built).
+   */
+  private placeSkyscraper(x: number, y: number, zone: 'residential' | 'commercial' | 'mixed'): boolean {
+    const offsets: Array<[number, number]> = [[0, 0], [1, 0], [0, 1], [1, 1]];
+    // All 4 tiles must be valid for new zone paint.
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy);
+      if (!t) {
+        this.onStatusMessage?.('Skyscraper needs a 2×2 free area');
+        return false;
+      }
+      if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') {
+        this.onStatusMessage?.('Skyscraper needs all 4 tiles free');
+        return false;
+      }
+      if (t.terrain === 'water' || t.bridge || t.skyscraper) {
+        this.onStatusMessage?.('Skyscraper needs flat free land');
+        return false;
+      }
+    }
+    // At least one of the 4 must be road-adjacent.
+    let hasRoadAdj = false;
+    for (const [dx, dy] of offsets) {
+      if (this.grid.hasRoadAdjacent(x + dx, y + dy)) { hasRoadAdj = true; break; }
+    }
+    if (!hasRoadAdj) {
+      this.onStatusMessage?.('Skyscraper needs a road touching the lot');
+      return false;
+    }
+    const cost = SKYSCRAPER_COST[zone];
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — skyscraper costs $${cost.toLocaleString()}`);
+      return false;
+    }
+    // Pick a deterministic variant from the placement coordinate so a
+    // skyscraper at (12, 8) always picks the same design across saves.
+    const variant = Math.abs((x * 73856093) ^ (y * 19349663)) % SKYSCRAPER_VARIANT_COUNT as 0 | 1 | 2 | 3 | 4 | 5;
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy)!;
+      t.zone = zone;
+      t.zoneCap = 3;
+      t.skyscraper = true;
+      t.skyscraperStage = 0;
+      t.skyscraperVariant = variant;
+      t.developedAt = this.economy.monthsElapsed;
+      // Density stays 0 until stage 4 → at stage 4 the population
+      // sweep reads SKYSCRAPER_RESIDENTS_PER_TILE directly.
+    }
+    this.economy.treasury -= cost;
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
+    this.renderer.drawZones(this.grid);
     return true;
   }
 
@@ -1870,6 +1963,27 @@ export class Game {
       if (this.grid.setRoad(x, y, false)) roadsChanged = true;
       if (tile.zone !== 'none') {
         if (this.grid.setZone(x, y, 'none')) zonesChanged = true;
+      }
+      // Skyscraper cleanup (Alpha 3.1.2): bulldozing any tile of a 2×2
+      // skyscraper clears the bits on all four tiles so we don't leave
+      // orphaned partial footprints. The renderer's anchor check would
+      // otherwise drop the geometry silently — but the gameplay state
+      // would still hold a phantom skyscraper-marked tile.
+      if (tile.skyscraper) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const peer = this.grid.get(x + dx, y + dy);
+            if (peer && peer.skyscraper && peer.zone === tile.zone && peer.skyscraperVariant === tile.skyscraperVariant) {
+              peer.skyscraper = false;
+              peer.skyscraperStage = 0;
+              peer.skyscraperVariant = 0;
+              if (peer.zone !== 'none') {
+                this.grid.setZone(peer.x, peer.y, 'none');
+                zonesChanged = true;
+              }
+            }
+          }
+        }
       }
       if (tile.building !== 'none') {
         if (this.grid.setBuilding(x, y, 'none')) cityBuildingsChanged = true;

@@ -173,6 +173,16 @@ export class Game {
   /** Council-block toast guard (Alpha 2.9.1): fires once per stroke. */
   private councilBlockNotifiedThisStroke = false;
 
+  /**
+   * Bridge Mode (Alpha 2.12): when true, road-paint operates on the
+   * upper layer (`bridgeRoadEdges`) instead of the ground layer. This
+   * lets the player draw overpasses that cross at-grade roads without
+   * forming intersections. Toggled via the HUD pill.
+   */
+  bridgeMode = false;
+  /** Per-stroke tracking for upper-layer edges (parallel to strokeEdges). */
+  private readonly strokeBridgeEdges = new Set<number>();
+
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
 
@@ -825,6 +835,7 @@ export class Game {
     this.strokePaths.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
+    this.strokeBridgeEdges.clear();
     this.strokeDidSnapshot = false;
     this.councilBlockNotifiedThisStroke = false;
     if (!tile) return;
@@ -1188,6 +1199,11 @@ export class Game {
   // --- Road tool stroke ---------------------------------------------------
 
   private applyRoadStroke(path: { x: number; y: number }[], tier: RoadType): void {
+    // Bridge Mode (Alpha 2.12): paint on the upper layer instead.
+    if (this.bridgeMode) {
+      this.applyBridgeRoadStroke(path, tier);
+      return;
+    }
     const desiredEdges = new Set<number>();
     const desiredStubs = new Set<number>();
     // For highway strokes, remember the flow direction at each tile so we
@@ -1332,6 +1348,44 @@ export class Game {
       // drawWorld rebuilds both — on Small/Medium maps this is sub-frame.
       this.renderer.drawWorld(this.grid);
     }
+  }
+
+  // --- Bridge Mode road stroke (Alpha 2.12) ------------------------------
+
+  /**
+   * Upper-layer (overpass) road stroke. Parallel to applyRoadStroke but
+   * touches the bridge edge graph and the upper-layer per-tile fields.
+   * Doesn't clear zones / forests on the ground tile — the overpass
+   * leaves the surface beneath untouched. No stub support (single-tile
+   * overpasses look weird without a span).
+   */
+  private applyBridgeRoadStroke(path: { x: number; y: number }[], tier: RoadType): void {
+    if (path.length < 2) return; // single-tile overpasses skipped
+    const desiredEdges = new Set<number>();
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i]!;
+      const b = path[i + 1]!;
+      desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
+    }
+
+    let changed = false;
+    // Revert this-stroke upper edges no longer wanted.
+    for (const ek of this.strokeBridgeEdges) {
+      if (desiredEdges.has(ek)) continue;
+      const { ax, ay, bx, by } = unpackEdge(ek, this.grid.width);
+      if (this.grid.setBridgeRoadEdge(ax, ay, bx, by, false)) changed = true;
+      this.strokeBridgeEdges.delete(ek);
+    }
+    // Apply desired upper edges.
+    for (const ek of desiredEdges) {
+      const { ax, ay, bx, by } = unpackEdge(ek, this.grid.width);
+      if (this.grid.hasBridgeRoadEdge(ax, ay, bx, by)) continue;
+      if (this.grid.setBridgeRoadEdge(ax, ay, bx, by, true, tier)) {
+        this.strokeBridgeEdges.add(ek);
+        changed = true;
+      }
+    }
+    if (changed) this.renderer.drawRoads(this.grid);
   }
 
   // --- Zone tool stroke ---------------------------------------------------

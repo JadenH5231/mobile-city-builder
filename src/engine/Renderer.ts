@@ -104,6 +104,8 @@ export class Renderer {
   private roadLanes: LineSegments | null = null;
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
   private roadOrnaments: Group | null = null;
+  /** Upper-layer (Bridge Mode) road mesh — rebuilt with the ground roads. */
+  private bridgeRoadMesh: Group | null = null;
   /** Trees mesh — merged variant geometry per forest tile (Alpha 2.2). */
   private treesMesh: Mesh | null = null;
   /** Merged buildings geometry (Alpha 2.1 — variant-driven). */
@@ -306,6 +308,11 @@ export class Renderer {
       this.worldGroup.remove(this.roadOrnaments);
       this.roadOrnaments = null;
     }
+    if (this.bridgeRoadMesh) {
+      this.disposeGroup(this.bridgeRoadMesh);
+      this.worldGroup.remove(this.bridgeRoadMesh);
+      this.bridgeRoadMesh = null;
+    }
     this.rebuildSidewalks(grid);
     this.rebuildPaths(grid);
     const built = buildRoadMesh(grid);
@@ -316,6 +323,12 @@ export class Renderer {
         this.roadLanes = built.lanes;
         this.worldGroup.add(this.roadLanes);
       }
+    }
+    // Upper-layer (Bridge Mode) overpasses (Alpha 2.12).
+    const bridgeRoads = buildBridgeRoadMesh(grid);
+    if (bridgeRoads) {
+      this.bridgeRoadMesh = bridgeRoads;
+      this.worldGroup.add(this.bridgeRoadMesh);
     }
     const ornaments = buildRoadOrnamentsGroup(grid);
     if (ornaments) {
@@ -2494,6 +2507,122 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
 
 function tierIndex(t: 'local' | 'avenue' | 'highway'): number {
   return t === 'local' ? 0 : t === 'avenue' ? 1 : 2;
+}
+
+/**
+ * Upper-layer (Bridge Mode) road mesh (Alpha 2.12). Each bridgeRoad
+ * edge gets a road quad lifted to BRIDGE_LIFT, plus support pillars
+ * sliced into pairs at every bridgeRoad tile. Returns null if no
+ * upper-layer roads exist on the grid.
+ */
+function buildBridgeRoadMesh(grid: Grid): Group | null {
+  const edges = Array.from(grid.iterBridgeRoadEdges());
+  if (edges.length === 0) return null;
+
+  const decks: BufferGeometry[] = [];
+  const deckColours: number[] = [];
+  const railColours: number[] = [];
+  const rails: BufferGeometry[] = [];
+  const pillars: BufferGeometry[] = [];
+  const pillarColours: number[] = [];
+
+  // Edge decks.
+  for (const e of edges) {
+    const ta = grid.get(e.ax, e.ay);
+    const tb = grid.get(e.bx, e.by);
+    const tierA = ta?.bridgeRoadType ?? 'local';
+    const tierB = tb?.bridgeRoadType ?? 'local';
+    const tier = tierIndex(tierA) >= tierIndex(tierB) ? tierA : tierB;
+    const tierProps = ROAD_TIER[tier];
+    const half = tierProps.width / 2;
+    const ax = (e.ax + 0.5) * TILE_SIZE;
+    const az = (e.ay + 0.5) * TILE_SIZE;
+    const bx = (e.bx + 0.5) * TILE_SIZE;
+    const bz = (e.by + 0.5) * TILE_SIZE;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    const px = -dz / len * half;
+    const pz = dx / len * half;
+
+    const deck = new BufferGeometry();
+    const positions = new Float32Array([
+      ax + px, BRIDGE_LIFT, az + pz,
+      bx + px, BRIDGE_LIFT, bz + pz,
+      bx - px, BRIDGE_LIFT, bz - pz,
+      ax - px, BRIDGE_LIFT, az - pz
+    ]);
+    deck.setAttribute('position', new BufferAttribute(positions, 3));
+    deck.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
+    decks.push(deck);
+    deckColours.push(tierProps.color);
+
+    // Rail edges along both shoulders, sit slightly above the deck.
+    const railH = 0.06;
+    const railThick = 0.025;
+    // Outer rail north/west.
+    const r1 = new BoxGeometry(railThick, railH, len);
+    const angle = Math.atan2(dx, dz);
+    r1.rotateY(angle);
+    r1.translate((ax + bx) / 2 + px, BRIDGE_LIFT + railH / 2, (az + bz) / 2 + pz);
+    rails.push(r1);
+    railColours.push(0xb6a98a);
+    const r2 = new BoxGeometry(railThick, railH, len);
+    r2.rotateY(angle);
+    r2.translate((ax + bx) / 2 - px, BRIDGE_LIFT + railH / 2, (az + bz) / 2 - pz);
+    rails.push(r2);
+    railColours.push(0xb6a98a);
+  }
+
+  // Support pillars at each upper-layer tile that has a bridge edge but
+  // is NOT also auto-bridged over water (water tiles already get pillars
+  // from the existing buildRoadOrnamentsGroup pillar pass). Drop two
+  // pillars perpendicular to the dominant edge axis.
+  for (const t of grid.iter()) {
+    if (!t.bridgeRoad) continue;
+    if (t.bridge) continue; // ground-water bridge already pillared
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    // Determine axis from incident upper-edges.
+    let horizontal = false;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (dx === 0 && dy === 0) continue;
+        if (grid.hasBridgeRoadEdge(t.x, t.y, t.x + dx, t.y + dy)) {
+          if (Math.abs(dx) > Math.abs(dy)) horizontal = true;
+        }
+      }
+    }
+    const tierProps = ROAD_TIER[t.bridgeRoadType];
+    const half = tierProps.width / 2;
+    const pillarH = BRIDGE_LIFT + 0.05;
+    const pillarYBase = -0.05;
+    const pillarOffset = half + 0.04;
+    const offsets: Array<[number, number]> = horizontal
+      ? [[0, -pillarOffset], [0, pillarOffset]]
+      : [[-pillarOffset, 0], [pillarOffset, 0]];
+    for (const [ox, oz] of offsets) {
+      const pillar = new BoxGeometry(0.06, pillarH, 0.06);
+      pillar.translate(cx + ox, pillarYBase + pillarH / 2, cz + oz);
+      pillars.push(pillar);
+      pillarColours.push(0x6e6e6e);
+    }
+  }
+
+  const group = new Group();
+  if (decks.length > 0) {
+    const merged = mergeGeoms(decks, deckColours);
+    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  }
+  if (rails.length > 0) {
+    const merged = mergeGeoms(rails, railColours);
+    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  }
+  if (pillars.length > 0) {
+    const merged = mergeGeoms(pillars, pillarColours);
+    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  }
+  return group;
 }
 
 /**

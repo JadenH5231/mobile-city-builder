@@ -36,6 +36,16 @@ if (heatmapBtn) {
   });
 }
 
+// Bridge Mode (Alpha 2.12) — toggle paint to upper-layer overpasses.
+const bridgeBtn = document.getElementById('hud-bridge');
+if (bridgeBtn) {
+  bridgeBtn.addEventListener('click', () => {
+    const next = !game.bridgeMode;
+    game.bridgeMode = next;
+    bridgeBtn.setAttribute('aria-pressed', String(next));
+  });
+}
+
 const undoBtn = document.getElementById('hud-undo') as HTMLButtonElement | null;
 if (undoBtn) {
   undoBtn.addEventListener('click', () => {

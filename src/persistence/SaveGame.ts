@@ -127,6 +127,13 @@ export interface SaveData {
   lastPlayedISO?: string;
   /** District registry (Alpha 2.22). Schema 17+. */
   districtsSnapshot?: DistrictsSnapshot;
+  /** City-bounds rectangle (Alpha 3.2.1). Schema 19+. v18-and-earlier
+   *  saves load with bounds covering the whole grid (back-compat — they
+   *  used per-tile owned bits exclusively). */
+  cityBoundsX0?: number;
+  cityBoundsX1?: number;
+  cityBoundsY0?: number;
+  cityBoundsY1?: number;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -312,7 +319,11 @@ export function serialize(
     lifetimeTourismRevenue: economy.lifetimeTourismRevenue,
     bondsSnapshot: bonds?.serialize(),
     wealthSurtax: economy.wealthSurtax,
-    districtsSnapshot: districts?.serialize()
+    districtsSnapshot: districts?.serialize(),
+    cityBoundsX0: grid.cityBoundsX0,
+    cityBoundsX1: grid.cityBoundsX1,
+    cityBoundsY0: grid.cityBoundsY0,
+    cityBoundsY1: grid.cityBoundsY1
   };
 }
 
@@ -431,4 +442,10 @@ export function applySave(
   economy.wealthSurtax = data.wealthSurtax ?? 0;
   if (bonds) bonds.restore(data.bondsSnapshot);
   if (districts) districts.restore(data.districtsSnapshot);
+  // City bounds (Alpha 3.2.1). v18 saves load with bounds covering the
+  // whole grid (back-compat with the old per-tile owned approach).
+  grid.cityBoundsX0 = data.cityBoundsX0 ?? 0;
+  grid.cityBoundsX1 = data.cityBoundsX1 ?? grid.width - 1;
+  grid.cityBoundsY0 = data.cityBoundsY0 ?? 0;
+  grid.cityBoundsY1 = data.cityBoundsY1 ?? grid.height - 1;
 }

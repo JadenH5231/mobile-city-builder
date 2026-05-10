@@ -38,6 +38,8 @@ import {
   BUILDING_COSTS,
   CRASH_DEMAND_PENALTY,
   CRASH_TREASURY_PENALTY,
+  CITY_EXPANSION_BLOCK_SIZE,
+  CITY_EXPANSION_COST,
   LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
   SKYSCRAPER_COST,
@@ -853,6 +855,25 @@ export class Game {
   // --- Navigate-mode handlers --------------------------------------------
 
   private handleTap(sx: number, sy: number): void {
+    // Expand-button hit-test (Alpha 3.2.1): the four "+" buttons sit
+    // just outside the city bounds and grow the map by one block per
+    // tap for $1M. Resolved before tile selection so a tap on a button
+    // doesn't drop a misleading selection on the underlying tile.
+    const world = this.camera.screenToWorld(sx, sy);
+    if (world) {
+      const wx = world.x / TILE_SIZE;
+      const wz = world.z / TILE_SIZE;
+      for (const dir of ['N', 'S', 'E', 'W'] as const) {
+        const pos = this.renderer.expandButtonPositions[dir];
+        if (!pos) continue;
+        const dx = wx - pos.x;
+        const dz = wz - pos.z;
+        if (dx * dx + dz * dz <= pos.r * pos.r) {
+          this.expandCity(dir);
+          return;
+        }
+      }
+    }
     const tile = this.screenToTile(sx, sy);
     if (!tile) {
       this.clearSelection();
@@ -861,6 +882,26 @@ export class Game {
     this.selected = tile;
     this.renderer.drawSelection(tile.x, tile.y);
     this.panel.hide();
+  }
+
+  /** Pay $1M and grow the city bounds in the given direction (Alpha 3.2.1).
+   *  Newly-included tiles flip to owned. Triggers a re-render of zones +
+   *  the unowned-land overlay + the + buttons themselves. */
+  expandCity(direction: 'N' | 'S' | 'E' | 'W'): boolean {
+    if (!this.grid.canExpand(direction)) {
+      this.onStatusMessage?.('Already at the edge of the world');
+      return false;
+    }
+    if (this.economy.treasury < CITY_EXPANSION_COST) {
+      this.onStatusMessage?.(`City expansion costs $${CITY_EXPANSION_COST.toLocaleString()}`);
+      return false;
+    }
+    const added = this.grid.expandBounds(direction, CITY_EXPANSION_BLOCK_SIZE);
+    if (added === 0) return false;
+    this.economy.treasury -= CITY_EXPANSION_COST;
+    this.renderer.drawZones(this.grid);
+    this.onStatusMessage?.(`City expanded · +${added} tiles`);
+    return true;
   }
 
   private handleLongPress(sx: number, sy: number): void {

@@ -279,8 +279,18 @@ export class Renderer {
   }
 
   /** "For sale" overlay (Alpha 3.1.3): translucent grey on every tile
-   *  that's not yet owned. Mesh is rebuilt whenever zones rebuild. */
+   *  that's not yet owned. Mesh is rebuilt whenever zones rebuild.
+   *  Also rebuilds the four "+" expansion buttons sitting just outside
+   *  the city bounds (Alpha 3.2.1). */
   private unownedMesh: Mesh | null = null;
+  private expandButtonsGroup: Group | null = null;
+  /** World positions of the four "+" buttons, indexed N/E/S/W. Updated
+   *  every drawUnownedLand call. Game.handleTap hit-tests against these
+   *  to detect a tap on a button. Null entries mean the button isn't
+   *  currently rendered (city already at the grid edge in that direction). */
+  expandButtonPositions: Record<'N' | 'S' | 'E' | 'W', { x: number; z: number; r: number } | null> = {
+    N: null, S: null, E: null, W: null
+  };
   drawUnownedLand(grid: Grid): void {
     if (this.unownedMesh) {
       this.worldGroup.remove(this.unownedMesh);
@@ -288,12 +298,61 @@ export class Renderer {
       (this.unownedMesh.material as MeshLambertMaterial).dispose();
       this.unownedMesh = null;
     }
+    if (this.expandButtonsGroup) {
+      this.worldGroup.remove(this.expandButtonsGroup);
+      for (const child of this.expandButtonsGroup.children) {
+        if (child instanceof Mesh) {
+          child.geometry.dispose();
+          (child.material as MeshBasicMaterial).dispose();
+        }
+      }
+      this.expandButtonsGroup = null;
+    }
     const built = buildUnownedLandMesh(grid);
     if (built) {
       this.unownedMesh = built;
       this.worldGroup.add(this.unownedMesh);
     }
+    // Build + buttons (Alpha 3.2.1) — one per direction, sitting just
+    // outside the city bounds. Skipped if the bounds already touch the
+    // grid edge in that direction.
+    this.expandButtonsGroup = new Group();
+    if (!this.plusButtonTexture) this.plusButtonTexture = makePlusButtonTexture();
+    const directions: Array<'N' | 'S' | 'E' | 'W'> = ['N', 'S', 'E', 'W'];
+    for (const dir of directions) {
+      this.expandButtonPositions[dir] = null;
+      if (!grid.canExpand(dir)) continue;
+      // Centre of the corresponding edge, just outside the bounds.
+      const midX = (grid.cityBoundsX0 + grid.cityBoundsX1 + 1) / 2;
+      const midY = (grid.cityBoundsY0 + grid.cityBoundsY1 + 1) / 2;
+      let bx: number, bz: number;
+      if (dir === 'N') { bx = midX; bz = grid.cityBoundsY0 - 1.0; }
+      else if (dir === 'S') { bx = midX; bz = grid.cityBoundsY1 + 2.0; }
+      else if (dir === 'W') { bx = grid.cityBoundsX0 - 1.0; bz = midY; }
+      else { bx = grid.cityBoundsX1 + 2.0; bz = midY; }
+      // Skip if the button would land outside the grid entirely.
+      if (bx < 0 || bz < 0 || bx >= grid.width || bz >= grid.height) continue;
+      const t = grid.get(Math.floor(bx), Math.floor(bz));
+      const yLift = (t?.elevation ?? 0) + 0.04;
+      const size = 1.6;
+      const plane = new PlaneGeometry(size, size);
+      plane.rotateX(-Math.PI / 2);
+      plane.translate(bx * TILE_SIZE, yLift, bz * TILE_SIZE);
+      const mat = new MeshBasicMaterial({
+        map: this.plusButtonTexture,
+        transparent: true,
+        depthWrite: false
+      });
+      const mesh = new Mesh(plane, mat);
+      this.expandButtonsGroup.add(mesh);
+      this.expandButtonPositions[dir] = { x: bx, z: bz, r: size * 0.6 };
+    }
+    if (this.expandButtonsGroup.children.length > 0) {
+      this.worldGroup.add(this.expandButtonsGroup);
+    }
   }
+  /** Lazy-initialised + button glyph texture. */
+  private plusButtonTexture: import('three').Texture | null = null;
 
   /**
    * Rebuild the city-building meshes (power plants, water towers, parks,
@@ -1502,6 +1561,45 @@ function makeRadialGlowTexture(): import('three').Texture {
   grad.addColorStop(1, 'rgba(255, 200, 130, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
+  const tex = new CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Texture for the four "+" expansion buttons rendered just outside the
+ *  city bounds (Alpha 3.2.1). Chunky white plus glyph on a translucent
+ *  dark rounded square so it reads from any zoom level. */
+function makePlusButtonTexture(): import('three').Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  // Rounded-rect background.
+  const r = 24;
+  ctx.fillStyle = 'rgba(20, 20, 20, 0.78)';
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.arcTo(size, 0, size, size, r);
+  ctx.arcTo(size, size, 0, size, r);
+  ctx.arcTo(0, size, 0, 0, r);
+  ctx.arcTo(0, 0, size, 0, r);
+  ctx.closePath();
+  ctx.fill();
+  // Outer ring.
+  ctx.strokeStyle = 'rgba(255, 200, 90, 0.85)';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  // Plus glyph.
+  ctx.strokeStyle = 'rgba(255, 240, 168, 1.0)';
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(size * 0.30, size * 0.50);
+  ctx.lineTo(size * 0.70, size * 0.50);
+  ctx.moveTo(size * 0.50, size * 0.30);
+  ctx.lineTo(size * 0.50, size * 0.70);
+  ctx.stroke();
   const tex = new CanvasTexture(canvas);
   tex.needsUpdate = true;
   return tex;

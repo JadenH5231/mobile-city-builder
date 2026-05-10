@@ -334,6 +334,13 @@ export class Renderer {
    *  commercial / mixed-use / skyscraper buildings that always render
    *  at full brightness via MeshBasicMaterial, fading in at night. */
   private litWindowsMesh: Mesh | null = null;
+  /** Skyscrapers live in their own mesh (Alpha 3.1.7) so opacity can fade
+   *  on zoom-in, letting the player see what's behind a tall tower when
+   *  the camera comes in close. */
+  private skyscrapersMesh: Mesh | null = null;
+  /** Current camera ortho size — pushed in via applyCameraZoom each frame
+   *  to drive skyscraper opacity (and any future zoom-aware effects). */
+  private currentOrthoSize = 16;
   /** Shared radial-gradient texture used by every lamp glow. Generated
    *  once at Renderer init via Canvas2D. */
   private lampGlowTexture: import('three').Texture | null = null;
@@ -415,9 +422,37 @@ export class Renderer {
       this.buildingsMesh = built;
       this.worldGroup.add(this.buildingsMesh);
     }
+    // Skyscrapers — separate mesh (Alpha 3.1.7) so opacity can be faded
+    // on zoom. Same rebuild cadence as the main buildings layer.
+    if (this.skyscrapersMesh) {
+      this.worldGroup.remove(this.skyscrapersMesh);
+      this.skyscrapersMesh.geometry.dispose();
+      (this.skyscrapersMesh.material as MeshLambertMaterial).dispose();
+      this.skyscrapersMesh = null;
+    }
+    const sky = buildSkyscrapersMesh(grid);
+    if (sky) {
+      this.skyscrapersMesh = sky;
+      this.worldGroup.add(this.skyscrapersMesh);
+      this.applyCameraZoom(this.currentOrthoSize);
+    }
     // Lit-window overlay (Alpha 3.1.6) is a sibling layer of the buildings
     // mesh — same dirty triggers, same rebuild cadence.
     this.drawLitWindows(grid);
+  }
+
+  /** Update skyscraper material opacity based on current camera ortho
+   *  size (Alpha 3.1.7). Closer zoom (smaller orthoSize) → more
+   *  translucent so the player can see ground-level activity behind
+   *  the towers. */
+  applyCameraZoom(orthoSize: number): void {
+    this.currentOrthoSize = orthoSize;
+    if (!this.skyscrapersMesh) return;
+    // Linear ramp: orthoSize >= 12 → fully opaque; orthoSize <= 5 → 0.45.
+    const t = Math.max(0, Math.min(1, (orthoSize - 5) / (12 - 5)));
+    const opacity = 0.45 + t * 0.55;
+    const mat = this.skyscrapersMesh.material as MeshLambertMaterial;
+    mat.opacity = opacity;
   }
 
   /** Rebuild the road mesh from current grid edges + stubs. Sidewalks AND
@@ -1153,25 +1188,10 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
       }
       continue;
     }
-    // Skyscrapers (Alpha 3.1.2): a 2×2 footprint emits one large tower
-    // (or construction stage) from the lex-smallest tile. We check if
-    // this tile is the anchor by confirming the other 3 tiles of the
-    // 2×2 are also skyscraper tiles in the same zone+variant.
-    if (t.skyscraper) {
-      if (!isSkyscraperAnchor(grid, t.x, t.y)) continue;
-      const parts = buildSkyscraperParts(
-        t.x, t.y, t.zone as 'residential' | 'commercial' | 'mixed',
-        t.skyscraperVariant, t.skyscraperStage
-      );
-      const yLift = baseLift + t.elevation;
-      for (const p of parts) {
-        if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        if (yLift !== 0) p.geom.translate(0, yLift, 0);
-        geoms.push(p.geom);
-        colours.push(p.color);
-      }
-      continue;
-    }
+    // Skyscrapers (Alpha 3.1.2) live in their own mesh now (Alpha 3.1.7)
+    // so we can fade them when the camera zooms in. Skip them in the
+    // main building mesh — `buildSkyscrapersMesh` handles them.
+    if (t.skyscraper) continue;
     if (t.density === 0) continue;
     // Per-tile happiness (Alpha 2.7): city mood, nudged by services. Tiles
     // with park coverage feel better; tiles missing power/water feel worse.
@@ -1199,6 +1219,40 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(merged, mat);
+}
+
+/** Build the skyscraper mesh separately (Alpha 3.1.7) so we can fade
+ *  its material when the camera zooms in. Walks anchors and emits their
+ *  parts the same way the main builder used to. Returns null if no
+ *  skyscrapers. */
+function buildSkyscrapersMesh(grid: Grid): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const baseLift = ROAD_LIFT * 0.5;
+  for (const t of grid.iter()) {
+    if (!t.skyscraper) continue;
+    if (!isSkyscraperAnchor(grid, t.x, t.y)) continue;
+    const parts = buildSkyscraperParts(
+      t.x, t.y, t.zone as 'residential' | 'commercial' | 'mixed',
+      t.skyscraperVariant, t.skyscraperStage
+    );
+    const yLift = baseLift + t.elevation;
+    for (const p of parts) {
+      if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      if (yLift !== 0) p.geom.translate(0, yLift, 0);
+      geoms.push(p.geom);
+      colours.push(p.color);
+    }
+  }
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  const mat = new MeshLambertMaterial({
+    vertexColors: true,
+    flatShading: true,
+    transparent: true,
+    opacity: 1.0
+  });
   return new Mesh(merged, mat);
 }
 

@@ -116,6 +116,14 @@ if (statusToast && statusText) {
   };
 }
 
+// Random / crisis events modal (Alpha 2.9). Game queues events;
+// EventModal handles display, severity styling, queue ordering, and
+// calls back into Game.resolveEventChoice for choice-events.
+import { EventModal } from './ui/EventModal';
+const eventModal = new EventModal();
+eventModal.onChoice = (e, choiceId) => game.resolveEventChoice(e, choiceId);
+game.onEvent = (e) => eventModal.enqueue(e);
+
 // Milestone celebration banner (Alpha 2.8). Game.onMilestoneEarned
 // fires per milestone the city crosses; we render the gold-trim banner
 // with the herald leader's name + the unlocks + the cash/PC reward.

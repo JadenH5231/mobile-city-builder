@@ -8,6 +8,7 @@ import { Development } from '../simulation/Development';
 import { Economy } from '../simulation/Economy';
 import { GlobalMarket } from '../simulation/GlobalMarket';
 import { Milestones } from '../simulation/Milestones';
+import { Events, type GameEvent } from '../simulation/Events';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -122,6 +123,18 @@ export class Game {
   onMilestoneEarned?: (m: import('../types').Milestone) => void;
 
   /**
+   * Random / crisis event fired (Alpha 2.9). main.ts wires this to a
+   * modal — for `severity: 'choice'` events the modal blocks until the
+   * player picks; everything else auto-dismisses. Resolution happens
+   * via the resolveEventChoice() method on Game.
+   */
+  onEvent?: (e: GameEvent) => void;
+
+  resolveEventChoice(event: GameEvent, choiceId: string): void {
+    this.events.resolveChoice(event, choiceId, this.economy);
+  }
+
+  /**
    * Sim speed multiplier. 0 = paused (no sim ticks, no vehicle/walker
    * motion). 1 = normal. 2 / 3 fast-forward. The render loop continues
    * regardless so the HUD stays responsive while paused.
@@ -170,6 +183,8 @@ export class Game {
   readonly globalMarket = new GlobalMarket();
   /** Population milestones + tool unlocks (Alpha 2.8). */
   readonly milestones = new Milestones();
+  /** Random events + crises (Alpha 2.9). */
+  readonly events = new Events();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -279,7 +294,7 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones);
+        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events);
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -483,9 +498,10 @@ export class Game {
           this.economy,
           this.population,
           this.traffic,
-          this.civicModifiers()
+          this.civicModifiers(),
+          this.events
         );
-        this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council);
+        this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council, this.events);
         // Milestones (Alpha 2.8) — earn population thresholds, hand out
         // tool unlocks + cash + PC, queue celebration banners. Called
         // after population.tick so we see the freshest count.
@@ -505,7 +521,7 @@ export class Game {
         }
         if (this.development.tick(this.grid)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -520,6 +536,18 @@ export class Game {
           if (fired) {
             this.councilPanel.show();
             this.refreshToolbarBans();
+          }
+          // Random events + crises (Alpha 2.9). Run on every month
+          // boundary; fires + recessions + lawsuits + referendums all
+          // tick here. The Events system decays its modifiers and may
+          // queue 0..N events. Drain them; modal events block.
+          this.events.tickMonth(
+            this.grid, this.economy, this.population, this.council, this.happiness
+          );
+          while (this.events.hasPending()) {
+            const e = this.events.shiftPending();
+            if (!e) break;
+            this.onEvent?.(e);
           }
         }
         this.vehicles.spawnTick(
@@ -595,7 +623,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -666,7 +694,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -678,7 +706,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council, this.milestones);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events);
     this.afterStateRestore();
   }
 

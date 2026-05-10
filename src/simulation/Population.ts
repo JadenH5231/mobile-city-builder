@@ -101,7 +101,10 @@ export class Population {
     }
   }
 
-  tick(grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness, council: Council): void {
+  tick(
+    grid: Grid, economy: Economy, traffic: Traffic, happiness: Happiness, council: Council,
+    events?: import('./Events').Events
+  ): void {
     // Capacity = how many residents the built buildings COULD hold; jobs =
     // built C / I jobs. Same pattern as before for jobs.
     // Luxury capacity (Alpha 2.5) is tracked separately so we can split
@@ -201,6 +204,14 @@ export class Population {
     c -= stress * STRESS_PENALTY.commercial;
     i -= stress * STRESS_PENALTY.industrial;
 
+    // Event-driven demand shifts (Alpha 2.9) — recessions push C demand
+    // down, booms push everything up, etc. Sum into the per-zone demand
+    // before clamping.
+    if (events) {
+      r += events.demandShiftFor('residential');
+      c += events.demandShiftFor('commercial');
+      i += events.demandShiftFor('industrial');
+    }
     this.demandR = clamp(r, -1, 1);
     this.demandC = clamp(c, -1, 1);
     this.demandI = clamp(i, -1, 1);

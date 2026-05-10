@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Economy } from '../simulation/Economy';
 import type { Council } from '../simulation/Council';
 import type { Milestones } from '../simulation/Milestones';
+import type { Events, EventsSnapshot } from '../simulation/Events';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
 
@@ -10,17 +11,16 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 9 (Alpha 2.8): adds top-level `highestPop` (max population
- * ever reached) so milestone unlocks survive save/load. v8 saves load
- * with highestPop derived from the current resident count, so an
- * existing 1500-pop city loads with all milestones up to City already
- * earned and nothing visibly changes.
+ * Schema 10 (Alpha 2.9): persists active event modifiers (recession
+ * cooldown, audit aftermath, market shocks) so a recession that
+ * started in one session doesn't reset on reload. Schema 9 added
+ * highestPop. v9 saves load with no active events (clean slate).
  *
  * Schema 8 (Alpha 2.5) added per-tile `luxury`. Schema 7 (Alpha 2.3)
  * added elevation + bridge. v5..v6 still load with defaults. Schema 1
  * (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 9;
+const SCHEMA = 10;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -78,6 +78,8 @@ export interface SaveData {
   /** Schema 9+. Highest population the city has ever reached. Drives
    *  which milestones / tool unlocks are restored on load. */
   highestPop?: number;
+  /** Schema 10+. Active event modifiers (recession aftermath, etc.). */
+  eventsSnapshot?: EventsSnapshot;
 }
 
 /**
@@ -122,9 +124,9 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events): Promise<void> {
     if (!this.db) return;
-    const data = serialize(grid, economy, council, milestones);
+    const data = serialize(grid, economy, council, milestones, events);
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, SLOT_KEY);
@@ -150,7 +152,7 @@ export class SaveGame {
  * so we get a single restore path for both.
  */
 export function serialize(
-  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones
+  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events
 ): SaveData {
   const tiles: TileSnapshot[] = new Array(grid.width * grid.height);
   let i = 0;
@@ -191,7 +193,8 @@ export function serialize(
     monthsElapsed: economy.monthsElapsed,
     totalAccidents: economy.totalAccidents,
     politicalCapital: council?.politicalCapital ?? 0,
-    highestPop: milestones?.highestPop ?? 0
+    highestPop: milestones?.highestPop ?? 0,
+    eventsSnapshot: events?.serialize()
   };
 }
 
@@ -205,7 +208,7 @@ export function serialize(
  * Services.recompute(grid) afterward. Same for the road graph rebuild.
  */
 export function applySave(
-  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones
+  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events
 ): void {
   if (data.width !== grid.width || data.height !== grid.height) return;
   if (council) {
@@ -213,6 +216,9 @@ export function applySave(
   }
   if (milestones) {
     milestones.applyHighestPop(data.highestPop ?? 0);
+  }
+  if (events) {
+    events.restore(data.eventsSnapshot);
   }
 
   let i = 0;

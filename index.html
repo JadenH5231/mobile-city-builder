@@ -54,15 +54,12 @@
         type="button"
         aria-label="Close tile info"
       >×</button>
-      <div class="tile-info__title">Tile</div>
-      <div class="tile-info__row">
-        <span>Coords</span>
-        <span id="tile-info-coords" class="mono">—</span>
-      </div>
-      <div class="tile-info__row">
-        <span>Terrain</span>
-        <span id="tile-info-terrain">—</span>
-      </div>
+      <div class="tile-info__title">Tile <span id="tile-info-coords" class="mono tile-info__coords">—</span></div>
+      <div class="tile-info__terrain" id="tile-info-terrain">—</div>
+      <div id="tile-info-chips" class="tile-info__chips"></div>
+      <div id="tile-info-caps" class="tile-info__caps"></div>
+      <div class="tile-info__diag-label">Why is this tile like this?</div>
+      <div id="tile-info-diag" class="tile-info__diag"></div>
     </section>
     <section
       id="budget-panel"

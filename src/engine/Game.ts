@@ -2,7 +2,7 @@ import { Camera } from './Camera';
 import { Input } from './Input';
 import { Renderer } from './Renderer';
 import { Grid } from '../world/Grid';
-import { TileInfoPanel } from '../ui/TileInfoPanel';
+import { TileInfoPanel, diagnoseTile } from '../ui/TileInfoPanel';
 import { Toolbar } from '../ui/Toolbar';
 import { Development } from '../simulation/Development';
 import { Economy } from '../simulation/Economy';
@@ -699,7 +699,14 @@ export class Game {
     if (!t) return;
     // Only one bottom panel at a time.
     this.budgetPanel.hide();
-    this.panel.show({
+    // Pick the city-wide demand for this tile's zone (Alpha 2.13).
+    const zoneDemand =
+      t.zone === 'residential' ? this.population.demandR
+      : t.zone === 'commercial' ? this.population.demandC
+      : t.zone === 'industrial' ? this.population.demandI
+      : t.zone === 'mixed' ? (this.population.demandR + this.population.demandC) / 2
+      : 0;
+    const baseInfo = {
       x: tile.x,
       y: tile.y,
       terrain: t.terrain,
@@ -715,8 +722,18 @@ export class Game {
       path: t.path,
       hasPower: t.hasPower,
       hasWater: t.hasWater,
-      hasPark: t.hasPark
-    });
+      hasPark: t.hasPark,
+      hasSchool: t.hasSchool,
+      hasHospital: t.hasHospital,
+      hasFireProtection: t.hasFireProtection,
+      hasPolice: t.hasPolice,
+      luxury: t.luxury,
+      bridge: t.bridge,
+      bridgeRoad: t.bridgeRoad,
+      hasRoadAdjacent: this.grid.hasRoadAdjacent(tile.x, tile.y),
+      zoneDemand
+    };
+    this.panel.show({ ...baseInfo, reasons: diagnoseTile(baseInfo) });
   }
 
   // --- Undo --------------------------------------------------------------

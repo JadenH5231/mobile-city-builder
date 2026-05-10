@@ -4,6 +4,29 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 3.2.4** — currently shipped on `main`, live at https://JadenH5231.github.io/mobile-city-builder/. Bundle 805 KB raw / 215 KB gzipped. Save schema v18.
+  - **3.0.1** Longer day/night cycle (4 → 8 min real-time) + nighttime street lights along all road tiles.
+  - **3.0.2** Softened lamp glow (radial-gradient centre alpha 0.95 → 0.65, taper kicks in earlier).
+  - **3.0.3** Responsive UI sizing — toolbar + HUD pills scale with viewport so small phones don't truncate labels.
+  - **3.0.4** Budget panel scrolls overflow content; close button stays pinned at the bottom.
+  - **3.1.0** Three more building variants per (zone, density) on top of Alpha 2.1's catalogue.
+  - **3.1.1** HUD declutter — More-menu popover collects secondary toggles (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds).
+  - **3.1.2** **Skyscrapers** — 2×2 footprint placeable buildings (residential / commercial / mixed), 4-stage construction over 12 sim months. Lex-smallest tile is the anchor; others mirror state. Save schema v18 persists `skyscraper`, `skyscraperStage`, `skyscraperVariant` per tile. Backwards-compat: v17 saves load with these defaulted.
+  - **3.1.3** Buy-land tool — tap-to-buy single unowned tiles for $5K. `Tile.owned` bit gates zoning + placement.
+  - **3.1.4** Services rework — power + water are now city-wide whenever ANY plant exists (no individual radius for utilities); park radius bumped 4 → 6 tiles.
+  - **3.1.5** Skyscraper redesign — window banding wraps all four faces, vertical fin reveals every ~⅓ width, podium glass on bottom 0.45u, five crown styles (`flat` / `stepped` / `pyramid` / `mech` / `dome`), optional spire, optional second tower for "twin" designs.
+  - **3.1.6** Real night illumination — finished skyscrapers + Medium+ R/C/MU buildings emit lit-window overlays during the night phase.
+  - **3.1.7** Skyscrapers go translucent on zoom-in (orthoSize ≤ 5 → 0.45 opacity; ≥ 12 → fully opaque).
+  - **3.1.8** Fixed floating skyscraper windows (lit-window builder now reads actual `SkyscraperDesign` instead of hardcoded dims). Softened lamp glow further.
+  - **3.1.9** Eight park variations (was four after Alpha 2.6's modular pass).
+  - **3.2.0** Two more variants per (zone, density) cell + two more skyscraper designs per zone.
+  - **3.2.1** Initial land-expansion attempt — `+` buttons outside city borders for $1M each, but kept fixed 64×64 grid (wrong approach per user feedback).
+  - **3.2.2** Pedestrians get a humanoid silhouette (body + head + hair) instead of plain pawns.
+  - **3.2.3** **Grid expansion done correctly** — `Grid.expandWorld(direction, amount)` reallocates the tile array, shifts existing tiles, regenerates terrain for the new strip, re-packs road edges. `Tile.x/y` and `Grid.width/height/tiles` are now writable.
+  - **3.2.4** Settings cheats (unlimited money / unlimited demand toggles) + subtle walking animation on pedestrians.
+
+- **Alpha 3.2.5 (REVERTED)** — Max density tier (single L4 tile = Mega building, 2 adjacent = Twin pair, 4 in 2×2 = triggers skyscraper construction). Shipped as PR #63 (commit `f56a711`) but **reverted in PR #64 (commit `c3234fb`)** after the user reported the game freezing after brief play. Could not reproduce in headless Chrome. The Max-tier work is preserved on branch `claude/max-density` for future re-roll. Likely root cause: `Game.applyZoneStroke` maps `cap=4` to `'high'` instead of `'max'`, then `Council.canChangeZone` constructs stance key `r_max` which doesn't exist in `FACTION_STANCES`, returning `undefined`. Plan for re-roll: add `r_max` / `c_max` / `mu_max` / `i_max` stance rows for every faction, fix the `cap → tier` mapping, audit all `${prefix}_${tier}` string constructions, and test on actual phone before claiming green.
+
 - **Alpha 1.0** — tagged `alpha-1.0` on `main`. All 14 build steps + four post-alpha tuning passes (pass 1: challenge tuning + Undo; pass 2: sim scaling fix; pass 3: traffic-aware spawn routing + same-segment gap; pass 4: big roads update — three road tiers, highway one-way, player-placed stop signs with FIFO yielding, collisions, queue spillback). Save schema v2.
 - **Alpha 2.6** — visual overhaul + perf pass. Six visual pieces and one perf pass aimed at moving the prototype toward late-beta polish.
   - **Bridge railings + deck stripe** in `buildRoadOrnamentsGroup`. Each bridge tile gets two slim parapet rails on the road shoulders + a yellow median deck stripe along the bridge axis (long axis derived from the dominant incident-road-edge direction).
@@ -558,7 +581,19 @@ each of these — for example, a future light-rail PR can consume the
 existing transit-mode stance keys and the SUBWAY_SUPPRESSION_RADIUS
 shape; weather can hook into the day/night phase machinery.
 
-**Status:** Alpha 3.0 is the feature-complete prototype. The build
-is 730 KB raw / 196 KB gzipped. 60 fps on Pixel 7 / iPhone 13 with
-a Medium map fully developed. Single-purchase premium model intact;
-no monetization, no timers, no energy systems, no paywalls.
+**Status:** Alpha 3.2.4 is the current shipped state on `main`
+(commit `c3234fb`, live at https://JadenH5231.github.io/mobile-city-builder/).
+Build is 805 KB raw / 215 KB gzipped (grew from 730 KB at Alpha 3.0
+as skyscrapers + 3 more variants per cell + grid expansion + lit
+windows landed). 60 fps on Pixel 7 / iPhone 13 with a Medium map
+fully developed. Single-purchase premium model intact; no monetization,
+no timers, no energy systems, no paywalls.
+
+**Note for the next session**: Alpha 3.2.5 (Max density tier — Mega /
+Twin / Skyscraper based on cluster shape) was attempted and reverted
+after a freeze report. The Max-tier implementation lives on branch
+`claude/max-density` (PR #63 history). Before re-rolling, fix the
+`Game.applyZoneStroke` cap→tier mapping (line 1852, 1898) to handle
+`cap === 4` and add the missing `r_max` / `c_max` / `mu_max` /
+`i_max` rows to every faction's `FACTION_STANCES`. Verify on the
+user's actual phone, not just headless Chrome, before merging.

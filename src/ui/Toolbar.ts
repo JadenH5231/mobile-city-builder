@@ -175,6 +175,30 @@ const ITEMS: readonly ToolbarItem[] = [
     <path d="M3 21h18 M6 12v-3 M9 8v-2 M14 9v-3 M19 11v-2"
           stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
   </svg>` },
+  { kind: 'tool', tool: 'place_school', label: 'School', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3l9 4-9 4-9-4z"
+          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    <path d="M5 9v5c0 1 3 3 7 3s7-2 7-3V9"
+          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    <path d="M21 7v6"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>` },
+  { kind: 'tool', tool: 'place_hospital', label: 'Hospital', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="4" y="5" width="16" height="15" rx="1.5"
+          stroke="currentColor" stroke-width="1.6" fill="none"/>
+    <path d="M12 9v7 M9 12.5h6"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>` },
+  { kind: 'tool', tool: 'place_fire_station', label: 'Fire', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3c1 3-2 4 0 7 1.5 2 4 1 4 4a4 4 0 1 1-8 0c0-2 1-3 1-5 1 1 2 1 3-1z"
+          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+  </svg>` },
+  { kind: 'tool', tool: 'place_police_station', label: 'Police', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"
+          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    <path d="M9 11l2 2 4-4"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg>` },
   { kind: 'tool', tool: 'place_bus_stop', label: 'BusStop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <rect x="6" y="4" width="12" height="14" rx="2"
           stroke="currentColor" stroke-width="1.8" fill="none"/>

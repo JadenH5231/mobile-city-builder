@@ -258,7 +258,11 @@ export type Building =
   | 'bus_stop'
   | 'bus_depot'
   | 'forestry'
-  | 'farm';
+  | 'farm'
+  | 'school'
+  | 'hospital'
+  | 'fire_station'
+  | 'police_station';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -274,7 +278,12 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // the long-tail return. Only placeable on forest terrain.
   forestry: 1200,
   // Farm (Alpha 2.7.1) — grass-only modular industry mirroring forestry.
-  farm: 1000
+  farm: 1000,
+  // Public services pack (Alpha 2.10).
+  school: 4000,
+  hospital: 8000,
+  fire_station: 5000,
+  police_station: 5000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -285,7 +294,11 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   bus_stop: 60,
   bus_depot: 300,
   forestry: 90,
-  farm: 75
+  farm: 75,
+  school: 200,
+  hospital: 400,
+  fire_station: 250,
+  police_station: 250
 };
 
 /**
@@ -326,8 +339,29 @@ export const PRODUCE_PERIOD_MONTHS = 12;
 export const SERVICE_RADIUS = {
   power: 8,
   water: 8,
-  park: 3
+  park: 3,
+  // Alpha 2.10 services pack — bigger reach than parks since each is
+  // pricier and there are fewer per city.
+  school: 6,
+  hospital: 8,
+  fire: 6,
+  police: 6
 } as const;
+
+/**
+ * Fire station damping (Alpha 2.10) — multiplier on the per-tile fire
+ * chance for industrial tiles inside a fire-station's coverage. 0.25
+ * means a covered tile only catches fire 25% as often as an uncovered
+ * one. Strong incentive to drop a fire station near industrial blocks.
+ */
+export const FIRE_PROTECTION_MULT = 0.25;
+
+/**
+ * Hospital coverage productivity bonus (Alpha 2.10). Tiles inside a
+ * hospital radius generate +HOSPITAL_PRODUCTIVITY_BONUS commercial /
+ * industrial revenue this month — sick days don't drag earnings.
+ */
+export const HOSPITAL_PRODUCTIVITY_BONUS = 0.08;
 
 export interface MapSize {
   readonly width: number;
@@ -402,22 +436,26 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Town',
     subtitle: 'Public services online',
     popThreshold: 500,
-    unlocks: ['place_bus_stop', 'place_bus_depot', 'commercial_high', 'industrial_high', 'mixed_high'],
+    unlocks: [
+      'place_bus_stop', 'place_bus_depot',
+      'commercial_high', 'industrial_high', 'mixed_high',
+      'place_school', 'place_fire_station', 'place_police_station'
+    ],
     rewardCash: 5000,
     rewardPC: 3,
     herald: 'transit',
-    blurb: 'finally — a transit-eligible town. bus stops, depots, and high-density zoning unlocked. let\'s make this a city that doesn\'t require a car 🚌'
+    blurb: 'finally — a transit-eligible town. bus stops, depots, schools, fire + police stations, and high-density zoning all unlocked. let\'s make this a city that doesn\'t require a car 🚌'
   },
   {
     id: 'city',
     name: 'City',
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
-    unlocks: ['road_highway', 'place_traffic_light', 'residential_high'],
+    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital'],
     rewardCash: 10000,
     rewardPC: 5,
     herald: 'yimbys',
-    blurb: 'we did it!! a real city. highways, adaptive lights, and high-density residential are unlocked. now build the housing supply your residents have been waiting for 🏙️'
+    blurb: 'we did it!! a real city. highways, adaptive lights, high-density residential, and a hospital are unlocked. now build the housing supply your residents have been waiting for 🏙️'
   },
   {
     id: 'metro',
@@ -514,6 +552,10 @@ export type Tool =
   | 'place_park'
   | 'place_forestry'
   | 'place_farm'
+  | 'place_school'
+  | 'place_hospital'
+  | 'place_fire_station'
+  | 'place_police_station'
   | 'place_bus_stop'
   | 'place_bus_depot'
   | 'place_stop_sign'
@@ -552,6 +594,10 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_park', 'park' as const],
   ['place_forestry', 'forestry' as const],
   ['place_farm', 'farm' as const],
+  ['place_school', 'school' as const],
+  ['place_hospital', 'hospital' as const],
+  ['place_fire_station', 'fire_station' as const],
+  ['place_police_station', 'police_station' as const],
   ['place_bus_stop', 'bus_stop' as const],
   ['place_bus_depot', 'bus_depot' as const]
 ]);

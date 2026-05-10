@@ -6,6 +6,7 @@ import {
   FARM_DISCONNECTED_MULT,
   FORESTRY_BASE_REVENUE_PER_TILE,
   FORESTRY_DISCONNECTED_MULT,
+  HOSPITAL_PRODUCTIVITY_BONUS,
   LUXURY_TAX_BONUS,
   ROAD_TIER,
   type Building,
@@ -157,13 +158,28 @@ export class Economy {
     this.lastForestryRevenue = Math.round(forestryRevenue);
     this.lastFarmRevenue = Math.round(farmRevenue);
 
+    // Hospital productivity bonus (Alpha 2.10): tally commercial /
+    // industrial jobs on tiles inside a hospital coverage radius so the
+    // bonus applies only where the hospital actually reaches.
+    let cJobsCovered = 0;
+    let iJobsCovered = 0;
+    for (const t of grid.iter()) {
+      if (!t.hasHospital || t.density === 0) continue;
+      if (t.zone === 'commercial') cJobsCovered++;
+      else if (t.zone === 'industrial') iJobsCovered++;
+    }
+    const hospitalBonus =
+      cJobsCovered * this.taxC * REV_PER_C_JOB * HOSPITAL_PRODUCTIVITY_BONUS +
+      iJobsCovered * this.taxI * REV_PER_I_JOB * HOSPITAL_PRODUCTIVITY_BONUS;
+
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
       population.totalCommercialJobs * this.taxC * REV_PER_C_JOB +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
       forestryRevenue +
-      farmRevenue;
+      farmRevenue +
+      hospitalBonus;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.
     // Charge the average of the two endpoints' tier so a mixed-tier edge

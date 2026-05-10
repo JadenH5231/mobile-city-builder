@@ -393,6 +393,10 @@ export class Game {
       ['place_park', 'park'],
       ['place_forestry', 'forestry'],
       ['place_farm', 'farm'],
+      ['place_school', 'school'],
+      ['place_hospital', 'hospital'],
+      ['place_fire_station', 'fire_station'],
+      ['place_police_station', 'police_station'],
       ['place_bus_stop', 'bus_stop'],
       ['place_bus_depot', 'bus_depot'],
       ['place_stop_sign', 'stop_sign']
@@ -420,6 +424,7 @@ export class Game {
       'mixed_low', 'mixed_medium', 'mixed_high',
       'place_power', 'place_water', 'place_park',
       'place_forestry', 'place_farm',
+      'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
       'place_stop_sign', 'place_traffic_light'
     ];

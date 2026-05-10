@@ -4,7 +4,7 @@ import type { Population } from './Population';
 import type { Council } from './Council';
 import type { Happiness, FactionId } from './Happiness';
 import { FACTIONS } from './Happiness';
-import type { Zone } from '../types';
+import { FIRE_PROTECTION_MULT, type Zone } from '../types';
 
 /**
  * Random-events + crises engine (Alpha 2.9). Per-month dice rolls
@@ -119,20 +119,29 @@ export class Events {
     // Tile-driven random hazards. Iterate the grid once and roll on
     // each qualifying tile so the chance is proportional to your
     // industrial / power-plant footprint.
-    let industrialCount = 0;
+    // Fire-weighted industrial sweep (Alpha 2.10): each industrial tile
+    // contributes a per-tile fire chance × FIRE_PROTECTION_MULT if it
+    // sits inside a fire-station radius. Sum the chances; if the rng
+    // crosses, pick a random qualifying tile (weighted by individual
+    // chance) for the actual fire.
+    let weightedFireChance = 0;
     let powerPlantCount = 0;
-    let topIndustrialTile: { x: number; y: number } | null = null;
+    let pickedFireTile: { x: number; y: number } | null = null;
     for (const t of grid.iter()) {
       if (t.zone === 'industrial' && t.density >= 2) {
-        industrialCount++;
-        if (!topIndustrialTile || rng() < 0.05) topIndustrialTile = { x: t.x, y: t.y };
+        const tileChance = 0.012 * (t.hasFireProtection ? FIRE_PROTECTION_MULT : 1);
+        weightedFireChance += tileChance;
+        // Reservoir-sample the tile to be set on fire if a roll later succeeds.
+        if (!pickedFireTile || rng() * weightedFireChance < tileChance) {
+          pickedFireTile = { x: t.x, y: t.y };
+        }
       }
       if (t.building === 'power_plant') powerPlantCount++;
     }
 
-    // Industrial fire — rare per industrial tile.
-    if (industrialCount > 0 && topIndustrialTile && rng() < 0.012 * industrialCount) {
-      this.queueFire(grid, economy, topIndustrialTile);
+    // Industrial fire — chance scales with weighted industrial footprint.
+    if (pickedFireTile && rng() < weightedFireChance) {
+      this.queueFire(grid, economy, pickedFireTile);
     }
     // Power plant outage — rare per plant.
     if (powerPlantCount > 0 && rng() < 0.025 * powerPlantCount) {

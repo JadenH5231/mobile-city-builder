@@ -2,7 +2,22 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 3.0** — feature-complete prototype. The single autonomous build session that landed Alpha 3.0 added 16 PRs of systems + content on top of the Alpha 2.6 visual baseline:
+**Status: Alpha 3.2.4** — live at https://JadenH5231.github.io/mobile-city-builder/. Builds on the Alpha 3.0 feature-complete prototype with 3.0.x polish, 3.1.x skyscrapers + services rework, and 3.2.x grid expansion + QOL.
+
+**Alpha 3.2.x highlights (since 3.0):**
+- **Skyscrapers** (3.1.2) — 2×2 footprint, 4-stage construction over 12 sim months, 18 visual variants across R/C/MU. Translucent on zoom-in (3.1.7). Lit windows at night (3.1.6).
+- **Grid expansion** (3.2.3) — `+` buttons on each map edge grow the world by one starter region for $1M each. Genuine reallocation: tile array shifts, new strip gets fresh terrain.
+- **Buy land** (3.1.3) — tap-to-buy individual unowned tiles for $5K to grow into the wilderness gradually.
+- **Services rework** (3.1.4) — power + water are city-wide whenever any plant exists; park radius bumped 4 → 6 tiles.
+- **Humanoid pedestrians** (3.2.2) with subtle walking animation (3.2.4).
+- **Settings cheats** (3.2.4) — unlimited money / unlimited demand toggles for playtesting.
+- **More-menu HUD popover** (3.1.1) keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed.
+- **8 park variations** (3.1.9), **5 building variants per (zone, density)** (3.0.x → 3.2.0).
+- Save schema bumped to v18 (skyscrapers in 3.1.2). Backwards-compat with v12+.
+
+> **Note**: Alpha 3.2.5 (Max density tier — cluster of L4 tiles → Mega → Twin → Skyscraper) was attempted but **reverted** after a freeze report. The work lives on branch `claude/max-density`. See `CLAUDE.md` for the root-cause hypothesis and re-roll plan.
+
+**Alpha 3.0 feature-complete baseline** — the single autonomous build session that landed Alpha 3.0 added 16 PRs of systems + content on top of the Alpha 2.6 visual baseline:
 
 - **Forestry + farms** (Alpha 2.7) export industries with oscillating global markets and connection-to-edge bonus.
 - **Population milestones** (2.8) gate the toolbar — Hamlet → Capital with celebration banners and herald-voiced congratulations.
@@ -22,7 +37,7 @@ Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No 
 - **Crime + heatmap** (2.21) — per-tile crime score recomputed monthly, drives commercial revenue penalty + faction reactions.
 - **Districts** (2.22) — paint districts, name / recolor them, set per-zone surtax sliders that stack on base R/C/I rates.
 
-Save schema is now v17 (was v8 at Alpha 2.6); v8-v16 saves load with sensible defaults for missing fields. Build size: 730 KB raw / 196 KB gzipped.
+Save schema is now v18 (was v8 at Alpha 2.6, v17 at Alpha 3.0); skyscrapers added v18 in Alpha 3.1.2. v12+ saves load with sensible defaults for missing fields. Build size: 805 KB raw / 215 KB gzipped.
 
 **Status: Alpha 2.6 (carryover)** — visual overhaul + perf pass. Bridges now have side rails and a yellow deck stripe; trees cast soft shadow discs; the toolbar shows banned-by-council tools struck-through with 🚫; place-tool taps on a budget-short treasury surface a "Not enough money — need $X,XXX" pill; the sky background is a real vertical gradient with stylized cloud clusters drifting above the world; commercial sidewalks scatter hydrants / parking meters / bike racks deterministically; and **modular parks** flood-fill: 1 tile renders a cottage park, 2 a community park with playground + pond, 3 a neighbourhood park with pavilion + fountain, 4+ a grand park with bandstand + ring paths. Renderer dropped precomputed normals on all flat-shaded meshes — pure CPU/GPU win, no visual change.
 

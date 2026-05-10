@@ -312,8 +312,62 @@ on a different machine isn't a forensic exercise.
 - **Ferries + subway entrances** (Alpha 2.19) — ferry docks pair across water with visible boats; subway entrances suppress car spawns within radius.
 - **Crime simulation + purple heatmap** (Alpha 2.21) — per-tile crime score recomputed monthly, drives commercial revenue penalty + faction reactions.
 - **Districts + per-zone surtax** (Alpha 2.22) — paint districts, name them, set color, and apply per-zone surtax sliders that stack on base R/C/I.
+- **Skyscrapers** (Alpha 3.1.2) — 2×2 footprint, 4-stage construction over 12 sim months, 18 visual variants across R/C/MU. Translucent on zoom-in (Alpha 3.1.7) so the player can see ground-level activity behind a tower.
+- **Lit night windows** (Alpha 3.1.6) — Medium+ R/C/MU buildings and finished skyscrapers light up during the night phase of the day/night cycle.
+- **Grid expansion** (Alpha 3.2.3) — `+` buttons on each of the four map edges grow the world by one starter-region's worth of tiles for $1M each. Genuine reallocation: `Tile.x/y` and `Grid.width/height` are mutable; existing tiles shift in place; new strip gets fresh terrain via `TerrainGenerator`.
+- **Buy land beyond city bounds** (Alpha 3.1.3) — tap-to-buy individual unowned tiles ($5K each) so the player can grow into wilderness gradually.
+- **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
+- **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
+- **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
-## Status: Alpha 3.0
+## Status: Alpha 3.2.4
+
+Currently shipped on `main` and live at https://JadenH5231.github.io/mobile-city-builder/.
+
+The post-3.0 stretch took the prototype from "feature-complete simulator" to "polished, growable, playtestable city-builder." Save schema is now v18 (skyscrapers added in 3.1.2; backwards-compat with v12 onward).
+
+**The 3.0.x polish pass:**
+- **3.0.1** Longer day cycle (4 min → 8 min real-time) + nighttime street lights along all road tiles.
+- **3.0.2** Softened lamp glow (radial gradient centre alpha eased from 0.95 → 0.65, taper kicks in earlier, overall opacity 0.95 → 0.75).
+- **3.0.3** Responsive UI sizing — toolbar + HUD pills scale by viewport so small phones don't truncate labels and tablets don't waste space.
+- **3.0.4** Budget panel scrolls overflow; close button stays pinned at the bottom.
+
+**The 3.1.x skyscrapers + services session:**
+- **3.1.0** Three more building variants per (zone, density) on top of Alpha 2.1's catalogue — medium and high tiers especially. Per-zone palettes get more variety per block.
+- **3.1.1** HUD declutter — More-menu popover collects the secondary toggles.
+- **3.1.2** **Skyscrapers** as 2×2 footprint placeable buildings (residential / commercial / mixed). Construction runs through 4 visible stages over 12 sim months: foundation pad + cranes → base floors → structural skeleton → facade going up → finished tower. Lex-smallest tile of the 2×2 is the anchor; others mirror state. Save schema v18 persists `skyscraper`, `skyscraperStage`, `skyscraperVariant` per tile.
+- **3.1.3** Buy-land tool — tap a single unowned tile for $5K. `Tile.owned` bit gates zoning + placement.
+- **3.1.4** Services rework — power + water are now city-wide as long as ANY power plant / water tower exists (no more individual radius for them); parks become more lenient (radius bumped from 4 to 6 tiles).
+- **3.1.5** Skyscraper redesign with serious detail — window banding wraps all four faces, vertical fin reveals every ~⅓ width, podium glass on the bottom 0.45 units, five crown styles (`flat` / `stepped` / `pyramid` / `mech` / `dome`), optional spire, optional second tower for "twin" designs, rooftop water tank + HVAC vent.
+- **3.1.6** Real night illumination — finished skyscrapers + Medium+ R/C/MU buildings emit lit-window overlays during the night phase. Blends with the lamp-glow layer.
+- **3.1.7** Skyscrapers go translucent when the camera zooms in close (orthoSize ≤ 5 → 0.45 opacity; ≥ 12 → fully opaque). Lets the player see street-level activity behind a tall tower.
+- **3.1.8** Fixed floating skyscraper windows (lit-window builder was using hardcoded dimensions; now reads the actual `SkyscraperDesign` to align bands to the real body geometry). Softened lamp glow further.
+- **3.1.9** Eight park variations (was four after 2.6's modular pass; bumped to eight for more visual variety in dense park clusters).
+
+**The 3.2.x growth + QOL session:**
+- **3.2.0** Two more variants per (zone, density) cell + two more skyscraper designs per zone. Block-level streetscape variety doubled vs Alpha 3.1.0.
+- **3.2.1** First attempt at land expansion — `+` buttons outside city borders for $1M each. Initial implementation kept a fixed 64×64 grid and just unlocked tiles within it via cityBounds (wrong approach per user feedback).
+- **3.2.2** Pedestrians get a humanoid silhouette — body + head + hair, picked from a small palette per spawn. Replaces the plain pawn.
+- **3.2.3** **Grid expansion** done correctly — `Grid.expandWorld(direction, amount)` actually reallocates the tile array, shifts existing tiles, regenerates terrain for the new strip, re-packs road edges. `Tile.x/y` and `Grid.width/height/tiles` are now writable.
+- **3.2.4** Settings cheats (unlimited money / unlimited demand toggles) + subtle walking animation on pedestrians (slight up/down bob in step).
+
+### Failed attempt: Alpha 3.2.5 (Max density tier) — reverted
+
+A Max density tier (cluster of L4 tiles → Mega → Twin → Skyscraper based on cluster shape) was implemented and shipped as PR #63 but **reverted in PR #64 (commit `c3234fb`)** after the user reported the game freezing after a few seconds of play.
+
+Could not reproduce the freeze in headless Chrome (sim 0.9 ms/tick, render 4 ms/frame, no console errors), so the revert was the right move while we diagnose. The Max-tier work is preserved in branch `claude/max-density` and PR #63 history.
+
+**Likely root cause to investigate before re-rolling:**
+- `Game.applyZoneStroke` (line 1852) maps `cap` to `ZoneTier` via `cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high'`. When `cap === 4` this falsely resolves to `'high'`. Same bug at line 1898 in the council-block toast.
+- `Council.canChangeZone` constructs stance keys like `r_high` / `r_max` from the tier string. `FACTION_STANCES` has `r_high` rows but **no `r_max` rows** — `FACTION_STANCES[id]['r_max']` returns `undefined`. `undefined >= 0` is `false` (not crashy on its own), but if any hot-loop arithmetic propagates that into NaN, it could explain the freeze.
+
+**Plan for re-roll** (do all of these before re-shipping):
+1. Add `r_max` / `c_max` / `mu_max` / `i_max` rows to every faction's `FACTION_STANCES` (mirror `_high` values).
+2. Fix the `cap === 4 ? 'max'` mapping in both `applyZoneStroke` spots.
+3. Audit any other tier→key string construction for missing `_max` handling (grep `\${prefix}_\${tier}`, `_high`, `_medium`).
+4. Test on the user's actual phone (not just headless Chrome) before claiming green.
+
+### The earlier Alpha 3.0 milestone (carryover)
 
 The "feature-complete prototype" milestone. 16 PRs across one session
 add the full systems sweep that takes the game from "fun loop with

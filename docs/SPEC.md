@@ -217,3 +217,60 @@ content + systems sweep. Everything below is shipped:
 - No artificial complexity.
 - No tap-to-build individual houses (zoning instead).
 - Single-purchase premium game model.
+
+## Alpha 3.1.x and 3.2.x — post-feature-complete polish + growth
+
+Extends Alpha 3.0 with skyscrapers, services rework, real night
+illumination, grid expansion, and QOL. Currently shipped on `main`
+as Alpha 3.2.4 (commit `c3234fb`). Save schema bumped v17 → v18 for
+the skyscraper bits in Alpha 3.1.2; backwards-compat preserved
+across the v12 minimum-loadable threshold.
+
+### Skyscrapers (Alpha 3.1.2 + 3.1.5 redesign + 3.1.7 translucency)
+- 2×2 footprint placeable buildings (R / C / MU only — no industrial
+  skyscrapers; industrial caps at L3).
+- 4-stage construction over 12 sim months (foundation pad + cranes →
+  base floors → structural skeleton → facade going up → finished).
+- Lex-smallest tile of the 2×2 is the anchor; others mirror state.
+- 18 visual variants (6 per zone) with body colour / window banding /
+  vertical fins / podium glass / 5 crown styles (`flat` / `stepped` /
+  `pyramid` / `mech` / `dome`) / optional spire / optional second
+  tower for "twin" designs.
+- Translucent on zoom-in: orthoSize ≤ 5 → 0.45 opacity, ≥ 12 → fully
+  opaque. Lets the player see street-level activity behind a tower.
+- Lit windows during the night phase of the day/night cycle.
+
+### Grid expansion (Alpha 3.1.3 + 3.2.3)
+- Tap-to-buy individual unowned tiles for $5K (Alpha 3.1.3).
+- `+` buttons on each map edge grow the world by one starter region's
+  worth of tiles for $1M each. `Grid.expandWorld(direction, amount)`
+  reallocates the tile array, shifts existing tiles, regenerates
+  terrain for the new strip, and re-packs road edges. `Tile.x/y` and
+  `Grid.width/height/tiles` are now writable.
+
+### Services + lighting (Alpha 3.1.4 + 3.1.6)
+- Power + water are now city-wide whenever ANY plant exists (no
+  individual radius). Park radius bumped 4 → 6 tiles for leniency.
+- Real night illumination — finished skyscrapers + Medium+ R/C/MU
+  buildings emit lit-window overlays during the night phase.
+
+### QOL (Alpha 3.0.x → 3.2.x)
+- Longer day/night cycle (4 → 8 min real-time) + nighttime street
+  lights along all road tiles. Lamp glow softened twice (3.0.2, 3.1.8).
+- More-menu HUD popover (3.1.1) collects secondary toggles so primary
+  HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+- Responsive UI sizing (3.0.3) — toolbar + HUD pills scale with
+  viewport. Budget panel scrolls with pinned close button (3.0.4).
+- 3 → 5 building variants per (zone, density) (3.0.x → 3.2.0). Park
+  variations bumped 4 → 8 (3.1.9).
+- Humanoid pedestrians with subtle walking animation (3.2.2 + 3.2.4).
+- Settings cheats (3.2.4) — unlimited money / unlimited demand
+  toggles for playtesting.
+
+### Reverted attempt (Alpha 3.2.5)
+A Max density tier (cluster of L4 tiles → Mega → Twin → 2×2 triggers
+skyscraper) was implemented but reverted after a freeze report. The
+work is preserved on branch `claude/max-density`. See `CLAUDE.md`
+for the root-cause hypothesis (`FACTION_STANCES` missing `_max`
+rows, `Game.applyZoneStroke` cap→tier mapping not handling cap=4)
+and re-roll plan.

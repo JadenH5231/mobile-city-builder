@@ -420,9 +420,14 @@ export const PRODUCE_PERIOD_MONTHS = 12;
  * extra ingredient that unlocks L3.
  */
 export const SERVICE_RADIUS = {
-  power: 8,
-  water: 8,
-  park: 3,
+  // Power + water are city-wide as of Alpha 3.1.4 — kept here only for
+  // legacy callers that still ask. The actual gating reads
+  // `Services.cityHasPower / cityHasWater` and ignores per-tile distance.
+  power: Infinity,
+  water: Infinity,
+  // Parks are now far more lenient (Alpha 3.1.4) — 10 tiles vs the
+  // original 3 — so a single park covers a big chunk of a neighbourhood.
+  park: 10,
   // Alpha 2.10 services pack — bigger reach than parks since each is
   // pricier and there are fewer per city.
   school: 6,
@@ -430,6 +435,20 @@ export const SERVICE_RADIUS = {
   fire: 6,
   police: 6
 } as const;
+
+/**
+ * Per-utility-plant capacity in "demand units" (Alpha 3.1.4). One
+ * developed building (any density) consumes 1 unit. A power plant
+ * supplies POWER_PLANT_CAPACITY units city-wide; if total demand
+ * exceeds total supply, every developed tile loses power until the
+ * player builds another plant.
+ *
+ * Numbers picked so the starter $8K power plant carries a small city
+ * comfortably (~250 buildings) and a serious metropolis needs at
+ * least 2-3 plants.
+ */
+export const POWER_PLANT_CAPACITY = 250;
+export const WATER_TOWER_CAPACITY = 250;
 
 /**
  * Fire station damping (Alpha 2.10) — multiplier on the per-tile fire

@@ -1,36 +1,68 @@
 import type { Grid } from '../world/Grid';
-import { SERVICE_RADIUS } from '../types';
+import { POWER_PLANT_CAPACITY, SERVICE_RADIUS, WATER_TOWER_CAPACITY } from '../types';
 
 /**
- * Service-coverage sweep. Walks every placed building, brute-force flips the
- * `hasPower / hasWater / hasPark` flags on tiles within Chebyshev radius. The
- * full pass is O(buildings × radius²) — at the radii we use (≤ 8) this is
- * cheap even on a fully-built Medium map.
+ * Service-coverage sweep.
  *
- * Spec note: power and water are deliberately radius checks, not a network
- * graph. The anti-goal here is "no elaborate pipes/wires the player has to
- * babysit" — coverage is binary, present or absent.
+ * **Power + water (Alpha 3.1.4)**: city-wide demand-based. Total city
+ * demand = number of zoned tiles (existing or developing). Total supply
+ * = number of plants × per-plant capacity. If supply ≥ demand, every
+ * tile in the city has power/water; otherwise nobody does. The "build
+ * 5 power plants spread across town" minigame is gone — the player
+ * just needs enough generation to keep up. Distance no longer matters.
+ *
+ * **Parks (Alpha 3.1.4)**: still radius-based but bumped to 10 tiles
+ * (was 3) so a single park covers a meaningful neighbourhood. L3
+ * unlock still requires hasPark coverage, but the player isn't forced
+ * to dot a park every 6 tiles to make it work.
+ *
+ * **Public services pack** (school / hospital / fire / police): unchanged
+ * radius-based behaviour from Alpha 2.10.
  */
 export class Services {
+  /** True iff total power supply ≥ total power demand (Alpha 3.1.4). */
+  cityHasPower = false;
+  /** True iff total water supply ≥ total water demand. */
+  cityHasWater = false;
+  /** Capacity stats surfaced to UI: how much we have vs how much we need. */
+  powerSupply = 0;
+  powerDemand = 0;
+  waterSupply = 0;
+  waterDemand = 0;
+
   recompute(grid: Grid): void {
     // Phase 1 — clear all flags. Cheap full sweep; alternative (track dirty
     // buildings + radii) wasn't worth the bookkeeping at prototype scale.
     for (const t of grid.iter()) t.resetServices();
 
-    // Phase 2 — for each placed service building, paint its coverage circle.
+    // Phase 2a — count plants + zoned tiles. Both are aggregate, so we
+    // build the city-wide power/water verdict before the per-tile pass.
+    let powerPlants = 0;
+    let waterTowers = 0;
+    let demand = 0;
+    for (const t of grid.iter()) {
+      if (t.building === 'power_plant') powerPlants++;
+      else if (t.building === 'water_tower') waterTowers++;
+      // Demand = any zoned tile (developed or developing). Skyscrapers
+      // count as 4 (they're a 2×2 footprint with 4 tiles each marked).
+      if (t.zone !== 'none') demand++;
+    }
+    this.powerSupply = powerPlants * POWER_PLANT_CAPACITY;
+    this.waterSupply = waterTowers * WATER_TOWER_CAPACITY;
+    this.powerDemand = demand;
+    this.waterDemand = demand;
+    this.cityHasPower = this.powerSupply >= demand;
+    this.cityHasWater = this.waterSupply >= demand;
+
+    // Phase 2b — per-building paint pass for the radius-based services
+    // (parks + public-services pack). Power + water are applied in bulk
+    // at the end of this method.
     for (const t of grid.iter()) {
       if (t.building === 'none') continue;
       switch (t.building) {
-        case 'power_plant':
-          this.paint(grid, t.x, t.y, SERVICE_RADIUS.power, 'power');
-          break;
-        case 'water_tower':
-          this.paint(grid, t.x, t.y, SERVICE_RADIUS.water, 'water');
-          break;
         case 'park':
           this.paint(grid, t.x, t.y, SERVICE_RADIUS.park, 'park');
           break;
-        // Public services pack (Alpha 2.10).
         case 'school':
           this.paint(grid, t.x, t.y, SERVICE_RADIUS.school, 'school');
           break;
@@ -43,17 +75,30 @@ export class Services {
         case 'police_station':
           this.paint(grid, t.x, t.y, SERVICE_RADIUS.police, 'police');
           break;
-        // bus_stop / bus_depot don't grant services — they're handled by Buses.
+        // power_plant / water_tower handled in the city-wide pass below.
+        // bus_stop / bus_depot don't grant services — handled by Buses.
         default:
           break;
+      }
+    }
+
+    // Phase 3 — apply the city-wide power/water verdict to every tile.
+    // Cheap sweep; only sets flags on zoned tiles since that's where they
+    // matter (development cap, mood penalty).
+    if (this.cityHasPower || this.cityHasWater) {
+      for (const t of grid.iter()) {
+        if (t.zone === 'none') continue;
+        if (this.cityHasPower) t.hasPower = true;
+        if (this.cityHasWater) t.hasWater = true;
       }
     }
   }
 
   private paint(
     grid: Grid, cx: number, cy: number, radius: number,
-    kind: 'power' | 'water' | 'park' | 'school' | 'hospital' | 'fire' | 'police'
+    kind: 'park' | 'school' | 'hospital' | 'fire' | 'police'
   ): void {
+    if (!isFinite(radius)) return; // city-wide kinds (power/water) don't paint
     const r2 = radius * radius;
     const minX = Math.max(0, cx - radius);
     const maxX = Math.min(grid.width - 1, cx + radius);
@@ -65,9 +110,7 @@ export class Services {
         const dy = y - cy;
         if (dx * dx + dy * dy > r2) continue;
         const t = grid.get(x, y)!;
-        if (kind === 'power') t.hasPower = true;
-        else if (kind === 'water') t.hasWater = true;
-        else if (kind === 'park') t.hasPark = true;
+        if (kind === 'park') t.hasPark = true;
         else if (kind === 'school') t.hasSchool = true;
         else if (kind === 'hospital') t.hasHospital = true;
         else if (kind === 'fire') t.hasFireProtection = true;

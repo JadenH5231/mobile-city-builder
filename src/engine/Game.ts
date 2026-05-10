@@ -192,7 +192,7 @@ export class Game {
   /** Road tool: tile indices flipped from road=false to road=true. */
   private readonly strokeStubs = new Set<number>();
   /** Zone tool: per-tile snapshot of original (zone, cap) for revert. */
-  private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 }>();
+  private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 | 4 }>();
   /** Path tool: tile indices flipped from path=false to path=true this stroke. */
   private readonly strokePaths = new Set<number>();
   /** Bulldoze tool: per-tile snapshot of all destroyed state for revert. */
@@ -495,6 +495,12 @@ export class Game {
       ['mixed_low', 'mu_low'],
       ['mixed_medium', 'mu_medium'],
       ['mixed_high', 'mu_high'],
+      // Max tier (Alpha 3.2.5) reuses the L3 stance key per zone — the
+      // council's opinion on Max R / C / MU is the same as L3 since
+      // FACTION_STANCES doesn't carry a separate Max row.
+      ['residential_max', 'r_high'],
+      ['commercial_max', 'c_high'],
+      ['mixed_max', 'mu_high'],
       ['place_power', 'power_plant'],
       ['place_water', 'water_tower'],
       ['place_park', 'park'],
@@ -542,7 +548,7 @@ export class Game {
       'place_museum', 'place_stadium', 'place_observatory',
       'place_ferry_dock', 'place_subway_entrance',
       'paint_district', 'erase_district',
-      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
+      'residential_max', 'commercial_max', 'mixed_max',
       'buy_land'
     ];
     const locked = new Set<Tool>();
@@ -1860,7 +1866,7 @@ export class Game {
   private applyZoneStroke(
     path: { x: number; y: number }[],
     zone: Exclude<Zone, 'none'>,
-    cap: 1 | 2 | 3
+    cap: 1 | 2 | 3 | 4
   ): void {
     const desired = new Set<number>();
     for (const p of path) desired.add(this.tileIndex(p.x, p.y));
@@ -2157,8 +2163,8 @@ interface BulldozedSnapshot {
   stopSign: boolean;
   trafficLight: boolean;
   zone: Zone;
-  /** Player-set density cap (0..3) at bulldoze time. Restored alongside zone. */
-  zoneCap: 0 | 1 | 2 | 3;
+  /** Player-set density cap (0..4) at bulldoze time. Restored alongside zone. */
+  zoneCap: 0 | 1 | 2 | 3 | 4;
   /** Density at bulldoze time — restored verbatim if the rubber band retreats. */
   density: number;
   developmentPressure: number;

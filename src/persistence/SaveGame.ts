@@ -62,7 +62,7 @@ export interface TileSnapshot {
   bridge?: boolean;
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
-  zoneCap?: 0 | 1 | 2 | 3;
+  zoneCap?: 0 | 1 | 2 | 3 | 4;
   /** Luxury low-density bit. Schema 8+. */
   luxury?: boolean;
   density: number;

@@ -2169,3 +2169,175 @@ function mixHexLocal(a: number, b: number, t: number): number {
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bl;
 }
+
+/* ---- Max-density single & twin buildings (Alpha 3.2.5) ----------------
+ *
+ * "Max" tier sits between L3 and full skyscraper. A single Max tile renders
+ * as a Mega building (~3.5 units tall — about 1.5× a tall L3); two adjacent
+ * Max tiles of the same R/C/MU zone render as a linked Twin pair (~3.0 units
+ * tall, two slim towers sharing a podium); four in a 2×2 trigger the full
+ * skyscraper construction pipeline (handled by Development → Skyscrapers).
+ *
+ * Geometry-wise these reuse the skyscraper detail helpers (`emitDetailedTowerSection`
+ * + `emitCrown`) at smaller scale so the visual language is consistent —
+ * window banding, vertical fins, crown caps. Designs are picked deterministically
+ * from per-zone palettes via the same hash as variant pickers elsewhere.
+ */
+
+const MEGA_PALETTE: Record<'residential' | 'commercial' | 'mixed', SkyscraperDesign[]> = {
+  residential: [
+    // Brick + cream cornice
+    { bodyColor: 0xc26658, glassColor: 0x301a14, finColor: 0xa44c40, crownColor: 0xece0c0,
+      height: 3.5, inset: 0.18, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'flat', spireH: 0, spireColor: 0,
+      hasFins: false, hasPodiumGlass: false },
+    // Stone + slate stepped
+    { bodyColor: 0xc8c0a8, glassColor: 0x2a3848, finColor: 0xa8a088, crownColor: 0x4c5660,
+      height: 3.6, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'stepped', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: false },
+    // Cream + rust gable
+    { bodyColor: 0xe6dcc4, glassColor: 0x4c6080, finColor: 0xc0b69a, crownColor: 0x9a4a26,
+      height: 3.4, inset: 0.16, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'mech', spireH: 0, spireColor: 0,
+      hasFins: false, hasPodiumGlass: true },
+    // Modern teal glass
+    { bodyColor: 0x4a7068, glassColor: 0x102820, finColor: 0x355048, crownColor: 0x86b0a4,
+      height: 3.7, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'flat', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true }
+  ],
+  commercial: [
+    // Glass-front office mid-rise
+    { bodyColor: 0x4a5b78, glassColor: 0x14203a, finColor: 0x2c3854, crownColor: 0xa4c0d8,
+      height: 3.6, inset: 0.18, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'flat', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true },
+    // Sandstone Art Deco
+    { bodyColor: 0xc4a878, glassColor: 0x2a1c10, finColor: 0xa48858, crownColor: 0x6a4818,
+      height: 3.8, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'stepped', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true },
+    // Black + gold accent
+    { bodyColor: 0x252a36, glassColor: 0x080c14, finColor: 0xc8a040, crownColor: 0xc8a040,
+      height: 3.7, inset: 0.18, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'mech', spireH: 0.3, spireColor: 0xc8a040,
+      hasFins: false, hasPodiumGlass: true },
+    // Bronze glass tower
+    { bodyColor: 0x8a5a36, glassColor: 0x2c180c, finColor: 0x6c4424, crownColor: 0xc89058,
+      height: 3.5, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'flat', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true }
+  ],
+  mixed: [
+    // Cream tower over brick podium
+    { bodyColor: 0xeae0c4, glassColor: 0x4e6680, finColor: 0xc0b694, crownColor: 0xb8a878,
+      height: 3.6, inset: 0.18, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'mech', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true },
+    // Warm earth + cream
+    { bodyColor: 0xc46c34, glassColor: 0x3a1c10, finColor: 0xece4cf, crownColor: 0x8a4a22,
+      height: 3.5, inset: 0.18, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'stepped', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true },
+    // Slate + glass
+    { bodyColor: 0x586878, glassColor: 0x141c28, finColor: 0x3c4856, crownColor: 0xa8b8c8,
+      height: 3.7, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'flat', spireH: 0, spireColor: 0,
+      hasFins: true, hasPodiumGlass: true },
+    // Forest green facade
+    { bodyColor: 0x3e6850, glassColor: 0x102820, finColor: 0x2c4c3c, crownColor: 0x86b09a,
+      height: 3.4, inset: 0.16, setbackAtFrac: 0, setbackInsetFactor: 0,
+      crownStyle: 'mech', spireH: 0, spireColor: 0,
+      hasFins: false, hasPodiumGlass: true }
+  ]
+};
+
+/** Pick a Mega design deterministically from tile coords. Same hash style as
+ *  the skyscraper variant picker but indexed into the per-zone Mega palette. */
+function pickMegaDesign(zone: 'residential' | 'commercial' | 'mixed', x: number, y: number): SkyscraperDesign {
+  const palette = MEGA_PALETTE[zone];
+  const idx = (Math.abs(x * 73856093) ^ Math.abs(y * 19349663)) % palette.length;
+  return palette[idx]!;
+}
+
+/**
+ * Build geometry for a single-tile Max-density "Mega" building. Tile-centred
+ * at (x+0.5, y+0.5), height ~3.5, reusing the skyscraper detail helpers so
+ * window banding + crown read consistently with the full-skyscraper visual
+ * language. Pick a variant via {@link pickMegaDesign}.
+ */
+export function buildMegaParts(
+  zone: 'residential' | 'commercial' | 'mixed', x: number, y: number, _happy: number
+): VariantPart[] {
+  const out: VariantPart[] = [];
+  const d = pickMegaDesign(zone, x, y);
+  const cx = x + 0.5;
+  const cz = y + 0.5;
+  const w = 1.0 - d.inset * 2;
+  const dpth = 1.0 - d.inset * 2;
+  emitDetailedTowerSection(d, cx, cz, 0, d.height, w, dpth, out, true);
+  emitCrown(d, cx, cz, d.height, w, dpth, out);
+  // Optional rooftop spire on commercial/mixed Megas — small antenna gives the
+  // skyline a vertical accent without requiring a full skyscraper.
+  if (d.spireH > 0) {
+    const spire = new ConeGeometry(0.05, d.spireH, 6);
+    spire.translate(cx, d.height + d.spireH / 2, cz);
+    out.push({ geom: spire, color: d.spireColor });
+  }
+  return out;
+}
+
+/**
+ * Build geometry for a 2-tile Max-density "Twin" building. Two slim towers
+ * share a low podium spanning both tiles. Anchor (ax, ay) is the lex-smaller
+ * tile of the pair; the partner (bx, by) is either east or south.
+ *
+ * Visual: lower podium across both tiles + two narrower towers (one per tile),
+ * each with subtle window banding and a flat crown. Heights are deliberately
+ * matched between the two towers (variant-driven but identical) so the pair
+ * reads as one designed building rather than two coincidental neighbours.
+ */
+export function buildTwinParts(
+  zone: 'residential' | 'commercial' | 'mixed',
+  ax: number, ay: number, bx: number, by: number, _happy: number
+): VariantPart[] {
+  const out: VariantPart[] = [];
+  // Pick variant from the anchor — same hash style.
+  const palette = MEGA_PALETTE[zone];
+  const designIdx = (Math.abs(ax * 73856093) ^ Math.abs(ay * 19349663)) % palette.length;
+  const d = palette[designIdx]!;
+  // Twin towers are ~3.2 tall — slightly shorter than Mega so the silhouette
+  // reads as "two slim towers" rather than "two megas".
+  const towerH = 3.2;
+  const podiumH = 0.55;
+  // Pair-spanning podium box across both tiles. Compute the bounding box.
+  const minX = Math.min(ax, bx);
+  const minY = Math.min(ay, by);
+  const maxX = Math.max(ax, bx);
+  const maxY = Math.max(ay, by);
+  const podCx = (minX + maxX) / 2 + 0.5;
+  const podCz = (minY + maxY) / 2 + 0.5;
+  const podW = (maxX - minX + 1) - 0.18;
+  const podD = (maxY - minY + 1) - 0.18;
+  const podBody = new BoxGeometry(podW, podiumH, podD);
+  podBody.translate(podCx, podiumH / 2, podCz);
+  out.push({ geom: podBody, color: d.crownColor });
+  // Podium glass band — thin glassy strip so the storefront reads.
+  const podGlass = new BoxGeometry(podW + 0.005, podiumH * 0.55, podD + 0.005);
+  podGlass.translate(podCx, podiumH * 0.30, podCz);
+  out.push({ geom: podGlass, color: d.glassColor });
+
+  // Two slim towers, one centred per tile. Use 60% of the tile footprint so
+  // the two towers feel slim against the shared podium.
+  const towerInset = 0.22;
+  const tw = 1.0 - towerInset * 2;
+  const td = 1.0 - towerInset * 2;
+  for (const [tx, ty] of [[ax, ay], [bx, by]] as Array<[number, number]>) {
+    const cx = tx + 0.5;
+    const cz = ty + 0.5;
+    emitDetailedTowerSection(d, cx, cz, podiumH, towerH, tw, td, out, false);
+    emitCrown(d, cx, cz, podiumH + towerH, tw, td, out);
+  }
+  return out;
+}

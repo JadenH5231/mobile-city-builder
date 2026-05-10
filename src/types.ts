@@ -184,20 +184,29 @@ export const BUILDING_DIMS: ReadonlyArray<{ readonly w: number; readonly h: numb
   { w: 0.80, h: 1.50 }
 ];
 
-export const MAX_DENSITY = 3;
+/** Density 4 (Max, Alpha 3.2.5) is the new top tier — same service
+ *  requirements as L3, unlocked at Capital. R/C/MU tiles can grow to
+ *  density 4; industrial caps at 3 (no Max Industrial — there's no
+ *  industrial-skyscraper concept). */
+export const MAX_DENSITY = 4;
 
 /**
  * Residents per residential tile by density tier. Index 0 is unused
  * (no building yet). Roughly exponential — matches how a low-poly cluster
  * of houses → townhouses → apartment block escalates capacity in a city sim.
+ * Index 4 (Max) is the "Mega/Twin" tier — between L3 and a finished
+ * skyscraper. When 4 Max tiles cluster into a 2×2 they convert into a
+ * skyscraper which uses the per-tile Skyscraper capacity instead.
  */
-export const RESIDENT_CAPACITY: readonly number[] = [0, 4, 16, 64];
+export const RESIDENT_CAPACITY: readonly number[] = [0, 4, 16, 64, 96];
 
 /** Jobs per commercial tile by density tier. */
-export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48];
+export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48, 72];
 
-/** Jobs per industrial tile by density tier. */
-export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
+/** Jobs per industrial tile by density tier. Industrial caps at L3 — no
+ *  Max tier (skyscrapers are R/C/MU only) so the L4 slot is just the
+ *  L3 value to keep arithmetic safe if anything reads it accidentally. */
+export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80, 80];
 
 /**
  * Mixed-use (Alpha 2.0) — same building footprint, but each tile
@@ -205,8 +214,8 @@ export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
  * for each axis so a mixed-use block is denser than a single-use block of
  * the same density tier overall but doesn't double-count.
  */
-export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32];
-export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24];
+export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32, 48];
+export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24, 36];
 
 /**
  * Luxury low-density residential (Alpha 2.5). One luxury home spans a
@@ -568,10 +577,10 @@ export const MILESTONES: readonly Milestone[] = [
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
     unlocks: [
-      'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
-      // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
-      // city before they make sense.
-      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper'
+      'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock'
+      // Skyscrapers (Alpha 3.1.2 → 3.2.5): the explicit Sky tools are
+      // retired in favour of the Max-density grow-into-skyscraper
+      // pipeline. Max R/C/MU unlocks at Capital instead.
     ],
     rewardCash: 10000,
     rewardPC: 5,
@@ -594,7 +603,13 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Capital',
     subtitle: 'Region-defining city',
     popThreshold: 5000,
-    unlocks: ['place_subway_entrance'],
+    unlocks: [
+      'place_subway_entrance',
+      // Max density (Alpha 3.2.5): R / C / MU only. Single tile = Mega
+      // building (between L3 and skyscraper); 2 adjacent = Twin; 4 in
+      // a square triggers the 12-month skyscraper construction.
+      'residential_max', 'commercial_max', 'mixed_max'
+    ],
     rewardCash: 50000,
     rewardPC: 15,
     herald: 'taxpayers',
@@ -634,12 +649,13 @@ export const STARTING_TOOLS: ReadonlySet<Tool> = new Set([
  * Zone density is a separate axis from Zone (R/C/I). All three zones support
  * all three tiers.
  */
-export type ZoneTier = 'low' | 'medium' | 'high';
+export type ZoneTier = 'low' | 'medium' | 'high' | 'max';
 
-export const ZONE_TIER_CAP: Record<ZoneTier, 1 | 2 | 3> = {
+export const ZONE_TIER_CAP: Record<ZoneTier, 1 | 2 | 3 | 4> = {
   low: 1,
   medium: 2,
-  high: 3
+  high: 3,
+  max: 4
 };
 
 /**
@@ -675,6 +691,12 @@ export type Tool =
   | 'mixed_low'
   | 'mixed_medium'
   | 'mixed_high'
+  // Max density (Alpha 3.2.5). Same coverage requirements as L3.
+  // Single L4 tile = Mega building. 2 adjacent = Twin. 4-in-a-square
+  // triggers the 12-month skyscraper construction process.
+  | 'residential_max'
+  | 'commercial_max'
+  | 'mixed_max'
   | 'place_power'
   | 'place_water'
   | 'place_park'
@@ -721,7 +743,12 @@ export const ZONE_TOOL_INFO: ReadonlyMap<Tool, { zone: Exclude<Zone, 'none'>; ti
   ['industrial_high',    { zone: 'industrial' as const,  tier: 'high' as const }],
   ['mixed_low',          { zone: 'mixed' as const,       tier: 'low' as const }],
   ['mixed_medium',       { zone: 'mixed' as const,       tier: 'medium' as const }],
-  ['mixed_high',         { zone: 'mixed' as const,       tier: 'high' as const }]
+  ['mixed_high',         { zone: 'mixed' as const,       tier: 'high' as const }],
+  // Max tier (Alpha 3.2.5) — R / C / MU only. Single tile = Mega,
+  // 2 adjacent = Twin, 4-in-a-square triggers skyscraper construction.
+  ['residential_max',    { zone: 'residential' as const, tier: 'max' as const }],
+  ['commercial_max',     { zone: 'commercial' as const,  tier: 'max' as const }],
+  ['mixed_max',          { zone: 'mixed' as const,       tier: 'max' as const }]
 ]);
 
 /** Tools that paint a road, mapped to their road tier. */

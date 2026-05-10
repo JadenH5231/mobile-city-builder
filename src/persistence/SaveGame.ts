@@ -339,7 +339,12 @@ export function serialize(
 export function applySave(
   data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, districts?: Districts
 ): void {
-  if (data.width !== grid.width || data.height !== grid.height) return;
+  // Saved dims may differ from the freshly-constructed Grid's dims if the
+  // player previously expanded the world (Alpha 3.2.3). Resize the grid
+  // to match the snapshot before reading tiles.
+  if (data.width !== grid.width || data.height !== grid.height) {
+    grid.resizeForLoad(data.width, data.height);
+  }
   if (council) {
     council.politicalCapital = data.politicalCapital ?? 0;
   }

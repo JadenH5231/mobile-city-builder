@@ -354,28 +354,27 @@ export class Renderer {
       this.unownedMesh = built;
       this.worldGroup.add(this.unownedMesh);
     }
-    // Build + buttons (Alpha 3.2.1) — one per direction, sitting just
-    // outside the city bounds. Skipped if the bounds already touch the
-    // grid edge in that direction.
+    // Build + buttons (Alpha 3.2.3) — one per direction, sitting just
+    // PAST the grid edge in world space (not on a tile). Tapping a
+    // button grows the grid by EXPANSION_BLOCK_SIZE tiles in that
+    // direction. The buttons are intentionally off-grid, sitting over
+    // the sky so they're always visible regardless of how tall the
+    // edge buildings are.
     this.expandButtonsGroup = new Group();
     if (!this.plusButtonTexture) this.plusButtonTexture = makePlusButtonTexture();
     const directions: Array<'N' | 'S' | 'E' | 'W'> = ['N', 'S', 'E', 'W'];
+    const midX = grid.width / 2;
+    const midY = grid.height / 2;
+    const padding = 2.5; // world units past the grid edge
     for (const dir of directions) {
       this.expandButtonPositions[dir] = null;
-      if (!grid.canExpand(dir)) continue;
-      // Centre of the corresponding edge, just outside the bounds.
-      const midX = (grid.cityBoundsX0 + grid.cityBoundsX1 + 1) / 2;
-      const midY = (grid.cityBoundsY0 + grid.cityBoundsY1 + 1) / 2;
       let bx: number, bz: number;
-      if (dir === 'N') { bx = midX; bz = grid.cityBoundsY0 - 1.0; }
-      else if (dir === 'S') { bx = midX; bz = grid.cityBoundsY1 + 2.0; }
-      else if (dir === 'W') { bx = grid.cityBoundsX0 - 1.0; bz = midY; }
-      else { bx = grid.cityBoundsX1 + 2.0; bz = midY; }
-      // Skip if the button would land outside the grid entirely.
-      if (bx < 0 || bz < 0 || bx >= grid.width || bz >= grid.height) continue;
-      const t = grid.get(Math.floor(bx), Math.floor(bz));
-      const yLift = (t?.elevation ?? 0) + 0.04;
-      const size = 1.6;
+      if (dir === 'N') { bx = midX; bz = -padding; }
+      else if (dir === 'S') { bx = midX; bz = grid.height + padding; }
+      else if (dir === 'W') { bx = -padding; bz = midY; }
+      else { bx = grid.width + padding; bz = midY; }
+      const yLift = 0.04;
+      const size = 3.0;
       const plane = new PlaneGeometry(size, size);
       plane.rotateX(-Math.PI / 2);
       plane.translate(bx * TILE_SIZE, yLift, bz * TILE_SIZE);

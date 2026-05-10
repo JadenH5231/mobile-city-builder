@@ -215,6 +215,16 @@ export class Grid {
     );
   }
 
+  /** True if any 4-connected neighbour of (x, y) is water (Alpha 2.19). */
+  has4WaterNeighbour(x: number, y: number): boolean {
+    const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    for (const [dx, dy] of dirs) {
+      const t = this.get(x + dx, y + dy);
+      if (t?.terrain === 'water') return true;
+    }
+    return false;
+  }
+
   // --- Zoning -----------------------------------------------------------
 
   /**

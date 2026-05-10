@@ -10,6 +10,7 @@ import {
   COLLISION_RATE_PER_OTHER,
   MAX_VEHICLES,
   PATH_CAR_SUPPRESSION,
+  SUBWAY_SUPPRESSION_RADIUS,
   ROAD_TIER,
   STOP_SIGN_PAUSE_SEC,
   VEHICLE_PALETTE,
@@ -25,6 +26,10 @@ import { nearBusStop } from './Buses';
 const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
 /** Probability a candidate spawn near a bus stop is silently dropped. */
 const BUS_STOP_SUPPRESSION = 0.7;
+/** Probability that a candidate spawn near a subway entrance is suppressed
+ *  (Alpha 2.19). Stronger than bus-stop because subways move much more.
+ *  Read together with SUBWAY_SUPPRESSION_RADIUS in types.ts. */
+const SUBWAY_SUPPRESSION = 0.85;
 /**
  * Path-search congestion coefficient. Each unit of EMA load on a tile
  * inflates the edge cost into that tile by this fraction — drivers
@@ -217,6 +222,12 @@ export class Vehicles {
     const origin = pickRandomDevelopedTile(grid, 'residential');
     if (!origin) return;
     if (nearBusStop(grid, origin.x, origin.y) && Math.random() < BUS_STOP_SUPPRESSION) return;
+    // Subway entrance suppression (Alpha 2.19): a strong probability that
+    // a trip from a tile near a subway entrance gets converted away from
+    // a car. Models the abstraction of underground rail without a separate
+    // graph. Stronger than bus-stop suppression because subways move
+    // many more people per stop in real cities.
+    if (nearSubwayEntrance(grid, origin.x, origin.y) && Math.random() < SUBWAY_SUPPRESSION) return;
 
     const destZone = Math.random() < 0.5 ? 'commercial' : 'industrial';
     const dest = pickRandomDevelopedTile(grid, destZone);
@@ -598,6 +609,20 @@ function nearPath(grid: Grid, x: number, y: number): boolean {
     for (let dx = -1; dx <= 1; dx++) {
       if (dx === 0 && dy === 0) continue;
       if (grid.hasPath(x + dx, y + dy)) return true;
+    }
+  }
+  return false;
+}
+
+/** True if (x, y) is within SUBWAY_SUPPRESSION_RADIUS (Chebyshev) of a
+ *  subway entrance (Alpha 2.19). Each spawn check is O(R²) but the
+ *  lookup happens only on candidate origins, not every tile. */
+function nearSubwayEntrance(grid: Grid, x: number, y: number): boolean {
+  const R = SUBWAY_SUPPRESSION_RADIUS;
+  for (let dy = -R; dy <= R; dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      const t = grid.get(x + dx, y + dy);
+      if (t?.building === 'subway_entrance') return true;
     }
   }
   return false;

@@ -254,6 +254,32 @@ const ITEMS: readonly ToolbarItem[] = [
       </svg>` }
     ]
   },
+  // Transit pack (Alpha 2.19). Ferry dock + subway entrance live in their
+  // own group below the bus tools — both are "alternative transit modes"
+  // that aren't roads.
+  {
+    kind: 'group',
+    id: 'transit-modes',
+    label: 'Trnst',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 17l5-2 4 2 4-2 5 2 M3 21l5-2 4 2 4-2 5 2"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'place_ferry_dock', label: 'Ferry', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 16l3-7h12l3 7z M5 20q3-1 7 0 t7 0"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M11 9v-3h2v3"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_subway_entrance', label: 'Subway', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="6" y="4" width="12" height="14" rx="3"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M9 9l3 6 3-6 M9 18v3 M15 18v3"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>` }
+    ]
+  },
   { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
           stroke="currentColor" stroke-width="1.8" stroke-linecap="round"

@@ -83,6 +83,11 @@ export interface FactionStances {
   museum: number;
   stadium: number;
   observatory: number;
+  /** Transit pack (Alpha 2.19). Ferry is broadly liked waterfront transit;
+   *  subway is heavy-duty public transit — transit/yimbys/greens love,
+   *  drivers stay neutral (their roads aren't taken). */
+  ferry_dock: number;
+  subway_entrance: number;
 }
 
 export type StanceKey = keyof FactionStances;
@@ -105,7 +110,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: -0.4,
     farm: -0.2,
     school: 0.3, hospital: 0.4, fire_station: 0.5, police_station: 0.7,
-    museum: -0.1, stadium: -0.6, observatory: 0.2
+    museum: -0.1, stadium: -0.6, observatory: 0.2,
+    ferry_dock: 0.1, subway_entrance: -0.2
   },
   yimbys: {
     road_local: -0.1, road_avenue: 0.3, road_highway: 0.0,
@@ -119,7 +125,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.0,
     farm: -0.1,
     school: 0.5, hospital: 0.5, fire_station: 0.3, police_station: 0.0,
-    museum: 0.0, stadium: -0.2, observatory: 0.4
+    museum: 0.0, stadium: -0.2, observatory: 0.4,
+    ferry_dock: 0.4, subway_entrance: 0.7
   },
   environmentalists: {
     road_local: -0.2, road_avenue: -0.4, road_highway: -0.8,
@@ -133,7 +140,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: -0.7,
     farm: 0.4,
     school: 0.4, hospital: 0.5, fire_station: 0.2, police_station: -0.1,
-    museum: 0.4, stadium: -0.4, observatory: 0.5
+    museum: 0.4, stadium: -0.4, observatory: 0.5,
+    ferry_dock: 0.5, subway_entrance: 0.7
   },
   hometown: {
     road_local: 0.1, road_avenue: -0.3, road_highway: -0.6,
@@ -147,7 +155,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.6,
     farm: 0.8,
     school: 0.4, hospital: 0.5, fire_station: 0.7, police_station: 0.6,
-    museum: 0.7, stadium: -0.4, observatory: 0.1
+    museum: 0.7, stadium: -0.4, observatory: 0.1,
+    ferry_dock: 0.2, subway_entrance: -0.1
   },
   chamber: {
     road_local: 0.1, road_avenue: 0.3, road_highway: 0.4,
@@ -161,7 +170,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.7,
     farm: 0.6,
     school: 0.3, hospital: 0.4, fire_station: 0.4, police_station: 0.5,
-    museum: 0.5, stadium: 0.8, observatory: 0.3
+    museum: 0.5, stadium: 0.8, observatory: 0.3,
+    ferry_dock: 0.3, subway_entrance: 0.4
   },
   transit: {
     road_local: -0.1, road_avenue: 0.3, road_highway: -0.5,
@@ -175,7 +185,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.0,
     farm: 0.1,
     school: 0.4, hospital: 0.4, fire_station: 0.3, police_station: 0.1,
-    museum: 0.4, stadium: 0.5, observatory: 0.4
+    museum: 0.4, stadium: 0.5, observatory: 0.4,
+    ferry_dock: 0.7, subway_entrance: 1.0
   },
   drivers: {
     road_local: 0.5, road_avenue: 0.8, road_highway: 1.0,
@@ -189,7 +200,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.2,
     farm: 0.3,
     school: 0.2, hospital: 0.4, fire_station: 0.5, police_station: 0.6,
-    museum: 0.0, stadium: 0.4, observatory: 0.0
+    museum: 0.0, stadium: 0.4, observatory: 0.0,
+    ferry_dock: 0.0, subway_entrance: -0.1
   },
   taxpayers: {
     road_local: -0.2, road_avenue: -0.3, road_highway: -0.5,
@@ -203,7 +215,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.5,
     farm: 0.4,
     school: 0.1, hospital: -0.1, fire_station: 0.3, police_station: 0.3,
-    museum: 0.2, stadium: 0.0, observatory: -0.1
+    museum: 0.2, stadium: 0.0, observatory: -0.1,
+    ferry_dock: -0.1, subway_entrance: -0.3
   },
   safer_streets: {
     road_local: 0.1, road_avenue: 0.0, road_highway: -0.4,
@@ -217,7 +230,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.0,
     farm: 0.2,
     school: 0.6, hospital: 0.7, fire_station: 0.9, police_station: 0.7,
-    museum: 0.4, stadium: -0.1, observatory: 0.3
+    museum: 0.4, stadium: -0.1, observatory: 0.3,
+    ferry_dock: 0.4, subway_entrance: 0.6
   },
   working_families: {
     road_local: 0.1, road_avenue: 0.2, road_highway: 0.1,
@@ -231,7 +245,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     forestry: 0.6,
     farm: 0.7,
     school: 0.8, hospital: 0.8, fire_station: 0.5, police_station: 0.4,
-    museum: 0.5, stadium: 0.6, observatory: 0.3
+    museum: 0.5, stadium: 0.6, observatory: 0.3,
+    ferry_dock: 0.3, subway_entrance: 0.6
   }
 };
 

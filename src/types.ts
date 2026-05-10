@@ -267,7 +267,12 @@ export type Building =
   // scaled by city population once they have road access.
   | 'museum'
   | 'stadium'
-  | 'observatory';
+  | 'observatory'
+  // Transit pack (Alpha 2.19). Ferry docks live on the water edge and
+  // run boats between paired docks; subway entrances are cosmetic
+  // people-teleporters that suppress nearby car spawns.
+  | 'ferry_dock'
+  | 'subway_entrance';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -294,7 +299,12 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // entry-tier landmark unlocked at Town.
   museum: 6000,
   stadium: 12000,
-  observatory: 9000
+  observatory: 9000,
+  // Transit pack (Alpha 2.19). Ferry dock anchors a water route; subway
+  // entrance is the most expensive single-tile build because of the
+  // large car-spawn-suppression radius it commands.
+  ferry_dock: 4000,
+  subway_entrance: 6000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -312,8 +322,16 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   police_station: 250,
   museum: 200,
   stadium: 500,
-  observatory: 250
+  observatory: 250,
+  ferry_dock: 250,
+  subway_entrance: 350
 };
+
+/** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
+ *  within this radius of an entrance get a strong probability of
+ *  converting a car spawn into a walker — modelling the abstraction of
+ *  underground rail without a separate graph. */
+export const SUBWAY_SUPPRESSION_RADIUS = 6;
 
 /**
  * Tourism revenue per landmark per month (Alpha 2.17). Each landmark adds
@@ -484,7 +502,7 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'City',
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
-    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium'],
+    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock'],
     rewardCash: 10000,
     rewardPC: 5,
     herald: 'yimbys',
@@ -506,7 +524,7 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Capital',
     subtitle: 'Region-defining city',
     popThreshold: 5000,
-    unlocks: [],
+    unlocks: ['place_subway_entrance'],
     rewardCash: 50000,
     rewardPC: 15,
     herald: 'taxpayers',
@@ -595,7 +613,9 @@ export type Tool =
   | 'place_traffic_light'
   | 'place_museum'
   | 'place_stadium'
-  | 'place_observatory';
+  | 'place_observatory'
+  | 'place_ferry_dock'
+  | 'place_subway_entrance';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -638,7 +658,9 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_bus_depot', 'bus_depot' as const],
   ['place_museum', 'museum' as const],
   ['place_stadium', 'stadium' as const],
-  ['place_observatory', 'observatory' as const]
+  ['place_observatory', 'observatory' as const],
+  ['place_ferry_dock', 'ferry_dock' as const],
+  ['place_subway_entrance', 'subway_entrance' as const]
 ]);
 
 /**

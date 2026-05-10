@@ -12,6 +12,7 @@ import { Events, type GameEvent } from '../simulation/Events';
 import { Stats } from '../simulation/Stats';
 import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Bonds, type BondId } from '../simulation/Bonds';
+import { Ferries } from '../simulation/Ferries';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -240,6 +241,8 @@ export class Game {
   readonly achievements = new Achievements();
   /** Municipal bonds + active loan tracker (Alpha 2.18). */
   readonly bonds = new Bonds();
+  /** Ferry routes between dock pairs (Alpha 2.19). */
+  readonly ferries = new Ferries();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -466,7 +469,9 @@ export class Game {
       ['place_stop_sign', 'stop_sign'],
       ['place_museum', 'museum'],
       ['place_stadium', 'stadium'],
-      ['place_observatory', 'observatory']
+      ['place_observatory', 'observatory'],
+      ['place_ferry_dock', 'ferry_dock'],
+      ['place_subway_entrance', 'subway_entrance']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -494,7 +499,8 @@ export class Game {
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
       'place_stop_sign', 'place_traffic_light',
-      'place_museum', 'place_stadium', 'place_observatory'
+      'place_museum', 'place_stadium', 'place_observatory',
+      'place_ferry_dock', 'place_subway_entrance'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -730,6 +736,8 @@ export class Game {
       this.renderer.updateCars(this.vehicles, this.grid);
       this.buses.update(dt, this.grid, this.grid.width, this.roadGraph, this.pathfinder);
       this.renderer.updateBuses(this.buses, this.grid);
+      this.ferries.update(dt, this.grid);
+      this.renderer.updateFerries(this.ferries, this.grid);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
       // Heatmap rebuild is the most expensive optional layer (full road
@@ -869,6 +877,7 @@ export class Game {
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
     this.globalMarket.recompute(this.grid);
+    this.ferries.reset();
     // Re-derive milestone unlocks from the restored highestPop (Alpha 2.8).
     this.refreshToolbarLocks();
     this.renderer.drawZones(this.grid);
@@ -1116,6 +1125,21 @@ export class Game {
       const t = this.grid.get(x, y);
       if (t && t.terrain !== 'grass') {
         this.onStatusMessage?.('Farms can only be placed on grass tiles');
+        return false;
+      }
+    }
+    // Ferry dock (Alpha 2.19): tile must NOT be water itself, AND must
+    // have at least one 4-connected water neighbour. Sand tiles (the
+    // procedural shoreline) work fine; water tiles don't because we'd
+    // be paving over the route the boat is supposed to use.
+    if (kind === 'ferry_dock') {
+      const tile = this.grid.get(x, y);
+      if (tile && tile.terrain === 'water') {
+        this.onStatusMessage?.('Ferry dock cannot be placed on water itself');
+        return false;
+      }
+      if (!this.grid.has4WaterNeighbour(x, y)) {
+        this.onStatusMessage?.('Ferry dock needs an adjacent water tile');
         return false;
       }
     }

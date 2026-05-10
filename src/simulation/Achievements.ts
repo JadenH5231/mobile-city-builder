@@ -56,7 +56,9 @@ export type AchievementId =
   | 'cultural_capital'
   | 'tourist_trap'
   | 'bond_issuer'
-  | 'debt_free';
+  | 'debt_free'
+  | 'multimodal'
+  | 'underground';
 
 export interface Achievement {
   readonly id: AchievementId;
@@ -104,6 +106,11 @@ export interface Snapshot {
   /** Distinct landmark kinds currently standing (museum / stadium /
    *  observatory). 0..3 — used by the Tourist Trap achievement. */
   uniqueLandmarkKinds: number;
+  /** Active ferry docks (Alpha 2.19). Need ≥2 for the Multimodal
+   *  achievement (route requires a pair). */
+  ferryDocks: number;
+  /** Active subway entrances (Alpha 2.19). */
+  subwayEntrances: number;
   /** Lifetime bonds issued (Alpha 2.18). */
   bondsIssuedLifetime: number;
   /** True if the player has ever issued a bond AND has zero outstanding
@@ -360,6 +367,20 @@ export const ACHIEVEMENT_DEFS: readonly Achievement[] = [
     description: 'Pay off every outstanding bond after taking at least one.',
     icon: '🪙',
     check: (s) => s.hasPaidOffAllDebt
+  },
+  {
+    id: 'multimodal',
+    name: 'Multimodal',
+    description: 'Operate buses, ferries, and a subway entrance simultaneously.',
+    icon: '🚇',
+    check: (s) => s.busDepots >= 1 && s.ferryDocks >= 2 && s.subwayEntrances >= 1
+  },
+  {
+    id: 'underground',
+    name: 'Underground',
+    description: 'Place three subway entrances.',
+    icon: 'Ⓜ️',
+    check: (s) => s.subwayEntrances >= 3
   }
 ];
 
@@ -448,6 +469,8 @@ export class Achievements {
     let hasMuseum = false;
     let hasStadium = false;
     let hasObservatory = false;
+    let ferryDocks = 0;
+    let subwayEntrances = 0;
     for (const t of grid.iter()) {
       if (t.terrain === 'forest') forestTiles++;
       if (t.zone !== 'none') {
@@ -462,6 +485,8 @@ export class Achievements {
       else if (t.building === 'museum') hasMuseum = true;
       else if (t.building === 'stadium') hasStadium = true;
       else if (t.building === 'observatory') hasObservatory = true;
+      else if (t.building === 'ferry_dock') ferryDocks++;
+      else if (t.building === 'subway_entrance') subwayEntrances++;
     }
     const uniqueLandmarkKinds =
       (hasMuseum ? 1 : 0) + (hasStadium ? 1 : 0) + (hasObservatory ? 1 : 0);
@@ -506,6 +531,8 @@ export class Achievements {
       walkingPathTiles,
       busDepots,
       uniqueLandmarkKinds,
+      ferryDocks,
+      subwayEntrances,
       bondsIssuedLifetime: args.bonds?.lifetimeIssued ?? 0,
       hasPaidOffAllDebt: (args.bonds?.lifetimeIssued ?? 0) > 0 && (args.bonds?.activeCount ?? 0) === 0,
       highwayEdges,

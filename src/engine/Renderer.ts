@@ -120,6 +120,7 @@ export class Renderer {
   private sunLight!: DirectionalLight;
   private carsMesh: InstancedMesh;
   private busesMesh: InstancedMesh;
+  private ferriesMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
   private selectionMesh: Mesh;
   // Reusable scratch objects for per-frame car updates — avoid GC churn.
@@ -224,6 +225,19 @@ export class Renderer {
     this.pedestriansMesh.count = 0;
     this.pedestriansMesh.frustumCulled = false;
     this.worldGroup.add(this.pedestriansMesh);
+
+    // Ferries (Alpha 2.19) — small low-poly boat. Hull below the waterline,
+    // cabin above. Same instanced-mesh pattern as cars/buses.
+    const hull = new BoxGeometry(0.20, 0.07, 0.40);
+    hull.translate(0, 0.03, 0);
+    const ferryCabin = new BoxGeometry(0.16, 0.06, 0.18);
+    ferryCabin.translate(0, 0.10, -0.04);
+    const ferryGeom = mergeGeoms([hull, ferryCabin], [0xfff0d4, 0xb04444]);
+    const ferryMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.ferriesMesh = new InstancedMesh(ferryGeom, ferryMat, 8);
+    this.ferriesMesh.count = 0;
+    this.ferriesMesh.frustumCulled = false;
+    this.worldGroup.add(this.ferriesMesh);
   }
 
   setSize(width: number, height: number): void {
@@ -610,6 +624,27 @@ export class Renderer {
       this.busesMesh.instanceMatrix.needsUpdate = true;
       if (this.busesMesh.instanceColor) this.busesMesh.instanceColor.needsUpdate = true;
     }
+  }
+
+  /** Per-frame ferry positions (Alpha 2.19). Boats interpolate across
+   *  water between paired docks at the ferry's current `t`. */
+  updateFerries(ferries: import('../simulation/Ferries').Ferries, _grid: Grid): void {
+    const obj = this.tmpObj;
+    let visible = 0;
+    for (const f of ferries.active) {
+      const fx = f.ax + (f.bx - f.ax) * f.t;
+      const fz = f.ay + (f.by - f.ay) * f.t;
+      // Sit just above the water surface — y = 0.06 is above the water
+      // shimmer plane and below most bridge clearances.
+      obj.position.set((fx + 0.5) * TILE_SIZE, 0.06, (fz + 0.5) * TILE_SIZE);
+      obj.rotation.set(0, f.headingRadians, 0);
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      this.ferriesMesh.setMatrixAt(visible, obj.matrix);
+      visible++;
+    }
+    this.ferriesMesh.count = visible;
+    if (visible > 0) this.ferriesMesh.instanceMatrix.needsUpdate = true;
   }
 
   drawSelection(gx: number, gy: number): void {
@@ -2259,6 +2294,43 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz: -0.18 },
         { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx: -0.32, dy: 0.46, dz:  0.18 },
         { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz:  0.18 }
+      ];
+    }
+    case 'ferry_dock': {
+      // Wooden pier on land + a short jetty extending toward water. Bright
+      // red flag pole reads at any zoom level.
+      return [
+        // Land pad.
+        { makeGeom: () => box(0.45, 0.04, 0.30), color: 0x6c4f2c, dx: -0.10, dy: 0.02, dz: 0 },
+        // Jetty extending out (toward what we hope is water — the player
+        // chose this tile because of the water adjacency).
+        { makeGeom: () => box(0.20, 0.04, 0.85), color: 0x5a3f22, dx: 0.18, dy: 0.02, dz: 0 },
+        // Cleat / bollard.
+        { makeGeom: () => cyl(0.04, 0.10, 8), color: 0x444444, dx: 0.18, dy: 0.07, dz: 0.36 },
+        { makeGeom: () => cyl(0.04, 0.10, 8), color: 0x444444, dx: 0.18, dy: 0.07, dz: -0.30 },
+        // Sign + flagpole.
+        { makeGeom: () => box(0.025, 0.40, 0.025), color: 0xb0a89b, dx: -0.18, dy: 0.20, dz: -0.06 },
+        { makeGeom: () => box(0.18, 0.10, 0.012), color: 0xc94038, dx: -0.10, dy: 0.36, dz: -0.06 }
+      ];
+    }
+    case 'subway_entrance': {
+      // Compact stair-down pad: low pavement square with a recessed dark
+      // pit + a green entry-sign post and a pair of bright handrails.
+      return [
+        // Pavement pad.
+        { makeGeom: () => box(0.92, 0.025, 0.92), color: 0x9a9690, dx: 0, dy: 0.013, dz: 0 },
+        // Recessed pit (the stairs going down).
+        { makeGeom: () => box(0.36, 0.04, 0.50), color: 0x18181a, dx: 0, dy: 0.005, dz: -0.05 },
+        // Stair tread suggestions — three bright rectangles across the pit.
+        { makeGeom: () => box(0.32, 0.005, 0.06), color: 0x78b878, dx: 0, dy: 0.030, dz: 0.06 },
+        { makeGeom: () => box(0.32, 0.005, 0.06), color: 0x78b878, dx: 0, dy: 0.030, dz: -0.04 },
+        { makeGeom: () => box(0.32, 0.005, 0.06), color: 0x78b878, dx: 0, dy: 0.030, dz: -0.14 },
+        // Handrails.
+        { makeGeom: () => box(0.025, 0.10, 0.55), color: 0x5b6f78, dx: -0.20, dy: 0.06, dz: -0.05 },
+        { makeGeom: () => box(0.025, 0.10, 0.55), color: 0x5b6f78, dx:  0.20, dy: 0.06, dz: -0.05 },
+        // Sign post + green M placard.
+        { makeGeom: () => box(0.030, 0.50, 0.030), color: 0xb0b0b0, dx: 0, dy: 0.25, dz: 0.36 },
+        { makeGeom: () => box(0.20, 0.18, 0.018), color: 0x4d8442, dx: 0, dy: 0.40, dz: 0.36 }
       ];
     }
     case 'observatory': {

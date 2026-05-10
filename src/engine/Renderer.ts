@@ -759,9 +759,14 @@ export class Renderer {
     // Update the night-lights overlay opacity based on darkness amount.
     if (this.nightLightsMesh) {
       const mat = this.nightLightsMesh.material as MeshBasicMaterial;
-      // Fade in over the last 25% of dayMix → 0 (dusk to night).
-      const nightOpacity = Math.max(0, 1 - dayMix * 4);
-      mat.opacity = nightOpacity * 0.95;
+      // Fade in smoothly across the last ~40% of the dayMix range so
+      // the lamps brighten gradually from dusk into deep night rather
+      // than snapping on.
+      const nightOpacity = Math.max(0, Math.min(1, 1 - dayMix * 2.5));
+      // Cap at ~0.65 — the rings already encode their own falloff via
+      // vertex colours, so a softer overall opacity reads as a gentle
+      // ambient glow rather than a flashlight.
+      mat.opacity = nightOpacity * 0.65;
       this.nightLightsMesh.visible = nightOpacity > 0.01;
     }
   }
@@ -1245,6 +1250,16 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
   const GROUND_GLOW = 0xfff0a8;     // ground-disc colour matches the bulb
   const PARK_GROUND_GLOW = 0xffe4b0;
 
+  /** Pre-computed darker tints of the warm-yellow glow for the falloff
+   *  rings. Vertex-colour darkening is the cheapest way to fake an
+   *  alpha-gradient when every face shares one material/opacity. */
+  const dim = (hex: number, factor: number): number => {
+    const r = Math.round(((hex >> 16) & 0xff) * factor);
+    const g = Math.round(((hex >> 8) & 0xff) * factor);
+    const b = Math.round((hex & 0xff) * factor);
+    return (r << 16) | (g << 8) | b;
+  };
+
   const addLamp = (
     cx: number, cz: number, baseY: number, glowHex: number, scale = 1
   ): void => {
@@ -1252,16 +1267,27 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
     const pole = new CylinderGeometry(0.018 * scale, 0.018 * scale, 0.34 * scale, 6);
     pole.translate(cx, baseY + 0.17 * scale, cz);
     geoms.push(pole); colours.push(LAMP_POLE);
-    // Bulb (small emissive sphere — reads as "lit" because the material
-    // is MeshBasicMaterial; lighting doesn't dim it).
-    const bulb = new IcosahedronGeometry(0.045 * scale, 0);
+    // Bulb — small emissive sphere. Slightly dimmed from the raw glow
+    // hex so it reads as "warm" rather than "headlight."
+    const bulb = new IcosahedronGeometry(0.05 * scale, 0);
     bulb.translate(cx, baseY + 0.36 * scale, cz);
-    geoms.push(bulb); colours.push(glowHex);
-    // Ground-glow disc — wider, sits flat just above the surface so it
-    // reads as the lamp pooling light on the ground.
-    const disc = new CylinderGeometry(0.20 * scale, 0.20 * scale, 0.005, 12);
-    disc.translate(cx, baseY + 0.003, cz);
-    geoms.push(disc); colours.push(glowHex === GROUND_GLOW ? GROUND_GLOW : glowHex);
+    geoms.push(bulb); colours.push(dim(glowHex, 0.85));
+    // Three concentric falloff discs (Alpha 3.0.2). Inner is the
+    // bright pool; mid + outer fade in colour space so the apparent
+    // light reads as a gradient even though the material has uniform
+    // opacity. Each ring is at a slightly different y to avoid
+    // z-fighting between coincident faces.
+    const ringDef: Array<{ r: number; tint: number; yOff: number }> = [
+      { r: 0.18 * scale, tint: 0.65, yOff: 0.006 },
+      { r: 0.40 * scale, tint: 0.30, yOff: 0.004 },
+      { r: 0.75 * scale, tint: 0.10, yOff: 0.002 }
+    ];
+    void GROUND_GLOW;
+    for (const ring of ringDef) {
+      const disc = new CylinderGeometry(ring.r, ring.r, 0.003, 16);
+      disc.translate(cx, baseY + ring.yOff, cz);
+      geoms.push(disc); colours.push(dim(glowHex, ring.tint));
+    }
   };
 
   for (const t of grid.iter()) {

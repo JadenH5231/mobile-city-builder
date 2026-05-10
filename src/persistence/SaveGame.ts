@@ -13,16 +13,16 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 14 (Alpha 2.16): persists per-tile `developedAt` (months when the
- * building first sprouted) so building patina survives a reload. v13 saves
- * load with developedAt = monthsElapsed (treats existing buildings as freshly
- * built — pragmatic; the only alternative is dating them all to month 0
- * which would render an entire pre-existing city as ancient).
+ * Schema 15 (Alpha 2.17): persists Economy.lifetimeTourismRevenue. Landmarks
+ * (museum / stadium / observatory) get the existing `building` field on
+ * Tile so no per-tile schema change is required. v14 saves load with
+ * lifetimeTourismRevenue = 0 — fair trade-off, the player starts earning
+ * credit toward Cultural Capital from the load forward.
  *
- * Earlier: v13 achievements, v12 bridges, v11 stats, v10 events, v9
- * highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v14 developedAt patina, v13 achievements, v12 bridges, v11 stats,
+ * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 14;
+const SCHEMA = 15;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -96,6 +96,8 @@ export interface SaveData {
   /** Schema 13+. Achievements lifetime counters + unlocked set +
    *  one-time leader-bio "metLeaders" tracker. */
   achievementsSnapshot?: AchievementsSnapshot;
+  /** Schema 15+. Lifetime tourism revenue earned from landmarks. */
+  lifetimeTourismRevenue?: number;
 }
 
 /**
@@ -221,7 +223,8 @@ export function serialize(
     eventsSnapshot: events?.serialize(),
     statsSnapshot: stats?.serialize(),
     bridgeRoadEdges: bridgeEdges,
-    achievementsSnapshot: achievements?.serialize()
+    achievementsSnapshot: achievements?.serialize(),
+    lifetimeTourismRevenue: economy.lifetimeTourismRevenue
   };
 }
 
@@ -327,4 +330,5 @@ export function applySave(
   economy.lastExpenses = 0;
   economy.lastAccidentCost = 0;
   economy.accidentsThisMonth = 0;
+  economy.lifetimeTourismRevenue = data.lifetimeTourismRevenue ?? 0;
 }

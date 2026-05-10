@@ -2210,6 +2210,75 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => box(0.06, 0.45, 0.06), color: 0xc9a437, dx: 0, dy: 0.225, dz: 0 },
         { makeGeom: () => box(0.30, 0.04, 0.18), color: 0xe5c25a, dx: 0, dy: 0.45 + 0.02, dz: 0 }
       ];
+    case 'museum': {
+      // Neoclassical: stone podium + columned colonnade + pedimented roof.
+      // Pure facade: keeps the silhouette readable on a single tile.
+      const cols: ReturnType<() => CityBuildingPart[]> = [];
+      const colY = 0.04 + 0.32 / 2; // sit half-depth above the podium top
+      for (let i = 0; i < 6; i++) {
+        const dx = -0.30 + i * 0.12;
+        cols.push({ makeGeom: () => cyl(0.025, 0.32, 8), color: 0xece4cf, dx, dy: 0.04 + 0.16, dz: 0.30 });
+        // Suppress unused-variable lint
+        void colY;
+      }
+      return [
+        { makeGeom: () => box(0.92, 0.05, 0.78), color: 0xc7bfa9, dx: 0, dy: 0.025, dz: 0 },
+        // Stone body (sits behind the colonnade).
+        { makeGeom: () => box(0.85, 0.42, 0.55), color: 0xddd2b7, dx: 0, dy: 0.04 + 0.21, dz: -0.10 },
+        // Pediment — triangular roof gestured with a thin slab.
+        { makeGeom: () => box(0.85, 0.06, 0.55), color: 0xb19f7f, dx: 0, dy: 0.04 + 0.42 + 0.03, dz: -0.10 },
+        // Apex block.
+        { makeGeom: () => box(0.20, 0.10, 0.20), color: 0xb19f7f, dx: 0, dy: 0.04 + 0.42 + 0.10, dz: -0.10 },
+        ...cols,
+        // Colonnade entablature.
+        { makeGeom: () => box(0.85, 0.04, 0.10), color: 0xb6ac8e, dx: 0, dy: 0.04 + 0.34, dz: 0.30 },
+        // Steps.
+        { makeGeom: () => box(0.55, 0.025, 0.06), color: 0xc7bfa9, dx: 0, dy: 0.04 + 0.013, dz: 0.36 }
+      ];
+    }
+    case 'stadium': {
+      // Oval bowl: low base ring + raised seating + interior field.
+      // Crisp silhouette on a single tile thanks to the elliptical body.
+      // Cylinder approximated by a hex prism + interior field box; reads
+      // unambiguously as a stadium at this art scale.
+      return [
+        // Field interior (green).
+        { makeGeom: () => box(0.55, 0.025, 0.40), color: 0x4d8442, dx: 0, dy: 0.013, dz: 0 },
+        // Outer concrete ring as 4 sweeping wedges of a hex prism.
+        { makeGeom: () => cyl(0.46, 0.18, 18), color: 0xc4c0b6, dx: 0, dy: 0.09, dz: 0 },
+        // Cut the field out by laying a green inner cylinder on top —
+        // creates the bowl reveal.
+        { makeGeom: () => cyl(0.34, 0.04, 18), color: 0x4d8442, dx: 0, dy: 0.18 + 0.02, dz: 0 },
+        // Stadium lights — 4 corner pylons.
+        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx: -0.32, dy: 0.30, dz: -0.18 },
+        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx:  0.32, dy: 0.30, dz: -0.18 },
+        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx: -0.32, dy: 0.30, dz:  0.18 },
+        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx:  0.32, dy: 0.30, dz:  0.18 },
+        // Light fixtures atop pylons.
+        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx: -0.32, dy: 0.46, dz: -0.18 },
+        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz: -0.18 },
+        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx: -0.32, dy: 0.46, dz:  0.18 },
+        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz:  0.18 }
+      ];
+    }
+    case 'observatory': {
+      // Conical building base + dome top + telescope slit. Reads instantly
+      // because of the dome — no other building uses a hemisphere primitive.
+      return [
+        // Concrete pad.
+        { makeGeom: () => box(0.92, 0.04, 0.92), color: 0x9a9690, dx: 0, dy: 0.02, dz: 0 },
+        // Tapered conical body (bottom radius wider than the dome).
+        { makeGeom: () => cone(0.40, 0.20, 18), color: 0xe7e4dc, dx: 0, dy: 0.04 + 0.10, dz: 0 },
+        // Slim cylinder linking the body to the dome.
+        { makeGeom: () => cyl(0.30, 0.18, 18), color: 0xe7e4dc, dx: 0, dy: 0.04 + 0.20 + 0.09, dz: 0 },
+        // Dome cap — half-sphere via icosahedron, scaled flat by a thin box.
+        { makeGeom: () => sphereLite(0.30), color: 0xc4c0b6, dx: 0, dy: 0.04 + 0.20 + 0.18, dz: 0 },
+        // Telescope slit — dark thin slab cutting across the dome face.
+        { makeGeom: () => box(0.06, 0.32, 0.04), color: 0x222222, dx: 0, dy: 0.04 + 0.20 + 0.18, dz: 0 },
+        // Side door / entry.
+        { makeGeom: () => box(0.10, 0.16, 0.018), color: 0x2a2a2a, dx: 0, dy: 0.04 + 0.08, dz: 0.30 + 0.005 }
+      ];
+    }
     case 'bus_depot':
       // Polished depot (Alpha 2.2) — main building + 3 yellow bay-marker
       // strips on the apron + a roof sign so it reads as a transit depot.

@@ -150,4 +150,21 @@ export class Tile {
   /** District membership (Alpha 2.22). 0 = unassigned. Per-district tax
    *  surtaxes apply to revenue calculation when this is non-zero. */
   districtId = 0;
+  /**
+   * Skyscraper bit (Alpha 3.1.2). When true, this tile is part of a
+   * 2×2 skyscraper footprint. The lex-smaller tile of the four (lowest
+   * x, then lowest y) owns the rendered geometry; the other three are
+   * marked-only. Skyscrapers go through 4 visual construction stages
+   * over 12 sim months before they become "developed" — `density` stays
+   * at 0 until stage 4 (built), at which point it goes straight to a
+   * special skyscraper density that beats L3.
+   */
+  skyscraper = false;
+  /** Construction progress for skyscrapers. 0 = freshly placed (foundation
+   *  pit), 1..3 = intermediate stages, 4 = built (all four stages
+   *  complete). Each stage takes 3 sim months. */
+  skyscraperStage: 0 | 1 | 2 | 3 | 4 = 0;
+  /** Variant index (0..5) for the 2×2 skyscraper. Stamped on placement
+   *  so the choice stays stable across re-renders. */
+  skyscraperVariant: 0 | 1 | 2 | 3 | 4 | 5 = 0;
 }

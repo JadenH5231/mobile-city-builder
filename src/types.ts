@@ -230,6 +230,32 @@ export const LUXURY_TAX_BONUS = 1.5;
 export const LUXURY_LOW_COST = 800;
 
 /**
+ * Skyscraper parameters (Alpha 3.1.2). Each skyscraper occupies a 2×2
+ * footprint and goes through a 12-month construction phase before it
+ * starts housing residents / jobs.
+ *
+ * Cost is steep — the entry-tier R skyscraper is $20K up-front (vs
+ * $800 for a luxury home) — both because the building itself is
+ * monumental and to make the choice meaningful.
+ */
+export const SKYSCRAPER_COST = {
+  residential: 20000,
+  commercial: 25000,
+  mixed: 28000
+} as const;
+/** Months per construction stage. 4 stages × 3 months = 12 months total. */
+export const SKYSCRAPER_MONTHS_PER_STAGE = 3;
+/** Per-tile resident capacity for an R skyscraper at stage 4 (built).
+ *  4 tiles × 64 = 256 residents per skyscraper — substantially more
+ *  than 4×L3 (4 × 64 = 256, same), but the visual + civic statement
+ *  is the real reward. */
+export const SKYSCRAPER_RESIDENTS_PER_TILE = 64;
+/** Per-tile commercial jobs (C + MU) at stage 4. */
+export const SKYSCRAPER_C_JOBS_PER_TILE = 56;
+/** Number of finished-design variants per zone (R/C/MU). */
+export const SKYSCRAPER_VARIANT_COUNT = 6;
+
+/**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —
  * 250 lets a fully-developed Medium map saturate without the spawner silently
  * dropping cars. Memory: feedback_traffic_pressure (post-alpha pass 2).
@@ -502,7 +528,12 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'City',
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
-    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock'],
+    unlocks: [
+      'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
+      // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
+      // city before they make sense.
+      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper'
+    ],
     rewardCash: 10000,
     rewardPC: 5,
     herald: 'yimbys',
@@ -621,7 +652,12 @@ export type Tool =
   | 'place_ferry_dock'
   | 'place_subway_entrance'
   | 'paint_district'
-  | 'erase_district';
+  | 'erase_district'
+  // Skyscrapers (Alpha 3.1.2). 2×2 footprint, 12-month build with
+  // 4 visual construction stages, R / C / MU only.
+  | 'residential_skyscraper'
+  | 'commercial_skyscraper'
+  | 'mixed_skyscraper';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's

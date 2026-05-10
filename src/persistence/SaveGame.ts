@@ -22,15 +22,16 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 17 (Alpha 2.22): persists per-tile `districtId` + the Districts
- * registry (id → name + color + per-zone surtaxes). v16 saves load with
- * districtId = 0 on every tile (no districts) and an empty registry.
+ * Schema 18 (Alpha 3.1.2): persists per-tile skyscraper bits
+ * (skyscraper, skyscraperStage, skyscraperVariant) so 2×2 skyscraper
+ * footprints round-trip cleanly through save/load. v17 saves load with
+ * skyscraper=false and stage=0 on every tile.
  *
- * Earlier: v16 bonds, v15 tourism, v14 patina, v13 achievements, v12
- * bridges, v11 stats, v10 events, v9 highestPop, v8 luxury, v7
- * elevation+bridge.
+ * Earlier: v17 districts, v16 bonds, v15 tourism, v14 patina, v13
+ * achievements, v12 bridges, v11 stats, v10 events, v9 highestPop,
+ * v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 17;
+const SCHEMA = 18;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -78,6 +79,10 @@ export interface TileSnapshot {
   bridgeHighwayDir?: number;
   /** District membership (Alpha 2.22 / schema 17+). 0 = unassigned. */
   districtId?: number;
+  /** Skyscraper bits (Alpha 3.1.2 / schema 18+). */
+  skyscraper?: boolean;
+  skyscraperStage?: 0 | 1 | 2 | 3 | 4;
+  skyscraperVariant?: 0 | 1 | 2 | 3 | 4 | 5;
 }
 
 export interface SaveData {
@@ -268,7 +273,10 @@ export function serialize(
       bridgeRoad: t.bridgeRoad,
       bridgeRoadType: t.bridgeRoadType,
       bridgeHighwayDir: t.bridgeHighwayDir,
-      districtId: t.districtId
+      districtId: t.districtId,
+      skyscraper: t.skyscraper,
+      skyscraperStage: t.skyscraperStage,
+      skyscraperVariant: t.skyscraperVariant
     };
   }
   const edges: number[] = [];
@@ -388,6 +396,10 @@ export function applySave(
     t.bridgeHighwayDir = snap.bridgeHighwayDir ?? -1;
     // District membership (schema 17+).
     t.districtId = snap.districtId ?? 0;
+    // Skyscraper bits (schema 18+). Older saves have no skyscrapers.
+    t.skyscraper = snap.skyscraper ?? false;
+    t.skyscraperStage = snap.skyscraperStage ?? 0;
+    t.skyscraperVariant = snap.skyscraperVariant ?? 0;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

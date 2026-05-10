@@ -28,7 +28,7 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildLuxuryParts, buildVariantParts } from './BuildingVariants';
+import { buildLuxuryParts, buildSkyscraperParts, buildVariantParts } from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -1079,6 +1079,25 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
       }
       continue;
     }
+    // Skyscrapers (Alpha 3.1.2): a 2×2 footprint emits one large tower
+    // (or construction stage) from the lex-smallest tile. We check if
+    // this tile is the anchor by confirming the other 3 tiles of the
+    // 2×2 are also skyscraper tiles in the same zone+variant.
+    if (t.skyscraper) {
+      if (!isSkyscraperAnchor(grid, t.x, t.y)) continue;
+      const parts = buildSkyscraperParts(
+        t.x, t.y, t.zone as 'residential' | 'commercial' | 'mixed',
+        t.skyscraperVariant, t.skyscraperStage
+      );
+      const yLift = baseLift + t.elevation;
+      for (const p of parts) {
+        if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
     if (t.density === 0) continue;
     // Per-tile happiness (Alpha 2.7): city mood, nudged by services. Tiles
     // with park coverage feel better; tiles missing power/water feel worse.
@@ -1148,6 +1167,23 @@ function findLuxuryPartner(grid: Grid, x: number, y: number): { x: number; y: nu
     if (n && n.luxury && n.zone === 'residential') return { x: n.x, y: n.y };
   }
   return null;
+}
+
+/** Anchor check for skyscraper 2×2 footprint (Alpha 3.1.2). The anchor
+ *  is the lex-smallest of the four — same logic as Skyscrapers.isAnchor
+ *  but inlined so the renderer doesn't need the simulation import. */
+function isSkyscraperAnchor(grid: Grid, x: number, y: number): boolean {
+  const t = grid.get(x, y);
+  if (!t || !t.skyscraper) return false;
+  const cmp = (px: number, py: number): boolean => {
+    const p = grid.get(px, py);
+    return !!(p && p.skyscraper && p.zone === t.zone && p.skyscraperVariant === t.skyscraperVariant);
+  };
+  if (cmp(x - 1, y)) return false;
+  if (cmp(x, y - 1)) return false;
+  if (cmp(x - 1, y - 1)) return false;
+  if (!cmp(x + 1, y) || !cmp(x, y + 1) || !cmp(x + 1, y + 1)) return false;
+  return true;
 }
 
 // --- Traffic heatmap ----------------------------------------------------

@@ -393,7 +393,10 @@ function unlockLabel(tool: string): string {
     place_ferry_dock: 'Ferry dock',
     place_subway_entrance: 'Subway entrance',
     paint_district: 'Paint district',
-    erase_district: 'Erase district'
+    erase_district: 'Erase district',
+    residential_skyscraper: 'R · Skyscraper',
+    commercial_skyscraper: 'C · Skyscraper',
+    mixed_skyscraper: 'MU · Skyscraper'
   };
   return map[tool] ?? tool;
 }

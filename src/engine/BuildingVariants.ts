@@ -1494,3 +1494,250 @@ const VARIANTS: VariantTable = {
     ]
   }
 };
+
+/* ---- Skyscrapers (Alpha 3.1.2) -------------------------------------- */
+
+/**
+ * Skyscraper geometry — one tall tower per 2×2 footprint. Six designs
+ * per zone (R / C / MU). Each design picks a body palette + tower
+ * silhouette + optional crown/spire + setback level.
+ *
+ * The renderer calls `buildSkyscraperParts` from the lex-smallest tile
+ * of the 2×2; the geometry extends one full tile in +x and +z so it
+ * fills the 2×2 footprint cleanly.
+ *
+ * Construction stages (0..4):
+ *   0 = foundation pit (low concrete pad + crane)
+ *   1 = base floors (~25% height + crane)
+ *   2 = structural skeleton (~60% height, dark frame, multi-cranes)
+ *   3 = facade going up (~85% height, lighter cladding, finishing crane)
+ *   4 = built (full design, no construction equipment)
+ */
+
+interface SkyscraperDesign {
+  /** Main tower body colour. */
+  bodyColor: number;
+  /** Crown / cap colour (top accent block). */
+  crownColor: number;
+  /** Total height in tile units (8.0 = ~5× a typical L3 building). */
+  height: number;
+  /** Footprint inset from the 2×2 (0 = full 2 tiles wide). */
+  inset: number;
+  /** Setback height fraction — 0 means no setback. */
+  setbackAtFrac: number;
+  /** Setback inset fraction (0..1 of inset). */
+  setbackInsetFactor: number;
+  /** Antenna/spire height beyond crown. 0 = none. */
+  spireH: number;
+  /** Spire colour when spireH > 0. */
+  spireColor: number;
+  /** Optional secondary tower next to the main one (for "twin" designs). */
+  secondTower?: { offsetX: number; offsetZ: number; w: number; h: number; color: number };
+}
+
+const RESIDENTIAL_SKY: SkyscraperDesign[] = [
+  // 0 — Cream Modern: tall slim tower with light crown
+  { bodyColor: 0xeae0c4, crownColor: 0xb8a878, height: 7.0, inset: 0.30,
+    setbackAtFrac: 0.7, setbackInsetFactor: 0.6, spireH: 0, spireColor: 0 },
+  // 1 — Brick Crimson: stately red high-rise with antenna
+  { bodyColor: 0x822c24, crownColor: 0x4a1812, height: 6.5, inset: 0.30,
+    setbackAtFrac: 0, setbackInsetFactor: 0, spireH: 0.5, spireColor: 0x222222 },
+  // 2 — Glass Teal: bright green-glass with stepped crown
+  { bodyColor: 0x3e7868, crownColor: 0x82b8a8, height: 7.5, inset: 0.34,
+    setbackAtFrac: 0.85, setbackInsetFactor: 0.5, spireH: 0.4, spireColor: 0x666666 },
+  // 3 — Twin White Towers: two slim towers
+  { bodyColor: 0xf2eee4, crownColor: 0xb8b0a0, height: 6.0, inset: 0.55,
+    setbackAtFrac: 0, setbackInsetFactor: 0, spireH: 0, spireColor: 0,
+    secondTower: { offsetX: 0.55, offsetZ: 0, w: 0.40, h: 6.0, color: 0xece4cf } },
+  // 4 — Slate Modernist: dark wide block with crown setback
+  { bodyColor: 0x4a525c, crownColor: 0x2a323c, height: 7.0, inset: 0.20,
+    setbackAtFrac: 0.85, setbackInsetFactor: 0.6, spireH: 0, spireColor: 0 },
+  // 5 — Copper Tower: warm tan with sharp pyramid spire
+  { bodyColor: 0xb88a5e, crownColor: 0x6c4a30, height: 6.5, inset: 0.30,
+    setbackAtFrac: 0.65, setbackInsetFactor: 0.5, spireH: 0.7, spireColor: 0x4e3220 }
+];
+
+const COMMERCIAL_SKY: SkyscraperDesign[] = [
+  // 0 — Black Glass: monolithic slab
+  { bodyColor: 0x1c1f26, crownColor: 0x0a0c12, height: 8.5, inset: 0.20,
+    setbackAtFrac: 0, setbackInsetFactor: 0, spireH: 0.6, spireColor: 0x666666 },
+  // 1 — Steel Blue Tower: tall corporate
+  { bodyColor: 0x4a607c, crownColor: 0x2c3a4e, height: 8.0, inset: 0.30,
+    setbackAtFrac: 0.78, setbackInsetFactor: 0.5, spireH: 0.5, spireColor: 0xc83838 },
+  // 2 — Art Deco Stepped: light stone with multi-step crown
+  { bodyColor: 0xc8c0ac, crownColor: 0x8a7e60, height: 7.0, inset: 0.20,
+    setbackAtFrac: 0.55, setbackInsetFactor: 0.45, spireH: 0.6, spireColor: 0x4a3e30 },
+  // 3 — Bronze + Glass: copper-tinted office
+  { bodyColor: 0x9e7440, crownColor: 0x6c4a26, height: 7.5, inset: 0.30,
+    setbackAtFrac: 0.85, setbackInsetFactor: 0.55, spireH: 0, spireColor: 0 },
+  // 4 — Twin Office Towers: two slim parallel towers
+  { bodyColor: 0x3a4a5e, crownColor: 0x202c3a, height: 6.5, inset: 0.55,
+    setbackAtFrac: 0, setbackInsetFactor: 0, spireH: 0.4, spireColor: 0x666666,
+    secondTower: { offsetX: 0.55, offsetZ: 0, w: 0.40, h: 6.5, color: 0x44546a } },
+  // 5 — Spire Skyscraper: tall green-glass with pyramid crown
+  { bodyColor: 0x445e54, crownColor: 0x2c4036, height: 7.5, inset: 0.30,
+    setbackAtFrac: 0.85, setbackInsetFactor: 0.55, spireH: 1.0, spireColor: 0x223e36 }
+];
+
+const MIXED_SKY: SkyscraperDesign[] = [
+  // 0 — Podium + Tower: tan podium implied via wider base, navy tower
+  { bodyColor: 0x4a5878, crownColor: 0x2c3854, height: 7.5, inset: 0.32,
+    setbackAtFrac: 0.18, setbackInsetFactor: 0.85, spireH: 0.5, spireColor: 0x222222 },
+  // 1 — Glass + Brick Hybrid: red brick base under green-glass tower
+  { bodyColor: 0x6e2e26, crownColor: 0x44746a, height: 7.0, inset: 0.30,
+    setbackAtFrac: 0.30, setbackInsetFactor: 0.6, spireH: 0, spireColor: 0 },
+  // 2 — Triple Tower (rendered as one wide + spire)
+  { bodyColor: 0xece4cf, crownColor: 0xb8b0a0, height: 7.2, inset: 0.20,
+    setbackAtFrac: 0.55, setbackInsetFactor: 0.55, spireH: 0.4, spireColor: 0x444444 },
+  // 3 — Terraced Sky-Garden: green-tinted with stepped tiers
+  { bodyColor: 0x6a8a72, crownColor: 0x9ec2a8, height: 6.8, inset: 0.20,
+    setbackAtFrac: 0.5, setbackInsetFactor: 0.45, spireH: 0.4, spireColor: 0x223a30 },
+  // 4 — Sky-Bridge Twin: two dark navy towers
+  { bodyColor: 0x2a3142, crownColor: 0x1a2030, height: 7.5, inset: 0.55,
+    setbackAtFrac: 0, setbackInsetFactor: 0, spireH: 0.5, spireColor: 0x666666,
+    secondTower: { offsetX: 0.55, offsetZ: 0, w: 0.42, h: 7.5, color: 0x36405a } },
+  // 5 — Curved Stone Tower: cream stone with rounded crown vibe
+  { bodyColor: 0xddd2b7, crownColor: 0xa89878, height: 7.5, inset: 0.32,
+    setbackAtFrac: 0.7, setbackInsetFactor: 0.5, spireH: 0, spireColor: 0 }
+];
+
+const SKY_TABLE: Record<'residential' | 'commercial' | 'mixed', SkyscraperDesign[]> = {
+  residential: RESIDENTIAL_SKY,
+  commercial: COMMERCIAL_SKY,
+  mixed: MIXED_SKY
+};
+
+/**
+ * Build the geometry parts for a single skyscraper anchored at (ax, ay).
+ * The footprint extends to (ax+1, ay+1). At stage < 4 the function emits
+ * construction-in-progress geometry instead of the finished design.
+ */
+export function buildSkyscraperParts(
+  ax: number, ay: number,
+  zone: 'residential' | 'commercial' | 'mixed',
+  variant: number, stage: 0 | 1 | 2 | 3 | 4
+): VariantPart[] {
+  const designs = SKY_TABLE[zone];
+  const design = designs[variant % designs.length]!;
+  const out: VariantPart[] = [];
+  // Centre of the 2×2 = anchor + (1, 1) since each tile is 1 unit and
+  // the tile centre offset is +0.5 (Renderer scales by TILE_SIZE later).
+  const cx = ax + 1.0;
+  const cz = ay + 1.0;
+
+  if (stage >= 4) {
+    emitFinishedSkyscraper(design, cx, cz, out);
+  } else {
+    emitConstructionStage(design, cx, cz, stage as 0 | 1 | 2 | 3, out);
+  }
+  return out;
+}
+
+function emitFinishedSkyscraper(
+  d: SkyscraperDesign, cx: number, cz: number, out: VariantPart[]
+): void {
+  const baseW = 2.0 - d.inset * 2;
+  const baseD = 2.0 - d.inset * 2;
+  // Optional shorter podium body where setback occurs.
+  if (d.setbackAtFrac > 0 && d.setbackAtFrac < 1) {
+    const podiumH = d.height * d.setbackAtFrac;
+    const podium = new BoxGeometry(baseW, podiumH, baseD);
+    podium.translate(cx, podiumH / 2, cz);
+    out.push({ geom: podium, color: d.bodyColor });
+    const towerW = baseW * d.setbackInsetFactor;
+    const towerD = baseD * d.setbackInsetFactor;
+    const towerH = d.height - podiumH;
+    const tower = new BoxGeometry(towerW, towerH, towerD);
+    tower.translate(cx, podiumH + towerH / 2, cz);
+    out.push({ geom: tower, color: d.bodyColor });
+    // Crown.
+    const crownH = 0.30;
+    const crown = new BoxGeometry(towerW * 0.85, crownH, towerD * 0.85);
+    crown.translate(cx, d.height - crownH / 2, cz);
+    out.push({ geom: crown, color: d.crownColor });
+  } else {
+    // Single full-height block.
+    const body = new BoxGeometry(baseW, d.height, baseD);
+    body.translate(cx, d.height / 2, cz);
+    out.push({ geom: body, color: d.bodyColor });
+    // Crown.
+    const crownH = 0.30;
+    const crown = new BoxGeometry(baseW * 0.92, crownH, baseD * 0.92);
+    crown.translate(cx, d.height - crownH / 2, cz);
+    out.push({ geom: crown, color: d.crownColor });
+  }
+  // Optional second tower.
+  if (d.secondTower) {
+    const s = d.secondTower;
+    const sBody = new BoxGeometry(s.w, s.h, s.w);
+    sBody.translate(cx + s.offsetX, s.h / 2, cz + s.offsetZ);
+    out.push({ geom: sBody, color: s.color });
+    const crownH = 0.30;
+    const sCrown = new BoxGeometry(s.w * 0.92, crownH, s.w * 0.92);
+    sCrown.translate(cx + s.offsetX, s.h - crownH / 2, cz + s.offsetZ);
+    out.push({ geom: sCrown, color: d.crownColor });
+  }
+  // Optional spire / antenna.
+  if (d.spireH > 0) {
+    const spire = new ConeGeometry(0.06, d.spireH, 6);
+    spire.translate(cx, d.height + d.spireH / 2, cz);
+    out.push({ geom: spire, color: d.spireColor });
+  }
+}
+
+function emitConstructionStage(
+  d: SkyscraperDesign, cx: number, cz: number, stage: 0 | 1 | 2 | 3, out: VariantPart[]
+): void {
+  // Site pad — every stage has the foundation pad.
+  const padW = 2.0 - 0.10;
+  const padD = 2.0 - 0.10;
+  const pad = new BoxGeometry(padW, 0.04, padD);
+  pad.translate(cx, 0.02, cz);
+  out.push({ geom: pad, color: 0x6a6a6a });
+
+  // Stage-driven structural progress.
+  const baseW = 2.0 - d.inset * 2;
+  const baseD = 2.0 - d.inset * 2;
+  const progressFrac = [0.10, 0.30, 0.55, 0.80][stage] ?? 0;
+  const builtH = d.height * progressFrac;
+  if (builtH > 0.05) {
+    // For stage 1: solid concrete base. For stage 2-3: darker steel
+    // skeleton with slightly desaturated colour.
+    const isSkeleton = stage === 2;
+    const colour = stage === 1 ? 0xc8c4be : isSkeleton ? 0x44494c : mixHexLocal(d.bodyColor, 0xc8c4be, 0.35);
+    const body = new BoxGeometry(baseW, builtH, baseD);
+    body.translate(cx, builtH / 2, cz);
+    out.push({ geom: body, color: colour });
+  }
+
+  // Crane(s) — 1 crane on early stages, 2 on stage 2 (peak structural work).
+  const craneCount = stage <= 1 ? 1 : stage === 2 ? 2 : 1;
+  const craneH = d.height * 0.85; // crane towers above what's been built
+  for (let i = 0; i < craneCount; i++) {
+    const sign = i === 0 ? 1 : -1;
+    const cox = cx + 0.45 * sign;
+    const coz = cz + 0.45 * sign;
+    // Crane mast.
+    const mast = new BoxGeometry(0.06, craneH, 0.06);
+    mast.translate(cox, craneH / 2, coz);
+    out.push({ geom: mast, color: 0xeec453 });
+    // Crane jib (horizontal arm).
+    const jibW = 0.55;
+    const jib = new BoxGeometry(jibW, 0.05, 0.04);
+    jib.translate(cox + jibW / 2 - 0.03, craneH - 0.04, coz);
+    out.push({ geom: jib, color: 0xeec453 });
+    // Counter-jib.
+    const cjib = new BoxGeometry(0.20, 0.05, 0.04);
+    cjib.translate(cox - 0.10, craneH - 0.04, coz);
+    out.push({ geom: cjib, color: 0xc89030 });
+  }
+}
+
+function mixHexLocal(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}

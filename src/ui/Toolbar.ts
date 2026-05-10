@@ -87,6 +87,13 @@ const ICON_TIER_LUX = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M12 4l2 4 4 .6-3 2.8.7 4-3.7-2-3.7 2 .7-4-3-2.8 4-.6z"
         stroke="currentColor" stroke-width="1.4" fill="none"/>
 </svg>`;
+/** Skyscraper tier icon (Alpha 3.1.2) — tall slim tower silhouette. */
+const ICON_TIER_SKY = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="9" y="3" width="6" height="18" stroke="currentColor"
+        stroke-width="1.6" fill="none"/>
+  <path d="M11 3v-1 M13 3v-1 M9 8h6 M9 13h6 M9 18h6"
+        stroke="currentColor" stroke-width="1.4"/>
+</svg>`;
 
 const ITEMS: readonly ToolbarItem[] = [
   { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -115,7 +122,8 @@ const ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'residential_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'residential_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'residential_high',   label: 'High', icon: ICON_TIER_HIGH },
-      { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX }
+      { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX },
+      { kind: 'tool', tool: 'residential_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },
   {
@@ -126,7 +134,8 @@ const ITEMS: readonly ToolbarItem[] = [
     members: [
       { kind: 'tool', tool: 'commercial_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'commercial_medium', label: 'Med',  icon: ICON_TIER_MED },
-      { kind: 'tool', tool: 'commercial_high',   label: 'High', icon: ICON_TIER_HIGH }
+      { kind: 'tool', tool: 'commercial_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'commercial_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },
   {
@@ -148,7 +157,8 @@ const ITEMS: readonly ToolbarItem[] = [
     members: [
       { kind: 'tool', tool: 'mixed_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'mixed_medium', label: 'Med',  icon: ICON_TIER_MED },
-      { kind: 'tool', tool: 'mixed_high',   label: 'High', icon: ICON_TIER_HIGH }
+      { kind: 'tool', tool: 'mixed_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'mixed_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },
   { kind: 'tool', tool: 'place_power', label: 'Power', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">

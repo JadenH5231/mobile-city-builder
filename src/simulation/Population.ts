@@ -7,6 +7,8 @@ import {
   COMMERCIAL_JOBS,
   INDUSTRIAL_JOBS,
   LUXURY_RESIDENT_CAPACITY_PER_TILE,
+  SKYSCRAPER_C_JOBS_PER_TILE,
+  SKYSCRAPER_RESIDENTS_PER_TILE,
   MIXED_COMMERCIAL_JOBS,
   MIXED_RESIDENT_CAPACITY,
   RESIDENT_CAPACITY,
@@ -119,6 +121,21 @@ export class Population {
       // (not demand-driven growth), so capacity is fixed per tile.
       if (t.luxury && t.zone === 'residential') {
         luxuryCapacity += LUXURY_RESIDENT_CAPACITY_PER_TILE;
+        continue;
+      }
+      // Skyscrapers (Alpha 3.1.2): only count when fully built (stage 4).
+      // Each of the 4 tiles contributes the per-tile capacity directly.
+      if (t.skyscraper) {
+        if (t.skyscraperStage >= 4) {
+          if (t.zone === 'residential') {
+            regularCapacity += SKYSCRAPER_RESIDENTS_PER_TILE;
+          } else if (t.zone === 'commercial') {
+            cJobs += SKYSCRAPER_C_JOBS_PER_TILE;
+          } else if (t.zone === 'mixed') {
+            regularCapacity += Math.floor(SKYSCRAPER_RESIDENTS_PER_TILE / 2);
+            cJobs += Math.floor(SKYSCRAPER_C_JOBS_PER_TILE / 2);
+          }
+        }
         continue;
       }
       if (t.density === 0) continue;

@@ -134,6 +134,10 @@ export interface SaveData {
   cityBoundsX1?: number;
   cityBoundsY0?: number;
   cityBoundsY1?: number;
+  /** Cheat toggles (Alpha 3.2.4). Persisted so a playtest with cheats on
+   *  resumes with cheats on after a reload. */
+  cheatUnlimitedMoney?: boolean;
+  cheatUnlimitedDemand?: boolean;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -227,10 +231,14 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }): Promise<void> {
     if (!this.db) return;
     const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds, districts);
     if (cityName !== undefined) data.cityName = cityName;
+    if (cheats) {
+      data.cheatUnlimitedMoney = cheats.unlimitedMoney;
+      data.cheatUnlimitedDemand = cheats.unlimitedDemand;
+    }
     data.lastPlayedISO = new Date().toISOString();
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');

@@ -767,6 +767,11 @@ export class Renderer {
     const c = this.tmpColor;
     const gridWidth = grid.width;
     let visible = 0;
+    // Subtle walk-cycle clock (Alpha 3.2.4): a global "now" plus a per-
+    // walker phase offset gives every figure its own bob phase so the
+    // crowd doesn't synchronise. Frequency tuned to ~1.4 Hz so steps
+    // read at the prototype's orthographic scale.
+    const now = performance.now() * 0.001;
     for (let i = 0; i < pedestrians.walkers.length; i++) {
       const w = pedestrians.walkers[i]!;
       if (w.pathTiles.length < 2) continue;
@@ -797,12 +802,21 @@ export class Renderer {
       // tiles use PATH_LIFT + elevation; everything else uses sidewalk.
       const yA = walkerSurfaceY(grid, aTileX, aTileY);
       const yB = walkerSurfaceY(grid, bTileX, bTileY);
+      // Walk-cycle bob — vertical oscillation + a tiny side-to-side
+      // sway. Per-walker phase via the index so the crowd stays out of
+      // sync. Bob amplitude is small enough to read as a stride at
+      // ortho zoom without making the figure look like it's hopping.
+      const phase = i * 0.7;
+      const cycle = now * 8.8 + phase;
+      const bob = Math.abs(Math.sin(cycle)) * 0.018;
+      const sway = Math.sin(cycle) * 0.04;
+      const yaw = Math.atan2(dx, dz);
       obj.position.set(
         (ax + dx * t + px * off) * TILE_SIZE,
-        yA + (yB - yA) * t + 0.005,
+        yA + (yB - yA) * t + 0.005 + bob,
         (az + dz * t + pz * off) * TILE_SIZE
       );
-      obj.rotation.set(0, Math.atan2(dx, dz), 0);
+      obj.rotation.set(0, yaw, sway);
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.pedestriansMesh.setMatrixAt(visible, obj.matrix);

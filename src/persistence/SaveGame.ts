@@ -13,14 +13,16 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 13 (Alpha 2.15): persists the Achievements lifetime counters +
- * unlocked set + the per-faction "metLeaders" set that drives the one-time
- * leader-bio popup. v12 saves load with empty achievements (player starts
- * earning them from this session forward, peakPop / monthsRun seeded from
- * the existing milestones / economy state). Earlier: v12 bridges, v11
- * stats, v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Schema 14 (Alpha 2.16): persists per-tile `developedAt` (months when the
+ * building first sprouted) so building patina survives a reload. v13 saves
+ * load with developedAt = monthsElapsed (treats existing buildings as freshly
+ * built — pragmatic; the only alternative is dating them all to month 0
+ * which would render an entire pre-existing city as ancient).
+ *
+ * Earlier: v13 achievements, v12 bridges, v11 stats, v10 events, v9
+ * highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 13;
+const SCHEMA = 14;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -56,6 +58,9 @@ export interface TileSnapshot {
   luxury?: boolean;
   density: number;
   pressure: number;
+  /** Months when density first went 0 → 1 on this tile. Schema 14+. Drives
+   *  the renderer's patina pass; new saves stamp it from the dev tick. */
+  developedAt?: number;
   building: Building;
   /** Walking-path bit (Alpha 1.6). Schema 5+. */
   path?: boolean;
@@ -183,6 +188,7 @@ export function serialize(
       luxury: t.luxury,
       density: t.density,
       pressure: t.developmentPressure,
+      developedAt: t.developedAt,
       building: t.building,
       path: t.path,
       bridgeRoad: t.bridgeRoad,
@@ -286,6 +292,12 @@ export function applySave(
     t.luxury = snap.luxury ?? false;
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
+    // developedAt schema 14+. v13-and-earlier saves treat current density as
+    // "freshly built at the load month" — the only sensible default since
+    // the alternative dates them all to month 0 and renders the entire
+    // pre-existing city as fully aged. Buildings will then age forward
+    // from this restore point.
+    t.developedAt = snap.developedAt ?? (snap.density > 0 ? data.monthsElapsed : 0);
     t.building = snap.building;
     // Path is schema 5+. Older saves had no walking paths.
     t.path = snap.path ?? false;

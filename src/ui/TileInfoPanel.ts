@@ -22,6 +22,8 @@ export interface TileInfo {
   zone: Zone;
   zoneCap: 0 | 1 | 2 | 3;
   density: number;
+  /** Building age in months (Alpha 2.16). 0 means brand new or unbuilt. */
+  ageMonths: number;
   building: Building;
   path: boolean;
   hasPower: boolean;
@@ -176,7 +178,17 @@ function chipsFor(info: TileInfo): Array<{ text: string; tone: 'good' | 'warn' |
   if (info.stopSign) out.push({ text: '🛑 Stop sign', tone: 'info' });
   if (info.trafficLight) out.push({ text: '🚦 Light', tone: 'info' });
   if (info.luxury) out.push({ text: '⭐ Luxury', tone: 'info' });
+  if (info.density > 0 && info.ageMonths > 0) {
+    out.push({ text: `🕰 ${formatAge(info.ageMonths)}`, tone: 'info' });
+  }
   return out;
+}
+
+function formatAge(months: number): string {
+  if (months < 12) return `${months}mo`;
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  return rem === 0 ? `${years}y` : `${years}y ${rem}mo`;
 }
 
 function zoneShortName(zone: Zone): string {

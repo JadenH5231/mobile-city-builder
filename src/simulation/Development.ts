@@ -31,8 +31,13 @@ const MISSING_SERVICE_PENALTY = 0.3;
 export class Development {
   constructor(private readonly population: Population) {}
 
-  /** @returns true iff at least one tile's density changed this tick. */
-  tick(grid: Grid): boolean {
+  /**
+   * @param monthsElapsed Current sim-month counter from Economy. Stamped into
+   *   `t.developedAt` the first time a tile sprouts (density 0 → 1) so the
+   *   Renderer can age the building visually.
+   * @returns true iff at least one tile's density changed this tick.
+   */
+  tick(grid: Grid, monthsElapsed: number = 0): boolean {
     let changed = false;
     for (const t of grid.iter()) {
       if (t.zone === 'none' || t.road || t.building !== 'none') continue;
@@ -62,8 +67,16 @@ export class Development {
       t.developmentPressure += rate;
       const threshold = PROMOTION_THRESHOLDS[t.density] ?? Infinity;
       if (t.developmentPressure >= threshold && t.density < cap) {
+        const wasEmpty = t.density === 0;
         t.density++;
         t.developmentPressure = 0;
+        // Stamp the build date once on the first promotion. Subsequent
+        // upgrades (L1→L2, L2→L3) keep the original developedAt — a Town
+        // House upgrading to a Block of Flats is the same lot maturing,
+        // not a fresh build. Renovation = bulldoze + rezone, which calls
+        // resetDevelopment and re-stamps developedAt the next time the
+        // tile sprouts.
+        if (wasEmpty) t.developedAt = monthsElapsed;
         changed = true;
       }
     }

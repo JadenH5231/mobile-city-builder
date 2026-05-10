@@ -58,7 +58,8 @@ export type AchievementId =
   | 'bond_issuer'
   | 'debt_free'
   | 'multimodal'
-  | 'underground';
+  | 'underground'
+  | 'safe_streets';
 
 export interface Achievement {
   readonly id: AchievementId;
@@ -111,6 +112,8 @@ export interface Snapshot {
   ferryDocks: number;
   /** Active subway entrances (Alpha 2.19). */
   subwayEntrances: number;
+  /** Current city-wide crime score [0..1] (Alpha 2.21). */
+  cityCrime: number;
   /** Lifetime bonds issued (Alpha 2.18). */
   bondsIssuedLifetime: number;
   /** True if the player has ever issued a bond AND has zero outstanding
@@ -381,6 +384,13 @@ export const ACHIEVEMENT_DEFS: readonly Achievement[] = [
     description: 'Place three subway entrances.',
     icon: 'Ⓜ️',
     check: (s) => s.subwayEntrances >= 3
+  },
+  {
+    id: 'safe_streets',
+    name: 'Safe Streets',
+    description: 'Hold city crime under 0.10 with population ≥ 1,500.',
+    icon: '🛡',
+    check: (s) => s.population >= 1500 && s.cityCrime > 0 && s.cityCrime < 0.10
   }
 ];
 
@@ -434,6 +444,8 @@ export class Achievements {
     /** Optional Bonds — Achievements need lifetime issuance + active count
      *  for the Bond Issuer / Debt Free pair. Defaults to no-bond inputs. */
     bonds?: { lifetimeIssued: number; activeCount: number };
+    /** Optional Crime — current city-wide score for Safe Streets. */
+    cityCrime?: number;
   }): boolean {
     const { economy, population, happiness, grid } = args;
 
@@ -533,6 +545,7 @@ export class Achievements {
       uniqueLandmarkKinds,
       ferryDocks,
       subwayEntrances,
+      cityCrime: args.cityCrime ?? 0,
       bondsIssuedLifetime: args.bonds?.lifetimeIssued ?? 0,
       hasPaidOffAllDebt: (args.bonds?.lifetimeIssued ?? 0) > 0 && (args.bonds?.activeCount ?? 0) === 0,
       highwayEdges,

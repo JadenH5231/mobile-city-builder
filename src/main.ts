@@ -68,12 +68,22 @@ if (popEl) {
 }
 
 const heatmapBtn = document.getElementById('hud-heatmap');
+const crimeBtn = document.getElementById('hud-crime');
+const setHeatmapMode = (mode: 'none' | 'traffic' | 'crime'): void => {
+  game.heatmapVisible = mode === 'traffic';
+  game.crimeHeatmapVisible = mode === 'crime';
+  heatmapBtn?.setAttribute('aria-pressed', String(mode === 'traffic'));
+  crimeBtn?.setAttribute('aria-pressed', String(mode === 'crime'));
+  if (mode === 'none') game.renderer.clearHeatmap();
+};
 if (heatmapBtn) {
   heatmapBtn.addEventListener('click', () => {
-    const next = !game.heatmapVisible;
-    game.heatmapVisible = next;
-    heatmapBtn.setAttribute('aria-pressed', String(next));
-    if (!next) game.renderer.clearHeatmap();
+    setHeatmapMode(game.heatmapVisible ? 'none' : 'traffic');
+  });
+}
+if (crimeBtn) {
+  crimeBtn.addEventListener('click', () => {
+    setHeatmapMode(game.crimeHeatmapVisible ? 'none' : 'crime');
   });
 }
 

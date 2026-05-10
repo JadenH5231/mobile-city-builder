@@ -13,6 +13,7 @@ import { Stats } from '../simulation/Stats';
 import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Bonds, type BondId } from '../simulation/Bonds';
 import { Ferries } from '../simulation/Ferries';
+import { Crime } from '../simulation/Crime';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -243,6 +244,9 @@ export class Game {
   readonly bonds = new Bonds();
   /** Ferry routes between dock pairs (Alpha 2.19). */
   readonly ferries = new Ferries();
+  /** Per-tile crime simulation (Alpha 2.21). Recomputed monthly, drives the
+   *  Crime heatmap layer + a small commercial-revenue penalty. */
+  readonly crime = new Crime();
   /** Player-given name for the active save slot (Alpha 2.20). Empty
    *  string means "use the default 'City N' label". Persisted alongside
    *  every autosave. */
@@ -271,6 +275,9 @@ export class Game {
   private simAccumulatorMs = 0;
   /** Toggle for the traffic heatmap overlay. */
   heatmapVisible = false;
+  /** Crime heatmap toggle (Alpha 2.21). Mutually exclusive with the
+   *  traffic heatmap — only one heatmap layer renders at a time. */
+  crimeHeatmapVisible = false;
   /** Throttle so the heatmap mesh isn't rebuilt every render frame. */
   private heatmapAccumMs = 0;
   // Persistence — auto-saves every AUTOSAVE_MS, also restores on init.
@@ -610,7 +617,7 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime);
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -665,6 +672,20 @@ export class Game {
           this.events.tickMonth(
             this.grid, this.economy, this.population, this.council, this.happiness
           );
+          // Refresh per-tile crime scores once per month (Alpha 2.21).
+          // Cheap single grid sweep; drives the heatmap and the
+          // commercial-revenue penalty applied next month.
+          this.crime.recompute(this.grid, this.happiness);
+          // Faction wiring (Alpha 2.21): high city crime makes
+          // safer_streets furious and working_families uncomfortable.
+          // Happiness layers via campaignHappinessDelta which is read
+          // by Happiness.computeAll on the next refresh.
+          if (this.crime.cityCrime > 0.20) {
+            const delta = this.council.campaignHappinessDelta;
+            const intensity = Math.min(1, (this.crime.cityCrime - 0.20) / 0.30);
+            delta.set('safer_streets', (delta.get('safer_streets') ?? 0) - 0.30 * intensity);
+            delta.set('working_families', (delta.get('working_families') ?? 0) - 0.15 * intensity);
+          }
           // Capture history sample (Alpha 2.11) for the Stats panel.
           this.stats.capture(
             this.economy.monthsElapsed, this.economy, this.population, this.happiness
@@ -679,7 +700,8 @@ export class Game {
             council: this.council,
             grid: this.grid,
             milestones: this.milestones,
-            bonds: { lifetimeIssued: this.bonds.lifetimeIssued, activeCount: this.bonds.active.length }
+            bonds: { lifetimeIssued: this.bonds.lifetimeIssued, activeCount: this.bonds.active.length },
+            cityCrime: this.crime.cityCrime
           });
           while (this.achievements.hasPending()) {
             const a = this.achievements.shiftPending();
@@ -756,7 +778,15 @@ export class Game {
         this.heatmapAccumMs += dtMs;
         if (this.heatmapAccumMs >= 200) {
           this.heatmapAccumMs = 0;
-          this.renderer.drawHeatmap(this.grid);
+          this.renderer.drawHeatmap(this.grid, 'traffic');
+        }
+      } else if (this.crimeHeatmapVisible) {
+        // Crime updates monthly so the heatmap rebuild can run far less
+        // often than traffic — once a second is overkill but cheap.
+        this.heatmapAccumMs += dtMs;
+        if (this.heatmapAccumMs >= 1000) {
+          this.heatmapAccumMs = 0;
+          this.renderer.drawHeatmap(this.grid, 'crime', this.crime);
         }
       }
 
@@ -837,6 +867,7 @@ export class Game {
       zoneCap: t.zoneCap,
       density: t.density,
       ageMonths: t.developedAt > 0 ? Math.max(0, this.economy.monthsElapsed - t.developedAt) : 0,
+      crimeScore: this.crime.scoreAt(this.grid, t.x, t.y),
       building: t.building,
       path: t.path,
       hasPower: t.hasPower,

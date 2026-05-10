@@ -24,6 +24,8 @@ export interface TileInfo {
   density: number;
   /** Building age in months (Alpha 2.16). 0 means brand new or unbuilt. */
   ageMonths: number;
+  /** Per-tile crime score (Alpha 2.21). 0..1. */
+  crimeScore: number;
   building: Building;
   path: boolean;
   hasPower: boolean;
@@ -180,6 +182,13 @@ function chipsFor(info: TileInfo): Array<{ text: string; tone: 'good' | 'warn' |
   if (info.luxury) out.push({ text: '⭐ Luxury', tone: 'info' });
   if (info.density > 0 && info.ageMonths > 0) {
     out.push({ text: `🕰 ${formatAge(info.ageMonths)}`, tone: 'info' });
+  }
+  if (info.density > 0 && info.crimeScore > 0) {
+    const tone: 'good' | 'warn' | 'block' | 'info' =
+      info.crimeScore < 0.10 ? 'good' :
+      info.crimeScore < 0.30 ? 'info' :
+      info.crimeScore < 0.55 ? 'warn' : 'block';
+    out.push({ text: `🛡 Crime ${(info.crimeScore * 100).toFixed(0)}%`, tone });
   }
   return out;
 }

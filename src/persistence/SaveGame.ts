@@ -82,7 +82,7 @@ export interface TileSnapshot {
   /** Skyscraper bits (Alpha 3.1.2 / schema 18+). */
   skyscraper?: boolean;
   skyscraperStage?: 0 | 1 | 2 | 3 | 4;
-  skyscraperVariant?: 0 | 1 | 2 | 3 | 4 | 5;
+  skyscraperVariant?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   /** Land ownership (Alpha 3.1.3 / schema 19+). v18 saves load with
    *  owned=true on every tile (back-compat). */
   owned?: boolean;

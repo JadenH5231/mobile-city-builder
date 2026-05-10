@@ -1446,7 +1446,7 @@ export class Game {
     }
     // Pick a deterministic variant from the placement coordinate so a
     // skyscraper at (12, 8) always picks the same design across saves.
-    const variant = Math.abs((x * 73856093) ^ (y * 19349663)) % SKYSCRAPER_VARIANT_COUNT as 0 | 1 | 2 | 3 | 4 | 5;
+    const variant = Math.abs((x * 73856093) ^ (y * 19349663)) % SKYSCRAPER_VARIANT_COUNT as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
     for (const [dx, dy] of offsets) {
       const t = this.grid.get(x + dx, y + dy)!;
       t.zone = zone;

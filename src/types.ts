@@ -252,8 +252,10 @@ export const SKYSCRAPER_MONTHS_PER_STAGE = 3;
 export const SKYSCRAPER_RESIDENTS_PER_TILE = 64;
 /** Per-tile commercial jobs (C + MU) at stage 4. */
 export const SKYSCRAPER_C_JOBS_PER_TILE = 56;
-/** Number of finished-design variants per zone (R/C/MU). */
-export const SKYSCRAPER_VARIANT_COUNT = 6;
+/** Number of finished-design variants per zone (R/C/MU).
+ *  Bumped 6 → 8 in Alpha 3.2.0. The `skyscraperVariant` field in Tile +
+ *  SaveGame is widened to 0..7 to match. */
+export const SKYSCRAPER_VARIANT_COUNT = 8;
 
 /**
  * Land purchase cost in $ per tile (Alpha 3.1.3). Deliberately steep

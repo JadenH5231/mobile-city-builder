@@ -407,3 +407,158 @@ Per-tile `roadType` lives on `Tile`. `Grid.setRoad` / `Grid.setRoadEdge` take a 
 - Mixed-tier paint is forgiving but might surprise the user — painting a highway through an existing avenue overwrites the avenue tier. Mention if surprising.
 - Collision rate `0.018` per other car is a placeholder; tune up if intersections feel too forgiving or down if early-game accidents wreck a starter city. Memory: feedback_intersection_control.
 - Cars on different segments converging on the same intersection tile still visually stack — the gap maintenance is per-segment only. Real fix would be to sequence intersection arrivals (proper light/yield logic). For now the stop sign mechanic is the player's tool.
+
+---
+
+## Alpha 3.0 — feature-complete prototype (2026-05-09 to 2026-05-10)
+
+A single autonomous build session that takes the game from "fun loop with
+governance" (Alpha 1.5) to "playable simulator with progression, depth,
+content." Sixteen PRs landed — branch off main → implement → typecheck →
+build → commit → push → PR → squash-merge → wait for GitHub Pages
+deploy → next PR. Every PR was production-ready (not behind a feature
+flag), tested in the preview server before commit, and visually verified
+where applicable.
+
+Save schema progressed v12 → v17. Every step is backwards-compatible:
+loading any v12-v16 save fills missing fields with sensible defaults.
+
+The session in chronological order:
+
+1. **2.7 Forestry industry** — forest-tile-only `forestry` building, a
+   per-tile lumber output × oscillating global price × connection-to-edge
+   bonus. Lumber trucks visualised on the road graph. Faction wiring.
+2. **2.7.1 Farms** — grass-only counterpart on a different produce-price
+   curve (12-month period vs lumber's 18). Hometown / working-families
+   faction love.
+3. **2.7.2 Opposition tweets** — when a leader runs against the player
+   and loses, their leader-card flips to a mean-tweet feed pulled from
+   `OPPOSITION_TWEETS` in their persona voice.
+4. **2.8 Population milestones** — six tiers (Hamlet 50 → Capital 5000)
+   gate the toolbar with a celebration banner per milestone (herald
+   leader voice + cash + PC reward). `highestPop` persisted so unlocks
+   never relock.
+5. **2.9 Random events + crisis modal** — recessions, fires, lawsuits,
+   referendums, trade deals. Each shifts modifiers (lumber price,
+   produce price, faction mood, RCI demand) for several months.
+   Choice-events block until resolved. Severity-tinted modal with a
+   queue. Tuned twice for frequency based on playtest.
+6. **2.9.1 Council block toast** — tap-to-paint on a council-blocked
+   tile shows a "Blocked by council" pill instead of silent no-op.
+7. **2.10 Public services pack** — schools, hospitals, fire stations,
+   police stations. Each has a coverage radius, faction stances, and
+   hospitals add a productivity bonus on covered C/I jobs.
+8. **2.11 Stats panel** — 240-month ring buffer captured at every
+   month rollover (pop / treasury / mood / RCI demand / export
+   revenue). Canvas line graphs, no chart library.
+9. **2.12 Bridge mode** — HUD toggle that flips road-paint to an upper
+   layer (`bridgeRoadEdges`). Per-tile `bridgeRoad` bit + a separate
+   edge graph; renderer drops support pillars to the ground.
+10. **2.13 Tile diagnostic** — long-press info card shows colour-coded
+    reasons for every tile state. Block / warn / info / good chips.
+11. **2.13.1 Bridge ramps** — bridge endpoints slope down to meet the
+    ground road's elevation rather than terminating in a 0.22 m cliff.
+12. **2.13.2 Right-lane driving** — cars + buses + walkers offset onto
+    the right side of the centreline. Opposing traffic can pass.
+13. **2.14 Day/night cycle** — 4-minute real-time day. Sun arc + sky
+    gradient + ambient light all phase across midnight → dawn → noon
+    → dusk keyframes. Sim speed scales the cycle; pause freezes it.
+
+The remaining 8 PRs landed back-to-back as the alpha-3.0 push:
+
+14. **2.15 Achievements + leader bios** — 28 lifetime achievements
+    browseable in a 🏆 panel grid with corner toast on unlock. First
+    time each council leader takes a seat, the player meets them in a
+    one-time bio modal (faction-color avatar + leader name + bio).
+    Multiple new leaders queue.
+15. **2.16 Building patina** — per-tile `developedAt` stamped on the
+    first density 0→1 promotion. Renderer dims building colors over
+    a 15-year ramp (1.00 → 0.72 floor). Tile-info shows building age
+    as a 🕰 chip. Renovation = bulldoze + rezone.
+16. **2.17 Tourism + landmarks** — three placeable landmarks (museum
+    / stadium / observatory) gated by Town / City / Metropolis. Each
+    earns monthly tourism revenue (BASE + per-resident scaler) when
+    road-connected. Two new achievements (Cultural Capital, Tourist
+    Trap).
+17. **2.18 Bonds + wealth surtax** — three bond sizes (Small $5K /
+    Medium $15K / Large $40K), 24-month term each, smaller bonds carry
+    higher effective interest. Default penalty: PC drop + multi-month
+    happiness hit on taxpayers + chamber. Wealth-surtax slider 0-30%
+    adds a bracket on L3 R/C + luxury R.
+18. **2.19 Ferries + subway** — ferry docks pair with their nearest
+    other dock across water; visible boats sail between them with
+    3-sec dwell at each end. Subway entrances suppress car spawns
+    within a 6-tile Chebyshev radius (P=0.85). Multimodal +
+    Underground achievements.
+19. **2.20 Save slots** — 3 slots, picker UI on the 🏙 HUD pill,
+    active slot persisted in localStorage. City-name input on the
+    budget panel. Pre-2.20 saves remain on the 'main' / Slot 1 key
+    via no-op migration. Save schema unchanged for the slot keys
+    themselves; cityName + lastPlayedISO are additive optional
+    fields on SaveData.
+20. **2.21 Crime + heatmap** — per-tile crime score recomputed
+    monthly from density / services / mood / police. Crime HUD pill
+    toggles a purple translucent heatmap (mutually exclusive with
+    the existing traffic heatmap). City-wide crime drags commercial
+    revenue (-10% at max) and pushes safer_streets / working_families
+    unhappy via campaignHappinessDelta. Safe Streets achievement
+    (crime < 10% in a 1500+ city).
+21. **2.22 Districts** — per-tile `districtId` painted via paint /
+    erase tools. Districts panel lets you name + recolor + set per-
+    zone surtax sliders that stack on top of base R/C/I rates inside
+    the district. Subtle translucent overlay (alpha 0.30) tints each
+    district's tiles always-on.
+
+The HUD pill row now wraps to multiple rows on a 375 px viewport;
+flex-wrap was added in PR7 once the count exceeded 7 pills.
+flex-wrap + a margin-left:auto on the FPS chip pin it to the
+far-right of whatever row it lands on.
+
+**Toolbar groups added this session:** Land (museums / stadiums /
+observatories), Trnst (ferry / subway), Dist (paint / erase). Each
+follows the existing group-popover pattern.
+
+**Save schema progression this session:**
+- v13 (Alpha 2.15): achievements snapshot
+- v14 (Alpha 2.16): per-tile `developedAt`
+- v15 (Alpha 2.17): `lifetimeTourismRevenue`
+- v16 (Alpha 2.18): bonds snapshot + wealth surtax
+- v17 (Alpha 2.22): per-tile `districtId` + districts registry
+- (v15-equivalent) cityName + lastPlayedISO additive fields (Alpha 2.20)
+
+**Achievement count:** 28 total. Breakdown: 6 population/tenure, 4
+treasury/economy, 3 election/civic, 3 events/people, 4 builder, 3
+infrastructure, 2 tourism, 2 bonds, 2 transit, 1 crime.
+
+**Faction stance matrix coverage:** 10 factions × 25 stance keys.
+Each stance row has the `school` / `hospital` / `fire_station` /
+`police_station` fields filled from Alpha 2.10; `museum` / `stadium`
+/ `observatory` from 2.17; `ferry_dock` / `subway_entrance` from
+2.19.
+
+**What's intentionally absent from Alpha 3.0** (all queued for
+post-3.0 follow-ups):
+- Light rail with its own track graph + train vehicles (transit
+  modes 2.19 stopped at ferries + subway entrance suppression).
+- Roundabouts, multi-lane avenue rendering, mid-trip car rerouting.
+- Photo album / photo-mode capture-and-save.
+- Time-of-day vehicle spawn shaping (rush-hour, night-shift).
+- Per-tile speed limits, one-way local streets, bus-only lanes.
+- District-driven faction effects (currently only the surtax lever
+  applies; districts don't yet have per-district faction mood).
+- Per-faction quest lines tied to leader bios (the bios are static
+  meet-once popups, not story arcs).
+- Weather and seasonal terrain.
+- A proper crash/disaster animation layer (events fire as modals
+  but don't visually animate on the world surface).
+
+These were considered for Alpha 3.0 but cut to keep the session
+shippable end-to-end. The systems above are designed to compose with
+each of these — for example, a future light-rail PR can consume the
+existing transit-mode stance keys and the SUBWAY_SUPPRESSION_RADIUS
+shape; weather can hook into the day/night phase machinery.
+
+**Status:** Alpha 3.0 is the feature-complete prototype. The build
+is 730 KB raw / 196 KB gzipped. 60 fps on Pixel 7 / iPhone 13 with
+a Medium map fully developed. Single-purchase premium model intact;
+no monetization, no timers, no energy systems, no paywalls.

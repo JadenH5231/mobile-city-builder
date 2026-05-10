@@ -2,7 +2,29 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 2.6** — visual overhaul + perf pass. Bridges now have side rails and a yellow deck stripe; trees cast soft shadow discs; the toolbar shows banned-by-council tools struck-through with 🚫; place-tool taps on a budget-short treasury surface a "Not enough money — need $X,XXX" pill; the sky background is a real vertical gradient with stylized cloud clusters drifting above the world; commercial sidewalks scatter hydrants / parking meters / bike racks deterministically; and **modular parks** flood-fill: 1 tile renders a cottage park, 2 a community park with playground + pond, 3 a neighbourhood park with pavilion + fountain, 4+ a grand park with bandstand + ring paths. Renderer dropped precomputed normals on all flat-shaded meshes — pure CPU/GPU win, no visual change.
+**Status: Alpha 3.0** — feature-complete prototype. The single autonomous build session that landed Alpha 3.0 added 16 PRs of systems + content on top of the Alpha 2.6 visual baseline:
+
+- **Forestry + farms** (Alpha 2.7) export industries with oscillating global markets and connection-to-edge bonus.
+- **Population milestones** (2.8) gate the toolbar — Hamlet → Capital with celebration banners and herald-voiced congratulations.
+- **Random events + crisis modal** (2.9) — recessions, fires, lawsuits, referendums shift faction mood + market modifiers + demand. Severity-tinted, queueable.
+- **Public services** (2.10) — schools, hospitals, fire stations, police stations with coverage radii.
+- **Stats panel** (2.11) — 240-month canvas line graphs, no chart library.
+- **Bridge mode** (2.12) — overpasses on a separate upper road layer + smooth ramp-down to ground (2.13.1).
+- **Tile diagnostic** (2.13) — long-press info card explains every tile state.
+- **Right-lane driving** (2.13.2) — cars + buses + walkers offset onto the right side of the road centreline.
+- **Day/night cycle** (2.14) — 4-min real-time sun arc with sky gradient repaint.
+- **Achievements** (2.15) — 28 lifetime, 🏆 panel + corner toast on unlock. **Leader bio popups** the first time each council member appears.
+- **Building patina** (2.16) — buildings dim with age over a 15-year ramp.
+- **Tourism + landmarks** (2.17) — museum / stadium / observatory generate monthly tourism revenue scaled by city pop.
+- **Bonds + wealth surtax** (2.18) — 3 bond tiers with default penalty + a surtax slider on L3 / luxury.
+- **Ferries + subway** (2.19) — boats sail between paired docks; subway entrances suppress car spawns within radius.
+- **3 save slots** (2.20) — 🏙 picker pill, city naming, slot persisted in localStorage.
+- **Crime + heatmap** (2.21) — per-tile crime score recomputed monthly, drives commercial revenue penalty + faction reactions.
+- **Districts** (2.22) — paint districts, name / recolor them, set per-zone surtax sliders that stack on base R/C/I rates.
+
+Save schema is now v17 (was v8 at Alpha 2.6); v8-v16 saves load with sensible defaults for missing fields. Build size: 730 KB raw / 196 KB gzipped.
+
+**Status: Alpha 2.6 (carryover)** — visual overhaul + perf pass. Bridges now have side rails and a yellow deck stripe; trees cast soft shadow discs; the toolbar shows banned-by-council tools struck-through with 🚫; place-tool taps on a budget-short treasury surface a "Not enough money — need $X,XXX" pill; the sky background is a real vertical gradient with stylized cloud clusters drifting above the world; commercial sidewalks scatter hydrants / parking meters / bike racks deterministically; and **modular parks** flood-fill: 1 tile renders a cottage park, 2 a community park with playground + pond, 3 a neighbourhood park with pavilion + fountain, 4+ a grand park with bandstand + ring paths. Renderer dropped precomputed normals on all flat-shaded meshes — pure CPU/GPU win, no visual change.
 
 **Alpha 2.5** — luxury low-density residential. New `Lux` paint tool under the R popover places one grand mansion across a 2-tile pair (auto-finds an adjacent road-adjacent partner). Pays 2.5× the regular R tax rate, draws NIMBYs / hometown / taxpayers way over their natural share, costs $800 up-front. Save schema bumped to v8.
 

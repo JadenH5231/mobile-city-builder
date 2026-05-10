@@ -180,3 +180,40 @@ See [`PROGRESS.md`](PROGRESS.md) for per-step detail and known issues.
 2. ✅ A README with setup instructions and current feature status.
 3. ✅ Clean commit history.
 4. ✅ After each step, a "what to test on your phone" note.
+
+## Alpha 3.0 — feature-complete
+
+The Alpha 3.0 push extends the original 14-step build with a substantial
+content + systems sweep. Everything below is shipped:
+
+### Simulation depth
+- Forestry + farms (export industries) with oscillating global markets.
+- Population milestones gating the toolbar (Hamlet → Capital).
+- Random events + crisis modal (recession, fire, lawsuit, referendum).
+- Public services pack (school, hospital, fire station, police station).
+- Building patina (visual aging over time).
+- Per-tile crime score + commercial revenue penalty.
+- Ferry routes between paired docks.
+- Subway entrance car-spawn suppression.
+
+### Player levers
+- Bonds (3 tiers) for short-term cash with default penalty.
+- Wealth surtax bracket on L3 + luxury.
+- Districts: paint, name, color, per-zone surtax sliders.
+- Civic actions: Endorse / Coalition / Photo-op / Mayoral Override.
+
+### Surface area
+- Stats panel with 240-month line graphs.
+- Achievements (28 lifetime) + leader bio popups.
+- 3 save slots with city naming, lastPlayed timestamp.
+- Bridge mode (overpass road layer) + smooth ramps.
+- Tile diagnostic chips ("why isn't this growing?").
+- Day/night cycle + 4-min real-time sun arc.
+- Crime + traffic heatmaps (mutually exclusive).
+
+### Anti-goals (still upheld)
+- No microtransactions, IAPs, or premium currency.
+- No timers / stamina / energy systems gating play.
+- No artificial complexity.
+- No tap-to-build individual houses (zoning instead).
+- Single-purchase premium game model.

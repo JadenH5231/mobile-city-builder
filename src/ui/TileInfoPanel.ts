@@ -15,45 +15,65 @@ export interface TileInfo {
   y: number;
   terrain: TerrainType;
   road: boolean;
-  /** Road tier when `road` is true. Undefined-behaviour to read otherwise. */
   roadType: RoadType;
-  /** Highway flow direction (0..7 from `Dir` enum) or -1. */
   highwayDir: number;
-  /** Player-placed stop sign on this road tile. */
   stopSign: boolean;
-  /** Player-placed traffic light on this road tile (Alpha 2.0). */
   trafficLight: boolean;
   zone: Zone;
-  /** Player-set density cap (0..3). 0 means unzoned. */
   zoneCap: 0 | 1 | 2 | 3;
   density: number;
   building: Building;
-  /** Walking-path bit (Alpha 1.6). Mutually exclusive with road and zone. */
   path: boolean;
   hasPower: boolean;
   hasWater: boolean;
   hasPark: boolean;
+  /** Public services pack flags (Alpha 2.10). */
+  hasSchool: boolean;
+  hasHospital: boolean;
+  hasFireProtection: boolean;
+  hasPolice: boolean;
+  /** Luxury low-density bit (Alpha 2.5). */
+  luxury: boolean;
+  /** Bridge bit (Alpha 2.3) — at-grade water bridge. */
+  bridge: boolean;
+  /** Upper-layer overpass (Alpha 2.12). */
+  bridgeRoad: boolean;
+  /** Tile has a road-adjacent neighbour (4-connected). */
+  hasRoadAdjacent: boolean;
+  /** Faction snapshot — current city demand for this zone, [-1, +1]. */
+  zoneDemand: number;
+  /** Diagnostic reasons (Alpha 2.13). Bullet points explaining why the
+   *  tile is or isn't progressing — e.g. "Awaiting power coverage" or
+   *  "Capped at low density by zoning". Each entry has a sentiment
+   *  ('good' | 'warn' | 'block' | 'info') for colour. */
+  reasons: ReadonlyArray<{ kind: 'good' | 'warn' | 'block' | 'info'; text: string }>;
 }
 
 const DIR_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
 /**
- * Bottom-sheet style info panel. Slides up on long-press, dismissible via the
- * close button or by clearing the selection. Pure DOM — kept off the WebGL
- * canvas so that hit-testing and accessibility just work.
+ * Bottom-sheet info + diagnostic panel (Alpha 2.13). Shows the tile's
+ * current state as labeled chips and a bullet list of reasons explaining
+ * why the tile is or isn't growing — turning frustration into puzzle-
+ * solving (the lever the player should pull is one tap away).
  */
 export class TileInfoPanel {
   private readonly el: HTMLElement;
   private readonly coordsEl: HTMLElement;
   private readonly terrainEl: HTMLElement;
+  private readonly chipsEl: HTMLElement;
+  private readonly capsEl: HTMLElement;
+  private readonly diagEl: HTMLElement;
   private readonly closeBtn: HTMLElement;
-  /** Fired when the user explicitly closes the panel (not on programmatic hide). */
   onClose?: () => void;
 
   constructor() {
     this.el = mustGet('tile-info');
     this.coordsEl = mustGet('tile-info-coords');
     this.terrainEl = mustGet('tile-info-terrain');
+    this.chipsEl = mustGet('tile-info-chips');
+    this.capsEl = mustGet('tile-info-caps');
+    this.diagEl = mustGet('tile-info-diag');
     this.closeBtn = mustGet('tile-info-close');
 
     this.closeBtn.addEventListener('click', () => {
@@ -64,38 +84,49 @@ export class TileInfoPanel {
 
   show(info: TileInfo): void {
     this.coordsEl.textContent = `${info.x}, ${info.y}`;
-    const parts: string[] = [info.terrain];
-    if (info.road) {
-      let label = info.roadType;
-      if (info.roadType === 'highway' && info.highwayDir >= 0 && info.highwayDir < 8) {
-        label += ` →${DIR_LABELS[info.highwayDir]}`;
-      }
-      if (info.stopSign) label += ' · stop';
-      if (info.trafficLight) label += ' · light';
-      parts.push(label);
+    // Header line — terrain + headline label (zone or building or road).
+    const headline = headlineFor(info);
+    this.terrainEl.textContent = headline;
+
+    // Chips row — current state pills.
+    this.chipsEl.innerHTML = '';
+    for (const chip of chipsFor(info)) {
+      const span = document.createElement('span');
+      span.className = `tile-info__chip tile-info__chip--${chip.tone}`;
+      span.textContent = chip.text;
+      this.chipsEl.appendChild(span);
     }
-    if (info.building !== 'none') parts.push(info.building.replace(/_/g, ' '));
-    if (info.path) parts.push('walking path');
-    if (info.zone !== 'none') {
-      const tierLabel = info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'med' : info.zoneCap === 3 ? 'high' : '';
-      const zoneLabel = tierLabel ? `${info.zone}·${tierLabel}` : info.zone;
-      parts.push(info.density > 0 ? `${zoneLabel} L${info.density}` : zoneLabel);
-    }
-    const services: string[] = [];
-    if (info.hasPower) services.push('power');
-    if (info.hasWater) services.push('water');
-    if (info.hasPark) services.push('park');
-    if (services.length > 0) parts.push(services.join('+'));
-    // Per-cell capacity readout (Alpha 2.0). Shows residents and jobs the
-    // built tile contributes — zero for undeveloped or unzoned cells.
-    const cap = capacityFor(info.zone, info.density);
+
+    // Capacity readout (residents / jobs).
+    this.capsEl.innerHTML = '';
+    const cap = capacityFor(info.zone, info.density, info.luxury);
     if (cap.residents > 0 || cap.jobs > 0) {
-      const bits: string[] = [];
-      if (cap.residents > 0) bits.push(`${cap.residents} residents`);
-      if (cap.jobs > 0) bits.push(`${cap.jobs} jobs`);
-      parts.push(bits.join(' · '));
+      const html: string[] = [];
+      if (cap.residents > 0) {
+        html.push(`<span class="tile-info__cap"><strong>${cap.residents}</strong> residents</span>`);
+      }
+      if (cap.jobs > 0) {
+        html.push(`<span class="tile-info__cap"><strong>${cap.jobs}</strong> jobs</span>`);
+      }
+      this.capsEl.innerHTML = html.join('');
     }
-    this.terrainEl.textContent = parts.join(' · ');
+
+    // Diagnostic reasons.
+    this.diagEl.innerHTML = '';
+    if (info.reasons.length === 0) {
+      const li = document.createElement('div');
+      li.className = 'tile-info__reason tile-info__reason--info';
+      li.textContent = '✓ All systems nominal';
+      this.diagEl.appendChild(li);
+    } else {
+      for (const r of info.reasons) {
+        const li = document.createElement('div');
+        li.className = `tile-info__reason tile-info__reason--${r.kind}`;
+        li.textContent = r.text;
+        this.diagEl.appendChild(li);
+      }
+    }
+
     this.el.classList.remove('hidden');
     this.el.setAttribute('aria-hidden', 'false');
   }
@@ -106,12 +137,62 @@ export class TileInfoPanel {
   }
 }
 
-/**
- * Per-cell residents + jobs derived from zone × density. Mirrors the math
- * Population.tick uses, so the readout matches what the cell actually
- * contributes to the citywide aggregates.
- */
-function capacityFor(zone: Zone, density: number): { residents: number; jobs: number } {
+function headlineFor(info: TileInfo): string {
+  if (info.bridgeRoad) {
+    return `Overpass · ${info.terrain}`;
+  }
+  if (info.road) {
+    let label = info.roadType;
+    if (info.roadType === 'highway' && info.highwayDir >= 0 && info.highwayDir < 8) {
+      label += ` →${DIR_LABELS[info.highwayDir]}`;
+    }
+    if (info.bridge) label += ' (bridge)';
+    return `${label} road · ${info.terrain}`;
+  }
+  if (info.path) return `Walking path · ${info.terrain}`;
+  if (info.building !== 'none') {
+    return `${info.building.replace(/_/g, ' ')} · ${info.terrain}`;
+  }
+  if (info.zone !== 'none') {
+    const tierLabel =
+      info.luxury ? 'luxury' :
+      info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'medium' : info.zoneCap === 3 ? 'high' : '';
+    const zoneLabel = tierLabel ? `${zoneShortName(info.zone)} ${tierLabel}` : zoneShortName(info.zone);
+    return info.density > 0 ? `${zoneLabel} L${info.density} · ${info.terrain}` : `${zoneLabel} · ${info.terrain}`;
+  }
+  return info.terrain;
+}
+
+function chipsFor(info: TileInfo): Array<{ text: string; tone: 'good' | 'warn' | 'block' | 'info' }> {
+  const out: Array<{ text: string; tone: 'good' | 'warn' | 'block' | 'info' }> = [];
+  // Service flags as colour-coded chips.
+  if (info.hasPower) out.push({ text: '⚡ Power', tone: 'good' });
+  if (info.hasWater) out.push({ text: '💧 Water', tone: 'good' });
+  if (info.hasPark) out.push({ text: '🌳 Park', tone: 'good' });
+  if (info.hasSchool) out.push({ text: '🏫 School', tone: 'good' });
+  if (info.hasHospital) out.push({ text: '🏥 Hospital', tone: 'good' });
+  if (info.hasFireProtection) out.push({ text: '🚒 Fire', tone: 'good' });
+  if (info.hasPolice) out.push({ text: '🚓 Police', tone: 'good' });
+  if (info.stopSign) out.push({ text: '🛑 Stop sign', tone: 'info' });
+  if (info.trafficLight) out.push({ text: '🚦 Light', tone: 'info' });
+  if (info.luxury) out.push({ text: '⭐ Luxury', tone: 'info' });
+  return out;
+}
+
+function zoneShortName(zone: Zone): string {
+  if (zone === 'residential') return 'Residential';
+  if (zone === 'commercial') return 'Commercial';
+  if (zone === 'industrial') return 'Industrial';
+  if (zone === 'mixed') return 'Mixed-use';
+  return zone;
+}
+
+function capacityFor(zone: Zone, density: number, luxury: boolean): { residents: number; jobs: number } {
+  if (luxury && zone === 'residential') {
+    // Luxury tiles: 2 residents per tile at any density (placement is the
+    // build, no growth). Mirrors LUXURY_RESIDENT_CAPACITY_PER_TILE.
+    return { residents: 2, jobs: 0 };
+  }
   if (density <= 0) return { residents: 0, jobs: 0 };
   switch (zone) {
     case 'residential': return { residents: RESIDENT_CAPACITY[density] ?? 0, jobs: 0 };
@@ -123,6 +204,104 @@ function capacityFor(zone: Zone, density: number): { residents: number; jobs: nu
     };
     default: return { residents: 0, jobs: 0 };
   }
+}
+
+/**
+ * Build the diagnostic-reasons array from raw tile state + city
+ * snapshot. Caller (Game) sets `reasons` on the TileInfo before passing
+ * to `panel.show()`. Exported so Game can call it without duplicating
+ * the rules.
+ */
+export function diagnoseTile(info: Omit<TileInfo, 'reasons'>): TileInfo['reasons'] {
+  const out: Array<{ kind: 'good' | 'warn' | 'block' | 'info'; text: string }> = [];
+
+  // Empty grass / sand / forest / water — purely informational.
+  if (!info.road && !info.path && info.zone === 'none' && info.building === 'none') {
+    if (info.terrain === 'water') {
+      out.push({ kind: 'info', text: 'Water — paint a road across it to bridge' });
+    } else if (info.terrain === 'forest') {
+      out.push({ kind: 'info', text: 'Forest — placeable: forestry industry, paths, roads' });
+    } else if (info.terrain === 'sand') {
+      out.push({ kind: 'info', text: 'Sand shoreline — most things buildable' });
+    } else {
+      out.push({ kind: 'info', text: 'Grass — ready for zoning, parks, farms, services' });
+    }
+    return out;
+  }
+
+  // Roads & bridges — structural info.
+  if (info.road) {
+    if (info.bridgeRoad) {
+      out.push({ kind: 'info', text: 'Carries an overpass on the upper layer' });
+    }
+    if (info.bridge) {
+      out.push({ kind: 'info', text: 'Bridge over water' });
+    }
+    if (info.stopSign && info.trafficLight) {
+      out.push({ kind: 'warn', text: 'Stop sign + traffic light both placed (light wins)' });
+    }
+  }
+
+  // City buildings — describe coverage state.
+  if (info.building === 'park' || info.building === 'school' ||
+      info.building === 'hospital' || info.building === 'fire_station' ||
+      info.building === 'police_station' || info.building === 'power_plant' ||
+      info.building === 'water_tower') {
+    out.push({ kind: 'good', text: 'Service building — provides coverage to nearby tiles' });
+    return out;
+  }
+  if (info.building === 'forestry' || info.building === 'farm') {
+    out.push({ kind: 'good', text: 'Export industry — earns monthly via global market' });
+    return out;
+  }
+
+  // Zoned tiles — the diagnostic-rich path.
+  if (info.zone !== 'none') {
+    if (info.luxury) {
+      out.push({ kind: 'good', text: 'Luxury home — fixed capacity, premium tax, NIMBY draw' });
+      return out;
+    }
+    // Pre-development blockers.
+    if (!info.hasRoadAdjacent) {
+      out.push({ kind: 'block', text: 'No road within 1 tile — zoning waits for a road' });
+    }
+    if (!info.hasPower) {
+      out.push({ kind: 'block', text: 'No power coverage — drop a power plant within 8 tiles' });
+    }
+    if (!info.hasWater) {
+      out.push({ kind: 'block', text: 'No water coverage — drop a water tower within 8 tiles' });
+    }
+    // Cap analysis.
+    if (info.zoneCap === 1) {
+      out.push({ kind: 'info', text: 'Capped at L1 — repaint as Med or High to allow growth' });
+    } else if (info.zoneCap === 2) {
+      out.push({ kind: 'info', text: 'Capped at L2 — repaint as High to allow tower-tier growth' });
+    } else if (info.zoneCap === 3) {
+      if (!info.hasPark) {
+        out.push({ kind: 'warn', text: 'Park required for L3 — no park within 3 tiles' });
+      }
+    }
+    // Demand readout.
+    if (info.zoneDemand <= -0.4) {
+      out.push({ kind: 'warn', text: `Demand for ${zoneShortName(info.zone).toLowerCase()} is very low (${info.zoneDemand.toFixed(2)})` });
+    } else if (info.zoneDemand <= -0.05) {
+      out.push({ kind: 'info', text: `${zoneShortName(info.zone)} demand is soft (${info.zoneDemand.toFixed(2)})` });
+    } else if (info.zoneDemand >= 0.4) {
+      out.push({ kind: 'good', text: `${zoneShortName(info.zone)} demand is hot (+${info.zoneDemand.toFixed(2)})` });
+    }
+    // If everything looks good and density is below cap.
+    if (info.hasPower && info.hasWater && info.hasRoadAdjacent &&
+        (info.zoneCap > 0 && info.density < info.zoneCap)) {
+      out.push({ kind: 'good', text: 'Conditions met — growth pending demand' });
+    }
+    if (info.density === info.zoneCap && info.zoneCap > 0) {
+      out.push({ kind: 'good', text: `Fully developed at L${info.density}` });
+    }
+    return out;
+  }
+
+  // Anything else.
+  return out;
 }
 
 function mustGet(id: string): HTMLElement {

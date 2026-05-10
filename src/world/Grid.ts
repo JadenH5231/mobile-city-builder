@@ -49,11 +49,20 @@ export class Grid {
    */
   private generate(): void {
     const specs = generateTerrain(this.width, this.height, { seed: Date.now() });
+    // Initial ownership (Alpha 3.1.3): only the central half of the map is
+    // owned at city start. The outer ring is "for sale" — the player buys
+    // tiles via the Land tool. Sized so a Small map (64×64) starts with
+    // 1024 owned tiles (32×32 centre) and 3072 for-sale tiles surrounding.
+    const ownedHalfW = Math.floor(this.width / 4);
+    const ownedHalfH = Math.floor(this.height / 4);
+    const cx = Math.floor(this.width / 2);
+    const cy = Math.floor(this.height / 2);
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const spec = specs[y * this.width + x]!;
         const tile = new Tile(x, y, spec.terrain);
         tile.elevation = spec.elevation;
+        tile.owned = Math.abs(x - cx) <= ownedHalfW && Math.abs(y - cy) <= ownedHalfH;
         this.tiles[y * this.width + x] = tile;
       }
     }
@@ -88,6 +97,10 @@ export class Grid {
   setRoad(x: number, y: number, on: boolean, type: RoadType = 'local'): boolean {
     const t = this.get(x, y);
     if (!t) return false;
+    // Land-purchase gate (Alpha 3.1.3): unowned tiles refuse builds.
+    // Allowing `on=false` so bulldoze on owned land that previously had
+    // a road still works after a defensive ownership change.
+    if (on && !t.owned) return false;
     if (on) {
       const wasRoad = t.road;
       const sameType = t.roadType === type;
@@ -182,6 +195,7 @@ export class Grid {
   setPath(x: number, y: number, on: boolean): boolean {
     const t = this.get(x, y);
     if (!t) return false;
+    if (on && !t.owned) return false;
     if (on) {
       if (t.road) return false;
       if (t.path) return false;
@@ -242,6 +256,7 @@ export class Grid {
   setZone(x: number, y: number, zone: Zone, cap: 0 | 1 | 2 | 3 = 0): boolean {
     const t = this.get(x, y);
     if (!t) return false;
+    if (zone !== 'none' && !t.owned) return false;
     if (zone !== 'none') {
       if (t.road) return false;
       // No zoning on water (Alpha 2.4) — buildings can't develop in lakes
@@ -314,6 +329,7 @@ export class Grid {
   setBuilding(x: number, y: number, b: Building): boolean {
     const t = this.get(x, y);
     if (!t) return false;
+    if (b !== 'none' && !t.owned) return false;
     if (b !== 'none') {
       if (t.road || t.zone !== 'none' || t.building !== 'none') return false;
       // Forestry-specific: only on forest terrain (Alpha 2.7).

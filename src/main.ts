@@ -396,7 +396,8 @@ function unlockLabel(tool: string): string {
     erase_district: 'Erase district',
     residential_skyscraper: 'R · Skyscraper',
     commercial_skyscraper: 'C · Skyscraper',
-    mixed_skyscraper: 'MU · Skyscraper'
+    mixed_skyscraper: 'MU · Skyscraper',
+    buy_land: 'Land'
   };
   return map[tool] ?? tool;
 }

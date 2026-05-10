@@ -317,6 +317,14 @@ const ITEMS: readonly ToolbarItem[] = [
     <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
           stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
           stroke-linejoin="round" fill="none"/>
+  </svg>` },
+  // Land purchase (Alpha 3.1.3). Tap to buy a single tile of unowned
+  // land. Always available so the city can grow whenever there's money.
+  { kind: 'tool', tool: 'buy_land', label: 'Land', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 19h16 M5 16l4-6 4 4 3-3 3 5"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M16 3v4M14 5h4"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   </svg>` }
 ];
 

@@ -256,6 +256,13 @@ export const SKYSCRAPER_C_JOBS_PER_TILE = 56;
 export const SKYSCRAPER_VARIANT_COUNT = 6;
 
 /**
+ * Land purchase cost in $ per tile (Alpha 3.1.3). Deliberately steep
+ * so expanding the city beyond the starter area feels like a real
+ * investment — a 10×10 chunk of new land costs $50,000.
+ */
+export const LAND_PURCHASE_COST_PER_TILE = 500;
+
+/**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —
  * 250 lets a fully-developed Medium map saturate without the spawner silently
  * dropping cars. Memory: feedback_traffic_pressure (post-alpha pass 2).
@@ -577,7 +584,10 @@ export const STARTING_TOOLS: ReadonlySet<Tool> = new Set([
   // Districts (Alpha 2.22) — never milestone-gated. The lever is always
   // available; district tax surtaxes only matter once you have buildings
   // to apply them to.
-  'paint_district', 'erase_district'
+  'paint_district', 'erase_district',
+  // Land purchase (Alpha 3.1.3) — always available so a fresh city can
+  // start expanding the moment treasury allows.
+  'buy_land'
 ]);
 
 /**
@@ -657,7 +667,11 @@ export type Tool =
   // 4 visual construction stages, R / C / MU only.
   | 'residential_skyscraper'
   | 'commercial_skyscraper'
-  | 'mixed_skyscraper';
+  | 'mixed_skyscraper'
+  // Land purchase (Alpha 3.1.3). Tap-to-buy a single tile of unowned
+  // land. Always available so the player can grow beyond the starter
+  // area whenever they have the money.
+  | 'buy_land';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's

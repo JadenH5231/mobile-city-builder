@@ -259,7 +259,9 @@ export class Renderer {
     if (this.treesMesh) this.worldGroup.add(this.treesMesh);
   }
 
-  /** Rebuild the zone overlay from current tile zones. */
+  /** Rebuild the zone overlay from current tile zones. Also rebuilds
+   *  the unowned-land overlay (Alpha 3.1.3) since both are land-state
+   *  layers and a typical caller wants them in sync. */
   drawZones(grid: Grid): void {
     if (this.zoneMesh) {
       this.worldGroup.remove(this.zoneMesh);
@@ -271,6 +273,24 @@ export class Renderer {
     if (built) {
       this.zoneMesh = built;
       this.worldGroup.add(this.zoneMesh);
+    }
+    this.drawUnownedLand(grid);
+  }
+
+  /** "For sale" overlay (Alpha 3.1.3): translucent grey on every tile
+   *  that's not yet owned. Mesh is rebuilt whenever zones rebuild. */
+  private unownedMesh: Mesh | null = null;
+  drawUnownedLand(grid: Grid): void {
+    if (this.unownedMesh) {
+      this.worldGroup.remove(this.unownedMesh);
+      this.unownedMesh.geometry.dispose();
+      (this.unownedMesh.material as MeshLambertMaterial).dispose();
+      this.unownedMesh = null;
+    }
+    const built = buildUnownedLandMesh(grid);
+    if (built) {
+      this.unownedMesh = built;
+      this.worldGroup.add(this.unownedMesh);
     }
   }
 
@@ -2862,6 +2882,63 @@ function makeClouds(): Group {
     group.add(mesh);
   }
   return group;
+}
+
+// --- Unowned land overlay (Alpha 3.1.3) -------------------------------
+
+/** Translucent grey overlay covering every tile that the player hasn't
+ *  yet purchased. Sits just above the terrain — like a thin "for sale"
+ *  sticker on the land. Zoned tiles never appear unowned (the gate
+ *  inside Grid.setZone refuses), so this overlay never overlaps zone
+ *  colour. */
+function buildUnownedLandMesh(grid: Grid): Mesh | null {
+  let count = 0;
+  for (const t of grid.iter()) if (!t.owned) count++;
+  if (count === 0) return null;
+
+  const positions = new Float32Array(count * 4 * 3);
+  const colours = new Float32Array(count * 4 * 3);
+  const indices = new Uint32Array(count * 6);
+  const c = new Color(0x1a1a1a);
+  const inset = 0;
+  const baseY = ROAD_LIFT * 0.10;
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+  for (const t of grid.iter()) {
+    if (t.owned) continue;
+    const x0 = t.x * TILE_SIZE + inset;
+    const x1 = (t.x + 1) * TILE_SIZE - inset;
+    const z0 = t.y * TILE_SIZE + inset;
+    const z1 = (t.y + 1) * TILE_SIZE - inset;
+    const y = baseY + t.elevation;
+
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z1;
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z1;
+
+    for (let i = 0; i < 4; i++) {
+      colours[ci++] = c.r;
+      colours[ci++] = c.g;
+      colours[ci++] = c.b;
+    }
+    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 1;
+    indices[ii++] = v; indices[ii++] = v + 3; indices[ii++] = v + 2;
+    v += 4;
+  }
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('color', new BufferAttribute(colours, 3));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  const mat = new MeshLambertMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false
+  });
+  return new Mesh(geom, mat);
 }
 
 // --- Zones --------------------------------------------------------------

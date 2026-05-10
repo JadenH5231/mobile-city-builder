@@ -22,16 +22,16 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 18 (Alpha 3.1.2): persists per-tile skyscraper bits
- * (skyscraper, skyscraperStage, skyscraperVariant) so 2×2 skyscraper
- * footprints round-trip cleanly through save/load. v17 saves load with
- * skyscraper=false and stage=0 on every tile.
+ * Schema 19 (Alpha 3.1.3): persists per-tile `owned` bit so land
+ * purchases survive reloads. v18-and-earlier saves load with owned=true
+ * on every tile (preserves the pre-3.1.3 behaviour of "you have the
+ * whole map"); fresh cities start with only the central area owned.
  *
- * Earlier: v17 districts, v16 bonds, v15 tourism, v14 patina, v13
- * achievements, v12 bridges, v11 stats, v10 events, v9 highestPop,
- * v8 luxury, v7 elevation+bridge.
+ * Earlier: v18 skyscrapers, v17 districts, v16 bonds, v15 tourism,
+ * v14 patina, v13 achievements, v12 bridges, v11 stats, v10 events,
+ * v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 18;
+const SCHEMA = 19;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -83,6 +83,9 @@ export interface TileSnapshot {
   skyscraper?: boolean;
   skyscraperStage?: 0 | 1 | 2 | 3 | 4;
   skyscraperVariant?: 0 | 1 | 2 | 3 | 4 | 5;
+  /** Land ownership (Alpha 3.1.3 / schema 19+). v18 saves load with
+   *  owned=true on every tile (back-compat). */
+  owned?: boolean;
 }
 
 export interface SaveData {
@@ -276,7 +279,8 @@ export function serialize(
       districtId: t.districtId,
       skyscraper: t.skyscraper,
       skyscraperStage: t.skyscraperStage,
-      skyscraperVariant: t.skyscraperVariant
+      skyscraperVariant: t.skyscraperVariant,
+      owned: t.owned
     };
   }
   const edges: number[] = [];
@@ -400,6 +404,9 @@ export function applySave(
     t.skyscraper = snap.skyscraper ?? false;
     t.skyscraperStage = snap.skyscraperStage ?? 0;
     t.skyscraperVariant = snap.skyscraperVariant ?? 0;
+    // Land ownership (schema 19+). v18 saves grandfather everything to
+    // owned=true so existing cities don't suddenly lose half their map.
+    t.owned = snap.owned ?? true;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

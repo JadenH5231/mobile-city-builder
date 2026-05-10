@@ -52,7 +52,9 @@ export type AchievementId =
   | 'green_giant'
   | 'export_economy'
   | 'override_used'
-  | 'big_tent';
+  | 'big_tent'
+  | 'cultural_capital'
+  | 'tourist_trap';
 
 export interface Achievement {
   readonly id: AchievementId;
@@ -89,12 +91,17 @@ export interface Snapshot {
   overrideActivations: number;
   developedBuildings: number;
   exportRevenueLifetime: number;
+  /** Lifetime tourism revenue (Alpha 2.17). Read straight off Economy. */
+  tourismRevenueLifetime: number;
   // Live tile counters
   l3Buildings: number;
   muTiles: number;
   forestTiles: number;
   walkingPathTiles: number;
   busDepots: number;
+  /** Distinct landmark kinds currently standing (museum / stadium /
+   *  observatory). 0..3 — used by the Tourist Trap achievement. */
+  uniqueLandmarkKinds: number;
   highwayEdges: number;
   totalRoadEdges: number;
   zonedTiles: number;
@@ -318,6 +325,20 @@ export const ACHIEVEMENT_DEFS: readonly Achievement[] = [
     description: 'Endorse five different factions across your career.',
     icon: '🎪',
     check: (s) => s.uniqueFactionsEndorsed >= 5
+  },
+  {
+    id: 'cultural_capital',
+    name: 'Cultural Capital',
+    description: 'Earn $25,000 in lifetime tourism revenue from landmarks.',
+    icon: '🎭',
+    check: (s) => s.tourismRevenueLifetime >= 25000
+  },
+  {
+    id: 'tourist_trap',
+    name: 'Tourist Trap',
+    description: 'Operate a museum, a stadium, and an observatory at once.',
+    icon: '🗺️',
+    check: (s) => s.uniqueLandmarkKinds >= 3
   }
 ];
 
@@ -400,6 +421,9 @@ export class Achievements {
     let fullyServicedTiles = 0;
     let l3Buildings = 0;
     let developedBuildings = 0;
+    let hasMuseum = false;
+    let hasStadium = false;
+    let hasObservatory = false;
     for (const t of grid.iter()) {
       if (t.terrain === 'forest') forestTiles++;
       if (t.zone !== 'none') {
@@ -411,7 +435,12 @@ export class Achievements {
       }
       if (t.path) walkingPathTiles++;
       if (t.building === 'bus_depot') busDepots++;
+      else if (t.building === 'museum') hasMuseum = true;
+      else if (t.building === 'stadium') hasStadium = true;
+      else if (t.building === 'observatory') hasObservatory = true;
     }
+    const uniqueLandmarkKinds =
+      (hasMuseum ? 1 : 0) + (hasStadium ? 1 : 0) + (hasObservatory ? 1 : 0);
     let highwayEdges = 0;
     let totalRoadEdges = 0;
     for (const e of grid.iterRoadEdges()) {
@@ -446,11 +475,13 @@ export class Achievements {
       overrideActivations: this.overrideActivations,
       developedBuildings: this.developedBuildings,
       exportRevenueLifetime: this.exportRevenueLifetime,
+      tourismRevenueLifetime: economy.lifetimeTourismRevenue ?? 0,
       l3Buildings,
       muTiles,
       forestTiles,
       walkingPathTiles,
       busDepots,
+      uniqueLandmarkKinds,
       highwayEdges,
       totalRoadEdges,
       zonedTiles,

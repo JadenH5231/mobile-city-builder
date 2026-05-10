@@ -442,7 +442,10 @@ export class Game {
       ['place_police_station', 'police_station'],
       ['place_bus_stop', 'bus_stop'],
       ['place_bus_depot', 'bus_depot'],
-      ['place_stop_sign', 'stop_sign']
+      ['place_stop_sign', 'stop_sign'],
+      ['place_museum', 'museum'],
+      ['place_stadium', 'stadium'],
+      ['place_observatory', 'observatory']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -469,7 +472,8 @@ export class Game {
       'place_forestry', 'place_farm',
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
-      'place_stop_sign', 'place_traffic_light'
+      'place_stop_sign', 'place_traffic_light',
+      'place_museum', 'place_stadium', 'place_observatory'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {

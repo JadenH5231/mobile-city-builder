@@ -7,6 +7,8 @@ import {
   FORESTRY_BASE_REVENUE_PER_TILE,
   FORESTRY_DISCONNECTED_MULT,
   HOSPITAL_PRODUCTIVITY_BONUS,
+  LANDMARK_TOURISM_BASE,
+  LANDMARK_TOURISM_PER_RESIDENT,
   LUXURY_TAX_BONUS,
   ROAD_TIER,
   type Building,
@@ -93,6 +95,11 @@ export class Economy {
   lastFarmRevenue = 0;
   /** Last produce-price multiplier (Alpha 2.7.1). */
   lastProducePrice = 1.0;
+  /** Last completed month's tourism revenue (Alpha 2.17). 0 with no
+   *  road-connected landmarks. Surfaced in the budget panel. */
+  lastTourismRevenue = 0;
+  /** Lifetime tourism revenue earned. Drives the tourism achievement. */
+  lifetimeTourismRevenue = 0;
   /** Last completed month's accident-related expense (for budget breakdown). */
   lastAccidentCost = 0;
   /** Number of crashes during the current (in-progress) month. */
@@ -172,6 +179,21 @@ export class Economy {
       cJobsCovered * this.taxC * REV_PER_C_JOB * HOSPITAL_PRODUCTIVITY_BONUS +
       iJobsCovered * this.taxI * REV_PER_I_JOB * HOSPITAL_PRODUCTIVITY_BONUS;
 
+    // Landmark tourism (Alpha 2.17): each landmark earns BASE + per-resident
+    // scaler per month, gated on having a 4-connected road. A landmark
+    // without road access generates zero tourism — visible "you should
+    // build a road" feedback through the budget panel.
+    let tourismRevenue = 0;
+    for (const t of grid.iter()) {
+      if (t.building !== 'museum' && t.building !== 'stadium' && t.building !== 'observatory') continue;
+      if (!grid.hasRoadAdjacent(t.x, t.y)) continue;
+      const kind = t.building;
+      tourismRevenue += LANDMARK_TOURISM_BASE[kind] +
+        LANDMARK_TOURISM_PER_RESIDENT[kind] * population.totalResidents;
+    }
+    this.lastTourismRevenue = Math.round(tourismRevenue);
+    this.lifetimeTourismRevenue += this.lastTourismRevenue;
+
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
@@ -179,7 +201,8 @@ export class Economy {
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
       forestryRevenue +
       farmRevenue +
-      hospitalBonus;
+      hospitalBonus +
+      tourismRevenue;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.
     // Charge the average of the two endpoints' tier so a mixed-tier edge

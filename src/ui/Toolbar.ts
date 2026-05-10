@@ -221,6 +221,39 @@ const ITEMS: readonly ToolbarItem[] = [
     <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
     <circle cx="12" cy="17" r="1.4" fill="currentColor"/>
   </svg>` },
+  // Landmarks (Alpha 2.17). Grouped popover so the toolbar stays scannable.
+  // Each one generates monthly tourism revenue scaled by city pop.
+  {
+    kind: 'group',
+    id: 'landmarks',
+    label: 'Land',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 20l9-15 9 15z M9 20v-5h6v5"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'place_museum', label: 'Museum', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 9l9-5 9 5 M5 9v10 M19 9v10 M9 19v-7 M15 19v-7 M3 21h18"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_stadium', label: 'Stadium', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="12" rx="9" ry="5"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M3 12c0 3 4 5 9 5s9-2 9-5"
+              stroke="currentColor" stroke-width="1.4" fill="none"/>
+        <path d="M12 7v10"
+              stroke="currentColor" stroke-width="1.2" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_observatory', label: 'Obs.', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 18a7 7 0 0 1 14 0z M3 21h18"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <circle cx="12" cy="11" r="3.5"
+              stroke="currentColor" stroke-width="1.4" fill="none"/>
+        <path d="M12 7l1 1.5"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` }
+    ]
+  },
   { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
           stroke="currentColor" stroke-width="1.8" stroke-linecap="round"

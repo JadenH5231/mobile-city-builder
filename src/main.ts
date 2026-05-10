@@ -291,7 +291,10 @@ function unlockLabel(tool: string): string {
     place_bus_stop: 'Bus stop',
     place_bus_depot: 'Bus depot',
     place_stop_sign: 'Stop sign',
-    place_traffic_light: 'Traffic light'
+    place_traffic_light: 'Traffic light',
+    place_museum: 'Museum',
+    place_stadium: 'Stadium',
+    place_observatory: 'Observatory'
   };
   return map[tool] ?? tool;
 }

@@ -262,7 +262,12 @@ export type Building =
   | 'school'
   | 'hospital'
   | 'fire_station'
-  | 'police_station';
+  | 'police_station'
+  // Landmarks (Alpha 2.17). 1-tile each, generate monthly tourism revenue
+  // scaled by city population once they have road access.
+  | 'museum'
+  | 'stadium'
+  | 'observatory';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -283,7 +288,13 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   school: 4000,
   hospital: 8000,
   fire_station: 5000,
-  police_station: 5000
+  police_station: 5000,
+  // Landmarks (Alpha 2.17). Sticker prices reflect their reach: a stadium
+  // is the splashy big-ticket build, observatory is mid, museum is the
+  // entry-tier landmark unlocked at Town.
+  museum: 6000,
+  stadium: 12000,
+  observatory: 9000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -298,7 +309,28 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   school: 200,
   hospital: 400,
   fire_station: 250,
-  police_station: 250
+  police_station: 250,
+  museum: 200,
+  stadium: 500,
+  observatory: 250
+};
+
+/**
+ * Tourism revenue per landmark per month (Alpha 2.17). Each landmark adds
+ * a flat base + a per-resident scaler. Revenue is gated on road access
+ * (no road neighbour → no tourists). Stadium scales fastest because the
+ * higher upkeep + cost should be worth it as the city grows; museum is
+ * the entry-tier earner so it's always positive net once unlocked.
+ */
+export const LANDMARK_TOURISM_BASE: Record<'museum' | 'stadium' | 'observatory', number> = {
+  museum: 50,
+  stadium: 80,
+  observatory: 40
+};
+export const LANDMARK_TOURISM_PER_RESIDENT: Record<'museum' | 'stadium' | 'observatory', number> = {
+  museum: 0.05,
+  stadium: 0.10,
+  observatory: 0.04
 };
 
 /**
@@ -439,7 +471,8 @@ export const MILESTONES: readonly Milestone[] = [
     unlocks: [
       'place_bus_stop', 'place_bus_depot',
       'commercial_high', 'industrial_high', 'mixed_high',
-      'place_school', 'place_fire_station', 'place_police_station'
+      'place_school', 'place_fire_station', 'place_police_station',
+      'place_museum'
     ],
     rewardCash: 5000,
     rewardPC: 3,
@@ -451,7 +484,7 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'City',
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
-    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital'],
+    unlocks: ['road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium'],
     rewardCash: 10000,
     rewardPC: 5,
     herald: 'yimbys',
@@ -462,7 +495,7 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Metropolis',
     subtitle: 'Diversifying the tax base',
     popThreshold: 2500,
-    unlocks: ['place_forestry', 'place_farm'],
+    unlocks: ['place_forestry', 'place_farm', 'place_observatory'],
     rewardCash: 20000,
     rewardPC: 8,
     herald: 'working_families',
@@ -559,7 +592,10 @@ export type Tool =
   | 'place_bus_stop'
   | 'place_bus_depot'
   | 'place_stop_sign'
-  | 'place_traffic_light';
+  | 'place_traffic_light'
+  | 'place_museum'
+  | 'place_stadium'
+  | 'place_observatory';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -599,7 +635,10 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_fire_station', 'fire_station' as const],
   ['place_police_station', 'police_station' as const],
   ['place_bus_stop', 'bus_stop' as const],
-  ['place_bus_depot', 'bus_depot' as const]
+  ['place_bus_depot', 'bus_depot' as const],
+  ['place_museum', 'museum' as const],
+  ['place_stadium', 'stadium' as const],
+  ['place_observatory', 'observatory' as const]
 ]);
 
 /**

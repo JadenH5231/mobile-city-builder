@@ -945,6 +945,28 @@ const VARIANTS: VariantTable = {
       {
         body: { w: 0.30, h: 0.22, d: 0.42, color: 0xb89970 },
         roof: { kind: 'pyramid', height: 0.30, color: 0x4d3520 }
+      },
+      // Bungalow — pale yellow walls, deep green gable, screened porch awning.
+      {
+        body: { w: 0.50, h: 0.26, d: 0.42, color: 0xeede9c },
+        roof: { kind: 'gable', height: 0.14, color: 0x3a5a3a },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.34, depth: 0.10, color: 0x2a4030 }
+        ]
+      },
+      // Mid-century split — slate walls + terracotta hip roof + side body.
+      {
+        body: { w: 0.45, h: 0.30, d: 0.50, color: 0xa8b4b8 },
+        body2: { w: 0.32, h: 0.22, d: 0.32, color: 0x9aa6ac, yBase: 0 },
+        roof: { kind: 'hip', height: 0.10, color: 0xc06038 }
+      },
+      // Storybook cottage — pale blue + slate roof, prominent chimney.
+      {
+        body: { w: 0.40, h: 0.28, d: 0.40, color: 0xc6dee6 },
+        roof: { kind: 'gable', height: 0.20, color: 0x3a3a48 },
+        decorations: [
+          { kind: 'chimney', dx: -0.14, dz: 0.12, h: 0.18, color: 0x6a5648 }
+        ]
       }
     ],
     2: [
@@ -971,6 +993,28 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'awning', side: 'S', width: 0.14, depth: 0.08, color: 0x6a4030 }
         ]
+      },
+      // Brick courtyard apartment — deep red, central setback tower.
+      {
+        body: { w: 0.75, h: 0.55, d: 0.55, color: 0x8e3a2e },
+        decorations: [
+          { kind: 'tower', w: 0.45, d: 0.45, h: 0.40, color: 0x9c4838, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // Sage garden walkup — green walls, white-trim gable.
+      {
+        body: { w: 0.55, h: 0.62, d: 0.45, color: 0x8aa890 },
+        roof: { kind: 'gable', height: 0.14, color: 0xece4cf },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.16, depth: 0.10, color: 0x4a6650 }
+        ]
+      },
+      // Tudor revival — cream body + dark brown corner tower with pyramid roof.
+      {
+        body: { w: 0.60, h: 0.55, d: 0.50, color: 0xece4cf },
+        decorations: [
+          { kind: 'tower', w: 0.22, d: 0.22, h: 0.78, color: 0x4e3826, roofKind: 'pyramid', roofHeight: 0.18, roofColor: 0x2a1c14 }
+        ]
       }
     ],
     3: [
@@ -990,6 +1034,26 @@ const VARIANTS: VariantTable = {
       {
         body: { w: 0.55, h: 1.55, d: 0.55, color: 0x7a6a52 },
         decorations: [{ kind: 'antenna', h: 0.30, color: 0x444444 }]
+      },
+      // Twin-tower residence — two slim white towers above a shared podium.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0xd6cdb6 },
+        decorations: [
+          { kind: 'tower', w: 0.30, d: 0.30, h: 1.30, color: 0xeee5cc, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'antenna', h: 0.18, color: 0x222222 }
+        ]
+      },
+      // Brick high-rise — deep crimson with antenna.
+      {
+        body: { w: 0.65, h: 1.55, d: 0.55, color: 0x6e2a22 },
+        decorations: [{ kind: 'antenna', h: 0.18, color: 0x333333 }]
+      },
+      // Modern green-glass tower — teal body, slim spire.
+      {
+        body: { w: 0.55, h: 1.50, d: 0.55, color: 0x3a6a64 },
+        decorations: [
+          { kind: 'tower', w: 0.30, d: 0.30, h: 0.30, color: 0x4a7e78, roofKind: 'pyramid', roofHeight: 0.20, roofColor: 0x223a36 }
+        ]
       }
     ]
   },
@@ -1020,6 +1084,31 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'sign', side: 'S', w: 0.40, h: 0.12, y: 0.30, color: 0xd03a55 }
         ]
+      },
+      // Boutique — pure white walls, copper-orange awning + tall sign.
+      {
+        body: { w: 0.50, h: 0.40, d: 0.45, color: 0xf2eee4 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.34, depth: 0.10, color: 0xc06030 },
+          { kind: 'sign', side: 'S', w: 0.30, h: 0.16, y: 0.30, color: 0x2e2e2e }
+        ]
+      },
+      // Coffeehouse — dark green walls, wood-tan awning, flat roof.
+      {
+        body: { w: 0.55, h: 0.34, d: 0.50, color: 0x2c4636 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.40, depth: 0.12, color: 0xb88a4e },
+          { kind: 'sign', side: 'S', w: 0.28, h: 0.08, y: 0.26, color: 0xece4cf }
+        ]
+      },
+      // Convenience store — bright red walls, white parapet sign.
+      {
+        body: { w: 0.55, h: 0.32, d: 0.45, color: 0xc83838 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.46, h: 0.10, y: 0.30, color: 0xece4cf }
+        ]
       }
     ],
     2: [
@@ -1042,6 +1131,29 @@ const VARIANTS: VariantTable = {
           { kind: 'sign', side: 'N', w: 0.50, h: 0.14, y: 0.50, color: 0xd06a3a },
           { kind: 'sign', side: 'S', w: 0.50, h: 0.14, y: 0.50, color: 0xd06a3a }
         ]
+      },
+      // Modernist office — matte charcoal slab with bright glass band.
+      {
+        body: { w: 0.60, h: 0.85, d: 0.55, color: 0x32363c },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.50, h: 0.04, y: 0.55, color: 0x6ad0c8 }
+        ]
+      },
+      // Mall plaza — wide cream body with green awning + central tower.
+      {
+        body: { w: 0.85, h: 0.45, d: 0.65, color: 0xe6decb },
+        decorations: [
+          { kind: 'tower', w: 0.40, d: 0.40, h: 0.65, color: 0x6e8aac, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'awning', side: 'S', width: 0.50, depth: 0.10, color: 0x4a7e54 }
+        ]
+      },
+      // Burgundy bank — deep red brick body with white columned awning.
+      {
+        body: { w: 0.65, h: 0.70, d: 0.55, color: 0x6e2a30 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.46, depth: 0.10, color: 0xece4cf },
+          { kind: 'sign', side: 'S', w: 0.30, h: 0.08, y: 0.55, color: 0xc8a040 }
+        ]
       }
     ],
     3: [
@@ -1062,6 +1174,25 @@ const VARIANTS: VariantTable = {
       {
         body: { w: 0.50, h: 1.45, d: 0.65, color: 0x4a607c },
         decorations: [{ kind: 'antenna', h: 0.40, color: 0x222222 }]
+      },
+      // Black-glass slab — sleek monolith with corporate vibes.
+      {
+        body: { w: 0.50, h: 1.65, d: 0.50, color: 0x1a1d24 },
+        decorations: [{ kind: 'antenna', h: 0.30, color: 0x666666 }]
+      },
+      // Twin office tower — two slim copper-tinted towers.
+      {
+        body: { w: 0.85, h: 0.30, d: 0.85, color: 0xb89876 },
+        decorations: [
+          { kind: 'tower', w: 0.32, d: 0.30, h: 1.20, color: 0xc8a07c, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // Spire skyscraper — green-glass body with sharp pyramid crown.
+      {
+        body: { w: 0.55, h: 1.30, d: 0.55, color: 0x44746a },
+        decorations: [
+          { kind: 'tower', w: 0.40, d: 0.40, h: 0.30, color: 0x4e8678, roofKind: 'pyramid', roofHeight: 0.40, roofColor: 0x223e38 }
+        ]
       }
     ]
   },
@@ -1086,6 +1217,28 @@ const VARIANTS: VariantTable = {
           { kind: 'tank', dx: -0.22, dz:  0.20, r: 0.08, h: 0.18, color: 0x8a7860 },
           { kind: 'tank', dx:  0.22, dz: -0.20, r: 0.08, h: 0.10, color: 0x8a7860 }
         ]
+      },
+      // Garage — corrugated steel-grey body with a wide loading sign.
+      {
+        body: { w: 0.60, h: 0.30, d: 0.50, color: 0x7c8088 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.24, color: 0xeec453 }
+        ]
+      },
+      // Lumber yard — small slate office plus three stacks of timber.
+      {
+        body: { w: 0.32, h: 0.28, d: 0.32, color: 0x6c5a48 },
+        decorations: [
+          { kind: 'tank', dx: -0.18, dz: -0.18, r: 0.10, h: 0.10, color: 0xb88c5e },
+          { kind: 'tank', dx:  0.18, dz: -0.18, r: 0.10, h: 0.10, color: 0xb88c5e },
+          { kind: 'tank', dx:  0.18, dz:  0.18, r: 0.10, h: 0.10, color: 0xb88c5e }
+        ]
+      },
+      // Quonset workshop — rust-red curved-feel body with a single tall stack.
+      {
+        body: { w: 0.50, h: 0.38, d: 0.55, color: 0x9e4a32 },
+        roof: { kind: 'hip', height: 0.20, color: 0x6e3a26 },
+        decorations: [{ kind: 'stack', dx: 0, dz: -0.20, h: 0.40, color: 0x3a261a }]
       }
     ],
     2: [
@@ -1106,6 +1259,32 @@ const VARIANTS: VariantTable = {
       {
         body: { w: 0.85, h: 0.55, d: 0.45, color: 0x847460 },
         roof: { kind: 'gable', height: 0.18, color: 0x4e4030 }
+      },
+      // Brewing plant — pale-green-tinted body + two tall vertical tanks.
+      {
+        body: { w: 0.55, h: 0.55, d: 0.50, color: 0x6c8a78 },
+        decorations: [
+          { kind: 'tank', dx: -0.22, dz: 0.18, r: 0.12, h: 0.85, color: 0xc8d2bd },
+          { kind: 'tank', dx:  0.22, dz: 0.18, r: 0.12, h: 0.85, color: 0xc8d2bd },
+          { kind: 'sign', side: 'S', w: 0.30, h: 0.08, y: 0.52, color: 0x2c4636 }
+        ]
+      },
+      // Cement plant — grey body with a row of silos.
+      {
+        body: { w: 0.50, h: 0.50, d: 0.40, color: 0x9a9a96 },
+        decorations: [
+          { kind: 'tank', dx: -0.30, dz: -0.10, r: 0.10, h: 1.00, color: 0xb0b0ac },
+          { kind: 'tank', dx: -0.30, dz:  0.10, r: 0.10, h: 1.00, color: 0xb0b0ac },
+          { kind: 'tank', dx:  0.30, dz:  0,    r: 0.10, h: 0.95, color: 0xb0b0ac }
+        ]
+      },
+      // Logistics warehouse — long low orange body + side crane.
+      {
+        body: { w: 0.85, h: 0.45, d: 0.50, color: 0xc46c34 },
+        decorations: [
+          { kind: 'crane', dx: 0.30, dz: 0.10, h: 0.85, color: 0x3a3a3a },
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.42, color: 0x1a1a1a }
+        ]
       }
     ],
     3: [
@@ -1136,6 +1315,34 @@ const VARIANTS: VariantTable = {
           { kind: 'crane', dx:  0.30, dz: -0.10, h: 1.05, color: 0xb84a30 },
           { kind: 'stack', dx:  0,    dz: -0.22, h: 1.30, color: 0x2e2418 }
         ]
+      },
+      // Steel mill — rust-red mega-hall with three asymmetric stacks.
+      {
+        body: { w: 0.85, h: 0.75, d: 0.70, color: 0x6e3024 },
+        decorations: [
+          { kind: 'stack', dx: -0.30, dz: -0.18, h: 1.40, color: 0x2a1612 },
+          { kind: 'stack', dx:  0.10, dz: -0.18, h: 1.05, color: 0x2a1612 },
+          { kind: 'stack', dx:  0.30, dz: -0.18, h: 0.85, color: 0x2a1612 }
+        ]
+      },
+      // Auto plant — slate slab body + central crane + side sign.
+      {
+        body: { w: 0.85, h: 0.65, d: 0.85, color: 0x3e424a },
+        decorations: [
+          { kind: 'crane', dx: 0, dz: 0, h: 1.20, color: 0xeec453 },
+          { kind: 'sign', side: 'S', w: 0.46, h: 0.12, y: 0.50, color: 0xece4cf }
+        ]
+      },
+      // Petrochemical — pale-grey admin block + dense tank cluster.
+      {
+        body: { w: 0.40, h: 0.55, d: 0.40, color: 0xc8c4be },
+        decorations: [
+          { kind: 'tank', dx: -0.30, dz:  0.20, r: 0.10, h: 0.95, color: 0xece4cf },
+          { kind: 'tank', dx:  0.30, dz:  0.20, r: 0.10, h: 0.95, color: 0xece4cf },
+          { kind: 'tank', dx: -0.30, dz: -0.20, r: 0.10, h: 0.75, color: 0xece4cf },
+          { kind: 'tank', dx:  0.30, dz: -0.20, r: 0.10, h: 0.75, color: 0xece4cf },
+          { kind: 'stack', dx: 0, dz: -0.30, h: 1.55, color: 0x444840 }
+        ]
       }
     ]
   },
@@ -1164,6 +1371,30 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'sign', side: 'S', w: 0.20, h: 0.08, y: 0.32, color: 0x4a8aa0 }
         ]
+      },
+      // Bookstore + flat — deep-blue body, white sign band.
+      {
+        body: { w: 0.55, h: 0.45, d: 0.50, color: 0x2e3a52 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.36, depth: 0.10, color: 0xeec453 },
+          { kind: 'sign', side: 'S', w: 0.34, h: 0.08, y: 0.34, color: 0xece4cf }
+        ]
+      },
+      // Bakery with patio — warm orange awning, peach walls.
+      {
+        body: { w: 0.60, h: 0.40, d: 0.42, color: 0xeac494 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.40, depth: 0.14, color: 0xc46c34 },
+          { kind: 'sign', side: 'E', w: 0.20, h: 0.08, y: 0.30, color: 0x6e2e1e }
+        ]
+      },
+      // Mixed L-shape with retail wing — terracotta + olive.
+      {
+        body: { w: 0.50, h: 0.42, d: 0.45, color: 0xc26a4a },
+        body2: { w: 0.30, h: 0.30, d: 0.55, color: 0x6c7a4a, yBase: 0 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.20, h: 0.08, y: 0.32, color: 0xece4cf }
+        ]
       }
     ],
     2: [
@@ -1185,6 +1416,30 @@ const VARIANTS: VariantTable = {
         body: { w: 0.65, h: 0.30, d: 0.55, color: 0xc4ad8a },
         decorations: [
           { kind: 'tower', w: 0.45, d: 0.45, h: 0.62, color: 0x8d92a4 }
+        ]
+      },
+      // Rooftop garden mid-rise — green-tinted tower above tan podium.
+      {
+        body: { w: 0.55, h: 0.78, d: 0.55, color: 0xa6b8a0 },
+        body2: { w: 0.65, h: 0.30, d: 0.60, color: 0xc8b294, yBase: 0 },
+        decorations: [
+          { kind: 'tower', w: 0.30, d: 0.30, h: 0.10, color: 0x4a6650, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // Boutique hotel — copper-tinted tower above retail base.
+      {
+        body: { w: 0.50, h: 0.85, d: 0.50, color: 0xb88c5e },
+        body2: { w: 0.65, h: 0.30, d: 0.60, color: 0xece4cf, yBase: 0 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.34, h: 0.08, y: 0.18, color: 0x2e2e2e }
+        ]
+      },
+      // Brick + glass combo — red brick body + glass corner tower.
+      {
+        body: { w: 0.60, h: 0.55, d: 0.55, color: 0x7a3a30 },
+        decorations: [
+          { kind: 'tower', w: 0.30, d: 0.30, h: 0.78, color: 0x6a8aac, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'awning', side: 'S', width: 0.32, depth: 0.10, color: 0x1a1a1a }
         ]
       }
     ],
@@ -1209,6 +1464,31 @@ const VARIANTS: VariantTable = {
         body2: { w: 0.85, h: 0.28, d: 0.55, color: 0xc4ad8a, yBase: 0 },
         decorations: [
           { kind: 'sign', side: 'S', w: 0.50, h: 0.10, y: 0.18, color: 0xeec453 }
+        ]
+      },
+      // Triple-tower complex — three slim cream towers above shared podium.
+      {
+        body: { w: 0.85, h: 0.30, d: 0.75, color: 0xece4cf },
+        decorations: [
+          { kind: 'tower', w: 0.20, d: 0.30, h: 1.30, color: 0xd6cdb6, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'antenna', h: 0.16, color: 0x222222 }
+        ]
+      },
+      // Terraced setback tower — green-tinted with stepped greenery effect.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0x6a8a72 },
+        decorations: [
+          { kind: 'tower', w: 0.62, d: 0.62, h: 0.55, color: 0x82a890 },
+          { kind: 'tower', w: 0.40, d: 0.40, h: 0.85, color: 0xa0c2ac, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'awning', side: 'S', width: 0.50, depth: 0.10, color: 0x3a4a32 }
+        ]
+      },
+      // Sky-bridge tower — twin slim towers in dark navy with podium.
+      {
+        body: { w: 0.85, h: 0.32, d: 0.85, color: 0x2a3142 },
+        decorations: [
+          { kind: 'tower', w: 0.28, d: 0.28, h: 1.40, color: 0x3a4258, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'antenna', h: 0.20, color: 0x444444 }
         ]
       }
     ]

@@ -113,6 +113,11 @@ export class Renderer {
   /** One Group containing per-kind city building Mesh objects. Rebuilt on change. */
   private readonly cityBuildingsGroup = new Group();
   private heatmapMesh: Mesh | null = null;
+  /** Day/night cycle (Alpha 2.14) — mutated by applyTimeOfDay each frame. */
+  private skyTexture!: CanvasTexture;
+  private ambientLight!: AmbientLight;
+  private hemisphereLight!: HemisphereLight;
+  private sunLight!: DirectionalLight;
   private carsMesh: InstancedMesh;
   private busesMesh: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
@@ -139,15 +144,20 @@ export class Renderer {
     // Three.js doesn't support a true vertical gradient on Scene.background
     // directly, but a 1×N CanvasTexture works perfectly and is essentially
     // free at runtime (one tiny upload at init, no per-frame cost).
-    this.scene.background = makeSkyGradient();
+    // Sky gradient is a 1×N CanvasTexture we mutate over the day/night
+    // cycle (Alpha 2.14). Stored so applyTimeOfDay() can repaint it.
+    this.skyTexture = makeSkyGradient();
+    this.scene.background = this.skyTexture;
     // A few stylized clouds far above the world. Static — added to the
     // scene root so they don't pan with worldGroup.
     this.scene.add(makeClouds());
-    this.scene.add(new AmbientLight(0xffffff, 0.55));
-    this.scene.add(new HemisphereLight(0xbcd9ff, 0x223322, 0.45));
-    const sun = new DirectionalLight(0xffffff, 0.85);
-    sun.position.set(40, 80, 30);
-    this.scene.add(sun);
+    this.ambientLight = new AmbientLight(0xffffff, 0.55);
+    this.scene.add(this.ambientLight);
+    this.hemisphereLight = new HemisphereLight(0xbcd9ff, 0x223322, 0.45);
+    this.scene.add(this.hemisphereLight);
+    this.sunLight = new DirectionalLight(0xffffff, 0.85);
+    this.sunLight.position.set(40, 80, 30);
+    this.scene.add(this.sunLight);
 
     // Selection square — a wireframe plane that we move to the picked tile.
     const sel = new Mesh(
@@ -612,6 +622,46 @@ export class Renderer {
 
   render(camera: Camera): void {
     this.three.render(this.scene, camera.three);
+  }
+
+  /**
+   * Apply day/night phase (Alpha 2.14). `phase` ∈ [0, 1]:
+   *   0 / 1 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk.
+   * Updates sun position + colour + intensity, ambient + hemisphere
+   * lights, and repaints the sky-gradient texture.
+   */
+  applyTimeOfDay(phase: number): void {
+    const p = ((phase % 1) + 1) % 1;
+    // Sun arc: rotates around the world over a day. Project onto a
+    // tilted axis so dawn/dusk hit a low angle and noon goes overhead.
+    const angle = (p - 0.25) * Math.PI * 2; // -π/2 at midnight, 0 at dawn, π/2 at noon, π at dusk
+    const radius = 80;
+    const sunX = Math.cos(angle) * radius;
+    const sunY = Math.sin(angle) * radius;
+    const sunZ = 30;
+    this.sunLight.position.set(sunX, Math.max(-30, sunY), sunZ);
+    // Day = 0.25..0.75 (sun above horizon).
+    const dayMix = sunY > 0 ? Math.min(1, sunY / 50) : 0;
+    // Sun colour: warm at dawn/dusk, white at noon, cool dim at night.
+    const sunColor = lerpHexColor(
+      0x4060c0,                         // night
+      lerpHexColor(0xf0a060, 0xffffff, dayMix), // dawn/dusk → noon
+      Math.min(1, Math.max(0, sunY / 40))
+    );
+    this.sunLight.color.setHex(sunColor);
+    this.sunLight.intensity = 0.18 + dayMix * 0.85;
+    this.ambientLight.intensity = 0.20 + dayMix * 0.45;
+    this.hemisphereLight.intensity = 0.20 + dayMix * 0.40;
+    // Hemisphere sky/ground tint: shift cooler at night.
+    if (dayMix < 0.05) {
+      this.hemisphereLight.color.setHex(0x303860);
+      this.hemisphereLight.groundColor.setHex(0x101820);
+    } else {
+      this.hemisphereLight.color.setHex(0xbcd9ff);
+      this.hemisphereLight.groundColor.setHex(0x223322);
+    }
+    // Repaint sky gradient.
+    repaintSkyGradient(this.skyTexture, p);
   }
 
   private disposeMesh(m: Mesh | null): void {
@@ -2172,17 +2222,54 @@ function makeSkyGradient(): CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.00, '#5d96d4'); // top — saturated mid-blue
-  grad.addColorStop(0.55, '#a4caea'); // mid — softer blue
-  grad.addColorStop(1.00, '#e6d8be'); // horizon — warm haze
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 1, 256);
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
-  tex.needsUpdate = true;
+  // Initial paint at noon (Alpha 2.14 day/night will repaint each frame).
+  repaintSkyGradient(tex, 0.5);
   return tex;
+}
+
+/**
+ * Repaint the sky gradient texture for the current time of day (Alpha
+ * 2.14). Three keyframe ramps — night → dawn → noon → dusk → night —
+ * lerped together so the sky shifts smoothly across the day cycle.
+ */
+function repaintSkyGradient(tex: CanvasTexture, phase: number): void {
+  const canvas = tex.image as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d')!;
+  // Keyframe palette: zenith / mid / horizon at four phases.
+  const KF = [
+    { p: 0.00, zenith: 0x141a35, mid: 0x2a2c4a, horizon: 0x4a3a5a },  // midnight
+    { p: 0.22, zenith: 0x4a4f8a, mid: 0xc6886a, horizon: 0xe8a060 },  // dawn
+    { p: 0.50, zenith: 0x5d96d4, mid: 0xa4caea, horizon: 0xe6d8be },  // noon
+    { p: 0.78, zenith: 0x3a4a8a, mid: 0xa66a8a, horizon: 0xe06850 },  // dusk
+    { p: 1.00, zenith: 0x141a35, mid: 0x2a2c4a, horizon: 0x4a3a5a }   // midnight wrap
+  ];
+  let lo = KF[0]!, hi = KF[1]!;
+  for (let i = 0; i < KF.length - 1; i++) {
+    if (phase >= KF[i]!.p && phase <= KF[i + 1]!.p) { lo = KF[i]!; hi = KF[i + 1]!; break; }
+  }
+  const t = (phase - lo.p) / Math.max(1e-6, hi.p - lo.p);
+  const zenith = lerpHexColor(lo.zenith, hi.zenith, t);
+  const mid    = lerpHexColor(lo.mid, hi.mid, t);
+  const horizon = lerpHexColor(lo.horizon, hi.horizon, t);
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0.00, '#' + zenith.toString(16).padStart(6, '0'));
+  grad.addColorStop(0.55, '#' + mid.toString(16).padStart(6, '0'));
+  grad.addColorStop(1.00, '#' + horizon.toString(16).padStart(6, '0'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1, 256);
+  tex.needsUpdate = true;
+}
+
+function lerpHexColor(a: number, b: number, t: number): number {
+  const u = Math.max(0, Math.min(1, t));
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * u);
+  const g = Math.round(ag + (bg - ag) * u);
+  const c = Math.round(ab + (bb - ab) * u);
+  return (r << 16) | (g << 8) | c;
 }
 
 /**

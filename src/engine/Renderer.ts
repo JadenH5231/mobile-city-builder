@@ -2005,6 +2005,92 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => cyl(0.028, 0.10, 6), color: 0x6b3f1f, dx: 0.32, dy: 0.08, dz: 0.05 },
         { makeGeom: () => cone(0.13, 0.20, 8), color: 0x4a8e44, dx: 0.32, dy: 0.25, dz: 0.05 }
       ];
+    case 'school': {
+      // Brick schoolhouse + clock tower + flagpole. Reads as a small
+      // K-8 building. Cream stucco walls, terracotta roof.
+      return [
+        // Lawn pad.
+        { makeGeom: () => box(0.92, 0.025, 0.92), color: 0x4a8c3a, dx: 0, dy: 0.013, dz: 0 },
+        // Main wing.
+        { makeGeom: () => box(0.78, 0.36, 0.46), color: 0xd6c9a8, dx: 0, dy: 0.18, dz: -0.02 },
+        // Hipped roof.
+        { makeGeom: () => cone(0.50, 0.18, 4), color: 0x8a3d2a, dx: 0, dy: 0.36 + 0.09, dz: -0.02 },
+        // Clock tower.
+        { makeGeom: () => box(0.18, 0.40, 0.18), color: 0xc7b08a, dx: 0.24, dy: 0.20, dz: 0.18 },
+        { makeGeom: () => cyl(0.10, 0.04, 12), color: 0xe6d8b8, dx: 0.24, dy: 0.42, dz: 0.18 },
+        { makeGeom: () => cone(0.13, 0.16, 6), color: 0x6a3422, dx: 0.24, dy: 0.50, dz: 0.18 },
+        // Flagpole + flag.
+        { makeGeom: () => cyl(0.012, 0.55, 5), color: 0x9c9c9c, dx: -0.30, dy: 0.275, dz: 0.30 },
+        { makeGeom: () => box(0.10, 0.07, 0.012), color: 0xb14a3a, dx: -0.30 + 0.05, dy: 0.50, dz: 0.30 },
+        // Door.
+        { makeGeom: () => box(0.10, 0.18, 0.018), color: 0x4a3a18, dx: 0, dy: 0.09, dz: -0.02 + 0.23 + 0.009 },
+        // Window strip on the front face.
+        { makeGeom: () => box(0.50, 0.06, 0.018), color: 0x2a3a4a, dx: 0, dy: 0.22, dz: -0.02 + 0.23 + 0.009 }
+      ];
+    }
+    case 'hospital': {
+      // White building, red cross sign, ambulance bay.
+      return [
+        { makeGeom: () => box(0.92, 0.025, 0.92), color: 0xc8c4be, dx: 0, dy: 0.013, dz: 0 },
+        // Main tower (taller).
+        { makeGeom: () => box(0.62, 0.62, 0.50), color: 0xeae3d0, dx: 0, dy: 0.31, dz: -0.06 },
+        // Top trim.
+        { makeGeom: () => box(0.64, 0.04, 0.52), color: 0xc7c2b3, dx: 0, dy: 0.62 + 0.02, dz: -0.06 },
+        // Red cross sign — vertical + horizontal bars on the front face.
+        { makeGeom: () => box(0.06, 0.18, 0.018), color: 0xb14a3a, dx: 0, dy: 0.42, dz: -0.06 + 0.25 + 0.009 },
+        { makeGeom: () => box(0.18, 0.06, 0.018), color: 0xb14a3a, dx: 0, dy: 0.42, dz: -0.06 + 0.25 + 0.009 },
+        // Ambulance bay (lower wing).
+        { makeGeom: () => box(0.40, 0.22, 0.32), color: 0xc7c2b3, dx: 0.30, dy: 0.11, dz: 0.20 },
+        { makeGeom: () => box(0.40, 0.025, 0.32), color: 0x4a4a44, dx: 0.30, dy: 0.22 + 0.013, dz: 0.20 },
+        { makeGeom: () => box(0.30, 0.16, 0.018), color: 0x3a3a3a, dx: 0.30, dy: 0.08, dz: 0.20 + 0.16 + 0.009 },
+        // Window grid suggestion.
+        { makeGeom: () => box(0.50, 0.08, 0.018), color: 0x6a8eb0, dx: 0, dy: 0.20, dz: -0.06 + 0.25 + 0.010 },
+        { makeGeom: () => box(0.50, 0.08, 0.018), color: 0x6a8eb0, dx: 0, dy: 0.55, dz: -0.06 + 0.25 + 0.010 }
+      ];
+    }
+    case 'fire_station': {
+      // Red brick station with a tall hose-drying tower + ladder + sign.
+      return [
+        { makeGeom: () => box(0.92, 0.025, 0.92), color: 0x6a6a6a, dx: 0, dy: 0.013, dz: 0 },
+        // Main hall.
+        { makeGeom: () => box(0.72, 0.40, 0.52), color: 0xb14a3a, dx: 0, dy: 0.20, dz: -0.04 },
+        // White trim band.
+        { makeGeom: () => box(0.74, 0.04, 0.54), color: 0xeae3d0, dx: 0, dy: 0.40 + 0.02, dz: -0.04 },
+        // Hose-drying tower.
+        { makeGeom: () => box(0.22, 0.62, 0.22), color: 0x9c4030, dx: 0.22, dy: 0.31, dz: 0.18 },
+        { makeGeom: () => cone(0.18, 0.10, 4), color: 0x4a3a2a, dx: 0.22, dy: 0.62 + 0.05, dz: 0.18 },
+        // Bay door.
+        { makeGeom: () => box(0.40, 0.32, 0.018), color: 0x2a2a2a, dx: -0.10, dy: 0.16, dz: -0.04 + 0.26 + 0.009 },
+        // White cross-bar on the bay door.
+        { makeGeom: () => box(0.40, 0.022, 0.020), color: 0xeae3d0, dx: -0.10, dy: 0.16, dz: -0.04 + 0.26 + 0.018 },
+        // Sign panel above the bay.
+        { makeGeom: () => box(0.40, 0.07, 0.018), color: 0xeae3d0, dx: -0.10, dy: 0.34, dz: -0.04 + 0.26 + 0.012 }
+      ];
+    }
+    case 'police_station': {
+      // Stone-grey precinct with blue lights + a small porch.
+      return [
+        { makeGeom: () => box(0.92, 0.025, 0.92), color: 0x6a6a6a, dx: 0, dy: 0.013, dz: 0 },
+        // Main building.
+        { makeGeom: () => box(0.72, 0.40, 0.52), color: 0x4a5a6a, dx: 0, dy: 0.20, dz: -0.04 },
+        // Trim band.
+        { makeGeom: () => box(0.74, 0.04, 0.54), color: 0x2a3a4a, dx: 0, dy: 0.40 + 0.02, dz: -0.04 },
+        // Roof.
+        { makeGeom: () => box(0.72, 0.05, 0.52), color: 0x2a2a2a, dx: 0, dy: 0.40 + 0.07, dz: -0.04 },
+        // Porch.
+        { makeGeom: () => box(0.36, 0.04, 0.18), color: 0x3a3a3a, dx: 0, dy: 0.04, dz: 0.30 },
+        // Two columns on the porch.
+        { makeGeom: () => box(0.04, 0.20, 0.04), color: 0xc8c4be, dx: -0.14, dy: 0.10, dz: 0.36 },
+        { makeGeom: () => box(0.04, 0.20, 0.04), color: 0xc8c4be, dx:  0.14, dy: 0.10, dz: 0.36 },
+        // Door.
+        { makeGeom: () => box(0.10, 0.18, 0.018), color: 0x222222, dx: 0, dy: 0.09, dz: -0.04 + 0.26 + 0.009 },
+        // "POLICE" sign band.
+        { makeGeom: () => box(0.50, 0.06, 0.018), color: 0xeae3d0, dx: 0, dy: 0.30, dz: -0.04 + 0.26 + 0.010 },
+        // Two blue light bars on the roof.
+        { makeGeom: () => box(0.06, 0.04, 0.06), color: 0x4d8eb9, dx: -0.10, dy: 0.40 + 0.10, dz: -0.04 },
+        { makeGeom: () => box(0.06, 0.04, 0.06), color: 0xb14a3a, dx:  0.10, dy: 0.40 + 0.10, dz: -0.04 }
+      ];
+    }
     case 'bus_stop':
       return [
         { makeGeom: () => box(0.06, 0.45, 0.06), color: 0xc9a437, dx: 0, dy: 0.225, dz: 0 },

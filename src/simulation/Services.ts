@@ -30,6 +30,19 @@ export class Services {
         case 'park':
           this.paint(grid, t.x, t.y, SERVICE_RADIUS.park, 'park');
           break;
+        // Public services pack (Alpha 2.10).
+        case 'school':
+          this.paint(grid, t.x, t.y, SERVICE_RADIUS.school, 'school');
+          break;
+        case 'hospital':
+          this.paint(grid, t.x, t.y, SERVICE_RADIUS.hospital, 'hospital');
+          break;
+        case 'fire_station':
+          this.paint(grid, t.x, t.y, SERVICE_RADIUS.fire, 'fire');
+          break;
+        case 'police_station':
+          this.paint(grid, t.x, t.y, SERVICE_RADIUS.police, 'police');
+          break;
         // bus_stop / bus_depot don't grant services — they're handled by Buses.
         default:
           break;
@@ -37,7 +50,10 @@ export class Services {
     }
   }
 
-  private paint(grid: Grid, cx: number, cy: number, radius: number, kind: 'power' | 'water' | 'park'): void {
+  private paint(
+    grid: Grid, cx: number, cy: number, radius: number,
+    kind: 'power' | 'water' | 'park' | 'school' | 'hospital' | 'fire' | 'police'
+  ): void {
     const r2 = radius * radius;
     const minX = Math.max(0, cx - radius);
     const maxX = Math.min(grid.width - 1, cx + radius);
@@ -51,7 +67,11 @@ export class Services {
         const t = grid.get(x, y)!;
         if (kind === 'power') t.hasPower = true;
         else if (kind === 'water') t.hasWater = true;
-        else t.hasPark = true;
+        else if (kind === 'park') t.hasPark = true;
+        else if (kind === 'school') t.hasSchool = true;
+        else if (kind === 'hospital') t.hasHospital = true;
+        else if (kind === 'fire') t.hasFireProtection = true;
+        else t.hasPolice = true;
       }
     }
   }

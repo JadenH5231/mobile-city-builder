@@ -87,6 +87,11 @@ export class Tile {
   hasPower = false;
   hasWater = false;
   hasPark = false;
+  /** Public-services pack (Alpha 2.10). */
+  hasSchool = false;
+  hasHospital = false;
+  hasFireProtection = false;
+  hasPolice = false;
 
   constructor(x: number, y: number, terrain: TerrainType = 'grass') {
     this.x = x;
@@ -104,6 +109,10 @@ export class Tile {
     this.hasPower = false;
     this.hasWater = false;
     this.hasPark = false;
+    this.hasSchool = false;
+    this.hasHospital = false;
+    this.hasFireProtection = false;
+    this.hasPolice = false;
   }
 
   // Traffic state — updated by Vehicles + Traffic systems on the main loop.

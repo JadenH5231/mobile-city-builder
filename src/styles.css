@@ -275,6 +275,55 @@ body {
   pointer-events: none;
 }
 
+/* Milestone-locked tools (Alpha 2.8). Greyed-out + 🔒 marker. Tapping
+   refuses activation and surfaces the "Unlocks at <Milestone>" toast. */
+.toolbar__btn[data-locked="true"] {
+  opacity: 0.40;
+  position: relative;
+  cursor: not-allowed;
+}
+.toolbar__btn[data-locked="true"] .toolbar__label,
+.toolbar__btn[data-locked="true"] .toolbar__icon {
+  filter: grayscale(0.85);
+}
+.toolbar__btn[data-locked="true"]::before {
+  content: "🔒";
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+}
+.toolbar__btn[data-locked="partial"]::before {
+  content: "🔒";
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.toolbar__popover-btn[data-locked="true"] {
+  opacity: 0.40;
+  position: relative;
+  cursor: not-allowed;
+}
+.toolbar__popover-btn[data-locked="true"] .toolbar__label,
+.toolbar__popover-btn[data-locked="true"] .toolbar__icon {
+  filter: grayscale(0.85);
+}
+.toolbar__popover-btn[data-locked="true"]::before {
+  content: "🔒";
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .toolbar__icon {
   width: 20px;
   height: 20px;
@@ -931,6 +980,147 @@ body.photo-mode .photo-op {
 
 .toast__action:active {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* ---- Milestone banner (Alpha 2.8) ----------------------------------- */
+
+.milestone-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 70px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 16px 18px 16px 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 218, 130, 0.18), rgba(255, 168, 70, 0.10) 60%, rgba(0, 0, 0, 0));
+  background-color: rgba(20, 14, 8, 0.92);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 218, 130, 0.45);
+  border-radius: 18px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 4px rgba(255, 218, 130, 0.10);
+  z-index: 100;
+  width: min(calc(100vw - 24px), 460px);
+  color: var(--pill-fg);
+  pointer-events: auto;
+  animation: milestone-pop 0.45s cubic-bezier(0.4, 1.4, 0.6, 1.0);
+}
+
+@keyframes milestone-pop {
+  0% { transform: translateX(-50%) translateY(-12px) scale(0.92); opacity: 0; }
+  60% { transform: translateX(-50%) translateY(2px) scale(1.02); opacity: 1; }
+  100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+.milestone-banner.hidden {
+  display: none;
+}
+
+.milestone-banner__avatar {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 218, 130, 0.14);
+  border: 2px solid rgba(255, 218, 130, 0.55);
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 245, 215, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+
+.milestone-banner__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.milestone-banner__crown {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: rgba(255, 218, 130, 0.85);
+  font-weight: 700;
+}
+
+.milestone-banner__title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: rgba(255, 245, 215, 0.98);
+}
+
+.milestone-banner__subtitle {
+  font-size: 12px;
+  color: rgba(255, 245, 215, 0.55);
+  margin-bottom: 4px;
+}
+
+.milestone-banner__blurb {
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 245, 215, 0.92);
+  font-style: italic;
+  margin: 4px 0 6px;
+}
+
+.milestone-banner__rewards {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.milestone-banner__reward {
+  background: rgba(255, 218, 130, 0.12);
+  border: 1px solid rgba(255, 218, 130, 0.35);
+  color: rgba(255, 245, 215, 0.95);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.milestone-banner__unlocks {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.milestone-banner__unlock {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 245, 215, 0.85);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.milestone-banner__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 0;
+  color: rgba(255, 245, 215, 0.65);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.milestone-banner__close:hover {
+  color: rgba(255, 245, 215, 0.95);
 }
 
 /* ---- Photo-op banner ------------------------------------------------- */

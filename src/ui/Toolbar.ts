@@ -212,7 +212,11 @@ export class Toolbar {
   private current: Tool = 'pan';
   private openPopoverId: string | null = null;
   private bannedTools: Set<Tool> = new Set();
+  /** Tools gated behind a milestone (Alpha 2.8). */
+  private lockedTools: Set<Tool> = new Set();
   onChange?: (tool: Tool) => void;
+  /** Fired when the user taps a locked tool — Game wires this to a toast. */
+  onLocked?: (tool: Tool) => void;
 
   constructor() {
     const el = document.getElementById('toolbar');
@@ -416,10 +420,50 @@ export class Toolbar {
   }
 
   private activate(tool: Tool): void {
+    // Locked-by-milestone tools refuse activation and surface a toast
+    // ("Unlocks at <Milestone> · NNN pop") via onLocked (Alpha 2.8).
+    if (this.lockedTools.has(tool)) {
+      this.onLocked?.(tool);
+      return;
+    }
     if (tool === this.current) return;
     this.current = tool;
     this.refreshActive();
     this.onChange?.(tool);
+  }
+
+  /**
+   * Mark a set of tools as locked-by-milestone (Alpha 2.8). `hints` maps
+   * tool → human label like "Town · 500 pop" used for the lock tooltip.
+   * The toolbar applies `data-locked="true"` on the matching buttons,
+   * which CSS uses to dim them + render a 🔒 marker. Activation is
+   * refused; tapping fires `onLocked(tool)` for the toast.
+   */
+  setLockedTools(locked: ReadonlySet<Tool>, hints?: ReadonlyMap<Tool, string>): void {
+    this.lockedTools = new Set(locked);
+    for (const [tool, btn] of this.toolButtons) {
+      const isLocked = this.lockedTools.has(tool);
+      btn.dataset.locked = isLocked ? 'true' : 'false';
+      if (isLocked) {
+        const hint = hints?.get(tool);
+        btn.setAttribute('title', hint ? `Locked — Unlocks at ${hint}` : 'Locked');
+      } else if (!this.bannedTools.has(tool)) {
+        // Don't blow away a ban-tooltip when un-locking.
+        btn.removeAttribute('title');
+      }
+    }
+    // Group buttons get a 'partial' / 'all' lock state so a player sees
+    // at-a-glance which whole groups (e.g. Roads) are still gated.
+    for (const item of ITEMS) {
+      if (item.kind !== 'group') continue;
+      const btn = this.groupButtons.get(item.id);
+      if (!btn) continue;
+      const total = item.members.length;
+      const lockedCount = item.members.filter((m) => this.lockedTools.has(m.tool)).length;
+      const allLocked = lockedCount === total && total > 0;
+      const someLocked = lockedCount > 0 && !allLocked;
+      btn.dataset.locked = allLocked ? 'true' : someLocked ? 'partial' : 'false';
+    }
   }
 
   private refreshActive(): void {

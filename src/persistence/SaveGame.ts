@@ -1,6 +1,7 @@
 import type { Grid } from '../world/Grid';
 import type { Economy } from '../simulation/Economy';
 import type { Council } from '../simulation/Council';
+import type { Milestones } from '../simulation/Milestones';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
 
@@ -9,13 +10,17 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 8 (Alpha 2.5): adds per-tile `luxury` bit for the new
- * residential-luxury low-density zone (2-tile pair). v7 saves load with
- * luxury=false everywhere. Schema 7 (Alpha 2.3) added elevation + bridge.
- * v5..v6 still load with their existing defaults (trafficLight, busStop,
- * path defaulted to false). Schema 1 (pre-Alpha-1.0) is silently dropped.
+ * Schema 9 (Alpha 2.8): adds top-level `highestPop` (max population
+ * ever reached) so milestone unlocks survive save/load. v8 saves load
+ * with highestPop derived from the current resident count, so an
+ * existing 1500-pop city loads with all milestones up to City already
+ * earned and nothing visibly changes.
+ *
+ * Schema 8 (Alpha 2.5) added per-tile `luxury`. Schema 7 (Alpha 2.3)
+ * added elevation + bridge. v5..v6 still load with defaults. Schema 1
+ * (pre-Alpha-1.0) is silently dropped.
  */
-const SCHEMA = 8;
+const SCHEMA = 9;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -70,6 +75,9 @@ export interface SaveData {
   totalAccidents: number;
   /** Schema 4+. Slow-accumulating civic-action resource. */
   politicalCapital?: number;
+  /** Schema 9+. Highest population the city has ever reached. Drives
+   *  which milestones / tool unlocks are restored on load. */
+  highestPop?: number;
 }
 
 /**
@@ -114,9 +122,9 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones): Promise<void> {
     if (!this.db) return;
-    const data = serialize(grid, economy, council);
+    const data = serialize(grid, economy, council, milestones);
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, SLOT_KEY);
@@ -141,7 +149,9 @@ export class SaveGame {
  * SaveGame round-trip and by Game's undo stack — the JSON shape is identical
  * so we get a single restore path for both.
  */
-export function serialize(grid: Grid, economy: Economy, council?: Council): SaveData {
+export function serialize(
+  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones
+): SaveData {
   const tiles: TileSnapshot[] = new Array(grid.width * grid.height);
   let i = 0;
   for (const t of grid.iter()) {
@@ -180,7 +190,8 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
     taxI: economy.taxI,
     monthsElapsed: economy.monthsElapsed,
     totalAccidents: economy.totalAccidents,
-    politicalCapital: council?.politicalCapital ?? 0
+    politicalCapital: council?.politicalCapital ?? 0,
+    highestPop: milestones?.highestPop ?? 0
   };
 }
 
@@ -193,10 +204,15 @@ export function serialize(grid: Grid, economy: Economy, council?: Council): Save
  * Service flags get cleared here; the caller is expected to call
  * Services.recompute(grid) afterward. Same for the road graph rebuild.
  */
-export function applySave(data: SaveData, grid: Grid, economy: Economy, council?: Council): void {
+export function applySave(
+  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones
+): void {
   if (data.width !== grid.width || data.height !== grid.height) return;
   if (council) {
     council.politicalCapital = data.politicalCapital ?? 0;
+  }
+  if (milestones) {
+    milestones.applyHighestPop(data.highestPop ?? 0);
   }
 
   let i = 0;

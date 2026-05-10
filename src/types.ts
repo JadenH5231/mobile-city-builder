@@ -340,6 +340,122 @@ export const MAP_SIZES: Record<'small' | 'medium' | 'large', MapSize> = {
   large: { width: 256, height: 256 }
 };
 
+/* ---- Milestones (Alpha 2.8) ---------------------------------------- */
+
+export type MilestoneId =
+  | 'hamlet' | 'village' | 'town' | 'city' | 'metro' | 'capital';
+
+export interface Milestone {
+  readonly id: MilestoneId;
+  readonly name: string;
+  /** Display tag — appears in the banner. */
+  readonly subtitle: string;
+  /** Population threshold to earn this milestone. */
+  readonly popThreshold: number;
+  /** Tools unlocked when this milestone is earned. */
+  readonly unlocks: readonly Tool[];
+  /** One-time treasury bonus on earning. */
+  readonly rewardCash: number;
+  /** One-time Political Capital bonus on earning. */
+  readonly rewardPC: number;
+  /** Faction whose leader voices the congratulations banner. */
+  readonly herald: 'chamber' | 'hometown' | 'working_families' | 'yimbys' | 'taxpayers' | 'transit';
+  /** Bannered congratulations line in the herald's voice. */
+  readonly blurb: string;
+}
+
+/**
+ * Milestones in earn order (Alpha 2.8). Each one gates a slice of the
+ * toolbar so a fresh city starts with basic R/C/I + local roads + parks
+ * and earns the rest as it grows. Save persists `highestPop` so saves
+ * loaded after this update don't lose access to anything they already
+ * earned in the past.
+ *
+ * Always-available baseline: pan, bulldoze, road_local, place_path,
+ * residential_low, commercial_low, industrial_low, mixed_low, place_park.
+ */
+export const MILESTONES: readonly Milestone[] = [
+  {
+    id: 'hamlet',
+    name: 'Hamlet',
+    subtitle: 'First households',
+    popThreshold: 50,
+    unlocks: ['residential_medium', 'commercial_medium', 'industrial_medium', 'mixed_medium'],
+    rewardCash: 1000,
+    rewardPC: 1,
+    herald: 'hometown',
+    blurb: 'Word\'s gettin around the country. Folks are puttin down roots here. Mid-density zoning is yours, mayor — use it well 🇺🇸'
+  },
+  {
+    id: 'village',
+    name: 'Village',
+    subtitle: 'Becoming a real town',
+    popThreshold: 200,
+    unlocks: ['road_avenue', 'place_water', 'place_power', 'place_stop_sign', 'residential_luxury_low'],
+    rewardCash: 2500,
+    rewardPC: 2,
+    herald: 'chamber',
+    blurb: 'Real growth, real ratepayers. Avenues, utilities, stop signs and luxury low-density are all on the table now. Don\'t squander it 📈'
+  },
+  {
+    id: 'town',
+    name: 'Town',
+    subtitle: 'Public services online',
+    popThreshold: 500,
+    unlocks: ['place_bus_stop', 'place_bus_depot', 'commercial_high', 'industrial_high', 'mixed_high'],
+    rewardCash: 5000,
+    rewardPC: 3,
+    herald: 'transit',
+    blurb: 'finally — a transit-eligible town. bus stops, depots, and high-density zoning unlocked. let\'s make this a city that doesn\'t require a car 🚌'
+  },
+  {
+    id: 'city',
+    name: 'City',
+    subtitle: 'Five digits and counting',
+    popThreshold: 1000,
+    unlocks: ['road_highway', 'place_traffic_light', 'residential_high'],
+    rewardCash: 10000,
+    rewardPC: 5,
+    herald: 'yimbys',
+    blurb: 'we did it!! a real city. highways, adaptive lights, and high-density residential are unlocked. now build the housing supply your residents have been waiting for 🏙️'
+  },
+  {
+    id: 'metro',
+    name: 'Metropolis',
+    subtitle: 'Diversifying the tax base',
+    popThreshold: 2500,
+    unlocks: ['place_forestry', 'place_farm'],
+    rewardCash: 20000,
+    rewardPC: 8,
+    herald: 'working_families',
+    blurb: 'Metro status means real export industries. Forestry and farms are unlocked — these are the kind of jobs that put food on the table 🌾'
+  },
+  {
+    id: 'capital',
+    name: 'Capital',
+    subtitle: 'Region-defining city',
+    popThreshold: 5000,
+    unlocks: [],
+    rewardCash: 50000,
+    rewardPC: 15,
+    herald: 'taxpayers',
+    blurb: 'A capital. Five thousand residents under one administration is no small feat. Treasury\'s topped up, but be prudent — every cent is borrowed from tomorrow 💼'
+  }
+];
+
+/**
+ * Tools available from the very first tile placed (Alpha 2.8). Everything
+ * else is gated behind a milestone. Players who load a save with a
+ * higher historical pop get auto-unlocks via Milestones from the
+ * persisted `highestPop`.
+ */
+export const STARTING_TOOLS: ReadonlySet<Tool> = new Set([
+  'pan', 'bulldoze',
+  'road_local', 'place_path',
+  'residential_low', 'commercial_low', 'industrial_low', 'mixed_low',
+  'place_park'
+]);
+
 /**
  * Player-set zoning tier — the maximum density a tile is *permitted* to grow
  * to. Buildings still need demand + services to actually reach a tier;

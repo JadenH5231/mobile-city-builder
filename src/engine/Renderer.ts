@@ -472,19 +472,22 @@ export class Renderer {
   }
 
   /**
-   * (Re)build the traffic heatmap overlay from each road tile's
-   * sustained-load EMA. Green at zero load, ramping through yellow to red.
-   * Called every render frame while the toggle is on; cleared via
+   * (Re)build the heatmap overlay. `kind` selects:
+   *  - 'traffic': road tiles coloured by sustained-load EMA (green→red).
+   *  - 'crime':   zoned tiles coloured by Crime.scoreAt (Alpha 2.21).
+   * Called every render frame while a toggle is on; cleared via
    * `clearHeatmap` when the player turns it off.
    */
-  drawHeatmap(grid: Grid): void {
+  drawHeatmap(grid: Grid, kind: 'traffic' | 'crime' = 'traffic', crime?: import('../simulation/Crime').Crime): void {
     if (this.heatmapMesh) {
       this.worldGroup.remove(this.heatmapMesh);
       this.heatmapMesh.geometry.dispose();
       (this.heatmapMesh.material as MeshLambertMaterial).dispose();
       this.heatmapMesh = null;
     }
-    const built = buildHeatmapMesh(grid);
+    const built = kind === 'crime' && crime
+      ? buildCrimeHeatmapMesh(grid, crime)
+      : buildHeatmapMesh(grid);
     if (built) {
       this.heatmapMesh = built;
       this.worldGroup.add(this.heatmapMesh);
@@ -1152,6 +1155,69 @@ function heatColor(load: number, out: Color): void {
     out.setHex(lo).lerp(new Color(mid), t);
   } else {
     const t = Math.max(0, Math.min(1, (load - 1) / 1.5));
+    out.setHex(mid).lerp(new Color(hi), t);
+  }
+}
+
+/** Crime heatmap (Alpha 2.21): one quad per zoned tile coloured by Crime
+ *  score [0, 1]. Distinct purple-tinted gradient so it doesn't visually
+ *  compete with the green→red traffic heatmap. */
+function buildCrimeHeatmapMesh(grid: Grid, crime: import('../simulation/Crime').Crime): Mesh | null {
+  let count = 0;
+  for (const t of grid.iter()) if (t.zone !== 'none' && t.density > 0) count++;
+  if (count === 0) return null;
+
+  const positions = new Float32Array(count * 4 * 3);
+  const colours = new Float32Array(count * 4 * 3);
+  const indices = new Uint32Array(count * 6);
+  const c = new Color();
+  const inset = 0.06;
+  const baseY = ROAD_LIFT * 0.3;
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+  for (const t of grid.iter()) {
+    if (t.zone === 'none' || t.density === 0) continue;
+    crimeColor(crime.scoreAt(grid, t.x, t.y), c);
+    const x0 = t.x * TILE_SIZE + inset;
+    const x1 = (t.x + 1) * TILE_SIZE - inset;
+    const z0 = t.y * TILE_SIZE + inset;
+    const z1 = (t.y + 1) * TILE_SIZE - inset;
+    const y = baseY + t.elevation;
+
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z1;
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z1;
+
+    for (let i = 0; i < 4; i++) {
+      colours[ci++] = c.r;
+      colours[ci++] = c.g;
+      colours[ci++] = c.b;
+    }
+    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 1;
+    indices[ii++] = v; indices[ii++] = v + 3; indices[ii++] = v + 2;
+    v += 4;
+  }
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('color', new BufferAttribute(colours, 3));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  const mat = new MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.55 });
+  return new Mesh(geom, mat);
+}
+
+function crimeColor(score: number, out: Color): void {
+  // Calm pale-green at 0 → muted purple at 0.5 → magenta-red at 1.
+  const lo = 0xb6e0bb;
+  const mid = 0x9c5a9e;
+  const hi = 0xc73a52;
+  if (score <= 0.5) {
+    const t = Math.max(0, Math.min(1, score / 0.5));
+    out.setHex(lo).lerp(new Color(mid), t);
+  } else {
+    const t = Math.max(0, Math.min(1, (score - 0.5) / 0.5));
     out.setHex(mid).lerp(new Color(hi), t);
   }
 }

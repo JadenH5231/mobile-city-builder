@@ -22,6 +22,7 @@ import type { Tile } from '../world/Tile';
 import type { GlobalMarket } from './GlobalMarket';
 import type { Events } from './Events';
 import type { Bonds } from './Bonds';
+import type { Crime } from './Crime';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -127,11 +128,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds);
+      this.runMonth(grid, population, market, events, bonds, crime);
     }
   }
 
@@ -147,7 +148,7 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -229,10 +230,15 @@ export class Economy {
       surtaxCJobs * this.taxC * REV_PER_C_JOB * surtaxFraction;
     this.lastSurtaxRevenue = Math.round(surtaxRevenue);
 
+    // Crime penalty (Alpha 2.21): high city-wide crime drags commercial
+    // revenue (shoppers stay away from unsafe districts). Up to a 50%
+    // floor at max crime; in practice the multiplier sits well above 0.9
+    // even in cities with no police coverage.
+    const crimeMult = crime ? crime.commercialRevenueMultiplier() : 1.0;
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
-      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB +
+      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB * crimeMult +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
       forestryRevenue +
       farmRevenue +

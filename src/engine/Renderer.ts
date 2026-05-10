@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   AmbientLight,
   BoxGeometry,
   BufferAttribute,
@@ -325,6 +326,17 @@ export class Renderer {
   /** Night-lights overlay (Alpha 3.0.1). Glowing yellow lamps on
    *  avenues, walking paths, and parks; opacity ramps in at night. */
   private nightLightsMesh: Mesh | null = null;
+  /** Smooth radial-gradient pools of light around each lamp (Alpha 3.1.6).
+   *  Built alongside `nightLightsMesh` but uses a CanvasTexture with a
+   *  radial gradient so the falloff is continuous instead of steppy. */
+  private lampGlowMesh: Mesh | null = null;
+  /** Lit-window overlay (Alpha 3.1.6): bright rectangles on medium+
+   *  commercial / mixed-use / skyscraper buildings that always render
+   *  at full brightness via MeshBasicMaterial, fading in at night. */
+  private litWindowsMesh: Mesh | null = null;
+  /** Shared radial-gradient texture used by every lamp glow. Generated
+   *  once at Renderer init via Canvas2D. */
+  private lampGlowTexture: import('three').Texture | null = null;
   drawDistricts(grid: Grid, districts: import('../simulation/Districts').Districts): void {
     if (this.districtsMesh) {
       this.worldGroup.remove(this.districtsMesh);
@@ -340,10 +352,11 @@ export class Renderer {
   }
 
   /** (Re)build the night-lights overlay (Alpha 3.0.1). Walks the grid for
-   *  avenue road tiles, walking-path tiles, and park tiles; emits a small
-   *  yellow glow disc per location. Opacity is driven by applyTimeOfDay.
-   *  Cheap one-pass build — call after any road / path / city-buildings
-   *  redraw. */
+   *  avenue road tiles, walking-path tiles, and park tiles; emits the
+   *  visible lamp fixtures (poles + bulbs) AND the smooth radial-gradient
+   *  glow pools (Alpha 3.1.6) that actually illuminate the surrounding
+   *  ground. Opacity is driven by applyTimeOfDay.
+   */
   drawNightLights(grid: Grid): void {
     if (this.nightLightsMesh) {
       this.worldGroup.remove(this.nightLightsMesh);
@@ -351,10 +364,39 @@ export class Renderer {
       (this.nightLightsMesh.material as MeshBasicMaterial).dispose();
       this.nightLightsMesh = null;
     }
+    if (this.lampGlowMesh) {
+      this.worldGroup.remove(this.lampGlowMesh);
+      this.lampGlowMesh.geometry.dispose();
+      (this.lampGlowMesh.material as MeshBasicMaterial).dispose();
+      this.lampGlowMesh = null;
+    }
     const built = buildNightLightsMesh(grid);
     if (built) {
       this.nightLightsMesh = built;
       this.worldGroup.add(this.nightLightsMesh);
+    }
+    if (!this.lampGlowTexture) this.lampGlowTexture = makeRadialGlowTexture();
+    const glow = buildLampGlowMesh(grid, this.lampGlowTexture);
+    if (glow) {
+      this.lampGlowMesh = glow;
+      this.worldGroup.add(this.lampGlowMesh);
+    }
+  }
+
+  /** (Re)build the lit-windows overlay (Alpha 3.1.6). Bright rectangles
+   *  on medium+ commercial / mixed-use / skyscraper buildings that
+   *  brighten at night, making the city visibly come alive after dark. */
+  drawLitWindows(grid: Grid): void {
+    if (this.litWindowsMesh) {
+      this.worldGroup.remove(this.litWindowsMesh);
+      this.litWindowsMesh.geometry.dispose();
+      (this.litWindowsMesh.material as MeshBasicMaterial).dispose();
+      this.litWindowsMesh = null;
+    }
+    const built = buildLitWindowsMesh(grid);
+    if (built) {
+      this.litWindowsMesh = built;
+      this.worldGroup.add(this.litWindowsMesh);
     }
   }
 
@@ -373,6 +415,9 @@ export class Renderer {
       this.buildingsMesh = built;
       this.worldGroup.add(this.buildingsMesh);
     }
+    // Lit-window overlay (Alpha 3.1.6) is a sibling layer of the buildings
+    // mesh — same dirty triggers, same rebuild cadence.
+    this.drawLitWindows(grid);
   }
 
   /** Rebuild the road mesh from current grid edges + stubs. Sidewalks AND
@@ -776,18 +821,27 @@ export class Renderer {
     // in lockstep with the sun (otherwise night sky would show during a
     // mid-day visual).
     repaintSkyGradient(this.skyTexture, warped);
-    // Update the night-lights overlay opacity based on darkness amount.
+    // Update night-overlay opacity based on darkness amount. Three
+    // independently-controllable overlays (Alpha 3.1.6):
+    //  - nightLightsMesh: visible lamp fixtures (poles + bulbs).
+    //  - lampGlowMesh: smooth radial glow pools spilling onto the ground.
+    //  - litWindowsMesh: lit windows on developed buildings.
+    const nightOpacity = Math.max(0, Math.min(1, 1 - dayMix * 2.5));
     if (this.nightLightsMesh) {
       const mat = this.nightLightsMesh.material as MeshBasicMaterial;
-      // Fade in smoothly across the last ~40% of the dayMix range so
-      // the lamps brighten gradually from dusk into deep night rather
-      // than snapping on.
-      const nightOpacity = Math.max(0, Math.min(1, 1 - dayMix * 2.5));
-      // Cap at ~0.65 — the rings already encode their own falloff via
-      // vertex colours, so a softer overall opacity reads as a gentle
-      // ambient glow rather than a flashlight.
-      mat.opacity = nightOpacity * 0.65;
+      mat.opacity = nightOpacity * 0.85;
       this.nightLightsMesh.visible = nightOpacity > 0.01;
+    }
+    if (this.lampGlowMesh) {
+      const mat = this.lampGlowMesh.material as MeshBasicMaterial;
+      mat.opacity = nightOpacity * 0.95;
+      this.lampGlowMesh.visible = nightOpacity > 0.01;
+    }
+    if (this.litWindowsMesh) {
+      const mat = this.litWindowsMesh.material as MeshBasicMaterial;
+      // Lit windows are subtle in twilight, full at deep night.
+      mat.opacity = nightOpacity * 0.85;
+      this.litWindowsMesh.visible = nightOpacity > 0.01;
     }
   }
 
@@ -1306,16 +1360,15 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
   const GROUND_GLOW = 0xfff0a8;     // ground-disc colour matches the bulb
   const PARK_GROUND_GLOW = 0xffe4b0;
 
-  /** Pre-computed darker tints of the warm-yellow glow for the falloff
-   *  rings. Vertex-colour darkening is the cheapest way to fake an
-   *  alpha-gradient when every face shares one material/opacity. */
+  /** Lamp fixture (Alpha 3.1.6): emits ONLY the visible pole + bulb.
+   *  The smooth ground-glow is now a separate `lampGlowMesh` rendered
+   *  with a radial-gradient texture for proper falloff. */
   const dim = (hex: number, factor: number): number => {
     const r = Math.round(((hex >> 16) & 0xff) * factor);
     const g = Math.round(((hex >> 8) & 0xff) * factor);
     const b = Math.round((hex & 0xff) * factor);
     return (r << 16) | (g << 8) | b;
   };
-
   const addLamp = (
     cx: number, cz: number, baseY: number, glowHex: number, scale = 1
   ): void => {
@@ -1323,27 +1376,11 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
     const pole = new CylinderGeometry(0.018 * scale, 0.018 * scale, 0.34 * scale, 6);
     pole.translate(cx, baseY + 0.17 * scale, cz);
     geoms.push(pole); colours.push(LAMP_POLE);
-    // Bulb — small emissive sphere. Slightly dimmed from the raw glow
-    // hex so it reads as "warm" rather than "headlight."
+    // Bulb — small emissive sphere.
     const bulb = new IcosahedronGeometry(0.05 * scale, 0);
     bulb.translate(cx, baseY + 0.36 * scale, cz);
-    geoms.push(bulb); colours.push(dim(glowHex, 0.85));
-    // Three concentric falloff discs (Alpha 3.0.2). Inner is the
-    // bright pool; mid + outer fade in colour space so the apparent
-    // light reads as a gradient even though the material has uniform
-    // opacity. Each ring is at a slightly different y to avoid
-    // z-fighting between coincident faces.
-    const ringDef: Array<{ r: number; tint: number; yOff: number }> = [
-      { r: 0.18 * scale, tint: 0.65, yOff: 0.006 },
-      { r: 0.40 * scale, tint: 0.30, yOff: 0.004 },
-      { r: 0.75 * scale, tint: 0.10, yOff: 0.002 }
-    ];
+    geoms.push(bulb); colours.push(dim(glowHex, 0.95));
     void GROUND_GLOW;
-    for (const ring of ringDef) {
-      const disc = new CylinderGeometry(ring.r, ring.r, 0.003, 16);
-      disc.translate(cx, baseY + ring.yOff, cz);
-      geoms.push(disc); colours.push(dim(glowHex, ring.tint));
-    }
   };
 
   for (const t of grid.iter()) {
@@ -1384,6 +1421,215 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
   });
   const mesh = new Mesh(merged, mat);
   // Off by default — applyTimeOfDay will toggle visibility based on time.
+  mesh.visible = false;
+  return mesh;
+}
+
+/** Generate the radial-gradient texture used by every lamp glow pool.
+ *  Single CanvasTexture is shared across all lamps — built once per
+ *  Renderer lifetime. Smooth bell-curve falloff via Canvas2D
+ *  radialGradient gives lamps a natural-looking light spill. */
+function makeRadialGlowTexture(): import('three').Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  // Bright warm centre → soft warm mid → fully transparent edge.
+  grad.addColorStop(0, 'rgba(255, 240, 168, 0.95)');
+  grad.addColorStop(0.30, 'rgba(255, 220, 150, 0.55)');
+  grad.addColorStop(0.65, 'rgba(255, 200, 130, 0.18)');
+  grad.addColorStop(1, 'rgba(255, 200, 130, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Build one flat textured plane per lamp — the smooth radial glow that
+ *  spills onto the ground around the fixture (Alpha 3.1.6). Each plane
+ *  is ~2.4 tiles wide and lies flat just above the surface, with the
+ *  shared radial-gradient texture providing the soft falloff. */
+function buildLampGlowMesh(grid: Grid, texture: import('three').Texture): Mesh | null {
+  // Count lamp positions first so we can size buffers exactly.
+  type LampSpec = { cx: number; cz: number; y: number; r: number };
+  const lamps: LampSpec[] = [];
+  for (const t of grid.iter()) {
+    const cx = t.x + 0.5;
+    const cz = t.y + 0.5;
+    if (t.road && t.roadType === 'avenue' && !t.bridge) {
+      const baseY = SIDEWALK_LIFT + t.elevation + 0.01;
+      lamps.push({ cx, cz: cz - 0.36, y: baseY, r: 1.20 });
+      lamps.push({ cx, cz: cz + 0.36, y: baseY, r: 1.20 });
+    }
+    if (t.path && !t.road) {
+      const baseY = PATH_LIFT + t.elevation + 0.01;
+      lamps.push({ cx, cz, y: baseY, r: 1.10 });
+    }
+    if (t.building === 'park') {
+      const baseY = SIDEWALK_LIFT + t.elevation + 0.01;
+      lamps.push({ cx, cz, y: baseY, r: 1.50 });
+    }
+  }
+  if (lamps.length === 0) return null;
+
+  const positions = new Float32Array(lamps.length * 4 * 3);
+  const uvs = new Float32Array(lamps.length * 4 * 2);
+  const indices = new Uint32Array(lamps.length * 6);
+
+  let vi = 0, ui = 0, ii = 0, v = 0;
+  for (const l of lamps) {
+    const x0 = l.cx - l.r;
+    const x1 = l.cx + l.r;
+    const z0 = l.cz - l.r;
+    const z1 = l.cz + l.r;
+    const y = l.y;
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z1;
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z1;
+    uvs[ui++] = 0; uvs[ui++] = 0;
+    uvs[ui++] = 1; uvs[ui++] = 0;
+    uvs[ui++] = 1; uvs[ui++] = 1;
+    uvs[ui++] = 0; uvs[ui++] = 1;
+    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 1;
+    indices[ii++] = v; indices[ii++] = v + 3; indices[ii++] = v + 2;
+    v += 4;
+  }
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('uv', new BufferAttribute(uvs, 2));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  // Additive blending so overlapping lamps make the area properly
+  // brighter, mimicking real light. depthWrite off so we don't z-fight
+  // with the ground geometry below.
+  const mat = new MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: AdditiveBlending
+  });
+  const mesh = new Mesh(geom, mat);
+  mesh.visible = false;
+  return mesh;
+}
+
+/** Build the lit-windows overlay (Alpha 3.1.6). Walks every developed
+ *  building tile (medium+ R/C/MU, all skyscrapers at stage 4) and
+ *  emits a small bright rectangle per window position. The whole mesh
+ *  uses MeshBasicMaterial so windows always read at full brightness
+ *  regardless of scene lighting; opacity is driven by applyTimeOfDay. */
+function buildLitWindowsMesh(grid: Grid): Mesh | null {
+  const positions: number[] = [];
+  const colours: number[] = [];
+  const indices: number[] = [];
+  let v = 0;
+
+  // Window palette — slightly varied warm yellows so windows don't look
+  // identical. Each tile picks a deterministic colour from this list.
+  const PALETTE = [0xfff0a8, 0xffe8a0, 0xf8d088, 0xffd8a8, 0xffe8c0];
+
+  const addWindow = (x: number, y: number, z: number, w: number, h: number, dir: 'X' | 'Z', hex: number): void => {
+    const r = ((hex >> 16) & 0xff) / 255;
+    const g = ((hex >> 8) & 0xff) / 255;
+    const b = (hex & 0xff) / 255;
+    let p0x = 0, p0z = 0, p1x = 0, p1z = 0;
+    if (dir === 'X') {
+      // Window on a face perpendicular to z-axis; w extends in x.
+      p0x = x - w / 2; p0z = z;
+      p1x = x + w / 2; p1z = z;
+    } else {
+      // Face perpendicular to x-axis; w extends in z.
+      p0x = x; p0z = z - w / 2;
+      p1x = x; p1z = z + w / 2;
+    }
+    positions.push(p0x, y - h / 2, p0z);
+    positions.push(p1x, y - h / 2, p1z);
+    positions.push(p1x, y + h / 2, p1z);
+    positions.push(p0x, y + h / 2, p0z);
+    for (let i = 0; i < 4; i++) { colours.push(r, g, b); }
+    indices.push(v, v + 2, v + 1);
+    indices.push(v, v + 3, v + 2);
+    v += 4;
+  };
+
+  for (const t of grid.iter()) {
+    const cx = t.x + 0.5;
+    const cz = t.y + 0.5;
+    const palIdx = (Math.abs(t.x * 73856093) ^ Math.abs(t.y * 19349663)) % PALETTE.length;
+    const litColor = PALETTE[palIdx]!;
+    // Skyscrapers — emit lit windows up the height of the tower at the
+    // anchor tile only (we let the renderer's anchor check exclude
+    // duplicates by skipping non-anchors).
+    if (t.skyscraper && t.skyscraperStage >= 4) {
+      // Re-use anchor logic inline — same lex-smaller check.
+      const cmp = (px: number, py: number): boolean => {
+        const p = grid.get(px, py);
+        return !!(p && p.skyscraper && p.zone === t.zone && p.skyscraperVariant === t.skyscraperVariant);
+      };
+      const isAnchor = !cmp(t.x - 1, t.y) && !cmp(t.x, t.y - 1) && !cmp(t.x - 1, t.y - 1)
+        && cmp(t.x + 1, t.y) && cmp(t.x, t.y + 1) && cmp(t.x + 1, t.y + 1);
+      if (!isAnchor) continue;
+      // Skyscraper anchor centre is at (anchor + 1.0) — offset to the 2×2 centre.
+      const acx = t.x + 1.0;
+      const acz = t.y + 1.0;
+      const towerH = 7.0; // approximate; real designs vary 6.5-8.5 — close enough for window placement
+      const halfW = 0.55;
+      // Emit a grid of small windows on each of the 4 faces.
+      for (let row = 0; row < 12; row++) {
+        const wy = 0.50 + row * 0.55;
+        if (wy > towerH - 0.40) break;
+        // Each face: 4 windows across.
+        for (let col = 0; col < 4; col++) {
+          const offset = -halfW * 0.7 + col * (halfW * 0.46);
+          // Only some windows lit (deterministic checker).
+          if (((row + col + palIdx) & 3) === 0) continue;
+          // North face (z = acz - halfW)
+          addWindow(acx + offset, wy, acz - halfW - 0.005, 0.10, 0.18, 'X', litColor);
+          // South face
+          addWindow(acx + offset, wy, acz + halfW + 0.005, 0.10, 0.18, 'X', litColor);
+          // East face
+          addWindow(acx + halfW + 0.005, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+          // West face
+          addWindow(acx - halfW - 0.005, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+        }
+      }
+      continue;
+    }
+    // Medium+ commercial / mixed-use — lit windows on the front face only.
+    if (t.density >= 2 && (t.zone === 'commercial' || t.zone === 'mixed')) {
+      // Approximate body height + width per density.
+      const h = t.density === 2 ? 0.78 : 1.35;
+      const halfW = 0.30;
+      // Two rows of windows on the south face.
+      const rows = t.density === 2 ? 2 : 4;
+      for (let row = 0; row < rows; row++) {
+        const wy = 0.30 + row * 0.30;
+        if (wy > h - 0.10) break;
+        for (let col = 0; col < 3; col++) {
+          if (((row * 5 + col + palIdx) & 2) === 0) continue;
+          const offset = -halfW * 0.7 + col * (halfW * 0.7);
+          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
+        }
+      }
+    }
+  }
+
+  if (positions.length === 0) return null;
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geom.setAttribute('color', new BufferAttribute(new Float32Array(colours), 3));
+  geom.setIndex(new BufferAttribute(new Uint32Array(indices), 1));
+  const mat = new MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const mesh = new Mesh(geom, mat);
   mesh.visible = false;
   return mesh;
 }

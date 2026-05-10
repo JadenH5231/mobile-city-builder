@@ -29,7 +29,7 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildLuxuryParts, buildSkyscraperParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
+import { buildLuxuryParts, buildMegaParts, buildSkyscraperParts, buildTwinParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -1272,6 +1272,9 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
   const baseLift = ROAD_LIFT * 0.5;
   // City mood is in [-1, +1]; lift to [0, 1] base.
   const moodBase = (cityMood + 1) * 0.5;
+  // Tracks tiles that have been consumed as the partner of a Twin pair so we
+  // don't re-render them as a solo Mega in the same pass (Alpha 3.2.5).
+  const consumedByTwin = new Set<number>();
   for (const t of grid.iter()) {
     if (t.zone === 'none' || t.road) continue;
     // Luxury (Alpha 2.5): a 2-tile pair renders as one mansion. Emit only
@@ -1298,6 +1301,43 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
     // so we can fade them when the camera zooms in. Skip them in the
     // main building mesh — `buildSkyscrapersMesh` handles them.
     if (t.skyscraper) continue;
+    // Max-density (Alpha 3.2.5): a single L4 tile renders as a Mega; an
+    // adjacent same-zone L4 pair renders as a linked Twin. 2×2 L4 clusters
+    // are converted to skyscrapers by Development before they ever reach
+    // here, so we only need to handle 1- and 2-tile cases. Twin pairs are
+    // resolved by looking east/south from the lex-smaller anchor.
+    if (t.density === 4 && (t.zone === 'residential' || t.zone === 'commercial' || t.zone === 'mixed')) {
+      const idx = t.y * grid.width + t.x;
+      if (consumedByTwin.has(idx)) continue;
+      // Look for a same-zone L4 partner east or south so the anchor is always
+      // the lex-smaller tile. Skip partners that are themselves consumed,
+      // already a skyscraper, or zoned differently.
+      const twinPartner = findTwinPartner(grid, t.x, t.y, t.zone, consumedByTwin);
+      // Per-tile happiness factor — same as the L0–L3 path so Megas/Twins
+      // dim with city mood + missing services.
+      let happy = moodBase;
+      if (t.hasPark) happy += 0.10;
+      if (!t.hasPower) happy -= 0.20;
+      if (!t.hasWater) happy -= 0.15;
+      happy = Math.max(0, Math.min(1, happy));
+      const ageMonths = Math.max(0, monthsElapsed - t.developedAt);
+      const patina = patinaFactor(ageMonths);
+      const yLift = baseLift + t.elevation;
+      let parts: { geom: BufferGeometry; color: number }[];
+      if (twinPartner) {
+        parts = buildTwinParts(t.zone, t.x, t.y, twinPartner.x, twinPartner.y, happy);
+        consumedByTwin.add(twinPartner.y * grid.width + twinPartner.x);
+      } else {
+        parts = buildMegaParts(t.zone, t.x, t.y, happy);
+      }
+      for (const p of parts) {
+        if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(patina < 1 ? darkenHex(p.color, patina) : p.color);
+      }
+      continue;
+    }
     if (t.density === 0) continue;
     // Per-tile happiness (Alpha 2.7): city mood, nudged by services. Tiles
     // with park coverage feel better; tiles missing power/water feel worse.
@@ -1399,6 +1439,32 @@ function findLuxuryPartner(grid: Grid, x: number, y: number): { x: number; y: nu
   for (const [dx, dy] of dirs) {
     const n = grid.get(x + dx, y + dy);
     if (n && n.luxury && n.zone === 'residential') return { x: n.x, y: n.y };
+  }
+  return null;
+}
+
+/** Find an east or south same-zone L4 partner for a Twin pair (Alpha 3.2.5).
+ *  Only east/south so the lex-smaller tile of every pair is the canonical
+ *  anchor — the iteration order in `buildBuildingsMesh` always reaches the
+ *  smaller tile first, so this guarantees we never emit two halves. Skips
+ *  partners that are already part of a Twin earlier in this pass, or that
+ *  are themselves a skyscraper / luxury / different zone. */
+function findTwinPartner(
+  grid: Grid, x: number, y: number, zone: 'residential' | 'commercial' | 'mixed',
+  consumedByTwin: Set<number>
+): { x: number; y: number } | null {
+  const dirs: Array<[number, number]> = [[1, 0], [0, 1]];
+  for (const [dx, dy] of dirs) {
+    const nx = x + dx;
+    const ny = y + dy;
+    const n = grid.get(nx, ny);
+    if (!n) continue;
+    if (n.density !== 4) continue;
+    if (n.zone !== zone) continue;
+    if (n.skyscraper) continue;
+    if (n.luxury) continue;
+    if (consumedByTwin.has(ny * grid.width + nx)) continue;
+    return { x: nx, y: ny };
   }
   return null;
 }

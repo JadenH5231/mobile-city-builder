@@ -20,7 +20,7 @@ export interface TileInfo {
   stopSign: boolean;
   trafficLight: boolean;
   zone: Zone;
-  zoneCap: 0 | 1 | 2 | 3;
+  zoneCap: 0 | 1 | 2 | 3 | 4;
   density: number;
   /** Building age in months (Alpha 2.16). 0 means brand new or unbuilt. */
   ageMonths: number;

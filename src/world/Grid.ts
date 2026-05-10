@@ -396,7 +396,7 @@ export class Grid {
    * demand naturally adjusts (or until cap drops below current density,
    * which we let stand as "grandfathered" rather than bulldoze through).
    */
-  setZone(x: number, y: number, zone: Zone, cap: 0 | 1 | 2 | 3 = 0): boolean {
+  setZone(x: number, y: number, zone: Zone, cap: 0 | 1 | 2 | 3 | 4 = 0): boolean {
     const t = this.get(x, y);
     if (!t) return false;
     if (zone !== 'none' && !t.owned) return false;

@@ -123,7 +123,10 @@ const ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'residential_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'residential_high',   label: 'High', icon: ICON_TIER_HIGH },
       { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX },
-      { kind: 'tool', tool: 'residential_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
+      // Max (Alpha 3.2.5) replaces the explicit Sky tool — paint Max
+      // tiles and they grow into Mega → Twin → Skyscraper based on
+      // cluster shape.
+      { kind: 'tool', tool: 'residential_max',    label: 'Max',  icon: ICON_TIER_SKY }
     ]
   },
   {
@@ -135,7 +138,7 @@ const ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'commercial_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'commercial_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'commercial_high',   label: 'High', icon: ICON_TIER_HIGH },
-      { kind: 'tool', tool: 'commercial_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
+      { kind: 'tool', tool: 'commercial_max',    label: 'Max',  icon: ICON_TIER_SKY }
     ]
   },
   {
@@ -158,7 +161,7 @@ const ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'mixed_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'mixed_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'mixed_high',   label: 'High', icon: ICON_TIER_HIGH },
-      { kind: 'tool', tool: 'mixed_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
+      { kind: 'tool', tool: 'mixed_max',    label: 'Max',  icon: ICON_TIER_SKY }
     ]
   },
   { kind: 'tool', tool: 'place_power', label: 'Power', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">

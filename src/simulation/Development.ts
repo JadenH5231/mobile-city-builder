@@ -11,10 +11,13 @@ const BASE_RATE = 0.06;
  * feedback_density_curve.
  */
 const L0_FLOOR = 0.3;
-/** Pressure required to promote from L0→L1, L1→L2, L2→L3 respectively. */
-const PROMOTION_THRESHOLDS: readonly number[] = [0.4, 0.7, 2.5];
-/** Services-allowed cap when power+water+park aren't all present. L3 is the
- *  service-gated payoff *if the player also zoned for high density*. */
+/** Pressure required to promote from L0→L1, L1→L2, L2→L3, L3→L4 (Max).
+ *  L3→L4 is steeper because Max is the top tier — same service
+ *  requirements as L3 (Alpha 3.2.5). */
+const PROMOTION_THRESHOLDS: readonly number[] = [0.4, 0.7, 2.5, 4.0];
+/** Services-allowed cap when power+water+park aren't all present. L3 (and
+ *  Max) is the service-gated payoff *if the player also zoned for that
+ *  density*. */
 const SERVICES_CAP_WITHOUT_PARK = 2;
 /** Penalty multiplier per missing utility. Cumulative — both missing → 0.09×. */
 const MISSING_SERVICE_PENALTY = 0.3;
@@ -39,12 +42,21 @@ export class Development {
    */
   tick(grid: Grid, monthsElapsed: number = 0): boolean {
     let changed = false;
+    // Track tiles that just hit density 4 — used after the main pass to
+    // probe for 2×2 Max clusters and trigger skyscraper conversion.
+    const justHitMax: Array<{ x: number; y: number }> = [];
     for (const t of grid.iter()) {
       if (t.zone === 'none' || t.road || t.building !== 'none') continue;
+      // Skyscraper tiles run their own construction pipeline — skip the
+      // normal density growth here so we don't double-count.
+      if (t.skyscraper) continue;
       const demand = this.demandFor(t.zone);
       // Effective max = min(player's zoning permission, services allow). The
-      // player gates the upper bound; services still gate L3 specifically.
-      const servicesCap = t.hasPower && t.hasWater && t.hasPark ? MAX_DENSITY : SERVICES_CAP_WITHOUT_PARK;
+      // player gates the upper bound; services still gate L3 + Max
+      // specifically. Industrial caps at L3 — there's no Max Industrial
+      // (skyscraper concept is R/C/MU only).
+      const baseServicesCap = t.hasPower && t.hasWater && t.hasPark ? MAX_DENSITY : SERVICES_CAP_WITHOUT_PARK;
+      const servicesCap = t.zone === 'industrial' ? Math.min(3, baseServicesCap) : baseServicesCap;
       const playerCap = t.zoneCap > 0 ? t.zoneCap : MAX_DENSITY;
       const cap = Math.min(playerCap, servicesCap);
       if (t.density >= cap) continue;
@@ -70,17 +82,66 @@ export class Development {
         const wasEmpty = t.density === 0;
         t.density++;
         t.developmentPressure = 0;
-        // Stamp the build date once on the first promotion. Subsequent
-        // upgrades (L1→L2, L2→L3) keep the original developedAt — a Town
-        // House upgrading to a Block of Flats is the same lot maturing,
-        // not a fresh build. Renovation = bulldoze + rezone, which calls
-        // resetDevelopment and re-stamps developedAt the next time the
-        // tile sprouts.
         if (wasEmpty) t.developedAt = monthsElapsed;
+        if (t.density === 4) justHitMax.push({ x: t.x, y: t.y });
         changed = true;
       }
     }
+
+    // Skyscraper conversion (Alpha 3.2.5): when a tile reaches density 4,
+    // check the four 2×2 footprints that include it. If any 2×2 has all
+    // four tiles at density 4 with the same R/C/MU zone (and none are
+    // already a skyscraper), convert all four into a skyscraper start
+    // (stage 0). The Skyscrapers sim ticks the stage forward monthly.
+    for (const p of justHitMax) {
+      // The 2×2 origins that include (p.x, p.y) — i.e. p is one corner.
+      const origins: Array<[number, number]> = [
+        [p.x, p.y], [p.x - 1, p.y], [p.x, p.y - 1], [p.x - 1, p.y - 1]
+      ];
+      for (const [ox, oy] of origins) {
+        if (this.tryConvertToSkyscraper(grid, ox, oy, monthsElapsed)) {
+          changed = true;
+          break; // tile is now part of a skyscraper, no need to keep checking
+        }
+      }
+    }
     return changed;
+  }
+
+  /** If the 2×2 starting at (ox, oy) is fully L4 with the same R/C/MU
+   *  zone and none of the four are already a skyscraper, convert all
+   *  four into a skyscraper-construction site (stage 0). Returns true
+   *  iff the conversion fired. */
+  private tryConvertToSkyscraper(grid: Grid, ox: number, oy: number, monthsElapsed: number): boolean {
+    const tiles = [
+      grid.get(ox, oy),
+      grid.get(ox + 1, oy),
+      grid.get(ox, oy + 1),
+      grid.get(ox + 1, oy + 1)
+    ];
+    for (const t of tiles) {
+      if (!t) return false;
+      if (t.density < 4) return false;
+      if (t.skyscraper) return false;
+      if (t.zone !== tiles[0]!.zone) return false;
+      if (t.zone !== 'residential' && t.zone !== 'commercial' && t.zone !== 'mixed') return false;
+    }
+    // Pick a deterministic variant from the anchor coord (lex-smallest tile)
+    // so the same physical 2×2 always picks the same design across saves.
+    const variant = (Math.abs(ox * 73856093) ^ Math.abs(oy * 19349663)) % 8 as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    for (const t of tiles) {
+      if (!t) continue;
+      t.skyscraper = true;
+      t.skyscraperStage = 0;
+      t.skyscraperVariant = variant;
+      // Density goes back to 0 during construction — Population's Mega/Twin
+      // contribution stops, the skyscraper-stage-4 contribution kicks in
+      // when construction completes.
+      t.density = 0;
+      t.developmentPressure = 0;
+      t.developedAt = monthsElapsed;
+    }
+    return true;
   }
 
   private demandFor(zone: Zone): number {

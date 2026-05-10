@@ -397,6 +397,9 @@ function unlockLabel(tool: string): string {
     residential_skyscraper: 'R · Skyscraper',
     commercial_skyscraper: 'C · Skyscraper',
     mixed_skyscraper: 'MU · Skyscraper',
+    residential_max: 'R · Max',
+    commercial_max: 'C · Max',
+    mixed_max: 'MU · Max',
     buy_land: 'Land'
   };
   return map[tool] ?? tool;

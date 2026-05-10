@@ -2677,3 +2677,118 @@ body.photo-mode .photo-op {
   display: flex;
   justify-content: space-between;
 }
+
+/* ---------- Responsive layout (Alpha 3.0.3) ----------
+ * Adapts surfaces to the viewport. Three breakpoints:
+ *  - <420px: phone, very compact
+ *  - 540px+: bottom sheets cap their width and centre
+ *  - 760px+: toolbar caps at a sensible max-width
+ *
+ * Bottom-sheets (`.info-panel`) need a custom hidden-state transform
+ * because we override `transform` with translateX(-50%) for centring;
+ * the slide-down hide motion has to compose both translates.
+ */
+
+/* Phone — tighten pills + RCI so the HUD doesn't wrap to 3 rows. */
+@media (max-width: 419px) {
+  #hud {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .pill {
+    padding: 6px 10px;
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .rci {
+    padding: 5px 9px;
+    gap: 8px;
+  }
+  .rci__bar {
+    width: 9px;
+    height: 24px;
+  }
+  /* Smaller toolbar buttons too — same tap area, less inflation */
+  .toolbar__btn {
+    padding: 0 11px;
+    font-size: 12px;
+    min-width: 40px;
+    height: 42px;
+  }
+}
+
+/* Tablet+ — centre + cap bottom sheets so they aren't a slab. */
+@media (min-width: 540px) {
+  .info-panel {
+    left: 50%;
+    right: auto;
+    width: min(540px, calc(100vw - 24px));
+    transform: translate(-50%, 0);
+  }
+  .info-panel.hidden {
+    transform: translate(-50%, 140%);
+  }
+
+  /* Centred toolbar gets a comfortable cap. The pinned + scroll layout
+   * still works inside the narrower container. */
+  .toolbar {
+    max-width: min(760px, calc(100vw - 24px));
+  }
+}
+
+/* Desktop+ — give bottom sheets a bit more breathing room and lift them
+ * slightly off the bottom edge. */
+@media (min-width: 900px) {
+  .info-panel {
+    width: min(580px, calc(100vw - 24px));
+    bottom: calc(env(safe-area-inset-bottom, 0) + 88px);
+  }
+}
+
+/* Very tall, narrow phones — when in landscape orientation the
+ * bottom-sheet covers most of the world. Shrink the open-state max
+ * height so the underlying canvas stays usable. */
+@media (max-height: 480px) {
+  .info-panel--tall {
+    max-height: calc(100vh - 80px);
+  }
+  .info-panel {
+    bottom: calc(env(safe-area-inset-bottom, 0) + 56px);
+  }
+}
+
+/* Modals: cap modal sheets so they don't fill enormous desktop windows.
+ * Existing .modal__sheet already has max-width: 520px. Let it grow on
+ * desktop but always leave breathing room around the edges. */
+@media (min-width: 900px) {
+  .modal__sheet {
+    max-width: min(620px, calc(100vw - 48px));
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+  }
+}
+
+/* Toasts (status, bulldoze, achievement-unlocked): cap so they don't
+ * stretch on wide screens. Currently they're top-right pinned and
+ * width-by-content, but let's make sure achievement-toast is bounded. */
+@media (min-width: 540px) {
+  .toast {
+    max-width: 480px;
+  }
+}
+
+/* Slot picker grid breakpoint already exists at 540px (3-up), but on
+ * tablet portrait keep it 2-up to avoid cramped cards. */
+@media (min-width: 540px) and (max-width: 759px) {
+  .slot-picker__list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Achievements panel — already 2-up at 540px+, but on desktop the
+ * default grows the cards too wide. Cap each card. */
+@media (min-width: 900px) {
+  .ach__list {
+    grid-template-columns: 1fr 1fr;
+  }
+}

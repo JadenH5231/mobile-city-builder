@@ -967,6 +967,22 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'chimney', dx: -0.14, dz: 0.12, h: 0.18, color: 0x6a5648 }
         ]
+      },
+      // Modern minimalist — white box + flat roof + slim entrance awning.
+      {
+        body: { w: 0.50, h: 0.30, d: 0.42, color: 0xf2eee4 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.18, depth: 0.12, color: 0x2e2e2e }
+        ]
+      },
+      // Cape Cod — grey clapboard + steep gable + small dormer (chimney).
+      {
+        body: { w: 0.45, h: 0.26, d: 0.38, color: 0x9aa6ac },
+        roof: { kind: 'gable', height: 0.22, color: 0x3a4048 },
+        decorations: [
+          { kind: 'chimney', dx: 0.16, dz: 0.10, h: 0.14, color: 0x9c5a4a }
+        ]
       }
     ],
     2: [
@@ -1015,6 +1031,22 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.22, d: 0.22, h: 0.78, color: 0x4e3826, roofKind: 'pyramid', roofHeight: 0.18, roofColor: 0x2a1c14 }
         ]
+      },
+      // Stacked townhouses — deep blue 3-storey stepped silhouette.
+      {
+        body: { w: 0.60, h: 0.50, d: 0.45, color: 0x2c4060 },
+        body2: { w: 0.45, h: 0.78, d: 0.45, color: 0x36507a, yBase: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.20, depth: 0.10, color: 0xece4cf }
+        ]
+      },
+      // Spanish revival — cream stucco + terracotta tile gable + arched awning.
+      {
+        body: { w: 0.55, h: 0.52, d: 0.48, color: 0xf2e4c8 },
+        roof: { kind: 'gable', height: 0.16, color: 0xc46c34 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.24, depth: 0.10, color: 0xb8814a }
+        ]
       }
     ],
     3: [
@@ -1054,6 +1086,18 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.30, d: 0.30, h: 0.30, color: 0x4a7e78, roofKind: 'pyramid', roofHeight: 0.20, roofColor: 0x223a36 }
         ]
+      },
+      // Pink condo — rose-pink modernist body with stepped setback crown.
+      {
+        body: { w: 0.75, h: 1.30, d: 0.55, color: 0xd06ab8 },
+        decorations: [
+          { kind: 'tower', w: 0.40, d: 0.40, h: 0.30, color: 0xb84a98, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // Bronze tower — warm metallic body + tall antenna.
+      {
+        body: { w: 0.55, h: 1.55, d: 0.55, color: 0x9a6a3a },
+        decorations: [{ kind: 'antenna', h: 0.32, color: 0x222222 }]
       }
     ]
   },
@@ -1109,6 +1153,23 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'sign', side: 'S', w: 0.46, h: 0.10, y: 0.30, color: 0xece4cf }
         ]
+      },
+      // Bookstore — deep purple stucco + gold lettering sign.
+      {
+        body: { w: 0.55, h: 0.40, d: 0.50, color: 0x4a2c5a },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.34, depth: 0.10, color: 0x2a1832 },
+          { kind: 'sign', side: 'S', w: 0.32, h: 0.08, y: 0.32, color: 0xeec453 }
+        ]
+      },
+      // Bistro — cream stucco + bright orange awning + small patio.
+      {
+        body: { w: 0.55, h: 0.36, d: 0.42, color: 0xf2eee4 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.40, depth: 0.18, color: 0xc46c34 },
+          { kind: 'sign', side: 'E', w: 0.16, h: 0.08, y: 0.28, color: 0x2e2e2e }
+        ]
       }
     ],
     2: [
@@ -1154,6 +1215,22 @@ const VARIANTS: VariantTable = {
           { kind: 'awning', side: 'S', width: 0.46, depth: 0.10, color: 0xece4cf },
           { kind: 'sign', side: 'S', w: 0.30, h: 0.08, y: 0.55, color: 0xc8a040 }
         ]
+      },
+      // Tech startup — black body with neon-cyan accent strip + sign.
+      {
+        body: { w: 0.65, h: 0.85, d: 0.55, color: 0x14181c },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.45, h: 0.04, y: 0.55, color: 0x44e0c8 },
+          { kind: 'sign', side: 'S', w: 0.20, h: 0.10, y: 0.30, color: 0xece4cf }
+        ]
+      },
+      // Hotel mid-rise — cream + warm-amber sign + entry awning.
+      {
+        body: { w: 0.55, h: 0.85, d: 0.55, color: 0xece4cf },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.30, depth: 0.10, color: 0xc8a040 },
+          { kind: 'sign', side: 'S', w: 0.34, h: 0.08, y: 0.62, color: 0x6a4a2a }
+        ]
       }
     ],
     3: [
@@ -1192,6 +1269,20 @@ const VARIANTS: VariantTable = {
         body: { w: 0.55, h: 1.30, d: 0.55, color: 0x44746a },
         decorations: [
           { kind: 'tower', w: 0.40, d: 0.40, h: 0.30, color: 0x4e8678, roofKind: 'pyramid', roofHeight: 0.40, roofColor: 0x223e38 }
+        ]
+      },
+      // Maroon corporate tower — deep wine body + gold trim band sign.
+      {
+        body: { w: 0.55, h: 1.55, d: 0.55, color: 0x4a1820 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.48, h: 0.06, y: 1.10, color: 0xc8a040 }
+        ]
+      },
+      // Geometric crystal — faceted base + slim setback tower with pyramid cap.
+      {
+        body: { w: 0.85, h: 0.55, d: 0.85, color: 0x4a607c },
+        decorations: [
+          { kind: 'tower', w: 0.45, d: 0.45, h: 0.85, color: 0x5a7290, roofKind: 'pyramid', roofHeight: 0.30, roofColor: 0x2c3a4e }
         ]
       }
     ]
@@ -1239,6 +1330,21 @@ const VARIANTS: VariantTable = {
         body: { w: 0.50, h: 0.38, d: 0.55, color: 0x9e4a32 },
         roof: { kind: 'hip', height: 0.20, color: 0x6e3a26 },
         decorations: [{ kind: 'stack', dx: 0, dz: -0.20, h: 0.40, color: 0x3a261a }]
+      },
+      // Recycling center — orange-and-green sorting bays with sign.
+      {
+        body: { w: 0.55, h: 0.30, d: 0.55, color: 0xc46c34 },
+        body2: { w: 0.55, h: 0.18, d: 0.20, color: 0x4a8e44, yBase: 0 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.30, h: 0.08, y: 0.26, color: 0xece4cf }
+        ]
+      },
+      // Brewing micro — red-brick body + one prominent vertical tank.
+      {
+        body: { w: 0.45, h: 0.34, d: 0.45, color: 0x822c24 },
+        decorations: [
+          { kind: 'tank', dx: 0.20, dz: 0.10, r: 0.10, h: 0.55, color: 0xc8c4be }
+        ]
       }
     ],
     2: [
@@ -1284,6 +1390,23 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'crane', dx: 0.30, dz: 0.10, h: 0.85, color: 0x3a3a3a },
           { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.42, color: 0x1a1a1a }
+        ]
+      },
+      // Pharma plant — sterile white body with twin tall stacks.
+      {
+        body: { w: 0.65, h: 0.55, d: 0.55, color: 0xece4cf },
+        decorations: [
+          { kind: 'stack', dx: -0.20, dz: -0.18, h: 0.75, color: 0x6a6e72 },
+          { kind: 'stack', dx:  0.20, dz: -0.18, h: 0.65, color: 0x6a6e72 },
+          { kind: 'sign', side: 'S', w: 0.32, h: 0.06, y: 0.50, color: 0x4d8eb9 }
+        ]
+      },
+      // Auto-parts factory — slate slab + central crane + dock.
+      {
+        body: { w: 0.80, h: 0.50, d: 0.50, color: 0x4a525c },
+        body2: { w: 0.30, h: 0.20, d: 0.20, color: 0x3a4048, yBase: 0 },
+        decorations: [
+          { kind: 'crane', dx: 0, dz: 0, h: 0.85, color: 0xeec453 }
         ]
       }
     ],
@@ -1343,6 +1466,24 @@ const VARIANTS: VariantTable = {
           { kind: 'tank', dx:  0.30, dz: -0.20, r: 0.10, h: 0.75, color: 0xece4cf },
           { kind: 'stack', dx: 0, dz: -0.30, h: 1.55, color: 0x444840 }
         ]
+      },
+      // Shipyard — long blue admin block with pair of dockside cranes.
+      {
+        body: { w: 0.85, h: 0.65, d: 0.45, color: 0x2c3a5a },
+        decorations: [
+          { kind: 'crane', dx: -0.32, dz: 0.18, h: 1.30, color: 0x4d8eb9 },
+          { kind: 'crane', dx:  0.32, dz: 0.18, h: 1.40, color: 0x4d8eb9 },
+          { kind: 'tank',  dx: 0, dz: -0.30, r: 0.12, h: 0.55, color: 0x6a7a90 }
+        ]
+      },
+      // Mining op — earth-toned wide body + tall central stack + ore tanks.
+      {
+        body: { w: 0.85, h: 0.75, d: 0.55, color: 0x5a3e2a },
+        decorations: [
+          { kind: 'stack', dx: 0,    dz: -0.22, h: 1.50, color: 0x2e1c12 },
+          { kind: 'tank',  dx: -0.30, dz:  0.22, r: 0.12, h: 0.85, color: 0x9a7860 },
+          { kind: 'tank',  dx:  0.30, dz:  0.22, r: 0.12, h: 0.65, color: 0x9a7860 }
+        ]
       }
     ]
   },
@@ -1395,6 +1536,22 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'sign', side: 'S', w: 0.20, h: 0.08, y: 0.32, color: 0xece4cf }
         ]
+      },
+      // Pharmacy + flat — mint-green walls + white awning + cross sign.
+      {
+        body: { w: 0.55, h: 0.42, d: 0.45, color: 0xa6d4b8 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.36, depth: 0.10, color: 0xece4cf },
+          { kind: 'sign', side: 'S', w: 0.16, h: 0.10, y: 0.32, color: 0x2c8a4c }
+        ]
+      },
+      // Wine shop + flat — deep purple stucco + warm-amber awning.
+      {
+        body: { w: 0.55, h: 0.45, d: 0.45, color: 0x46285c },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.36, depth: 0.12, color: 0xc8a040 },
+          { kind: 'sign', side: 'E', w: 0.16, h: 0.08, y: 0.32, color: 0xece4cf }
+        ]
       }
     ],
     2: [
@@ -1440,6 +1597,22 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.30, d: 0.30, h: 0.78, color: 0x6a8aac, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
           { kind: 'awning', side: 'S', width: 0.32, depth: 0.10, color: 0x1a1a1a }
+        ]
+      },
+      // Live/work loft — red brick body with black trim + warehouse vibe.
+      {
+        body: { w: 0.65, h: 0.78, d: 0.55, color: 0x6a3024 },
+        body2: { w: 0.65, h: 0.18, d: 0.55, color: 0x14181c, yBase: 0 },
+        decorations: [
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.05, y: 0.25, color: 0xece4cf }
+        ]
+      },
+      // Modern condo + plaza — pale grey body, plaza setback, wide awning.
+      {
+        body: { w: 0.55, h: 0.85, d: 0.55, color: 0xb0b8c0 },
+        body2: { w: 0.85, h: 0.10, d: 0.65, color: 0xc8c4be, yBase: 0 },
+        decorations: [
+          { kind: 'awning', side: 'S', width: 0.50, depth: 0.14, color: 0x2c4060 }
         ]
       }
     ],
@@ -1489,6 +1662,22 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.28, d: 0.28, h: 1.40, color: 0x3a4258, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
           { kind: 'antenna', h: 0.20, color: 0x444444 }
+        ]
+      },
+      // Ochre tower — warm yellow-tan classic stepped form with crown.
+      {
+        body: { w: 0.85, h: 0.50, d: 0.85, color: 0xc8a040 },
+        decorations: [
+          { kind: 'tower', w: 0.62, d: 0.62, h: 0.55, color: 0xb88a3a },
+          { kind: 'tower', w: 0.40, d: 0.40, h: 0.55, color: 0xa87a30, roofKind: 'pyramid', roofHeight: 0.16, roofColor: 0x6a4a1a }
+        ]
+      },
+      // Asymmetric duo — slate slabs of unequal heights joined by a podium.
+      {
+        body: { w: 0.85, h: 0.32, d: 0.85, color: 0x4a525c },
+        decorations: [
+          { kind: 'tower', w: 0.28, d: 0.40, h: 1.45, color: 0x5e6878, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'antenna', h: 0.18, color: 0x444444 }
         ]
       }
     ]
@@ -1579,7 +1768,17 @@ const RESIDENTIAL_SKY: SkyscraperDesign[] = [
   { bodyColor: 0xb88a5e, glassColor: 0x3a2614, finColor: 0x8a623a, crownColor: 0x6c4a30,
     height: 6.5, inset: 0.30, setbackAtFrac: 0.65, setbackInsetFactor: 0.5,
     crownStyle: 'pyramid', spireH: 0.7, spireColor: 0x4e3220,
-    hasFins: true, hasPodiumGlass: false }
+    hasFins: true, hasPodiumGlass: false },
+  // 6 — Pink + Glass: bright rose with mech crown
+  { bodyColor: 0xd06ab8, glassColor: 0x4a1a3e, finColor: 0xb04898, crownColor: 0x8a2a72,
+    height: 7.2, inset: 0.30, setbackAtFrac: 0.80, setbackInsetFactor: 0.55,
+    crownStyle: 'mech', spireH: 0, spireColor: 0,
+    hasFins: false, hasPodiumGlass: true },
+  // 7 — Black-and-Gold Deco: dark base with gold ziggurat crown
+  { bodyColor: 0x1a1d24, glassColor: 0x080a10, finColor: 0xc8a040, crownColor: 0xc8a040,
+    height: 7.8, inset: 0.30, setbackAtFrac: 0.55, setbackInsetFactor: 0.45,
+    crownStyle: 'stepped', spireH: 0.6, spireColor: 0xc8a040,
+    hasFins: true, hasPodiumGlass: true }
 ];
 
 const COMMERCIAL_SKY: SkyscraperDesign[] = [
@@ -1613,6 +1812,16 @@ const COMMERCIAL_SKY: SkyscraperDesign[] = [
   { bodyColor: 0x445e54, glassColor: 0x16261e, finColor: 0x2c4036, crownColor: 0x2c4036,
     height: 7.5, inset: 0.30, setbackAtFrac: 0.85, setbackInsetFactor: 0.55,
     crownStyle: 'pyramid', spireH: 1.0, spireColor: 0x223e36,
+    hasFins: false, hasPodiumGlass: true },
+  // 6 — Royal Purple Corporate: deep purple body + silver mech crown
+  { bodyColor: 0x462c5a, glassColor: 0x14081a, finColor: 0x6a4a82, crownColor: 0xb0b8c0,
+    height: 8.0, inset: 0.30, setbackAtFrac: 0.78, setbackInsetFactor: 0.5,
+    crownStyle: 'mech', spireH: 0.5, spireColor: 0x9aa0ac,
+    hasFins: true, hasPodiumGlass: true },
+  // 7 — Cyan Glass Slab: bright cyan + flat top + tall antenna
+  { bodyColor: 0x44a8c8, glassColor: 0x0c3848, finColor: 0x2c8aa8, crownColor: 0x2c6a82,
+    height: 8.5, inset: 0.20, setbackAtFrac: 0, setbackInsetFactor: 0,
+    crownStyle: 'flat', spireH: 0.9, spireColor: 0x666666,
     hasFins: false, hasPodiumGlass: true }
 ];
 
@@ -1647,6 +1856,16 @@ const MIXED_SKY: SkyscraperDesign[] = [
   { bodyColor: 0xddd2b7, glassColor: 0x40342a, finColor: 0xb8ad94, crownColor: 0xa89878,
     height: 7.5, inset: 0.32, setbackAtFrac: 0.7, setbackInsetFactor: 0.5,
     crownStyle: 'dome', spireH: 0, spireColor: 0,
+    hasFins: true, hasPodiumGlass: true },
+  // 6 — Warm Earth Tower: terracotta + cream banded with stepped crown
+  { bodyColor: 0xc46c34, glassColor: 0x3a1c10, finColor: 0xece4cf, crownColor: 0x8a4a22,
+    height: 7.0, inset: 0.32, setbackAtFrac: 0.55, setbackInsetFactor: 0.5,
+    crownStyle: 'stepped', spireH: 0, spireColor: 0,
+    hasFins: true, hasPodiumGlass: true },
+  // 7 — Black + Gold Accent: deep navy with gold-cap crown + spire
+  { bodyColor: 0x1a2336, glassColor: 0x080c14, finColor: 0xc8a040, crownColor: 0xc8a040,
+    height: 8.0, inset: 0.30, setbackAtFrac: 0.72, setbackInsetFactor: 0.5,
+    crownStyle: 'mech', spireH: 0.7, spireColor: 0xc8a040,
     hasFins: true, hasPodiumGlass: true }
 ];
 

@@ -414,13 +414,24 @@ export class Renderer {
       // tiles override to the absolute deck height.
       const yA = roadSurfaceY(grid, aTileX, aTileY);
       const yB = roadSurfaceY(grid, bTileX, bTileY);
+      // Right-lane offset (Alpha 2.13.2) — drive on the right of the
+      // centreline so opposing traffic passes on the left. Right
+      // perpendicular = (dz, -dx) when looking down +Y.
+      const dxSeg = bx - ax;
+      const dzSeg = bz - az;
+      const segLen = Math.hypot(dxSeg, dzSeg) || 1;
+      const ta = grid.get(aTileX, aTileY);
+      const tier = ta?.roadType ?? 'local';
+      const laneOffset = ROAD_TIER[tier].width * 0.22; // ≈ centre of right lane
+      const rightX = (dzSeg / segLen) * laneOffset;
+      const rightZ = (-dxSeg / segLen) * laneOffset;
       obj.position.set(
-        (ax + (bx - ax) * t) * TILE_SIZE,
+        (ax + dxSeg * t) * TILE_SIZE + rightX * TILE_SIZE,
         yA + (yB - yA) * t + 0.05,
-        (az + (bz - az) * t) * TILE_SIZE
+        (az + dzSeg * t) * TILE_SIZE + rightZ * TILE_SIZE
       );
       // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
-      obj.rotation.set(0, Math.atan2(bx - ax, bz - az), 0);
+      obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.carsMesh.setMatrixAt(i, obj.matrix);
@@ -553,20 +564,20 @@ export class Renderer {
       const bx = bTileX + 0.5;
       const bz = bTileY + 0.5;
       const t = bus.segmentT;
-      // Pull-over offset: when dwelling at a stop, slide the bus to the
-      // sidewalk on the building-side (perpendicular to direction). The
-      // road centreline stays clear so cars pass freely.
-      let lateral = 0;
-      if (bus.dwellRemaining > 0) {
-        // Offset toward the right of travel — close enough to the bus bay
-        // visual on a typical road tile.
-        lateral = 0.22;
-      }
+      // Right-lane offset (Alpha 2.13.2) + pull-over offset on dwell.
+      // Right perpendicular = (dz, -dx) when looking down +Y so cars and
+      // buses keep to the right of the centreline. Pull-over adds extra
+      // rightward shift so the bus tucks into the sidewalk for boarding.
       const dx = bx - ax;
       const dz = bz - az;
       const len = Math.hypot(dx, dz) || 1;
-      const px = -dz / len * lateral;
-      const pz = dx / len * lateral;
+      const ta = grid.get(aTileX, aTileY);
+      const tier = ta?.roadType ?? 'local';
+      const baseLane = ROAD_TIER[tier].width * 0.22;
+      const dwellExtra = bus.dwellRemaining > 0 ? 0.18 : 0;
+      const lateral = baseLane + dwellExtra;
+      const px = (dz / len) * lateral;
+      const pz = (-dx / len) * lateral;
       const yA = roadSurfaceY(grid, aTileX, aTileY);
       const yB = roadSurfaceY(grid, bTileX, bTileY);
       obj.position.set(

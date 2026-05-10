@@ -12,6 +12,7 @@ import {
   type Zone
 } from '../types';
 import type { GlobalMarket } from './GlobalMarket';
+import type { Events } from './Events';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -102,11 +103,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market);
+      this.runMonth(grid, population, market, events);
     }
   }
 
@@ -122,7 +123,7 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -141,8 +142,12 @@ export class Economy {
       else if (t.building === 'farm') farmTiles++;
     }
     const isConnected = market ? market.isConnected() : true;
-    const lumberPrice = market ? market.lumberPrice(this.monthsElapsed) : 1.0;
-    const producePrice = market ? market.producePrice(this.monthsElapsed) : 1.0;
+    // Active recession / boom / trade-deal modifiers (Alpha 2.9) layer on
+    // top of the base oscillation as a multiplicative shock.
+    const eventLumberMult = events ? events.lumberShockMult() : 1.0;
+    const eventProduceMult = events ? events.produceShockMult() : 1.0;
+    const lumberPrice = (market ? market.lumberPrice(this.monthsElapsed) : 1.0) * eventLumberMult;
+    const producePrice = (market ? market.producePrice(this.monthsElapsed) : 1.0) * eventProduceMult;
     const forestryConn = isConnected ? 1.0 : FORESTRY_DISCONNECTED_MULT;
     const farmConn = isConnected ? 1.0 : FARM_DISCONNECTED_MULT;
     const forestryRevenue = forestryTiles * FORESTRY_BASE_REVENUE_PER_TILE * lumberPrice * forestryConn;

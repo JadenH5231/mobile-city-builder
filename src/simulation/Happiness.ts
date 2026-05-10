@@ -877,13 +877,23 @@ export class Happiness {
     economy: Economy,
     population: Population,
     traffic: Traffic,
-    civicMods?: CivicModifiers
+    civicMods?: CivicModifiers,
+    events?: import('./Events').Events
   ): void {
     const stats = buildStats(grid, economy, population, traffic);
     for (const f of FACTIONS) {
       this.happiness.set(f.id, clamp(f.compute(stats)));
     }
     if (civicMods) applyCivicModifiers(this.happiness, civicMods);
+    // Event-driven mood deltas (Alpha 2.9) — recessions / fires / etc.
+    // shift specific factions for several months. Layered on top so
+    // they decay independently of the underlying faction compute.
+    if (events) {
+      for (const f of FACTIONS) {
+        const d = events.factionMoodDelta(f.id);
+        if (d !== 0) this.happiness.set(f.id, clamp((this.happiness.get(f.id) ?? 0) + d));
+      }
+    }
   }
 
   /** Mean happiness across all factions, [-1, 1]. */

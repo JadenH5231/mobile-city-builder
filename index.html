@@ -269,6 +269,20 @@
         <button id="council-dismiss" class="modal__cta" type="button" aria-label="Acknowledge results">Got it</button>
       </div>
     </div>
+    <div id="event-modal" class="event-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="event-modal-title" aria-hidden="true">
+      <div id="event-modal-card" class="event-modal__card" data-severity="info">
+        <button type="button" id="event-modal-close" class="event-modal__close" aria-label="Dismiss">✕</button>
+        <div class="event-modal__head">
+          <div id="event-modal-avatar" class="event-modal__avatar"></div>
+          <div class="event-modal__head-text">
+            <div id="event-modal-title" class="event-modal__title">Event title</div>
+            <div id="event-modal-herald" class="event-modal__herald"></div>
+          </div>
+        </div>
+        <div id="event-modal-body" class="event-modal__body"></div>
+        <div id="event-modal-choices" class="event-modal__choices"></div>
+      </div>
+    </div>
     <div id="milestone-banner" class="milestone-banner hidden" role="status" aria-live="polite">
       <div id="milestone-banner-avatar" class="milestone-banner__avatar"></div>
       <div class="milestone-banner__body">

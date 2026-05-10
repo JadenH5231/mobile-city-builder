@@ -134,8 +134,9 @@ body {
   color: rgba(207, 232, 214, 0.5);
 }
 
-/* Bottom toolbar — always visible. Horizontally scrollable so the tool list
-   can grow past the viewport width without crushing labels. */
+/* Bottom toolbar — always visible. Two sections (Alpha 2.7.3): a pinned
+   cluster on the left (Pan + Bulldoze, never scrolls) and a horizontally
+   scrollable strip on the right with everything else. */
 .toolbar {
   position: fixed;
   left: 50%;
@@ -145,15 +146,8 @@ body {
   display: flex;
   gap: 4px;
   padding: 4px;
-  /* Scroll: cap to viewport width minus a margin, allow horizontal pan. */
+  /* Cap to viewport width; the inner .toolbar__scroll handles overflow. */
   max-width: calc(100vw - 24px);
-  overflow-x: auto;
-  overflow-y: hidden;
-  /* Pan-x lets horizontal touch drags scroll the toolbar without bubbling
-     to the canvas (which is touch-action: none and would eat the gesture). */
-  touch-action: pan-x;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
   background: var(--pill-bg);
   border: 1px solid var(--pill-border);
   border-radius: 999px;
@@ -163,7 +157,34 @@ body {
   pointer-events: auto;
 }
 
-/* Hide the scrollbar — the pill is the only visual we want. */
+/* Pinned section — fixed-width, never scrolls. Holds Pan + Bulldoze. */
+.toolbar__pinned {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding-right: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  margin-right: 2px;
+}
+
+/* Scrollable section — everything else. Horizontally scrollable. */
+.toolbar__scroll {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Pan-x lets horizontal touch drags scroll the strip without bubbling
+     to the canvas (which is touch-action: none and would eat the gesture). */
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+
+/* Hide scrollbars — the pill is the only visual we want. */
+.toolbar__scroll::-webkit-scrollbar { display: none; }
+.toolbar__scroll { scrollbar-width: none; }
 .toolbar::-webkit-scrollbar { display: none; }
 .toolbar { scrollbar-width: none; }
 

@@ -289,11 +289,29 @@ export class Toolbar {
 
   private render(): void {
     this.el.innerHTML = '';
+    // Two sections (Alpha 2.7.3): Pan + Bulldoze pin to the left as a
+    // fixed-width "always visible" cluster; everything else lives in a
+    // horizontally scrollable strip on the right. Pan and Bulldoze are
+    // the two most-used tools and were getting buried behind a long
+    // scroll once we added forestry / farm / luxury.
+    const pinned = document.createElement('div');
+    pinned.className = 'toolbar__pinned';
+    const scroll = document.createElement('div');
+    scroll.className = 'toolbar__scroll';
+    // Re-close popovers when the scroll strip is panned (used to live
+    // on `this.el` directly).
+    scroll.addEventListener('scroll', () => this.closePopovers(), { passive: true });
+    this.el.appendChild(pinned);
+    this.el.appendChild(scroll);
+
+    const PINNED_TOOLS = new Set<Tool>(['pan', 'bulldoze']);
     for (const item of ITEMS) {
       if (item.kind === 'tool') {
-        this.el.appendChild(this.makeToolButton(item));
+        const btn = this.makeToolButton(item);
+        if (PINNED_TOOLS.has(item.tool)) pinned.appendChild(btn);
+        else scroll.appendChild(btn);
       } else {
-        this.el.appendChild(this.makeGroup(item));
+        scroll.appendChild(this.makeGroup(item));
       }
     }
   }

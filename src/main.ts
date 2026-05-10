@@ -67,6 +67,36 @@ if (popEl) {
   popEl.addEventListener('click', () => game.toggleHappiness());
 }
 
+// HUD "More" popover (Alpha 3.1.1). Click the trigger to toggle; click
+// outside (or any item inside) auto-closes. Items live in the popover
+// so their own click handlers can still fire.
+const moreBtn = document.getElementById('hud-more');
+const morePopover = document.getElementById('hud-more-popover');
+if (moreBtn && morePopover) {
+  const setOpen = (open: boolean): void => {
+    morePopover.classList.toggle('hidden', !open);
+    morePopover.setAttribute('aria-hidden', String(!open));
+    moreBtn.setAttribute('aria-expanded', String(open));
+  };
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(morePopover.classList.contains('hidden'));
+  });
+  // Tapping any item inside the popover dismisses it after the action
+  // fires (the action's own listener still runs first).
+  morePopover.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && t.closest('.pill')) setOpen(false);
+  });
+  // Outside-tap closes.
+  document.addEventListener('pointerdown', (e) => {
+    if (morePopover.classList.contains('hidden')) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.closest('#hud-more-popover') || t === moreBtn)) return;
+    setOpen(false);
+  });
+}
+
 const heatmapBtn = document.getElementById('hud-heatmap');
 const crimeBtn = document.getElementById('hud-crime');
 const setHeatmapMode = (mode: 'none' | 'traffic' | 'crime'): void => {

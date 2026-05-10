@@ -33,16 +33,32 @@
       </div>
       <button id="hud-treasury" type="button" class="pill mono treasury" aria-label="Open budget">$50,000</button>
       <button id="hud-undo" type="button" class="pill action" aria-label="Undo last change" disabled>Undo</button>
-      <button id="hud-heatmap" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle traffic heatmap">Heat</button>
-      <button id="hud-crime" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle crime heatmap">Crime</button>
-      <button id="hud-bridge" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle bridge mode (overpasses)">Bridge</button>
-      <button id="hud-stats" type="button" class="pill action" aria-label="Open city stats">Stats</button>
-      <button id="hud-achievements" type="button" class="pill action" aria-label="Open achievements">🏆</button>
-      <button id="hud-cities" type="button" class="pill action" aria-label="Switch save slot">🏙</button>
-      <button id="hud-districts" type="button" class="pill action" aria-label="Manage districts">🗺</button>
       <button id="hud-speed" type="button" class="pill action speed" aria-label="Cycle simulation speed">▶</button>
-      <button id="hud-photo" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle photo mode">Photo</button>
+      <!-- More-menu pill collects secondary toggles + panel openers (Alpha 3.1.1).
+           Keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed. -->
+      <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">More</button>
       <div id="hud-fps" class="pill mono">— fps</div>
+    </div>
+    <!-- Popover lives at body level so it can render above the HUD without
+         being clipped by anything. Hidden by default; toggled by hud-more. -->
+    <div id="hud-more-popover" class="hud-more-popover hidden" role="menu" aria-hidden="true">
+      <div class="hud-more-popover__group">
+        <div class="hud-more-popover__group-label">Layers</div>
+        <button id="hud-heatmap" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle traffic heatmap">Heat</button>
+        <button id="hud-crime" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle crime heatmap">Crime</button>
+        <button id="hud-bridge" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle bridge mode (overpasses)">Bridge</button>
+      </div>
+      <div class="hud-more-popover__group">
+        <div class="hud-more-popover__group-label">Panels</div>
+        <button id="hud-stats" type="button" class="pill action" aria-label="Open city stats">📊 Stats</button>
+        <button id="hud-achievements" type="button" class="pill action" aria-label="Open achievements">🏆 Achievements</button>
+        <button id="hud-cities" type="button" class="pill action" aria-label="Switch save slot">🏙 Cities</button>
+        <button id="hud-districts" type="button" class="pill action" aria-label="Manage districts">🗺 Districts</button>
+      </div>
+      <div class="hud-more-popover__group">
+        <div class="hud-more-popover__group-label">Mode</div>
+        <button id="hud-photo" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle photo mode">📷 Photo</button>
+      </div>
     </div>
     <section
       id="tile-info"

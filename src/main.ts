@@ -116,6 +116,102 @@ if (statusToast && statusText) {
   };
 }
 
+// Milestone celebration banner (Alpha 2.8). Game.onMilestoneEarned
+// fires per milestone the city crosses; we render the gold-trim banner
+// with the herald leader's name + the unlocks + the cash/PC reward.
+// Auto-dismiss in 8 s, manual dismiss via the close button.
+import { FACTIONS } from './simulation/Happiness';
+const milestoneBanner = document.getElementById('milestone-banner');
+const milestoneAvatar = document.getElementById('milestone-banner-avatar');
+const milestoneTitle = document.getElementById('milestone-banner-title');
+const milestoneSubtitle = document.getElementById('milestone-banner-subtitle');
+const milestoneBlurb = document.getElementById('milestone-banner-blurb');
+const milestoneCash = document.getElementById('milestone-banner-cash');
+const milestonePC = document.getElementById('milestone-banner-pc');
+const milestoneUnlocks = document.getElementById('milestone-banner-unlocks');
+const milestoneClose = document.getElementById('milestone-banner-close');
+if (
+  milestoneBanner && milestoneAvatar && milestoneTitle && milestoneSubtitle &&
+  milestoneBlurb && milestoneCash && milestonePC && milestoneUnlocks && milestoneClose
+) {
+  let milestoneTimer: number | undefined;
+  const hide = (): void => {
+    milestoneBanner.classList.add('hidden');
+    milestoneBanner.setAttribute('aria-hidden', 'true');
+    if (milestoneTimer !== undefined) {
+      clearTimeout(milestoneTimer);
+      milestoneTimer = undefined;
+    }
+  };
+  milestoneClose.addEventListener('click', hide);
+  game.onMilestoneEarned = (m) => {
+    const herald = FACTIONS.find((f) => f.id === m.herald);
+    const initials = herald?.leaderName
+      ? herald.leaderName.split(/\s+/).map((p) => p[0] ?? '').join('').slice(0, 2).toUpperCase()
+      : '★';
+    milestoneAvatar.textContent = initials;
+    if (herald) {
+      milestoneAvatar.style.background = `#${herald.color.toString(16).padStart(6, '0')}33`;
+      milestoneAvatar.style.borderColor = `#${herald.color.toString(16).padStart(6, '0')}aa`;
+    }
+    milestoneTitle.textContent = m.name;
+    milestoneSubtitle.textContent = `${m.popThreshold.toLocaleString()} residents · ${m.subtitle}`;
+    milestoneBlurb.textContent = `"${m.blurb}" — ${herald?.leaderName ?? m.herald}`;
+    milestoneCash.textContent = `+$${m.rewardCash.toLocaleString()}`;
+    milestonePC.textContent = `+${m.rewardPC} PC`;
+    milestoneUnlocks.innerHTML = '';
+    if (m.unlocks.length === 0) {
+      const span = document.createElement('span');
+      span.className = 'milestone-banner__unlock';
+      span.textContent = 'Legacy bonus';
+      milestoneUnlocks.appendChild(span);
+    } else {
+      for (const u of m.unlocks) {
+        const span = document.createElement('span');
+        span.className = 'milestone-banner__unlock';
+        span.textContent = unlockLabel(u);
+        milestoneUnlocks.appendChild(span);
+      }
+    }
+    milestoneBanner.classList.remove('hidden');
+    milestoneBanner.setAttribute('aria-hidden', 'false');
+    if (milestoneTimer !== undefined) clearTimeout(milestoneTimer);
+    milestoneTimer = window.setTimeout(hide, 8000);
+  };
+}
+
+function unlockLabel(tool: string): string {
+  const map: Record<string, string> = {
+    road_local: 'Local road',
+    road_avenue: 'Avenue',
+    road_highway: 'Highway',
+    place_path: 'Path',
+    residential_low: 'R · Low',
+    residential_medium: 'R · Med',
+    residential_high: 'R · High',
+    residential_luxury_low: 'R · Lux',
+    commercial_low: 'C · Low',
+    commercial_medium: 'C · Med',
+    commercial_high: 'C · High',
+    industrial_low: 'I · Low',
+    industrial_medium: 'I · Med',
+    industrial_high: 'I · High',
+    mixed_low: 'MU · Low',
+    mixed_medium: 'MU · Med',
+    mixed_high: 'MU · High',
+    place_power: 'Power plant',
+    place_water: 'Water tower',
+    place_park: 'Park',
+    place_forestry: 'Forestry',
+    place_farm: 'Farm',
+    place_bus_stop: 'Bus stop',
+    place_bus_depot: 'Bus depot',
+    place_stop_sign: 'Stop sign',
+    place_traffic_light: 'Traffic light'
+  };
+  return map[tool] ?? tool;
+}
+
 // "Show tutorial again" link in the budget panel.
 const showTutorialBtn = document.getElementById('budget-show-tutorial');
 if (showTutorialBtn) {

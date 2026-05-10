@@ -7,6 +7,7 @@ import { Toolbar } from '../ui/Toolbar';
 import { Development } from '../simulation/Development';
 import { Economy } from '../simulation/Economy';
 import { GlobalMarket } from '../simulation/GlobalMarket';
+import { Milestones } from '../simulation/Milestones';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -113,6 +114,14 @@ export class Game {
   onStatusMessage?: (msg: string) => void;
 
   /**
+   * Milestone earned (Alpha 2.8). Fired once per milestone the city
+   * crosses, with the Milestone object so main.ts can render the
+   * celebration banner. Multiple milestones earned in one tick are
+   * delivered one at a time across subsequent frames.
+   */
+  onMilestoneEarned?: (m: import('../types').Milestone) => void;
+
+  /**
    * Sim speed multiplier. 0 = paused (no sim ticks, no vehicle/walker
    * motion). 1 = normal. 2 / 3 fast-forward. The render loop continues
    * regardless so the HUD stays responsive while paused.
@@ -159,6 +168,8 @@ export class Game {
   readonly economy = new Economy();
   /** Global lumber market + outside-world connection check (Alpha 2.7). */
   readonly globalMarket = new GlobalMarket();
+  /** Population milestones + tool unlocks (Alpha 2.8). */
+  readonly milestones = new Milestones();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -223,8 +234,19 @@ export class Game {
     this.panel = new TileInfoPanel();
     this.toolbar = new Toolbar();
     this.toolbar.onChange = (tool) => this.setTool(tool);
+    // Surface the "Unlocks at <Milestone> · NNN pop" toast when a player
+    // taps a locked tool (Alpha 2.8).
+    this.toolbar.onLocked = (tool) => {
+      const m = this.milestones.milestoneForTool(tool);
+      if (!m) {
+        this.onStatusMessage?.('Tool not yet available');
+        return;
+      }
+      this.onStatusMessage?.(`Unlocks at ${m.name} · ${m.popThreshold.toLocaleString()} pop`);
+    };
     // Refresh banned-tool indicators on first paint and after any election.
     this.refreshToolbarBans();
+    this.refreshToolbarLocks();
     this.budgetPanel = new BudgetPanel(this.economy);
     this.happinessPanel = new HappinessPanel({
       happiness: this.happiness,
@@ -257,7 +279,7 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council);
+        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones);
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -364,6 +386,38 @@ export class Game {
     this.toolbar.setBannedTools(banned);
   }
 
+  /**
+   * Push the current locked-tool set into the toolbar (Alpha 2.8).
+   * A tool is locked iff it isn't in `STARTING_TOOLS` and the
+   * milestones tracker hasn't unlocked it yet. The toolbar renders
+   * locked buttons with a 🔒 + greyed style and refuses to activate
+   * them; tapping shows an "Unlocks at <Milestone> · NNN pop" toast.
+   */
+  private refreshToolbarLocks(): void {
+    const KNOWN_TOOLS: readonly Tool[] = [
+      'pan', 'bulldoze',
+      'road_local', 'road_avenue', 'road_highway', 'place_path',
+      'residential_low', 'residential_medium', 'residential_high', 'residential_luxury_low',
+      'commercial_low', 'commercial_medium', 'commercial_high',
+      'industrial_low', 'industrial_medium', 'industrial_high',
+      'mixed_low', 'mixed_medium', 'mixed_high',
+      'place_power', 'place_water', 'place_park',
+      'place_forestry', 'place_farm',
+      'place_bus_stop', 'place_bus_depot',
+      'place_stop_sign', 'place_traffic_light'
+    ];
+    const locked = new Set<Tool>();
+    for (const t of KNOWN_TOOLS) {
+      if (!this.milestones.isUnlocked(t)) locked.add(t);
+    }
+    const lockHints = new Map<Tool, string>();
+    for (const t of locked) {
+      const m = this.milestones.milestoneForTool(t);
+      lockHints.set(t, m ? `${m.name} · ${m.popThreshold.toLocaleString()} pop` : 'Locked');
+    }
+    this.toolbar.setLockedTools(locked, lockHints);
+  }
+
   setTool(tool: Tool): void {
     if (this.tool === tool) return;
     this.tool = tool;
@@ -432,6 +486,23 @@ export class Game {
           this.civicModifiers()
         );
         this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council);
+        // Milestones (Alpha 2.8) — earn population thresholds, hand out
+        // tool unlocks + cash + PC, queue celebration banners. Called
+        // after population.tick so we see the freshest count.
+        if (this.milestones.tick(this.population.totalResidents)) {
+          // Apply rewards immediately — banners drain pending after.
+          while (this.milestones.hasPending()) {
+            const m = this.milestones.shiftPending();
+            if (!m) break;
+            this.economy.treasury += m.rewardCash;
+            this.council.politicalCapital = Math.min(
+              this.council.politicalCapital + m.rewardPC,
+              50  // PC_CAP — keep in sync with Council.ts
+            );
+            this.onMilestoneEarned?.(m);
+          }
+          this.refreshToolbarLocks();
+        }
         if (this.development.tick(this.grid)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket);
@@ -524,7 +595,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -595,7 +666,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -607,7 +678,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones);
     this.afterStateRestore();
   }
 
@@ -617,6 +688,8 @@ export class Game {
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
     this.globalMarket.recompute(this.grid);
+    // Re-derive milestone unlocks from the restored highestPop (Alpha 2.8).
+    this.refreshToolbarLocks();
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);

@@ -36,6 +36,22 @@ if (cityNameInput) {
   });
 }
 
+// Playtest cheats (Alpha 3.2.4) — checkboxes in the budget panel.
+const cheatMoneyEl = document.getElementById('cheat-unlimited-money') as HTMLInputElement | null;
+const cheatDemandEl = document.getElementById('cheat-unlimited-demand') as HTMLInputElement | null;
+if (cheatMoneyEl) {
+  cheatMoneyEl.checked = game.cheatUnlimitedMoney;
+  cheatMoneyEl.addEventListener('change', () => {
+    game.cheatUnlimitedMoney = cheatMoneyEl.checked;
+  });
+}
+if (cheatDemandEl) {
+  cheatDemandEl.checked = game.cheatUnlimitedDemand;
+  cheatDemandEl.addEventListener('change', () => {
+    game.cheatUnlimitedDemand = cheatDemandEl.checked;
+  });
+}
+
 // Slot picker — accessible via the 🏙 HUD pill. Picking a different slot
 // writes to localStorage and reloads so the chosen slot's save is the
 // only one in memory.

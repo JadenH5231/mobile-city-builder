@@ -267,6 +267,13 @@ export class Game {
    *  string means "use the default 'City N' label". Persisted alongside
    *  every autosave. */
   cityName = '';
+  /** Cheat: top up treasury to a billion at every monthly settlement
+   *  (Alpha 3.2.4). Useful for playtesting late-game systems without
+   *  having to grind. Persisted in the save so it survives reloads. */
+  cheatUnlimitedMoney = false;
+  /** Cheat: clamp R/C/I demand to +1.0 each frame so zoning grows
+   *  immediately regardless of city happiness or job balance. */
+  cheatUnlimitedDemand = false;
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -394,6 +401,8 @@ export class Game {
         if (data) {
           applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.districts);
           if (data.cityName) this.cityName = data.cityName;
+          this.cheatUnlimitedMoney = data.cheatUnlimitedMoney ?? false;
+          this.cheatUnlimitedDemand = data.cheatUnlimitedDemand ?? false;
         }
       }
     } catch {
@@ -617,6 +626,14 @@ export class Game {
           this.events
         );
         this.population.tick(this.grid, this.economy, this.traffic, this.happiness, this.council, this.events);
+        // Cheat: pin demand at +1 every tick (Alpha 3.2.4). Population
+        // recomputes demand each tick from current city state, so the
+        // override has to fire after the recompute every step.
+        if (this.cheatUnlimitedDemand) {
+          this.population.demandR = 1;
+          this.population.demandC = 1;
+          this.population.demandI = 1;
+        }
         // Milestones (Alpha 2.8) — earn population thresholds, hand out
         // tool unlocks + cash + PC, queue celebration banners. Called
         // after population.tick so we see the freshest count.
@@ -637,6 +654,12 @@ export class Game {
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
         this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts);
+        // Cheat: top up to a billion after the monthly settlement so
+        // expensive things (skyscrapers, $1M expansions, bonds) are
+        // always affordable while playtesting.
+        if (this.cheatUnlimitedMoney && this.economy.treasury < 1_000_000_000) {
+          this.economy.treasury = 1_000_000_000;
+        }
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
@@ -821,7 +844,11 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.cityName, this.districts).catch(() => {});
+        void this.saveGame.save(
+          this.grid, this.economy, this.council, this.milestones, this.events,
+          this.stats, this.achievements, this.bonds, this.cityName, this.districts,
+          { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand }
+        ).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);

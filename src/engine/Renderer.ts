@@ -1956,21 +1956,20 @@ function floodBuilding(
 }
 
 /**
- * Modular park renderer (Alpha 2.6). Returns a list of geometry parts
- * positioned in absolute world space (not tile-local) since a cluster
- * spans multiple tiles. Cluster size determines layout:
+ * Modular park renderer. Cluster size determines the size class:
+ *   1 tile  → small park (2 layouts)
+ *   2 tiles → community park (2 layouts)
+ *   3 tiles → neighbourhood park (2 layouts)
+ *   4+ tiles → grand park (2 layouts)
  *
- *   1 tile  → cottage park (current style: lawn, pond, 2 benches, 3 trees)
- *   2 tiles → community park: doubled lawn, paved diagonal path,
- *             playground (slide + swing pair), pond, 4 trees
- *   3 tiles → neighbourhood park: pavilion, central pond + fountain,
- *             scattered benches + trees, paved S-curve path
- *   4+ tiles → grand park: bandstand or fountain centerpiece, ring path,
- *              dense tree borders, multiple benches, perimeter shrubs
+ * Within each size class, a deterministic hash of the cluster's anchor
+ * tile picks between two layouts (Alpha 3.1.9), giving 8 visually
+ * distinct park designs total. The lex-smallest tile of the cluster
+ * supplies the hash so the same physical park always picks the same
+ * layout across renders / saves.
  *
- * The cluster's "centroid" (average tile position) anchors the central
- * features; lawns and trees are emitted per-tile so the cluster shape
- * stays organic.
+ * The cluster's "centroid" anchors central features; lawns and trees
+ * are emitted per-tile so the cluster shape stays organic.
  */
 function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildingPart[] {
   if (cluster.length === 0) return [];
@@ -1992,7 +1991,19 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
     out.push({ makeGeom: () => box(0.92, 0.04, 0.92), color: 0x4a8c3a, dx: cx, dy: 0.02, dz: cz });
   }
 
+  // Pick a sub-variant within each size class from the lex-smallest tile.
+  // Two layouts per class × four classes = 8 total designs.
+  let anchor = cluster[0]!;
+  for (const c of cluster) {
+    if (c.x < anchor.x || (c.x === anchor.x && c.y < anchor.y)) anchor = c;
+  }
+  const subVariant = (Math.abs(anchor.x * 73856093) ^ Math.abs(anchor.y * 19349663)) & 1;
+
   if (size === 1) {
+    if (subVariant === 1) {
+      addSculpturePlaza(cluster[0]!, centerX, centerZ, out);
+      return out;
+    }
     // === 1-tile cottage park ===
     const c = cluster[0]!;
     const cx = (c.x + 0.5) * TILE_SIZE;
@@ -2019,6 +2030,10 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
   }
 
   if (size === 2) {
+    if (subVariant === 1) {
+      addTennisCourt(cluster, centerX, centerZ, out);
+      return out;
+    }
     // === 2-tile community park: playground + pond + paths ===
     // Determine axis: tiles share an x or share a y.
     const a = cluster[0]!;
@@ -2061,6 +2076,10 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
   }
 
   if (size === 3) {
+    if (subVariant === 1) {
+      addRoseGarden(cluster, centerX, centerZ, out);
+      return out;
+    }
     // === 3-tile neighbourhood park: pavilion + central pond + path ===
     // Pavilion (open-air shelter) at centroid.
     out.push({ makeGeom: () => box(0.50, 0.025, 0.40), color: 0x6f4a2c, dx: centerX, dy: 0.32, dz: centerZ });
@@ -2104,6 +2123,11 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
       out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx + 0.32, dy: 0.09, dz: cz - 0.32 });
       out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: cx + 0.32, dy: 0.28, dz: cz - 0.32 });
     }
+    return out;
+  }
+
+  if (subVariant === 1) {
+    addBotanicalGarden(cluster, centerX, centerZ, out);
     return out;
   }
 
@@ -2160,6 +2184,203 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
     }
   }
   return out;
+}
+
+// --- Park sub-variant layouts (Alpha 3.1.9) ---------------------------
+
+/** 1-tile sculpture plaza: paved circle + central abstract sculpture +
+ *  4 perimeter benches facing inward. No pond, no trees on the tile —
+ *  contrast to the cottage garden's organic look. */
+function addSculpturePlaza(
+  c: { x: number; y: number }, _centerX: number, _centerZ: number, out: CityBuildingPart[]
+): void {
+  const cx = (c.x + 0.5) * TILE_SIZE;
+  const cz = (c.y + 0.5) * TILE_SIZE;
+  // Paved circular plaza.
+  out.push({ makeGeom: () => cyl(0.42, 0.04, 24), color: 0xb8b3a4, dx: cx, dy: 0.026, dz: cz });
+  // Inner accent ring.
+  out.push({ makeGeom: () => cyl(0.28, 0.045, 24), color: 0x9a948a, dx: cx, dy: 0.030, dz: cz });
+  // Sculpture base.
+  out.push({ makeGeom: () => cyl(0.12, 0.10, 16), color: 0x4a4f56, dx: cx, dy: 0.075, dz: cz });
+  // Sculpture itself — three stacked rotated boxes for an abstract feel.
+  out.push({ makeGeom: () => box(0.18, 0.16, 0.12), color: 0xc83838, dx: cx, dy: 0.20, dz: cz });
+  out.push({ makeGeom: () => box(0.12, 0.18, 0.16), color: 0xeec453, dx: cx, dy: 0.36, dz: cz });
+  out.push({ makeGeom: () => box(0.10, 0.12, 0.10), color: 0x4d8eb9, dx: cx, dy: 0.50, dz: cz });
+  // Four perimeter benches facing the plaza.
+  const benchOffsets: Array<[number, number, number, number]> = [
+    [0.34, 0, 1, 0], [-0.34, 0, 1, 0], [0, 0.34, 0, 1], [0, -0.34, 0, 1]
+  ];
+  for (const [bx, bz, ax, az] of benchOffsets) {
+    const w = ax === 1 ? 0.04 : 0.20;
+    const d = az === 1 ? 0.04 : 0.20;
+    out.push({ makeGeom: () => box(w, 0.025, d), color: 0x6b4f3a, dx: cx + bx, dy: 0.07, dz: cz + bz });
+  }
+  // Four corner shrubs to soften the paved look.
+  for (const [bx, bz] of [[0.36, 0.36], [-0.36, 0.36], [0.36, -0.36], [-0.36, -0.36]] as Array<[number, number]>) {
+    out.push({ makeGeom: () => sphereLite(0.10), color: 0x4a8e44, dx: cx + bx, dy: 0.10, dz: cz + bz });
+  }
+}
+
+/** 2-tile tennis court: paved court + net + line markings + 2 perimeter
+ *  benches + corner trees. */
+function addTennisCourt(
+  cluster: Array<{ x: number; y: number }>, centerX: number, centerZ: number, out: CityBuildingPart[]
+): void {
+  const a = cluster[0]!;
+  const b = cluster[1]!;
+  const horizontal = a.y === b.y;
+  // Court — clay-orange surface spans both tiles.
+  if (horizontal) {
+    out.push({ makeGeom: () => box(1.65, 0.03, 0.65), color: 0xc46c34, dx: centerX, dy: 0.030, dz: centerZ });
+    // Centre net (low slim box).
+    out.push({ makeGeom: () => box(0.025, 0.10, 0.65), color: 0xeae0c4, dx: centerX, dy: 0.080, dz: centerZ });
+    // Court lines — white edge stripes.
+    out.push({ makeGeom: () => box(1.65, 0.035, 0.025), color: 0xece4cf, dx: centerX, dy: 0.035, dz: centerZ - 0.30 });
+    out.push({ makeGeom: () => box(1.65, 0.035, 0.025), color: 0xece4cf, dx: centerX, dy: 0.035, dz: centerZ + 0.30 });
+  } else {
+    out.push({ makeGeom: () => box(0.65, 0.03, 1.65), color: 0xc46c34, dx: centerX, dy: 0.030, dz: centerZ });
+    out.push({ makeGeom: () => box(0.65, 0.10, 0.025), color: 0xeae0c4, dx: centerX, dy: 0.080, dz: centerZ });
+    out.push({ makeGeom: () => box(0.025, 0.035, 1.65), color: 0xece4cf, dx: centerX - 0.30, dy: 0.035, dz: centerZ });
+    out.push({ makeGeom: () => box(0.025, 0.035, 1.65), color: 0xece4cf, dx: centerX + 0.30, dy: 0.035, dz: centerZ });
+  }
+  // Perimeter benches off the court endlines.
+  if (horizontal) {
+    out.push({ makeGeom: () => box(0.20, 0.025, 0.04), color: 0x6b4f3a, dx: centerX - 0.92, dy: 0.07, dz: centerZ });
+    out.push({ makeGeom: () => box(0.20, 0.025, 0.04), color: 0x6b4f3a, dx: centerX + 0.92, dy: 0.07, dz: centerZ });
+  } else {
+    out.push({ makeGeom: () => box(0.04, 0.025, 0.20), color: 0x6b4f3a, dx: centerX, dy: 0.07, dz: centerZ - 0.92 });
+    out.push({ makeGeom: () => box(0.04, 0.025, 0.20), color: 0x6b4f3a, dx: centerX, dy: 0.07, dz: centerZ + 0.92 });
+  }
+  // 4 corner trees.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => cyl(0.04, 0.14, 6), color: 0x6b3f1f, dx: cx + 0.36, dy: 0.10, dz: cz + 0.36 });
+    out.push({ makeGeom: () => cone(0.18, 0.30, 8), color: 0x2f6a2d, dx: cx + 0.36, dy: 0.32, dz: cz + 0.36 });
+    out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx - 0.36, dy: 0.09, dz: cz - 0.36 });
+    out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: cx - 0.36, dy: 0.28, dz: cz - 0.36 });
+  }
+}
+
+/** 3-tile rose garden: geometric flower beds + central fountain +
+ *  perimeter hedges + perimeter benches. Formal layout. */
+function addRoseGarden(
+  cluster: Array<{ x: number; y: number }>, centerX: number, centerZ: number, out: CityBuildingPart[]
+): void {
+  // Central round fountain.
+  out.push({ makeGeom: () => cyl(0.30, 0.06, 16), color: 0xc8c4be, dx: centerX, dy: 0.05, dz: centerZ });
+  out.push({ makeGeom: () => cyl(0.22, 0.08, 16), color: 0x4d8eb9, dx: centerX, dy: 0.07, dz: centerZ });
+  out.push({ makeGeom: () => cyl(0.06, 0.20, 8), color: 0x9a9a9a, dx: centerX, dy: 0.10, dz: centerZ });
+  out.push({ makeGeom: () => sphereLite(0.10), color: 0xe0e6ec, dx: centerX, dy: 0.24, dz: centerZ });
+  // Geometric flower beds — 4 small rectangles + 4 round patches around centre.
+  // Outer red roses.
+  const beds: Array<[number, number, number]> = [
+    [0.45, 0.0, 0xc83838],   // east
+    [-0.45, 0.0, 0xc83838],  // west
+    [0.0, 0.45, 0xeec453],   // north - yellow
+    [0.0, -0.45, 0xeec453],  // south - yellow
+    [0.32, 0.32, 0xd06ab8],  // pink corner
+    [-0.32, 0.32, 0xd06ab8],
+    [0.32, -0.32, 0xd06ab8],
+    [-0.32, -0.32, 0xd06ab8]
+  ];
+  for (const [bx, bz, color] of beds) {
+    out.push({ makeGeom: () => box(0.18, 0.04, 0.18), color: 0x5c3e2a, dx: centerX + bx, dy: 0.030, dz: centerZ + bz });
+    out.push({ makeGeom: () => box(0.14, 0.05, 0.14), color, dx: centerX + bx, dy: 0.045, dz: centerZ + bz });
+  }
+  // Hedge perimeter on each tile (low green strip on the outward side).
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    // Skip if this tile contains the fountain (centroid).
+    if (Math.hypot(cx - centerX, cz - centerZ) < 0.5) continue;
+    // Hedge facing away from centroid.
+    const dx = cx - centerX;
+    const dz = cz - centerZ;
+    const len = Math.hypot(dx, dz) || 1;
+    const hx = cx + (dx / len) * 0.32;
+    const hz = cz + (dz / len) * 0.32;
+    out.push({ makeGeom: () => box(0.45, 0.10, 0.10), color: 0x4a8e44, dx: hx, dy: 0.08, dz: hz });
+    // Bench in front of the hedge facing the fountain.
+    const bx = cx + (dx / len) * 0.18;
+    const bz = cz + (dz / len) * 0.18;
+    out.push({ makeGeom: () => box(0.20, 0.025, 0.05), color: 0x6b4f3a, dx: bx, dy: 0.07, dz: bz });
+  }
+  // Connecting paved paths from each tile to centroid.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const dx = centerX - cx;
+    const dz = centerZ - cz;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.05) continue;
+    const horiz = Math.abs(dx) > Math.abs(dz);
+    if (horiz) {
+      out.push({ makeGeom: () => box(len, 0.04, 0.14), color: 0xc7c2b3, dx: (cx + centerX) / 2, dy: 0.028, dz: cz });
+    } else {
+      out.push({ makeGeom: () => box(0.14, 0.04, len), color: 0xc7c2b3, dx: cx, dy: 0.028, dz: (cz + centerZ) / 2 });
+    }
+  }
+}
+
+/** 4+ tile botanical garden: greenhouse pavilion + winding pond chain
+ *  + dense exotic-tree mix + perimeter hedge maze segments. */
+function addBotanicalGarden(
+  cluster: Array<{ x: number; y: number }>, centerX: number, centerZ: number, out: CityBuildingPart[]
+): void {
+  // Central greenhouse — long glass-walled pavilion with a peaked roof.
+  out.push({ makeGeom: () => box(0.85, 0.05, 0.55), color: 0xc8c4be, dx: centerX, dy: 0.025, dz: centerZ });
+  // Glass walls (pale teal).
+  out.push({ makeGeom: () => box(0.82, 0.32, 0.52), color: 0xa8d4cc, dx: centerX, dy: 0.21, dz: centerZ });
+  // Slightly darker glass band at the top.
+  out.push({ makeGeom: () => box(0.85, 0.04, 0.55), color: 0x6c9a90, dx: centerX, dy: 0.39, dz: centerZ });
+  // Pitched roof.
+  out.push({ makeGeom: () => cone(0.45, 0.20, 4), color: 0x4a3020, dx: centerX, dy: 0.50, dz: centerZ });
+  // Roof finial.
+  out.push({ makeGeom: () => cone(0.04, 0.08, 6), color: 0xe5c25a, dx: centerX, dy: 0.60, dz: centerZ });
+  // Pond chain — three small connected ponds curving around the greenhouse.
+  out.push({ makeGeom: () => cyl(0.20, 0.06, 12), color: 0x4d8eb9, dx: centerX + 0.85, dy: 0.030, dz: centerZ - 0.30 });
+  out.push({ makeGeom: () => cyl(0.16, 0.06, 12), color: 0x4d8eb9, dx: centerX + 0.62, dy: 0.030, dz: centerZ + 0.40 });
+  out.push({ makeGeom: () => cyl(0.18, 0.06, 12), color: 0x4d8eb9, dx: centerX - 0.78, dy: 0.030, dz: centerZ + 0.20 });
+  // Hedge maze segments — a few short hedges per tile (skip the greenhouse tile).
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    if (Math.hypot(cx - centerX, cz - centerZ) < 0.5) continue;
+    // Two perpendicular short hedges.
+    out.push({ makeGeom: () => box(0.30, 0.10, 0.06), color: 0x3a6a3a, dx: cx + 0.10, dy: 0.07, dz: cz - 0.20 });
+    out.push({ makeGeom: () => box(0.06, 0.10, 0.30), color: 0x3a6a3a, dx: cx - 0.20, dy: 0.07, dz: cz + 0.10 });
+  }
+  // Dense exotic tree mix — each non-centroid tile gets 3 trees of
+  // varied colours (palm-green, deep teal-green, autumn red-orange).
+  const palette = [0x2f6a2d, 0x4a8e44, 0x3a7a3a, 0xc46c34, 0x6a9a4a];
+  for (let i = 0; i < cluster.length; i++) {
+    const c = cluster[i]!;
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    if (Math.hypot(cx - centerX, cz - centerZ) < 0.5) continue;
+    out.push({ makeGeom: () => cyl(0.04, 0.14, 6), color: 0x6b3f1f, dx: cx - 0.36, dy: 0.10, dz: cz - 0.36 });
+    out.push({ makeGeom: () => cone(0.18, 0.32, 8), color: palette[i % palette.length]!, dx: cx - 0.36, dy: 0.34, dz: cz - 0.36 });
+    out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx + 0.36, dy: 0.09, dz: cz + 0.36 });
+    out.push({ makeGeom: () => sphereLite(0.16), color: palette[(i + 2) % palette.length]!, dx: cx + 0.36, dy: 0.30, dz: cz + 0.36 });
+    out.push({ makeGeom: () => cyl(0.035, 0.10, 6), color: 0x6b3f1f, dx: cx - 0.30, dy: 0.08, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cone(0.13, 0.20, 8), color: palette[(i + 1) % palette.length]!, dx: cx - 0.30, dy: 0.25, dz: cz + 0.30 });
+  }
+  // Connecting paths (gravel) — same as bandstand layout for navigability.
+  for (const c of cluster) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    const dx = centerX - cx;
+    const dz = centerZ - cz;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.05) continue;
+    const horiz = Math.abs(dx) > Math.abs(dz);
+    if (horiz) {
+      out.push({ makeGeom: () => box(len, 0.04, 0.14), color: 0xc4b894, dx: (cx + centerX) / 2, dy: 0.028, dz: cz });
+    } else {
+      out.push({ makeGeom: () => box(0.14, 0.04, len), color: 0xc4b894, dx: cx, dy: 0.028, dz: (cz + centerZ) / 2 });
+    }
+  }
 }
 
 /**

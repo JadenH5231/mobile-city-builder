@@ -9,6 +9,7 @@ import { Economy } from '../simulation/Economy';
 import { GlobalMarket } from '../simulation/GlobalMarket';
 import { Milestones } from '../simulation/Milestones';
 import { Events, type GameEvent } from '../simulation/Events';
+import { Stats } from '../simulation/Stats';
 import { Pathfinding } from '../simulation/Pathfinding';
 import { PathGraph } from '../simulation/PathGraph';
 import { Pedestrians } from '../simulation/Pedestrians';
@@ -187,6 +188,8 @@ export class Game {
   readonly milestones = new Milestones();
   /** Random events + crises (Alpha 2.9). */
   readonly events = new Events();
+  /** Time-series history (Alpha 2.11). Captured monthly. */
+  readonly stats = new Stats();
   readonly population = new Population();
   private readonly development = new Development(this.population);
   // Road graph is rebuilt on any road-state change. Pathfinder reuses
@@ -296,7 +299,7 @@ export class Game {
         await this.saveGame.clear();
       } else {
         const data = await this.saveGame.load();
-        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events);
+        if (data) applySave(data, this.grid, this.economy, this.council, this.milestones, this.events, this.stats);
       }
     } catch {
       // IndexedDB not available (private browsing on iOS, etc.) — ignore.
@@ -551,6 +554,10 @@ export class Game {
           this.events.tickMonth(
             this.grid, this.economy, this.population, this.council, this.happiness
           );
+          // Capture history sample (Alpha 2.11) for the Stats panel.
+          this.stats.capture(
+            this.economy.monthsElapsed, this.economy, this.population, this.happiness
+          );
           while (this.events.hasPending()) {
             const e = this.events.shiftPending();
             if (!e) break;
@@ -630,7 +637,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events).catch(() => {});
+        void this.saveGame.save(this.grid, this.economy, this.council, this.milestones, this.events, this.stats).catch(() => {});
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -701,7 +708,7 @@ export class Game {
 
   /** Capture the current grid + economy state and push it onto the undo stack. */
   private snapshotForUndo(): void {
-    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events));
+    this.undoStack.push(serialize(this.grid, this.economy, this.council, this.milestones, this.events, this.stats));
     if (this.undoStack.length > UNDO_STACK_LIMIT) this.undoStack.shift();
   }
 
@@ -713,7 +720,7 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
-    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events);
+    applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats);
     this.afterStateRestore();
   }
 

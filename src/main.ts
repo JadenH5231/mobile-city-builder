@@ -43,6 +43,17 @@ if (undoBtn) {
   });
 }
 
+// Stats panel HUD pill (Alpha 2.11) — opens the line-graph history.
+import { StatsPanel } from './ui/StatsPanel';
+const statsPanel = new StatsPanel(game.stats);
+const statsBtn = document.getElementById('hud-stats');
+if (statsBtn) {
+  statsBtn.addEventListener('click', () => {
+    if (statsPanel.isOpen()) statsPanel.hide();
+    else statsPanel.show();
+  });
+}
+
 // Sim speed cycler — 1× → 2× → 3× → ⏸ → 1×.
 // Glyphs read at-a-glance even in a 12px pill: triangle for play, double
 // for 2x, triple for 3x, the standard pause bars for 0.

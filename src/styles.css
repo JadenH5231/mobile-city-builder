@@ -1123,6 +1123,74 @@ body.photo-mode .photo-op {
   color: rgba(255, 245, 215, 0.95);
 }
 
+/* ---- Stats panel (Alpha 2.11) --------------------------------------- */
+
+.stats__sheet {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+
+.stats__empty {
+  padding: 24px 6px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.5;
+}
+
+.stats__charts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.stats__chart {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.stats__chart-head {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+}
+.stats__chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+.stats__chart-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.50);
+  margin-top: 1px;
+}
+.stats__chart-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.stats__chart-stat-current {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stats__chart-stat-range {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.stats__chart-canvas {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+}
+
 /* ---- Event modal (Alpha 2.9) ---------------------------------------- */
 
 .event-modal {

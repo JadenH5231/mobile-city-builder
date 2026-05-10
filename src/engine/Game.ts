@@ -884,23 +884,33 @@ export class Game {
     this.panel.hide();
   }
 
-  /** Pay $1M and grow the city bounds in the given direction (Alpha 3.2.1).
-   *  Newly-included tiles flip to owned. Triggers a re-render of zones +
-   *  the unowned-land overlay + the + buttons themselves. */
+  /** Pay $1M and grow the WORLD itself in the given direction (Alpha 3.2.3).
+   *  The grid actually resizes — adds CITY_EXPANSION_BLOCK_SIZE tiles
+   *  past the existing edge, generates fresh terrain there, marks the
+   *  newly-included tiles as owned, and shifts the camera target so the
+   *  visual position doesn't jump. Old worlds keep their save schema —
+   *  just persist a wider/taller grid next save. */
   expandCity(direction: 'N' | 'S' | 'E' | 'W'): boolean {
-    if (!this.grid.canExpand(direction)) {
-      this.onStatusMessage?.('Already at the edge of the world');
-      return false;
-    }
     if (this.economy.treasury < CITY_EXPANSION_COST) {
       this.onStatusMessage?.(`City expansion costs $${CITY_EXPANSION_COST.toLocaleString()}`);
       return false;
     }
-    const added = this.grid.expandBounds(direction, CITY_EXPANSION_BLOCK_SIZE);
-    if (added === 0) return false;
+    const { offsetX, offsetY } = this.grid.expandWorld(direction, CITY_EXPANSION_BLOCK_SIZE);
     this.economy.treasury -= CITY_EXPANSION_COST;
-    this.renderer.drawZones(this.grid);
-    this.onStatusMessage?.(`City expanded · +${added} tiles`);
+    // Shift the camera target to compensate for the offset so what the
+    // player was looking at doesn't visually jump.
+    if (offsetX !== 0 || offsetY !== 0) {
+      this.camera.target.x += offsetX * TILE_SIZE;
+      this.camera.target.z += offsetY * TILE_SIZE;
+      this.camera.update();
+    }
+    // Full re-render dance — tiles shifted, edges re-packed, new terrain
+    // exists. Treat this like a save restore: rebuild every tile-indexed
+    // system + every renderer mesh, clear in-flight vehicles/walkers
+    // because their cached path indices no longer point at the right tiles.
+    // afterStateRestore handles terrain + everything else.
+    this.afterStateRestore();
+    this.onStatusMessage?.(`City expanded · +${CITY_EXPANSION_BLOCK_SIZE} tile${direction} edge`);
     return true;
   }
 
@@ -986,12 +996,21 @@ export class Game {
     this.skyscrapers.reset();
     // Re-derive milestone unlocks from the restored highestPop (Alpha 2.8).
     this.refreshToolbarLocks();
+    // Grid dims may have changed (Alpha 3.2.3 expanded saves). Update the
+    // camera's max-zoom-out cap to match the new world. Don't reset the
+    // target — we want to preserve whatever the player was looking at.
+    const w = this.grid.width * TILE_SIZE;
+    const h = this.grid.height * TILE_SIZE;
+    this.camera.maxOrthoSize = Math.max(w, h);
+    // Terrain mesh is dim-dependent — rebuild after every restore.
+    this.renderer.drawWorld(this.grid);
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.renderer.drawDistricts(this.grid, this.districts);
+    this.renderer.drawNightLights(this.grid);
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();

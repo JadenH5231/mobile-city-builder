@@ -269,8 +269,11 @@ export const LAND_PURCHASE_COST_PER_TILE = 500;
  *  (Alpha 3.2.1). One million dollars per expansion — a big-ticket
  *  decision that grows the playable area meaningfully. */
 export const CITY_EXPANSION_COST = 1_000_000;
-/** How many tiles each + tap adds to the city bounds in one direction. */
-export const CITY_EXPANSION_BLOCK_SIZE = 4;
+/** How many tiles each + tap adds in one direction (Alpha 3.2.3).
+ *  Sized to match the half-dimension of the starting region (Small map
+ *  starts at 32×32, half-extent 16 tiles either side of centre — so an
+ *  expansion of 32 tiles doubles the playable area along that axis). */
+export const CITY_EXPANSION_BLOCK_SIZE = 32;
 
 /**
  * Hard cap on simultaneously-active vehicles. Sized for the InstancedMesh —

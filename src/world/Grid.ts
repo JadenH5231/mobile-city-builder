@@ -21,9 +21,14 @@ export interface RoadEdge {
 const PACK_SHIFT = 1 << 20;
 
 export class Grid {
-  readonly width: number;
-  readonly height: number;
-  private readonly tiles: Tile[];
+  /** Grid width in tiles. Writable as of Alpha 3.2.3 so expandWorld can
+   *  grow the map at runtime (was readonly before). */
+  width: number;
+  /** Grid height in tiles. See `width`. */
+  height: number;
+  /** Backing tile array. Writable as of Alpha 3.2.3 so expandWorld can
+   *  swap in a resized array. */
+  private tiles: Tile[];
   private readonly roadEdges = new Set<number>();
   /** Upper-layer (Bridge Mode) road edges. Independent network from
    *  ground roadEdges — both can coexist on the same tile pair. */
@@ -58,24 +63,21 @@ export class Grid {
    */
   private generate(): void {
     const specs = generateTerrain(this.width, this.height, { seed: Date.now() });
-    // Initial ownership (Alpha 3.1.3 / 3.2.1): only the central half of
-    // the map is owned at city start. cityBounds defines the rectangle;
-    // outside is for-sale. Player grows the rectangle by tapping the
-    // "+" buttons rendered just outside each edge.
-    const ownedHalfW = Math.floor(this.width / 4);
-    const ownedHalfH = Math.floor(this.height / 4);
-    const cx = Math.floor(this.width / 2);
-    const cy = Math.floor(this.height / 2);
-    this.cityBoundsX0 = Math.max(0, cx - ownedHalfW);
-    this.cityBoundsX1 = Math.min(this.width - 1, cx + ownedHalfW);
-    this.cityBoundsY0 = Math.max(0, cy - ownedHalfH);
-    this.cityBoundsY1 = Math.min(this.height - 1, cy + ownedHalfH);
+    // Alpha 3.2.3: city bounds cover the entire grid at start. The grid
+    // itself grows on demand via expandWorld, so there's no longer an
+    // unowned ring — fresh starts get a fully-claimed playable area
+    // matching the requested MAP_SIZE, and "+" buttons sit just past
+    // the grid edges (in world space) to grow the world further.
+    this.cityBoundsX0 = 0;
+    this.cityBoundsX1 = this.width - 1;
+    this.cityBoundsY0 = 0;
+    this.cityBoundsY1 = this.height - 1;
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const spec = specs[y * this.width + x]!;
         const tile = new Tile(x, y, spec.terrain);
         tile.elevation = spec.elevation;
-        tile.owned = this.isWithinBounds(x, y);
+        tile.owned = true;
         this.tiles[y * this.width + x] = tile;
       }
     }
@@ -87,60 +89,126 @@ export class Grid {
         && y >= this.cityBoundsY0 && y <= this.cityBoundsY1;
   }
 
-  /** Expand the cityBounds by `amount` tiles in `direction` (Alpha 3.2.1).
-   *  Newly-included tiles flip to owned. Returns the count of tiles that
-   *  actually got included (0 if the bounds already touched the grid edge
-   *  in that direction). The Game layer is responsible for the cost +
-   *  treasury check before calling. */
-  expandBounds(direction: 'N' | 'S' | 'E' | 'W', amount: number): number {
-    let added = 0;
-    if (direction === 'N') {
-      const newY0 = Math.max(0, this.cityBoundsY0 - amount);
-      for (let y = newY0; y < this.cityBoundsY0; y++) {
-        for (let x = this.cityBoundsX0; x <= this.cityBoundsX1; x++) {
-          const t = this.get(x, y);
-          if (t && !t.owned) { t.owned = true; added++; }
-        }
+  /** Grow the underlying grid by `amount` tiles in `direction` (Alpha 3.2.3).
+   *  This is a real grid resize — it reallocates the tile array, shifts
+   *  existing tiles to their new coordinates (when growing N or W), and
+   *  generates fresh terrain for the newly-added strip. All road / bridge
+   *  edges get re-packed against the new width. Returns the {offsetX,
+   *  offsetY} that existing tiles shifted by — caller (Game) uses this
+   *  to translate the camera target so the visual position doesn't jump.
+   *
+   *  After this call ALL downstream systems that index by tile position
+   *  (RoadGraph / PathGraph / TrafficLights / Vehicles / Buses / Pedestrians /
+   *  Ferries / Skyscrapers / Renderer meshes) are stale and must be
+   *  rebuilt. Game.expandCity orchestrates that rebuild via afterStateRestore. */
+  expandWorld(direction: 'N' | 'S' | 'E' | 'W', amount: number): { offsetX: number; offsetY: number } {
+    const offsetX = direction === 'W' ? amount : 0;
+    const offsetY = direction === 'N' ? amount : 0;
+    const oldWidth = this.width;
+    const oldHeight = this.height;
+    const newWidth = oldWidth + (direction === 'E' || direction === 'W' ? amount : 0);
+    const newHeight = oldHeight + (direction === 'N' || direction === 'S' ? amount : 0);
+
+    // Capture old edges (with their road type) BEFORE we change `width`.
+    type EdgeSnap = { ax: number; ay: number; bx: number; by: number };
+    const groundEdges: EdgeSnap[] = [];
+    for (const e of this.iterRoadEdges()) groundEdges.push({ ...e });
+    const bridgeEdges: EdgeSnap[] = [];
+    for (const e of this.iterBridgeRoadEdges()) bridgeEdges.push({ ...e });
+    this.roadEdges.clear();
+    this.bridgeRoadEdges.clear();
+
+    // Reallocate tile array. Existing tiles shift to (x+offsetX, y+offsetY);
+    // newly-added regions are populated with fresh terrain.
+    const newTiles = new Array<Tile>(newWidth * newHeight);
+    const oldTiles = this.tiles;
+    for (let y = 0; y < oldHeight; y++) {
+      for (let x = 0; x < oldWidth; x++) {
+        const t = oldTiles[y * oldWidth + x]!;
+        const nx = x + offsetX;
+        const ny = y + offsetY;
+        t.x = nx;
+        t.y = ny;
+        newTiles[ny * newWidth + nx] = t;
       }
-      this.cityBoundsY0 = newY0;
-    } else if (direction === 'S') {
-      const newY1 = Math.min(this.height - 1, this.cityBoundsY1 + amount);
-      for (let y = this.cityBoundsY1 + 1; y <= newY1; y++) {
-        for (let x = this.cityBoundsX0; x <= this.cityBoundsX1; x++) {
-          const t = this.get(x, y);
-          if (t && !t.owned) { t.owned = true; added++; }
-        }
-      }
-      this.cityBoundsY1 = newY1;
-    } else if (direction === 'W') {
-      const newX0 = Math.max(0, this.cityBoundsX0 - amount);
-      for (let x = newX0; x < this.cityBoundsX0; x++) {
-        for (let y = this.cityBoundsY0; y <= this.cityBoundsY1; y++) {
-          const t = this.get(x, y);
-          if (t && !t.owned) { t.owned = true; added++; }
-        }
-      }
-      this.cityBoundsX0 = newX0;
-    } else {
-      const newX1 = Math.min(this.width - 1, this.cityBoundsX1 + amount);
-      for (let x = this.cityBoundsX1 + 1; x <= newX1; x++) {
-        for (let y = this.cityBoundsY0; y <= this.cityBoundsY1; y++) {
-          const t = this.get(x, y);
-          if (t && !t.owned) { t.owned = true; added++; }
-        }
-      }
-      this.cityBoundsX1 = newX1;
     }
-    return added;
+    // Generate fresh terrain for the newly-added strip. We seed with the
+    // expansion direction + amount so the new region is reproducible
+    // across reloads (alongside the per-tile snapshot the save persists).
+    const specs = generateTerrain(newWidth, newHeight, { seed: Date.now() ^ (newWidth * 31) });
+    for (let y = 0; y < newHeight; y++) {
+      for (let x = 0; x < newWidth; x++) {
+        if (newTiles[y * newWidth + x]) continue; // existing tile
+        const spec = specs[y * newWidth + x]!;
+        const tile = new Tile(x, y, spec.terrain);
+        tile.elevation = spec.elevation;
+        tile.owned = false; // newly-added land starts as owned by the player
+                             // who paid for the expansion (toggled below).
+        newTiles[y * newWidth + x] = tile;
+      }
+    }
+
+    this.tiles = newTiles;
+    this.width = newWidth;
+    this.height = newHeight;
+
+    // Shift cityBounds with the offset, then expand on the new edge to
+    // include the newly-added strip — that's what the player paid for.
+    this.cityBoundsX0 += offsetX;
+    this.cityBoundsX1 += offsetX;
+    this.cityBoundsY0 += offsetY;
+    this.cityBoundsY1 += offsetY;
+    if (direction === 'N') this.cityBoundsY0 = Math.max(0, this.cityBoundsY0 - amount);
+    else if (direction === 'S') this.cityBoundsY1 = Math.min(newHeight - 1, this.cityBoundsY1 + amount);
+    else if (direction === 'W') this.cityBoundsX0 = Math.max(0, this.cityBoundsX0 - amount);
+    else this.cityBoundsX1 = Math.min(newWidth - 1, this.cityBoundsX1 + amount);
+
+    // Mark the newly-included tiles (within the expanded bounds) as owned.
+    for (let y = this.cityBoundsY0; y <= this.cityBoundsY1; y++) {
+      for (let x = this.cityBoundsX0; x <= this.cityBoundsX1; x++) {
+        const t = newTiles[y * newWidth + x];
+        if (t) t.owned = true;
+      }
+    }
+
+    // Re-pack edges with the new width + shifted coords.
+    for (const e of groundEdges) {
+      const t = this.get(e.ax + offsetX, e.ay + offsetY);
+      const tier = t?.roadType ?? 'local';
+      this.setRoadEdge(e.ax + offsetX, e.ay + offsetY, e.bx + offsetX, e.by + offsetY, true, tier);
+    }
+    for (const e of bridgeEdges) {
+      const t = this.get(e.ax + offsetX, e.ay + offsetY);
+      const tier = t?.bridgeRoadType ?? 'local';
+      this.setBridgeRoadEdge(e.ax + offsetX, e.ay + offsetY, e.bx + offsetX, e.by + offsetY, true, tier);
+    }
+
+    return { offsetX, offsetY };
   }
 
-  /** True iff the cityBounds can grow further in `direction` (i.e. there's
-   *  still space inside the underlying grid). */
-  canExpand(direction: 'N' | 'S' | 'E' | 'W'): boolean {
-    if (direction === 'N') return this.cityBoundsY0 > 0;
-    if (direction === 'S') return this.cityBoundsY1 < this.height - 1;
-    if (direction === 'W') return this.cityBoundsX0 > 0;
-    return this.cityBoundsX1 < this.width - 1;
+  /** Always true (Alpha 3.2.3) — the grid grows on demand, so there's no
+   *  hard cap on direction. Kept as a method so renderers / UI that
+   *  asked the old in-bounds question still compile. */
+  canExpand(_direction: 'N' | 'S' | 'E' | 'W'): boolean {
+    return true;
+  }
+
+  /** Resize the backing tile array to match a saved snapshot (Alpha 3.2.3).
+   *  Allocates `width × height` blank Tile instances at default state;
+   *  the SaveGame.applySave loop will overwrite each one's fields with
+   *  the saved data. Edges are NOT preserved here — applySave reloads
+   *  them from the snapshot. */
+  resizeForLoad(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+    this.tiles = new Array<Tile>(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        this.tiles[y * width + x] = new Tile(x, y);
+      }
+    }
+    this.roadEdges.clear();
+    this.bridgeRoadEdges.clear();
   }
 
   // --- Tile access -------------------------------------------------------

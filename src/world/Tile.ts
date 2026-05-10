@@ -10,8 +10,11 @@ import type { Building, RoadType, TerrainType, Zone } from '../types';
  * All fields must stay JSON-serializable for save games.
  */
 export class Tile {
-  readonly x: number;
-  readonly y: number;
+  /** Tile X coordinate. Writable as of Alpha 3.2.3 so Grid.expandWorld can
+   *  shift existing tiles when the grid grows (was readonly before). */
+  x: number;
+  /** Tile Y coordinate. See `x` for the same caveat. */
+  y: number;
   terrain: TerrainType;
   /**
    * Terrain elevation in tile units (Alpha 2.3). 0 = ground level, water

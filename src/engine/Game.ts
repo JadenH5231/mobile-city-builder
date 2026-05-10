@@ -186,6 +186,16 @@ export class Game {
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
 
+  /**
+   * Day/night cycle phase ∈ [0, 1] (Alpha 2.14). 0 = midnight, 0.5 =
+   * noon, etc. Advanced every render frame at DAY_SECONDS rate. Sim
+   * speed multiplies the day cycle too — fast-forwarding the city
+   * speeds the sun. Pause stops it.
+   */
+  timeOfDay = 0.40;
+  /** Real-time seconds per full day cycle. 4 minutes feels right at 1×. */
+  static readonly DAY_SECONDS = 240;
+
   // Fixed-rate sim systems run inside `startLoop` via an accumulator clock.
   // Population must tick before Development since the latter reads demand;
   // Economy reads Population for monthly settlement and Population reads
@@ -660,6 +670,13 @@ export class Game {
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
+      // Day/night advance (Alpha 2.14). Sim-speed multiplies so fast-
+      // forwarding the city also speeds up the sun. Paused = sun freeze.
+      if (this.simSpeed > 0) {
+        const dayDelta = (dt / Game.DAY_SECONDS) * this.simSpeed;
+        this.timeOfDay = (this.timeOfDay + dayDelta) % 1;
+      }
+      this.renderer.applyTimeOfDay(this.timeOfDay);
       this.renderer.render(this.camera);
       requestAnimationFrame(frame);
     };

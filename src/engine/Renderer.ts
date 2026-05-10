@@ -294,12 +294,17 @@ export class Renderer {
     }
     const built = buildCityBuildingsMesh(grid, forestryHealth, farmHealth);
     if (built) this.cityBuildingsGroup.add(built);
+    // Refresh night-lights — park lamps depend on park placements.
+    this.drawNightLights(grid);
   }
 
   /** Districts overlay (Alpha 2.22). One translucent quad per tile that
    *  has a districtId, tinted by the district's color. Subtle (alpha 0.30)
    *  so it reads as "neighbourhood tint" rather than a full wash. */
   private districtsMesh: Mesh | null = null;
+  /** Night-lights overlay (Alpha 3.0.1). Glowing yellow lamps on
+   *  avenues, walking paths, and parks; opacity ramps in at night. */
+  private nightLightsMesh: Mesh | null = null;
   drawDistricts(grid: Grid, districts: import('../simulation/Districts').Districts): void {
     if (this.districtsMesh) {
       this.worldGroup.remove(this.districtsMesh);
@@ -311,6 +316,25 @@ export class Renderer {
     if (built) {
       this.districtsMesh = built;
       this.worldGroup.add(this.districtsMesh);
+    }
+  }
+
+  /** (Re)build the night-lights overlay (Alpha 3.0.1). Walks the grid for
+   *  avenue road tiles, walking-path tiles, and park tiles; emits a small
+   *  yellow glow disc per location. Opacity is driven by applyTimeOfDay.
+   *  Cheap one-pass build — call after any road / path / city-buildings
+   *  redraw. */
+  drawNightLights(grid: Grid): void {
+    if (this.nightLightsMesh) {
+      this.worldGroup.remove(this.nightLightsMesh);
+      this.nightLightsMesh.geometry.dispose();
+      (this.nightLightsMesh.material as MeshBasicMaterial).dispose();
+      this.nightLightsMesh = null;
+    }
+    const built = buildNightLightsMesh(grid);
+    if (built) {
+      this.nightLightsMesh = built;
+      this.worldGroup.add(this.nightLightsMesh);
     }
   }
 
@@ -379,6 +403,8 @@ export class Renderer {
       this.roadOrnaments = ornaments;
       this.worldGroup.add(ornaments);
     }
+    // Refresh night-lights — avenue lamps depend on the road state.
+    this.drawNightLights(grid);
   }
 
   /** Rebuild the walking-path mesh from current path tiles. Sidewalks
@@ -387,6 +413,8 @@ export class Renderer {
   drawPaths(grid: Grid): void {
     this.rebuildPaths(grid);
     this.rebuildSidewalks(grid);
+    // Refresh night-lights — path lamps depend on path state.
+    this.drawNightLights(grid);
   }
 
   private rebuildPaths(grid: Grid): void {
@@ -683,16 +711,22 @@ export class Renderer {
   }
 
   /**
-   * Apply day/night phase (Alpha 2.14). `phase` ∈ [0, 1]:
-   *   0 / 1 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk.
-   * Updates sun position + colour + intensity, ambient + hemisphere
-   * lights, and repaints the sky-gradient texture.
+   * Apply day/night phase (Alpha 2.14, retuned in 3.0.1). `phase` ∈ [0, 1]:
+   *   0 / 1 = midnight, 0.5 = noon. Day runs ~70% of the cycle, night ~30%.
+   * The input phase is warped through a piecewise-linear map before the sun
+   * arc math so dawn lands at p ≈ 0.15 and dusk at p ≈ 0.85 — without
+   * changing the underlying sin-based sun position formula.
    */
   applyTimeOfDay(phase: number): void {
     const p = ((phase % 1) + 1) % 1;
+    // Phase warp (Alpha 3.0.1): stretch the [0.15, 0.85] day-window so it
+    // covers 70% of the input cycle and the [0, 0.15] ∪ [0.85, 1] night
+    // bands cover 30%. The warped value flows directly into the existing
+    // sin-based sun arc, so dawn/dusk transitions stay smooth.
+    const warped = warpDayPhase(p);
     // Sun arc: rotates around the world over a day. Project onto a
     // tilted axis so dawn/dusk hit a low angle and noon goes overhead.
-    const angle = (p - 0.25) * Math.PI * 2; // -π/2 at midnight, 0 at dawn, π/2 at noon, π at dusk
+    const angle = (warped - 0.25) * Math.PI * 2; // -π/2 at midnight, 0 at dawn, π/2 at noon, π at dusk
     const radius = 80;
     const sunX = Math.cos(angle) * radius;
     const sunY = Math.sin(angle) * radius;
@@ -718,8 +752,18 @@ export class Renderer {
       this.hemisphereLight.color.setHex(0xbcd9ff);
       this.hemisphereLight.groundColor.setHex(0x223322);
     }
-    // Repaint sky gradient.
-    repaintSkyGradient(this.skyTexture, p);
+    // Repaint sky gradient. Use the WARPED phase too so the sky shifts
+    // in lockstep with the sun (otherwise night sky would show during a
+    // mid-day visual).
+    repaintSkyGradient(this.skyTexture, warped);
+    // Update the night-lights overlay opacity based on darkness amount.
+    if (this.nightLightsMesh) {
+      const mat = this.nightLightsMesh.material as MeshBasicMaterial;
+      // Fade in over the last 25% of dayMix → 0 (dusk to night).
+      const nightOpacity = Math.max(0, 1 - dayMix * 4);
+      mat.opacity = nightOpacity * 0.95;
+      this.nightLightsMesh.visible = nightOpacity > 0.01;
+    }
   }
 
   private disposeMesh(m: Mesh | null): void {
@@ -1175,6 +1219,91 @@ function heatColor(load: number, out: Color): void {
     const t = Math.max(0, Math.min(1, (load - 1) / 1.5));
     out.setHex(mid).lerp(new Color(hi), t);
   }
+}
+
+/** Night-lights overlay (Alpha 3.0.1). One small geometry cluster per
+ *  light-emitting tile — a thin pole + a glowing emissive cap + a soft
+ *  ground-glow disc. Rendered with an unlit MeshBasicMaterial so the
+ *  light reads "lit" even when the directional sun is at midnight
+ *  intensity. Opacity is driven by Renderer.applyTimeOfDay so the
+ *  overlay fades in at dusk + out at dawn.
+ *
+ *  Sources of lights:
+ *  - Avenue road tiles → 2 lamp posts (one per sidewalk side).
+ *  - Walking-path tiles → 1 lamp post.
+ *  - Park tiles → 1 ornate lamp.
+ *
+ *  All in one merged mesh = a single draw call. Build cost is one grid
+ *  sweep; rebuild when roads / paths / parks change. */
+function buildNightLightsMesh(grid: Grid): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+
+  const LAMP_GLOW = 0xfff0a8;       // warm yellow lamp glow
+  const PARK_LAMP_GLOW = 0xffe4b0;  // softer warm tone
+  const LAMP_POLE = 0x3a3a3a;       // dark pole
+  const GROUND_GLOW = 0xfff0a8;     // ground-disc colour matches the bulb
+  const PARK_GROUND_GLOW = 0xffe4b0;
+
+  const addLamp = (
+    cx: number, cz: number, baseY: number, glowHex: number, scale = 1
+  ): void => {
+    // Pole (thin dark cylinder).
+    const pole = new CylinderGeometry(0.018 * scale, 0.018 * scale, 0.34 * scale, 6);
+    pole.translate(cx, baseY + 0.17 * scale, cz);
+    geoms.push(pole); colours.push(LAMP_POLE);
+    // Bulb (small emissive sphere — reads as "lit" because the material
+    // is MeshBasicMaterial; lighting doesn't dim it).
+    const bulb = new IcosahedronGeometry(0.045 * scale, 0);
+    bulb.translate(cx, baseY + 0.36 * scale, cz);
+    geoms.push(bulb); colours.push(glowHex);
+    // Ground-glow disc — wider, sits flat just above the surface so it
+    // reads as the lamp pooling light on the ground.
+    const disc = new CylinderGeometry(0.20 * scale, 0.20 * scale, 0.005, 12);
+    disc.translate(cx, baseY + 0.003, cz);
+    geoms.push(disc); colours.push(glowHex === GROUND_GLOW ? GROUND_GLOW : glowHex);
+  };
+
+  for (const t of grid.iter()) {
+    const cx = t.x + 0.5;
+    const cz = t.y + 0.5;
+    if (t.road && t.roadType === 'avenue' && !t.bridge) {
+      // Two sidewalk-side lamps along the long-ish axis. Use the
+      // sidewalk lift so the lamp base sits on the sidewalk surface.
+      const baseY = SIDEWALK_LIFT + t.elevation;
+      addLamp(cx, cz - 0.36, baseY, LAMP_GLOW);
+      addLamp(cx, cz + 0.36, baseY, LAMP_GLOW);
+    }
+    if (t.path && !t.road) {
+      // Single small lamp at the centre of each path tile.
+      const baseY = PATH_LIFT + t.elevation;
+      addLamp(cx, cz, baseY, LAMP_GLOW, 0.85);
+    }
+    if (t.building === 'park') {
+      // Ornate park lamp in the centre.
+      const baseY = SIDEWALK_LIFT + t.elevation;
+      addLamp(cx, cz, baseY, PARK_LAMP_GLOW, 1.1);
+      // Suppress unused-variable lint
+      void PARK_GROUND_GLOW;
+    }
+  }
+
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  // Unlit material so the lights read as "lit" even at deep midnight when
+  // the directional sun light is dim.  Transparent + depthWrite:false so
+  // the ground-glow doesn't z-fight with the road/path surface beneath
+  // and so the overlay can fade out at dawn.
+  const mat = new MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const mesh = new Mesh(merged, mat);
+  // Off by default — applyTimeOfDay will toggle visibility based on time.
+  mesh.visible = false;
+  return mesh;
 }
 
 /** Districts overlay mesh (Alpha 2.22). Translucent tint per district. */
@@ -2578,6 +2707,17 @@ function repaintSkyGradient(tex: CanvasTexture, phase: number): void {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1, 256);
   tex.needsUpdate = true;
+}
+
+/** Phase warp (Alpha 3.0.1): map an unwarped phase ∈ [0, 1] through a
+ *  piecewise-linear function so the [0.15, 0.85] day-window covers 70%
+ *  of the cycle and the night bands cover 30% combined. The warp
+ *  preserves the midnight (p=0/1) and noon (p=0.5) anchor points so
+ *  the rest of the renderer math stays unchanged. */
+function warpDayPhase(p: number): number {
+  if (p <= 0.15) return p * (0.25 / 0.15);
+  if (p <= 0.85) return 0.25 + (p - 0.15) * (0.50 / 0.70);
+  return 0.75 + (p - 0.85) * (0.25 / 0.15);
 }
 
 function lerpHexColor(a: number, b: number, t: number): number {

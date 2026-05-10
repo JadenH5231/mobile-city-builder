@@ -222,8 +222,10 @@ export class Game {
    * speeds the sun. Pause stops it.
    */
   timeOfDay = 0.40;
-  /** Real-time seconds per full day cycle. 4 minutes feels right at 1×. */
-  static readonly DAY_SECONDS = 240;
+  /** Real-time seconds per full day cycle (Alpha 3.0.1). 12 minutes at
+   *  1×. The renderer additionally warps the phase so ~70% of the cycle
+   *  is day and ~30% is night — see Renderer.applyTimeOfDay. */
+  static readonly DAY_SECONDS = 720;
 
   // Fixed-rate sim systems run inside `startLoop` via an accumulator clock.
   // Population must tick before Development since the latter reads demand;

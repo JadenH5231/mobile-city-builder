@@ -147,4 +147,7 @@ export class Tile {
   // feedback so the signal doesn't strobe with individual cars.
   trafficLoad = 0;
   trafficLoadAvg = 0;
+  /** District membership (Alpha 2.22). 0 = unassigned. Per-district tax
+   *  surtaxes apply to revenue calculation when this is non-zero. */
+  districtId = 0;
 }

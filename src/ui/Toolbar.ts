@@ -254,6 +254,29 @@ const ITEMS: readonly ToolbarItem[] = [
       </svg>` }
     ]
   },
+  // Districts (Alpha 2.22). Paint adds tiles to the active district;
+  // erase clears them.
+  {
+    kind: 'group',
+    id: 'districts',
+    label: 'Dist',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 3v18h18V3z M3 11h18 M11 3v18"
+            stroke="currentColor" stroke-width="1.6" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'paint_district', label: 'Paint', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 4h14v8h-7l-2 2H7l-2 6z M9 14l3-3"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'erase_district', label: 'Erase', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 18l12-12 M6 18h12"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <rect x="4" y="14" width="9" height="7" transform="rotate(-45 8.5 17.5)"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+      </svg>` }
+    ]
+  },
   // Transit pack (Alpha 2.19). Ferry dock + subway entrance live in their
   // own group below the bus tools — both are "alternative transit modes"
   // that aren't roads.

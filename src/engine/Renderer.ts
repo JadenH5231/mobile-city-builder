@@ -296,6 +296,24 @@ export class Renderer {
     if (built) this.cityBuildingsGroup.add(built);
   }
 
+  /** Districts overlay (Alpha 2.22). One translucent quad per tile that
+   *  has a districtId, tinted by the district's color. Subtle (alpha 0.30)
+   *  so it reads as "neighbourhood tint" rather than a full wash. */
+  private districtsMesh: Mesh | null = null;
+  drawDistricts(grid: Grid, districts: import('../simulation/Districts').Districts): void {
+    if (this.districtsMesh) {
+      this.worldGroup.remove(this.districtsMesh);
+      this.districtsMesh.geometry.dispose();
+      (this.districtsMesh.material as MeshLambertMaterial).dispose();
+      this.districtsMesh = null;
+    }
+    const built = buildDistrictsMesh(grid, districts);
+    if (built) {
+      this.districtsMesh = built;
+      this.worldGroup.add(this.districtsMesh);
+    }
+  }
+
   /** Rebuild the buildings InstancedMesh from current tile densities.
    *  `monthsElapsed` drives the Alpha 2.16 patina pass — older buildings
    *  read darker. Defaults to 0 (pre-history; everything looks new). */
@@ -1157,6 +1175,59 @@ function heatColor(load: number, out: Color): void {
     const t = Math.max(0, Math.min(1, (load - 1) / 1.5));
     out.setHex(mid).lerp(new Color(hi), t);
   }
+}
+
+/** Districts overlay mesh (Alpha 2.22). Translucent tint per district. */
+function buildDistrictsMesh(grid: Grid, districts: import('../simulation/Districts').Districts): Mesh | null {
+  let count = 0;
+  for (const t of grid.iter()) if (t.districtId > 0) count++;
+  if (count === 0) return null;
+
+  const positions = new Float32Array(count * 4 * 3);
+  const colours = new Float32Array(count * 4 * 3);
+  const indices = new Uint32Array(count * 6);
+  const c = new Color();
+  const baseY = ROAD_LIFT * 0.15;
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+  for (const t of grid.iter()) {
+    if (t.districtId === 0) continue;
+    const d = districts.get(t.districtId);
+    if (!d) continue;
+    c.setHex(d.color);
+    const x0 = t.x * TILE_SIZE;
+    const x1 = (t.x + 1) * TILE_SIZE;
+    const z0 = t.y * TILE_SIZE;
+    const z1 = (t.y + 1) * TILE_SIZE;
+    const y = baseY + t.elevation;
+
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
+    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z1;
+    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z1;
+
+    for (let i = 0; i < 4; i++) {
+      colours[ci++] = c.r;
+      colours[ci++] = c.g;
+      colours[ci++] = c.b;
+    }
+    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 1;
+    indices[ii++] = v; indices[ii++] = v + 3; indices[ii++] = v + 2;
+    v += 4;
+  }
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.setAttribute('color', new BufferAttribute(colours, 3));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  const mat = new MeshLambertMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.30,
+    depthWrite: false
+  });
+  return new Mesh(geom, mat);
 }
 
 /** Crime heatmap (Alpha 2.21): one quad per zoned tile coloured by Crime

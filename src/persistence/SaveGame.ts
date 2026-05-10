@@ -6,6 +6,7 @@ import type { Events, EventsSnapshot } from '../simulation/Events';
 import type { Stats, StatsSnapshot } from '../simulation/Stats';
 import type { Achievements, AchievementsSnapshot } from '../simulation/Achievements';
 import type { Bonds, BondsSnapshot } from '../simulation/Bonds';
+import type { Districts, DistrictsSnapshot } from '../simulation/Districts';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
 
@@ -21,14 +22,15 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 16 (Alpha 2.18): persists Bonds (active loans + lifetime tally) +
- * Economy.wealthSurtax slider. v15 saves load with no active bonds and a
- * 0% surtax — clean slate, no in-flight obligations carry over.
+ * Schema 17 (Alpha 2.22): persists per-tile `districtId` + the Districts
+ * registry (id → name + color + per-zone surtaxes). v16 saves load with
+ * districtId = 0 on every tile (no districts) and an empty registry.
  *
- * Earlier: v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
- * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v16 bonds, v15 tourism, v14 patina, v13 achievements, v12
+ * bridges, v11 stats, v10 events, v9 highestPop, v8 luxury, v7
+ * elevation+bridge.
  */
-const SCHEMA = 16;
+const SCHEMA = 17;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -74,6 +76,8 @@ export interface TileSnapshot {
   bridgeRoad?: boolean;
   bridgeRoadType?: RoadType;
   bridgeHighwayDir?: number;
+  /** District membership (Alpha 2.22 / schema 17+). 0 = unassigned. */
+  districtId?: number;
 }
 
 export interface SaveData {
@@ -113,6 +117,8 @@ export interface SaveData {
   cityName?: string;
   /** ISO timestamp of last save (Alpha 2.20). Drives slot-picker sort. */
   lastPlayedISO?: string;
+  /** District registry (Alpha 2.22). Schema 17+. */
+  districtsSnapshot?: DistrictsSnapshot;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -206,9 +212,9 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts): Promise<void> {
     if (!this.db) return;
-    const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds);
+    const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds, districts);
     if (cityName !== undefined) data.cityName = cityName;
     data.lastPlayedISO = new Date().toISOString();
     return new Promise<void>((resolve, reject) => {
@@ -236,7 +242,7 @@ export class SaveGame {
  * so we get a single restore path for both.
  */
 export function serialize(
-  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds
+  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, districts?: Districts
 ): SaveData {
   const tiles: TileSnapshot[] = new Array(grid.width * grid.height);
   let i = 0;
@@ -261,7 +267,8 @@ export function serialize(
       path: t.path,
       bridgeRoad: t.bridgeRoad,
       bridgeRoadType: t.bridgeRoadType,
-      bridgeHighwayDir: t.bridgeHighwayDir
+      bridgeHighwayDir: t.bridgeHighwayDir,
+      districtId: t.districtId
     };
   }
   const edges: number[] = [];
@@ -292,7 +299,8 @@ export function serialize(
     achievementsSnapshot: achievements?.serialize(),
     lifetimeTourismRevenue: economy.lifetimeTourismRevenue,
     bondsSnapshot: bonds?.serialize(),
-    wealthSurtax: economy.wealthSurtax
+    wealthSurtax: economy.wealthSurtax,
+    districtsSnapshot: districts?.serialize()
   };
 }
 
@@ -306,7 +314,7 @@ export function serialize(
  * Services.recompute(grid) afterward. Same for the road graph rebuild.
  */
 export function applySave(
-  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds
+  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, districts?: Districts
 ): void {
   if (data.width !== grid.width || data.height !== grid.height) return;
   if (council) {
@@ -378,6 +386,8 @@ export function applySave(
     t.bridgeRoad = snap.bridgeRoad ?? false;
     t.bridgeRoadType = snap.bridgeRoadType ?? 'local';
     t.bridgeHighwayDir = snap.bridgeHighwayDir ?? -1;
+    // District membership (schema 17+).
+    t.districtId = snap.districtId ?? 0;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;
@@ -401,4 +411,5 @@ export function applySave(
   economy.lifetimeTourismRevenue = data.lifetimeTourismRevenue ?? 0;
   economy.wealthSurtax = data.wealthSurtax ?? 0;
   if (bonds) bonds.restore(data.bondsSnapshot);
+  if (districts) districts.restore(data.districtsSnapshot);
 }

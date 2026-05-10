@@ -542,7 +542,11 @@ export const STARTING_TOOLS: ReadonlySet<Tool> = new Set([
   'pan', 'bulldoze',
   'road_local', 'place_path',
   'residential_low', 'commercial_low', 'industrial_low', 'mixed_low',
-  'place_park'
+  'place_park',
+  // Districts (Alpha 2.22) — never milestone-gated. The lever is always
+  // available; district tax surtaxes only matter once you have buildings
+  // to apply them to.
+  'paint_district', 'erase_district'
 ]);
 
 /**
@@ -615,7 +619,9 @@ export type Tool =
   | 'place_stadium'
   | 'place_observatory'
   | 'place_ferry_dock'
-  | 'place_subway_entrance';
+  | 'place_subway_entrance'
+  | 'paint_district'
+  | 'erase_district';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's

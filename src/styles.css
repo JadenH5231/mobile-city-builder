@@ -2563,3 +2563,117 @@ body.photo-mode .photo-op {
   color: rgba(207, 232, 214, 0.55);
   font-style: italic;
 }
+
+/* ---------- Districts (Alpha 2.22) ---------- */
+
+.districts__new {
+  display: block;
+  width: 100%;
+  margin: 8px 0 12px 0;
+  padding: 9px 12px;
+  background: rgba(76, 152, 88, 0.20);
+  border: 1px solid rgba(102, 192, 122, 0.55);
+  border-radius: 10px;
+  color: #d8ffe2;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.districts__new:active {
+  background: rgba(76, 152, 88, 0.35);
+}
+
+.districts__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.districts__empty {
+  padding: 14px;
+  text-align: center;
+  color: rgba(207, 232, 214, 0.60);
+  font-style: italic;
+}
+
+.districts__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "swatch name use"
+    "sliders sliders sliders";
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(207, 232, 214, 0.10);
+  border-radius: 12px;
+}
+
+.districts__swatch {
+  grid-area: swatch;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+}
+
+.districts__name {
+  grid-area: name;
+  background: transparent;
+  color: var(--pill-fg);
+  border: 1px solid rgba(207, 232, 214, 0.20);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.districts__name:focus {
+  outline: none;
+  border-color: rgba(255, 200, 90, 0.65);
+}
+
+.districts__activate {
+  grid-area: use;
+  padding: 5px 10px;
+  background: rgba(255, 200, 90, 0.15);
+  border: 1px solid rgba(255, 200, 90, 0.55);
+  border-radius: 8px;
+  color: rgba(255, 200, 90, 0.95);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.districts__activate:active {
+  background: rgba(255, 200, 90, 0.30);
+}
+
+.districts__sliders {
+  grid-area: sliders;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.districts__slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.80);
+}
+
+.districts__slider input[type="range"] {
+  width: 100%;
+}
+
+.districts__slider-row {
+  display: flex;
+  justify-content: space-between;
+}

@@ -39,6 +39,7 @@
       <button id="hud-stats" type="button" class="pill action" aria-label="Open city stats">Stats</button>
       <button id="hud-achievements" type="button" class="pill action" aria-label="Open achievements">🏆</button>
       <button id="hud-cities" type="button" class="pill action" aria-label="Switch save slot">🏙</button>
+      <button id="hud-districts" type="button" class="pill action" aria-label="Manage districts">🗺</button>
       <button id="hud-speed" type="button" class="pill action speed" aria-label="Cycle simulation speed">▶</button>
       <button id="hud-photo" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle photo mode">Photo</button>
       <div id="hud-fps" class="pill mono">— fps</div>
@@ -314,6 +315,25 @@
         <div id="stats-charts" class="stats__charts"></div>
       </div>
     </div>
+    <section
+      id="districts-panel"
+      class="info-panel info-panel--tall hidden"
+      role="dialog"
+      aria-label="Districts"
+      aria-hidden="true"
+    >
+      <div class="info-panel__handle" aria-hidden="true"></div>
+      <button
+        id="districts-close"
+        class="info-panel__close"
+        type="button"
+        aria-label="Close districts"
+      >×</button>
+      <div class="info-panel__title">🗺 Districts</div>
+      <div class="info-panel__sub" id="districts-active">Active: none</div>
+      <button id="districts-new" type="button" class="districts__new">+ New district</button>
+      <div id="districts-list" class="districts__list"></div>
+    </section>
     <section
       id="achievements-panel"
       class="info-panel info-panel--tall hidden"

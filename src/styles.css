@@ -53,10 +53,18 @@ body {
   pointer-events: none;
   padding: 12px 14px;
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   align-items: flex-start;
   z-index: 10;
   gap: 8px;
+}
+
+/* Push the FPS readout to the far-right of its row so the long stack
+ * of action pills stays compactly left-aligned. Once the HUD wraps,
+ * FPS becomes the lone right-pinned chip on its row. */
+#hud-fps {
+  margin-left: auto;
 }
 
 .pill {
@@ -2066,4 +2074,249 @@ body.photo-mode .photo-op {
 @keyframes budget-reset-pulse {
   from { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0.0); }
   to   { box-shadow: 0 0 0 4px rgba(255, 100, 100, 0.20); }
+}
+
+/* ---------- Achievements panel (Alpha 2.15) ---------- */
+
+.ach__list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 4px 0 16px 0;
+  overflow-y: auto;
+  max-height: 65vh;
+}
+
+@media (min-width: 540px) {
+  .ach__list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ach__card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(207, 232, 214, 0.10);
+  align-items: flex-start;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.ach__card--unlocked {
+  background: linear-gradient(135deg, rgba(255, 200, 90, 0.14), rgba(255, 200, 90, 0.04));
+  border-color: rgba(255, 200, 90, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 200, 90, 0.10);
+}
+
+.ach__icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(207, 232, 214, 0.10);
+}
+
+.ach__card--unlocked .ach__icon {
+  background: rgba(255, 200, 90, 0.20);
+  border-color: rgba(255, 200, 90, 0.55);
+  filter: none;
+}
+
+.ach__card:not(.ach__card--unlocked) .ach__icon {
+  filter: grayscale(1) brightness(0.65);
+}
+
+.ach__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ach__name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--pill-fg);
+}
+
+.ach__card:not(.ach__card--unlocked) .ach__name {
+  color: rgba(207, 232, 214, 0.55);
+}
+
+.ach__desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(207, 232, 214, 0.65);
+}
+
+.ach__stamp {
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: var(--mono-font, monospace);
+  color: rgba(255, 200, 90, 0.95);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ach__stamp--locked {
+  color: rgba(207, 232, 214, 0.40);
+}
+
+/* Achievement toast — corner pill that auto-dismisses after a few seconds.
+ * Distinct enough from milestone banner that the player knows it's a
+ * different category of progression. */
+
+.ach-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(60, 35, 5, 0.96), rgba(35, 22, 5, 0.96));
+  border: 1px solid rgba(255, 200, 90, 0.65);
+  border-radius: 14px;
+  color: #fff5d8;
+  z-index: 80;
+  max-width: 320px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  animation: ach-toast-in 0.35s cubic-bezier(.2, .8, .25, 1);
+}
+
+.ach-toast.hidden {
+  display: none;
+}
+
+.ach-toast__icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: rgba(255, 200, 90, 0.22);
+  border: 1px solid rgba(255, 200, 90, 0.65);
+  border-radius: 10px;
+}
+
+.ach-toast__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ach-toast__crown {
+  font-size: 10px;
+  font-family: var(--mono-font, monospace);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255, 200, 90, 0.92);
+}
+
+.ach-toast__name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ach-toast__desc {
+  font-size: 12px;
+  color: rgba(255, 245, 216, 0.78);
+  line-height: 1.30;
+}
+
+@keyframes ach-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Leader bio modal (Alpha 2.15) ---------- */
+
+.leader-bio__sheet {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.leader-bio__head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.leader-bio__avatar {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.10);
+  border: 2px solid rgba(255, 255, 255, 0.30);
+}
+
+.leader-bio__head-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.leader-bio__name {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--pill-fg);
+}
+
+.leader-bio__title {
+  font-size: 13px;
+  color: rgba(207, 232, 214, 0.70);
+  font-style: italic;
+}
+
+.leader-bio__faction {
+  font-size: 12px;
+  font-family: var(--mono-font, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 200, 90, 0.90);
+  padding: 6px 0;
+  border-top: 1px solid rgba(207, 232, 214, 0.12);
+  border-bottom: 1px solid rgba(207, 232, 214, 0.12);
+}
+
+.leader-bio__bio {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--pill-fg);
+}
+
+.leader-bio__cares {
+  font-size: 13px;
+  line-height: 1.40;
+  color: rgba(207, 232, 214, 0.78);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border-left: 3px solid rgba(255, 200, 90, 0.55);
 }

@@ -64,6 +64,57 @@ if (statsBtn) {
   });
 }
 
+// Achievements panel + corner toast (Alpha 2.15).
+import { AchievementsPanel } from './ui/AchievementsPanel';
+const achievementsPanel = new AchievementsPanel(game.achievements);
+const achievementsBtn = document.getElementById('hud-achievements');
+if (achievementsBtn) {
+  achievementsBtn.addEventListener('click', () => {
+    if (achievementsPanel.isOpen()) achievementsPanel.hide();
+    else achievementsPanel.show();
+  });
+}
+const achToast = document.getElementById('achievement-toast');
+const achToastIcon = document.getElementById('achievement-toast-icon');
+const achToastName = document.getElementById('achievement-toast-name');
+const achToastDesc = document.getElementById('achievement-toast-desc');
+if (achToast && achToastIcon && achToastName && achToastDesc) {
+  // Coalesce multiple unlocks into a queue so they appear sequentially
+  // rather than overlapping. Each toast displays for 4.5s.
+  const queue: Array<{ icon: string; name: string; desc: string }> = [];
+  let active = false;
+  let timer: number | undefined;
+  const showNext = (): void => {
+    const next = queue.shift();
+    if (!next) {
+      active = false;
+      achToast.classList.add('hidden');
+      achToast.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    active = true;
+    achToastIcon.textContent = next.icon;
+    achToastName.textContent = next.name;
+    achToastDesc.textContent = next.desc;
+    achToast.classList.remove('hidden');
+    achToast.setAttribute('aria-hidden', 'false');
+    if (timer !== undefined) clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      timer = undefined;
+      showNext();
+    }, 4500);
+  };
+  game.onAchievementUnlocked = (a) => {
+    queue.push({ icon: a.icon, name: a.name, desc: a.description });
+    if (!active) showNext();
+  };
+}
+
+// Leader bio modal — first time each council leader appears.
+import { LeaderBioModal } from './ui/LeaderBioModal';
+const leaderBio = new LeaderBioModal();
+game.onNewLeader = (id) => leaderBio.enqueue(id);
+
 // Sim speed cycler — 1× → 2× → 3× → ⏸ → 1×.
 // Glyphs read at-a-glance even in a 12px pill: triangle for play, double
 // for 2x, triple for 3x, the standard pause bars for 0.

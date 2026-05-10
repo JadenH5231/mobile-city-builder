@@ -4,6 +4,7 @@ import type { Council } from '../simulation/Council';
 import type { Milestones } from '../simulation/Milestones';
 import type { Events, EventsSnapshot } from '../simulation/Events';
 import type { Stats, StatsSnapshot } from '../simulation/Stats';
+import type { Achievements, AchievementsSnapshot } from '../simulation/Achievements';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
 
@@ -12,12 +13,14 @@ const DB_VERSION = 1;
 const STORE = 'saves';
 const SLOT_KEY = 'main';
 /**
- * Schema 12 (Alpha 2.12): persists the upper-layer (Bridge Mode)
- * road graph + per-tile bridgeRoad / bridgeRoadType / bridgeHighwayDir.
- * v11 saves load with no overpasses (clean slate). v10 added events;
- * v9 highestPop; v8 luxury; v7 elevation+bridge.
+ * Schema 13 (Alpha 2.15): persists the Achievements lifetime counters +
+ * unlocked set + the per-faction "metLeaders" set that drives the one-time
+ * leader-bio popup. v12 saves load with empty achievements (player starts
+ * earning them from this session forward, peakPop / monthsRun seeded from
+ * the existing milestones / economy state). Earlier: v12 bridges, v11
+ * stats, v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 12;
+const SCHEMA = 13;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -85,6 +88,9 @@ export interface SaveData {
   statsSnapshot?: StatsSnapshot;
   /** Schema 12+. Upper-layer road graph (Bridge Mode overpasses). */
   bridgeRoadEdges?: number[];
+  /** Schema 13+. Achievements lifetime counters + unlocked set +
+   *  one-time leader-bio "metLeaders" tracker. */
+  achievementsSnapshot?: AchievementsSnapshot;
 }
 
 /**
@@ -129,9 +135,9 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements): Promise<void> {
     if (!this.db) return;
-    const data = serialize(grid, economy, council, milestones, events, stats);
+    const data = serialize(grid, economy, council, milestones, events, stats, achievements);
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, SLOT_KEY);
@@ -157,7 +163,7 @@ export class SaveGame {
  * so we get a single restore path for both.
  */
 export function serialize(
-  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats
+  grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements
 ): SaveData {
   const tiles: TileSnapshot[] = new Array(grid.width * grid.height);
   let i = 0;
@@ -208,7 +214,8 @@ export function serialize(
     highestPop: milestones?.highestPop ?? 0,
     eventsSnapshot: events?.serialize(),
     statsSnapshot: stats?.serialize(),
-    bridgeRoadEdges: bridgeEdges
+    bridgeRoadEdges: bridgeEdges,
+    achievementsSnapshot: achievements?.serialize()
   };
 }
 
@@ -222,7 +229,7 @@ export function serialize(
  * Services.recompute(grid) afterward. Same for the road graph rebuild.
  */
 export function applySave(
-  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats
+  data: SaveData, grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements
 ): void {
   if (data.width !== grid.width || data.height !== grid.height) return;
   if (council) {
@@ -236,6 +243,18 @@ export function applySave(
   }
   if (stats) {
     stats.restore(data.statsSnapshot);
+  }
+  if (achievements) {
+    achievements.restore(data.achievementsSnapshot);
+    // Backfill peakPop / monthsRun from neighbouring systems for v12 saves
+    // that pre-date Achievements — players don't lose credit for the city
+    // they were already running.
+    if (!data.achievementsSnapshot) {
+      const seedPop = data.highestPop ?? 0;
+      if (seedPop > achievements.peakPop) achievements.peakPop = seedPop;
+      const seedMonths = data.monthsElapsed ?? 0;
+      if (seedMonths > achievements.monthsRun) achievements.monthsRun = seedMonths;
+    }
   }
 
   let i = 0;

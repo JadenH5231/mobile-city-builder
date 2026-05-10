@@ -18,6 +18,7 @@ import {
   PC_CAP,
   type Council
 } from '../simulation/Council';
+import type { Achievements } from '../simulation/Achievements';
 
 interface Deps {
   readonly happiness: Happiness;
@@ -26,6 +27,8 @@ interface Deps {
   readonly economy: Economy;
   readonly population: Population;
   readonly traffic: Traffic;
+  /** Optional — bump lifetime counters when civic actions succeed. */
+  readonly achievements?: Achievements;
 }
 
 type CivicAction = 'endorse' | 'coalition' | 'override';
@@ -354,12 +357,23 @@ export class HappinessPanel {
     let success = false;
     if (this.currentAction === 'override') {
       success = c.activateOverride();
+      if (success) {
+        this.deps.achievements?.recordPCSpent(COSTS.override_pc);
+        this.deps.achievements?.recordOverrideActivation();
+      }
     } else if (this.currentAction === 'endorse') {
       const f = this.currentSelections[0];
-      if (f) success = c.endorse(f);
+      if (f) {
+        success = c.endorse(f);
+        if (success) {
+          this.deps.achievements?.recordPCSpent(COSTS.endorse_pc);
+          this.deps.achievements?.recordEndorsement(f);
+        }
+      }
     } else if (this.currentAction === 'coalition') {
       if (this.currentSelections.length === 2) {
         success = c.declareCoalition(this.currentSelections[0]!, this.currentSelections[1]!);
+        if (success) this.deps.achievements?.recordPCSpent(COSTS.coalition_pc);
       }
     }
     if (success) {

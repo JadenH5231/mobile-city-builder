@@ -22,16 +22,19 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 19 (Alpha 3.1.3): persists per-tile `owned` bit so land
- * purchases survive reloads. v18-and-earlier saves load with owned=true
- * on every tile (preserves the pre-3.1.3 behaviour of "you have the
- * whole map"); fresh cities start with only the central area owned.
+ * Schema 20 (Alpha 4.0 — Architect Mode): persists the council's
+ * elected + currently-effective Beautification Budget tier. New
+ * `Building` enum values (plaza / fountain / statue / etc) round-trip
+ * via the existing `building` field — the union widened, the JSON
+ * key stayed the same. v19-and-earlier saves load with both
+ * beautification fields defaulted to 'none' (their elected council
+ * had no opinion on a feature that didn't yet exist).
  *
- * Earlier: v18 skyscrapers, v17 districts, v16 bonds, v15 tourism,
- * v14 patina, v13 achievements, v12 bridges, v11 stats, v10 events,
- * v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v19 land ownership, v18 skyscrapers, v17 districts,
+ * v16 bonds, v15 tourism, v14 patina, v13 achievements, v12 bridges,
+ * v11 stats, v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 19;
+const SCHEMA = 20;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -138,6 +141,14 @@ export interface SaveData {
    *  resumes with cheats on after a reload. */
   cheatUnlimitedMoney?: boolean;
   cheatUnlimitedDemand?: boolean;
+  /** Council Beautification Budget — elected tier (Alpha 4.0). The
+   *  council picks this each term; mayor cannot override. Persisted
+   *  so a mid-term reload doesn't regress to 'none' until the next
+   *  election. v19-and-earlier saves default to 'none'. */
+  beautificationTier?: import('../types').BeautificationTier;
+  /** Effective beautification tier last month (may differ from elected
+   *  if the bill defunded). v19-and-earlier saves default to 'none'. */
+  effectiveBeautificationTier?: import('../types').BeautificationTier;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -331,7 +342,10 @@ export function serialize(
     cityBoundsX0: grid.cityBoundsX0,
     cityBoundsX1: grid.cityBoundsX1,
     cityBoundsY0: grid.cityBoundsY0,
-    cityBoundsY1: grid.cityBoundsY1
+    cityBoundsY1: grid.cityBoundsY1,
+    // Council Beautification Budget (Alpha 4.0 / schema 20+).
+    beautificationTier: council?.beautificationTier ?? 'none',
+    effectiveBeautificationTier: council?.effectiveBeautificationTier ?? 'none'
   };
 }
 
@@ -355,6 +369,13 @@ export function applySave(
   }
   if (council) {
     council.politicalCapital = data.politicalCapital ?? 0;
+    // Beautification Budget (Alpha 4.0 / schema 20+). Pre-4.0 saves
+    // default both to 'none' — those cities boot back into a
+    // pre-elected state and the next election picks a fresh tier.
+    council.restoreBeautification(
+      data.beautificationTier,
+      data.effectiveBeautificationTier
+    );
   }
   if (milestones) {
     milestones.applyHighestPop(data.highestPop ?? 0);

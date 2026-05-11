@@ -506,6 +506,60 @@ export class Renderer {
     }
   }
 
+  /** Beautification streetscape mesh (Alpha 4.0 — council-controlled).
+   *  One merged mesh of decorative props attached to developed C / MU
+   *  tiles, scaled by the current `BeautificationTier`. Rebuilt by
+   *  `drawBeautification`; defunding wipes it back to null. */
+  private beautificationMesh: Mesh | null = null;
+  /** Currently-rendered beautification tier — used to skip a no-op
+   *  rebuild when neither the tier nor the C/MU set has changed. */
+  private lastBeautTier: import('../types').BeautificationTier = 'none';
+
+  /**
+   * Rebuild the streetscape beautification overlay (Alpha 4.0). Emits
+   * per-tile decorations on developed Commercial / Mixed-Use tiles
+   * (and L3 Residential at the top tier) — planters, café tables,
+   * banners, public art, etc. — scaled by the council-set tier.
+   *
+   * **Tier 'none'** wipes the mesh entirely (the bill defunded or no
+   * council yet). **Tier 'opulent'** adds the most aggressive flair
+   * to every developed downtown tile.
+   *
+   * Cheap to rebuild — single merged Mesh, only walks developed C/MU
+   * tiles. Caller should debounce: only call when tier OR the C/MU
+   * tile set changed.
+   */
+  drawBeautification(grid: Grid, tier: import('../types').BeautificationTier): void {
+    if (this.beautificationMesh) {
+      this.worldGroup.remove(this.beautificationMesh);
+      this.beautificationMesh.geometry.dispose();
+      (this.beautificationMesh.material as MeshLambertMaterial).dispose();
+      this.beautificationMesh = null;
+    }
+    this.lastBeautTier = tier;
+    if (tier === 'none') return;
+    const built = buildBeautificationMesh(grid, tier);
+    if (built) {
+      this.beautificationMesh = built;
+      this.worldGroup.add(this.beautificationMesh);
+    }
+  }
+
+  /** Currently-rendered beautification tier. Used by Game to skip
+   *  redundant `drawBeautification` calls. */
+  getBeautificationTier(): import('../types').BeautificationTier {
+    return this.lastBeautTier;
+  }
+
+  /** Optional supplier of the council's currently-effective beautification
+   *  tier. Set once by Game.init; if present, every `drawBuildings`
+   *  rebuild auto-refreshes the beautification overlay too — saves
+   *  every paint site from having to remember to pair the calls. */
+  private beautificationProvider: (() => import('../types').BeautificationTier) | null = null;
+  setBeautificationProvider(fn: () => import('../types').BeautificationTier): void {
+    this.beautificationProvider = fn;
+  }
+
   /** Rebuild the buildings InstancedMesh from current tile densities.
    *  `monthsElapsed` drives the Alpha 2.16 patina pass — older buildings
    *  read darker. Defaults to 0 (pre-history; everything looks new). */
@@ -538,6 +592,12 @@ export class Renderer {
     // Lit-window overlay (Alpha 3.1.6) is a sibling layer of the buildings
     // mesh — same dirty triggers, same rebuild cadence.
     this.drawLitWindows(grid);
+    // Beautification streetscape (Alpha 4.0) — same dirty triggers since
+    // it depends on the developed C/MU set. Provider injected by Game;
+    // when absent (e.g. an early test harness) we just skip the rebuild.
+    if (this.beautificationProvider) {
+      this.drawBeautification(grid, this.beautificationProvider());
+    }
   }
 
   /** Update skyscraper material opacity based on current camera ortho
@@ -3438,9 +3498,403 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         // Yellow sign at the roofline.
         { makeGeom: () => box(0.30, 0.10, 0.014), color: 0xeec453, dx: 0, dy: 0.04 + 0.42 + 0.05, dz: -0.18 + 0.225 + 0.008 }
       ];
+    /* ============== Architect Mode decoratives (Alpha 4.0) ============= */
+    case 'plaza': {
+      // Cobbled paved square + central planter + four corner posts.
+      // Reads as the kind of public realm tile you'd find downtown.
+      return [
+        // Paved pad.
+        { makeGeom: () => box(0.92, 0.04, 0.92), color: 0xb8b1a0, dx: 0, dy: 0.02, dz: 0 },
+        // Cobble pattern — four lighter inset squares.
+        { makeGeom: () => box(0.40, 0.045, 0.40), color: 0xc8c0ad, dx: -0.21, dy: 0.024, dz: -0.21 },
+        { makeGeom: () => box(0.40, 0.045, 0.40), color: 0xc8c0ad, dx:  0.21, dy: 0.024, dz:  0.21 },
+        // Central planter (square stone box with a small hedge).
+        { makeGeom: () => box(0.30, 0.10, 0.30), color: 0x9a8f7a, dx: 0, dy: 0.07, dz: 0 },
+        { makeGeom: () => box(0.24, 0.10, 0.24), color: 0x466c3a, dx: 0, dy: 0.16, dz: 0 },
+        // Four corner bollards.
+        { makeGeom: () => cyl(0.04, 0.18, 8), color: 0x4a4030, dx: -0.36, dy: 0.10, dz: -0.36 },
+        { makeGeom: () => cyl(0.04, 0.18, 8), color: 0x4a4030, dx:  0.36, dy: 0.10, dz: -0.36 },
+        { makeGeom: () => cyl(0.04, 0.18, 8), color: 0x4a4030, dx: -0.36, dy: 0.10, dz:  0.36 },
+        { makeGeom: () => cyl(0.04, 0.18, 8), color: 0x4a4030, dx:  0.36, dy: 0.10, dz:  0.36 }
+      ];
+    }
+    case 'fountain': {
+      // Tiered marble fountain — circular basin, central column, splash
+      // cap. Reads as monumental even at small scale.
+      return [
+        // Plaza pad under the fountain.
+        { makeGeom: () => box(0.92, 0.04, 0.92), color: 0xc8c0ad, dx: 0, dy: 0.02, dz: 0 },
+        // Outer basin (tall narrow cylinder).
+        { makeGeom: () => cyl(0.36, 0.10, 24), color: 0xe8e2d4, dx: 0, dy: 0.09, dz: 0 },
+        // Inner water (slightly recessed cylinder, water-blue).
+        { makeGeom: () => cyl(0.32, 0.04, 24), color: 0x6ab0d8, dx: 0, dy: 0.13, dz: 0 },
+        // Central column.
+        { makeGeom: () => cyl(0.07, 0.40, 12), color: 0xeae5d8, dx: 0, dy: 0.32, dz: 0 },
+        // Mid-tier splash bowl.
+        { makeGeom: () => cyl(0.20, 0.04, 18), color: 0xeae5d8, dx: 0, dy: 0.50, dz: 0 },
+        // Top splash bowl (narrower).
+        { makeGeom: () => cyl(0.12, 0.04, 14), color: 0xeae5d8, dx: 0, dy: 0.62, dz: 0 },
+        // Crown sphere.
+        { makeGeom: () => sphereLite(0.08), color: 0x6ab0d8, dx: 0, dy: 0.72, dz: 0 }
+      ];
+    }
+    case 'statue': {
+      // Bronze figure on a stone plinth. The figure is reads as
+      // person-shaped (head + torso + arms + base) at low poly.
+      return [
+        // Plaza pad.
+        { makeGeom: () => box(0.85, 0.04, 0.85), color: 0xb8b1a0, dx: 0, dy: 0.02, dz: 0 },
+        // Stone plinth (tall block).
+        { makeGeom: () => box(0.30, 0.36, 0.30), color: 0x9a9286, dx: 0, dy: 0.22, dz: 0 },
+        { makeGeom: () => box(0.34, 0.04, 0.34), color: 0x756d61, dx: 0, dy: 0.42, dz: 0 },
+        // Bronze legs (single block, simplified).
+        { makeGeom: () => box(0.12, 0.18, 0.10), color: 0x7a5a32, dx: 0, dy: 0.51, dz: 0 },
+        // Bronze torso.
+        { makeGeom: () => box(0.18, 0.20, 0.12), color: 0x8c6a3a, dx: 0, dy: 0.70, dz: 0 },
+        // Bronze head.
+        { makeGeom: () => box(0.10, 0.10, 0.10), color: 0xa07a44, dx: 0, dy: 0.85, dz: 0 },
+        // Outstretched arm (hero pose).
+        { makeGeom: () => box(0.22, 0.05, 0.05), color: 0x8c6a3a, dx: 0.12, dy: 0.74, dz: 0 }
+      ];
+    }
+    case 'flower_bed': {
+      // Low timber-edged rectangle with bright dot-flowers in red,
+      // yellow, white. Cheap entry-tier piece. Cluster-friendly: many
+      // of these in a row read as a long planted boulevard.
+      return [
+        // Soil base.
+        { makeGeom: () => box(0.78, 0.04, 0.36), color: 0x5a3e22, dx: 0, dy: 0.02, dz: 0 },
+        // Timber edge — four thin slabs.
+        { makeGeom: () => box(0.78, 0.05, 0.04), color: 0x6e4e2a, dx: 0, dy: 0.025, dz: -0.18 },
+        { makeGeom: () => box(0.78, 0.05, 0.04), color: 0x6e4e2a, dx: 0, dy: 0.025, dz:  0.18 },
+        { makeGeom: () => box(0.04, 0.05, 0.36), color: 0x6e4e2a, dx: -0.39, dy: 0.025, dz: 0 },
+        { makeGeom: () => box(0.04, 0.05, 0.36), color: 0x6e4e2a, dx:  0.39, dy: 0.025, dz: 0 },
+        // Dot-flowers — bright spheres scattered across the bed.
+        { makeGeom: () => sphereLite(0.05), color: 0xd84545, dx: -0.28, dy: 0.10, dz: -0.06 },
+        { makeGeom: () => sphereLite(0.05), color: 0xf2cd5c, dx: -0.10, dy: 0.10, dz:  0.06 },
+        { makeGeom: () => sphereLite(0.05), color: 0xf6f0e0, dx:  0.08, dy: 0.10, dz: -0.06 },
+        { makeGeom: () => sphereLite(0.05), color: 0xd84545, dx:  0.26, dy: 0.10, dz:  0.06 },
+        { makeGeom: () => sphereLite(0.04), color: 0xa75ad4, dx:  0.00, dy: 0.10, dz: -0.10 }
+      ];
+    }
+    case 'topiary': {
+      // Manicured hedge maze block — square outer hedge with inner
+      // cross hedges. Reads as a formal English garden parterre.
+      return [
+        // Lawn pad.
+        { makeGeom: () => box(0.92, 0.04, 0.92), color: 0x4d8c3a, dx: 0, dy: 0.02, dz: 0 },
+        // Outer hedge wall — four slabs forming a square frame.
+        { makeGeom: () => box(0.92, 0.20, 0.10), color: 0x2d5e2a, dx: 0, dy: 0.12, dz: -0.41 },
+        { makeGeom: () => box(0.92, 0.20, 0.10), color: 0x2d5e2a, dx: 0, dy: 0.12, dz:  0.41 },
+        { makeGeom: () => box(0.10, 0.20, 0.92), color: 0x2d5e2a, dx: -0.41, dy: 0.12, dz: 0 },
+        { makeGeom: () => box(0.10, 0.20, 0.92), color: 0x2d5e2a, dx:  0.41, dy: 0.12, dz: 0 },
+        // Inner cross — narrower hedges.
+        { makeGeom: () => box(0.65, 0.16, 0.06), color: 0x3a7a3a, dx: 0, dy: 0.10, dz: 0 },
+        { makeGeom: () => box(0.06, 0.16, 0.65), color: 0x3a7a3a, dx: 0, dy: 0.10, dz: 0 },
+        // Centre topiary ball.
+        { makeGeom: () => sphereLite(0.08), color: 0x4a8e44, dx: 0, dy: 0.20, dz: 0 }
+      ];
+    }
+    case 'pergola': {
+      // Wooden pergola — four corner posts holding parallel cross-beams.
+      // Light shade structure for a courtyard or garden corner.
+      return [
+        // Stone pad.
+        { makeGeom: () => box(0.78, 0.04, 0.78), color: 0xc7c2b3, dx: 0, dy: 0.02, dz: 0 },
+        // Four corner posts.
+        { makeGeom: () => box(0.06, 0.46, 0.06), color: 0x8a5a32, dx: -0.32, dy: 0.23, dz: -0.32 },
+        { makeGeom: () => box(0.06, 0.46, 0.06), color: 0x8a5a32, dx:  0.32, dy: 0.23, dz: -0.32 },
+        { makeGeom: () => box(0.06, 0.46, 0.06), color: 0x8a5a32, dx: -0.32, dy: 0.23, dz:  0.32 },
+        { makeGeom: () => box(0.06, 0.46, 0.06), color: 0x8a5a32, dx:  0.32, dy: 0.23, dz:  0.32 },
+        // Two long top rails.
+        { makeGeom: () => box(0.78, 0.05, 0.05), color: 0x6e4622, dx: 0, dy: 0.50, dz: -0.30 },
+        { makeGeom: () => box(0.78, 0.05, 0.05), color: 0x6e4622, dx: 0, dy: 0.50, dz:  0.30 },
+        // Five cross-beams perpendicular.
+        { makeGeom: () => box(0.05, 0.04, 0.66), color: 0x7a4f28, dx: -0.32, dy: 0.49, dz: 0 },
+        { makeGeom: () => box(0.05, 0.04, 0.66), color: 0x7a4f28, dx: -0.16, dy: 0.49, dz: 0 },
+        { makeGeom: () => box(0.05, 0.04, 0.66), color: 0x7a4f28, dx:  0.00, dy: 0.49, dz: 0 },
+        { makeGeom: () => box(0.05, 0.04, 0.66), color: 0x7a4f28, dx:  0.16, dy: 0.49, dz: 0 },
+        { makeGeom: () => box(0.05, 0.04, 0.66), color: 0x7a4f28, dx:  0.32, dy: 0.49, dz: 0 },
+        // Trailing greenery — small hedges at two corner posts.
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx: -0.32, dy: 0.10, dz: -0.32 },
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx:  0.32, dy: 0.10, dz:  0.32 }
+      ];
+    }
+    case 'reflecting_pool': {
+      // Long marble-edged rectangular water feature — reads as a
+      // monumental Jefferson-Memorial-style reflecting pool. Very still
+      // water surface, decorative only.
+      return [
+        // Stone surround.
+        { makeGeom: () => box(0.92, 0.06, 0.92), color: 0xeae3d0, dx: 0, dy: 0.03, dz: 0 },
+        // Inset water (slightly lower than surround).
+        { makeGeom: () => box(0.78, 0.05, 0.78), color: 0x4d8eb9, dx: 0, dy: 0.04, dz: 0 },
+        // Subtle reflection ripple — slim white slab on the surface.
+        { makeGeom: () => box(0.40, 0.06, 0.04), color: 0xc6dff0, dx: 0, dy: 0.05, dz: 0 },
+        // Four corner stone bollards.
+        { makeGeom: () => box(0.06, 0.10, 0.06), color: 0xc7c2b3, dx: -0.42, dy: 0.07, dz: -0.42 },
+        { makeGeom: () => box(0.06, 0.10, 0.06), color: 0xc7c2b3, dx:  0.42, dy: 0.07, dz: -0.42 },
+        { makeGeom: () => box(0.06, 0.10, 0.06), color: 0xc7c2b3, dx: -0.42, dy: 0.07, dz:  0.42 },
+        { makeGeom: () => box(0.06, 0.10, 0.06), color: 0xc7c2b3, dx:  0.42, dy: 0.07, dz:  0.42 }
+      ];
+    }
+    case 'memorial_garden': {
+      // Sculptural memorial — central obelisk on a tiered base
+      // surrounded by paving + hedges + flowers. The premium garden
+      // tier; reads as solemn civic landmark.
+      return [
+        // Wide stone pad (large memorial plaza footprint).
+        { makeGeom: () => box(0.95, 0.05, 0.95), color: 0xc7c0ae, dx: 0, dy: 0.025, dz: 0 },
+        // Tiered base under the obelisk — three steps.
+        { makeGeom: () => box(0.50, 0.06, 0.50), color: 0xa8a094, dx: 0, dy: 0.08, dz: 0 },
+        { makeGeom: () => box(0.36, 0.06, 0.36), color: 0xc0b8a8, dx: 0, dy: 0.14, dz: 0 },
+        // Tall granite obelisk (tapered cone).
+        { makeGeom: () => cone(0.15, 0.85, 4), color: 0x7a7368, dx: 0, dy: 0.62, dz: 0 },
+        // Four corner hedge balls.
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx: -0.40, dy: 0.10, dz: -0.40 },
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx:  0.40, dy: 0.10, dz: -0.40 },
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx: -0.40, dy: 0.10, dz:  0.40 },
+        { makeGeom: () => sphereLite(0.10), color: 0x3a7a3a, dx:  0.40, dy: 0.10, dz:  0.40 },
+        // Edge flower clusters — small dots between hedges.
+        { makeGeom: () => sphereLite(0.04), color: 0xd84545, dx: 0, dy: 0.10, dz: -0.42 },
+        { makeGeom: () => sphereLite(0.04), color: 0xf2cd5c, dx: 0, dy: 0.10, dz:  0.42 }
+      ];
+    }
+    case 'clock_tower': {
+      // Dedicated tall slender clock tower — distinct from the school's
+      // small clock turret. Real centerpiece civic landmark.
+      return [
+        // Plaza pad.
+        { makeGeom: () => box(0.92, 0.04, 0.92), color: 0xb8b1a0, dx: 0, dy: 0.02, dz: 0 },
+        // Tall granite tower body.
+        { makeGeom: () => box(0.40, 1.20, 0.40), color: 0xd6c9a8, dx: 0, dy: 0.04 + 0.60, dz: 0 },
+        // Window strip on the front face.
+        { makeGeom: () => box(0.08, 0.18, 0.018), color: 0x2a3a4a, dx: 0, dy: 0.50, dz: 0.20 + 0.005 },
+        // Clock face — large dark disc with white frame on each face.
+        { makeGeom: () => cyl(0.13, 0.04, 16), color: 0x2a2a2a, dx: 0, dy: 1.05, dz: 0.20 + 0.025 },
+        { makeGeom: () => cyl(0.10, 0.05, 16), color: 0xeae3d0, dx: 0, dy: 1.05, dz: 0.20 + 0.045 },
+        // Minute hand.
+        { makeGeom: () => box(0.012, 0.10, 0.018), color: 0x1a1a1a, dx: 0, dy: 1.10, dz: 0.20 + 0.06 },
+        // Hour hand.
+        { makeGeom: () => box(0.014, 0.06, 0.018), color: 0x1a1a1a, dx: 0.025, dy: 1.07, dz: 0.20 + 0.06 },
+        // Belfry — open arched section above the clock.
+        { makeGeom: () => box(0.50, 0.18, 0.50), color: 0xc7b08a, dx: 0, dy: 1.30, dz: 0 },
+        // Pyramidal copper-green roof.
+        { makeGeom: () => cone(0.30, 0.30, 4), color: 0x4f9f7a, dx: 0, dy: 1.55, dz: 0 },
+        // Spire on top.
+        { makeGeom: () => cyl(0.012, 0.18, 5), color: 0xc4c0b6, dx: 0, dy: 1.79, dz: 0 },
+        // Gold ball finial.
+        { makeGeom: () => sphereLite(0.04), color: 0xeec453, dx: 0, dy: 1.91, dz: 0 }
+      ];
+    }
+    case 'triumphal_arch': {
+      // Massive stone arch — tallest, widest single-tile decorative.
+      // The end-game prestige build. Reads as Arc-de-Triomphe-style.
+      return [
+        // Plaza pad (wide).
+        { makeGeom: () => box(0.95, 0.04, 0.95), color: 0xc7c2b3, dx: 0, dy: 0.02, dz: 0 },
+        // Two solid leg piers (left + right).
+        { makeGeom: () => box(0.22, 0.95, 0.50), color: 0xd6c9a8, dx: -0.32, dy: 0.04 + 0.475, dz: 0 },
+        { makeGeom: () => box(0.22, 0.95, 0.50), color: 0xd6c9a8, dx:  0.32, dy: 0.04 + 0.475, dz: 0 },
+        // Arch top entablature — long heavy slab spanning the legs.
+        { makeGeom: () => box(0.92, 0.18, 0.50), color: 0xc7b08a, dx: 0, dy: 0.04 + 0.95 + 0.09, dz: 0 },
+        // Top cornice (slightly wider crown).
+        { makeGeom: () => box(0.96, 0.06, 0.54), color: 0xb8a07a, dx: 0, dy: 0.04 + 0.95 + 0.18 + 0.03, dz: 0 },
+        // Decorative relief plaque on the front face.
+        { makeGeom: () => box(0.40, 0.10, 0.018), color: 0xa8916a, dx: 0, dy: 0.04 + 0.95 + 0.09, dz: 0.25 + 0.005 },
+        // Gold lettering hint on the plaque.
+        { makeGeom: () => box(0.30, 0.04, 0.020), color: 0xeec453, dx: 0, dy: 0.04 + 0.95 + 0.09, dz: 0.25 + 0.018 },
+        // Top crown ornament — a small statue/quadriga silhouette.
+        { makeGeom: () => box(0.18, 0.12, 0.10), color: 0x8c6a3a, dx: 0, dy: 0.04 + 0.95 + 0.27, dz: 0 }
+      ];
+    }
+    case 'pier': {
+      // Wooden deck on water — planks, pilings dropping into the
+      // water, two posts at the seaward end with rope strung between.
+      return [
+        // Deck — flat wooden plank surface (slim, sitting just above water).
+        { makeGeom: () => box(0.85, 0.04, 0.85), color: 0x8a5a32, dx: 0, dy: 0.05, dz: 0 },
+        // Plank seams — three darker strips across the deck.
+        { makeGeom: () => box(0.85, 0.045, 0.04), color: 0x6a4422, dx: 0, dy: 0.052, dz: -0.20 },
+        { makeGeom: () => box(0.85, 0.045, 0.04), color: 0x6a4422, dx: 0, dy: 0.052, dz:  0.00 },
+        { makeGeom: () => box(0.85, 0.045, 0.04), color: 0x6a4422, dx: 0, dy: 0.052, dz:  0.20 },
+        // Four pilings dropping below the deck (visual cue of supports).
+        { makeGeom: () => cyl(0.04, 0.20, 6), color: 0x4a3220, dx: -0.36, dy: -0.07, dz: -0.36 },
+        { makeGeom: () => cyl(0.04, 0.20, 6), color: 0x4a3220, dx:  0.36, dy: -0.07, dz: -0.36 },
+        { makeGeom: () => cyl(0.04, 0.20, 6), color: 0x4a3220, dx: -0.36, dy: -0.07, dz:  0.36 },
+        { makeGeom: () => cyl(0.04, 0.20, 6), color: 0x4a3220, dx:  0.36, dy: -0.07, dz:  0.36 },
+        // Two seaward bollards with a rope between.
+        { makeGeom: () => cyl(0.04, 0.20, 8), color: 0x5a3a22, dx: -0.30, dy: 0.18, dz: 0.36 },
+        { makeGeom: () => cyl(0.04, 0.20, 8), color: 0x5a3a22, dx:  0.30, dy: 0.18, dz: 0.36 },
+        { makeGeom: () => box(0.60, 0.018, 0.018), color: 0x9a8a72, dx: 0, dy: 0.24, dz: 0.36 }
+      ];
+    }
     default:
       return [];
   }
+}
+
+/**
+ * Build the beautification overlay mesh (Alpha 4.0 — Architect Mode).
+ *
+ * Walks every developed Commercial / Mixed-Use tile (and L3 R / luxury
+ * at the top tier) and emits per-tile decorative props on the four
+ * corners of the lot — planter boxes, café tables, banner poles,
+ * sculpture, etc — scaled by the council's elected `BeautificationTier`.
+ *
+ * **Why this is council-controlled:** the player has no slider for it;
+ * the renderer just reads whatever tier is currently effective and
+ * draws accordingly. When the budget defunds (treasury short), the
+ * tier flips to 'none' and this mesh is wiped — the streetscape
+ * visibly strips down across the whole city in one frame.
+ *
+ * Each tier additively unlocks props:
+ *   light    — corner planter
+ *   standard — light + outdoor café table
+ *   grand    — standard + decorative streetlamp + banner pennant
+ *   opulent  — grand + public-art pedestal + flower spillover
+ *
+ * Returns null when no eligible tiles exist (fresh city without C/MU
+ * yet) so the caller can skip adding the mesh entirely.
+ */
+function buildBeautificationMesh(
+  grid: Grid,
+  tier: import('../types').BeautificationTier
+): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+
+  // Tier-gated additive flags. Each tier turns on its props PLUS all
+  // cheaper tiers' props. Read the tier once into a struct so the
+  // hot loop below doesn't re-evaluate the switch per tile.
+  const tierLevel =
+    tier === 'opulent'  ? 4 :
+    tier === 'grand'    ? 3 :
+    tier === 'standard' ? 2 :
+    tier === 'light'    ? 1 : 0;
+  if (tierLevel === 0) return null;
+
+  // Palette — bright cheerful colours for awning + planter + banner.
+  const PLANT_GREEN = 0x4d8c3a;
+  const PLANTER     = 0x6e4622;
+  const BANNER_RED  = 0xd84545;
+  const BANNER_BLUE = 0x4d8eb9;
+  const LAMP_POLE   = 0x222a32;
+  const LAMP_BULB   = 0xf2cd5c;
+  const TABLE_TOP   = 0xe8e2d4;
+  const ART_BRONZE  = 0x8c6a3a;
+  const ART_BASE    = 0x8a857a;
+
+  // Per-corner offsets — the four lot corners of a developed tile.
+  // We deliberately push toward the lot edge so props land on the
+  // sidewalk rim, NOT inside the building footprint.
+  const CORNERS: ReadonlyArray<readonly [number, number]> = [
+    [-0.36, -0.36], [0.36, -0.36], [-0.36, 0.36], [0.36, 0.36]
+  ];
+
+  for (const t of grid.iter()) {
+    if (t.density === 0) continue;
+    if (t.road) continue;
+    // C / MU are the canonical beautified zones. R-L3 + luxury get
+    // upgrades only at grand+ tier (residential streetscape flair is
+    // a higher-tier amenity).
+    const isCommercial = t.zone === 'commercial' || t.zone === 'mixed';
+    const isPremiumRes = t.zone === 'residential' && (t.density === 3 || t.luxury);
+    if (!isCommercial && !(isPremiumRes && tierLevel >= 3)) continue;
+
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    // Deterministic per-tile RNG so a re-render picks the same colours.
+    const r = Math.abs(((t.x * 73856093) ^ (t.y * 19349663)) | 0);
+    // Pick a banner colour per tile.
+    const bannerColor = (r % 2 === 0) ? BANNER_RED : BANNER_BLUE;
+
+    // Pick which two of the four corners get props per tier — keeps the
+    // visual density manageable and the corner choice deterministic.
+    const cornerCountByTier = [0, 1, 2, 3, 4];
+    const cornerCount = cornerCountByTier[tierLevel]!;
+    const cornerStart = (r >> 4) % 4;
+    for (let ci = 0; ci < cornerCount; ci++) {
+      const corner = CORNERS[(cornerStart + ci) % 4]!;
+      const ox = corner[0];
+      const oz = corner[1];
+
+      // Tier 1+ — corner planter box with a small hedge.
+      const planter = box(0.16, 0.06, 0.16);
+      planter.translate(cx + ox, 0.03, cz + oz);
+      geoms.push(planter); colours.push(PLANTER);
+      const hedge = box(0.12, 0.10, 0.12);
+      hedge.translate(cx + ox, 0.10, cz + oz);
+      geoms.push(hedge); colours.push(PLANT_GREEN);
+
+      // Tier 2+ — outdoor café table (only on alternating corners so
+      // every tile doesn't read identically).
+      if (tierLevel >= 2 && ci % 2 === 0) {
+        const tableTop = cyl(0.07, 0.014, 10);
+        tableTop.translate(cx + ox + 0.10, 0.18, cz + oz + 0.10);
+        geoms.push(tableTop); colours.push(TABLE_TOP);
+        const tableLeg = cyl(0.012, 0.18, 5);
+        tableLeg.translate(cx + ox + 0.10, 0.09, cz + oz + 0.10);
+        geoms.push(tableLeg); colours.push(LAMP_POLE);
+        // Two tiny chair-seat dots flanking the table.
+        const chairA = cyl(0.04, 0.016, 6);
+        chairA.translate(cx + ox + 0.04, 0.13, cz + oz + 0.10);
+        geoms.push(chairA); colours.push(LAMP_POLE);
+        const chairB = cyl(0.04, 0.016, 6);
+        chairB.translate(cx + ox + 0.16, 0.13, cz + oz + 0.10);
+        geoms.push(chairB); colours.push(LAMP_POLE);
+      }
+
+      // Tier 3+ — decorative streetlamp + flag banner.
+      if (tierLevel >= 3) {
+        const pole = cyl(0.018, 0.46, 6);
+        pole.translate(cx + ox, 0.27, cz + oz);
+        geoms.push(pole); colours.push(LAMP_POLE);
+        // Decorative arm.
+        const arm = box(0.14, 0.018, 0.018);
+        arm.translate(cx + ox + 0.06, 0.48, cz + oz);
+        geoms.push(arm); colours.push(LAMP_POLE);
+        // Lamp bulb.
+        const bulb = sphereLite(0.040);
+        bulb.translate(cx + ox + 0.12, 0.47, cz + oz);
+        geoms.push(bulb); colours.push(LAMP_BULB);
+        // Pennant banner.
+        const banner = box(0.10, 0.16, 0.012);
+        banner.translate(cx + ox, 0.36, cz + oz + 0.020);
+        geoms.push(banner); colours.push(bannerColor);
+      }
+
+      // Tier 4 — public-art pedestal on one corner (the first chosen).
+      if (tierLevel >= 4 && ci === 0) {
+        const base = box(0.16, 0.08, 0.16);
+        base.translate(cx + ox, 0.04, cz + oz);
+        geoms.push(base); colours.push(ART_BASE);
+        // Abstract twisted spire — a tall narrow cone offset to read
+        // as sculpture.
+        const spire = cone(0.06, 0.36, 5);
+        spire.translate(cx + ox, 0.26, cz + oz);
+        geoms.push(spire); colours.push(ART_BRONZE);
+        // Crown sphere.
+        const crown = sphereLite(0.050);
+        crown.translate(cx + ox, 0.46, cz + oz);
+        geoms.push(crown); colours.push(LAMP_BULB);
+        // Spillover flower clusters around the pedestal.
+        const f1 = sphereLite(0.030);
+        f1.translate(cx + ox - 0.10, 0.10, cz + oz);
+        geoms.push(f1); colours.push(0xd84545);
+        const f2 = sphereLite(0.030);
+        f2.translate(cx + ox + 0.10, 0.10, cz + oz);
+        geoms.push(f2); colours.push(0xa75ad4);
+      }
+    }
+  }
+
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  // Slightly emissive material so the streetscape decorations read as
+  // bright + alive even in shaded areas.
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(merged, mat);
 }
 
 function box(w: number, h: number, d: number): BufferGeometry {

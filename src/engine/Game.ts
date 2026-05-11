@@ -48,6 +48,7 @@ import {
   PLACE_TOOL_TO_BUILDING,
   ROAD_TOOLS,
   STOP_SIGN_COST,
+  TERRAFORM_COSTS,
   TILE_SIZE,
   TRAFFIC_LIGHT_COST,
   ZONE_TIER_CAP,
@@ -329,6 +330,10 @@ export class Game {
     host.appendChild(canvas);
 
     this.renderer = new Renderer(canvas);
+    // Beautification overlay is council-controlled (Alpha 4.0). Install
+    // a provider so every Renderer.drawBuildings rebuild auto-refreshes
+    // the streetscape mesh — no need to pair calls at every paint site.
+    this.renderer.setBeautificationProvider(() => this.council.effectiveBeautificationTier);
     this.grid = new Grid(mapSize.width, mapSize.height);
 
     this.input = new Input(canvas, this.camera, {
@@ -342,6 +347,16 @@ export class Game {
     this.panel = new TileInfoPanel();
     this.toolbar = new Toolbar();
     this.toolbar.onChange = (tool) => this.setTool(tool);
+    // Architect Mode swap (Alpha 4.0) — Game just ack-toasts the change
+    // so the player has clear feedback. Toolbar handles the actual
+    // ITEMS swap + resets the active tool to Pan internally.
+    this.toolbar.onModeChange = (mode) => {
+      this.onStatusMessage?.(
+        mode === 'architect'
+          ? 'Architect mode — terraform + decoratives'
+          : 'Build mode — zones, roads, services'
+      );
+    };
     // Surface the "Unlocks at <Milestone> · NNN pop" toast when a player
     // taps a locked tool (Alpha 2.8).
     this.toolbar.onLocked = (tool) => {
@@ -364,7 +379,7 @@ export class Game {
     // Refresh banned-tool indicators on first paint and after any election.
     this.refreshToolbarBans();
     this.refreshToolbarLocks();
-    this.budgetPanel = new BudgetPanel(this.economy, this.bonds);
+    this.budgetPanel = new BudgetPanel(this.economy, this.bonds, this.council);
     this.budgetPanel.onIssueBond = (id) => { this.issueBond(id); this.budgetPanel.refresh(); };
     this.happinessPanel = new HappinessPanel({
       happiness: this.happiness,
@@ -474,6 +489,16 @@ export class Game {
     return Math.max(0, Math.min(1, (price - 0.65) / 0.7));
   }
 
+  /**
+   * Push the council's currently-effective Beautification tier into
+   * the renderer (Alpha 4.0). Called whenever the buildings layer is
+   * rebuilt (catches new C/MU paint) AND whenever the tier flips
+   * (election or monthly defund). Cheap on a cold rebuild.
+   */
+  private refreshBeautification(): void {
+    this.renderer.drawBeautification(this.grid, this.council.effectiveBeautificationTier);
+  }
+
   private refreshToolbarBans(): void {
     const banned = new Set<Tool>();
     // Each tool maps to its FACTION_STANCES key. Walking-path and
@@ -511,7 +536,20 @@ export class Game {
       ['place_stadium', 'stadium'],
       ['place_observatory', 'observatory'],
       ['place_ferry_dock', 'ferry_dock'],
-      ['place_subway_entrance', 'subway_entrance']
+      ['place_subway_entrance', 'subway_entrance'],
+      // Architect Mode decoratives (Alpha 4.0) — same dispatch shape,
+      // each tool keys into its FACTION_STANCES row.
+      ['place_plaza', 'plaza'],
+      ['place_fountain', 'fountain'],
+      ['place_statue', 'statue'],
+      ['place_flower_bed', 'flower_bed'],
+      ['place_topiary', 'topiary'],
+      ['place_pergola', 'pergola'],
+      ['place_reflecting_pool', 'reflecting_pool'],
+      ['place_memorial_garden', 'memorial_garden'],
+      ['place_clock_tower', 'clock_tower'],
+      ['place_triumphal_arch', 'triumphal_arch'],
+      ['place_pier', 'pier']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -543,7 +581,13 @@ export class Game {
       'place_ferry_dock', 'place_subway_entrance',
       'paint_district', 'erase_district',
       'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
-      'buy_land'
+      'buy_land',
+      // Architect Mode (Alpha 4.0) — terraforming + decoratives.
+      'terra_tree', 'terra_meadow', 'terra_pond', 'terra_smooth',
+      'place_plaza', 'place_fountain', 'place_statue',
+      'place_flower_bed', 'place_topiary', 'place_pergola',
+      'place_reflecting_pool', 'place_memorial_garden',
+      'place_clock_tower', 'place_triumphal_arch', 'place_pier'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -653,7 +697,15 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council);
+        // Beautification budget defunded this month (Alpha 4.0) — surface
+        // a status toast so the player understands why the streetscape
+        // suddenly stripped down. The flag is set by Economy and
+        // consumed (cleared) here so the message fires exactly once.
+        if (this.council.beautificationJustDefunded) {
+          this.council.beautificationJustDefunded = false;
+          this.onStatusMessage?.('Beautification budget defunded — treasury short');
+        }
         // Cheat: top up to a billion after the monthly settlement so
         // expensive things (skyscrapers, $1M expansions, bonds) are
         // always affordable while playtesting.
@@ -785,7 +837,16 @@ export class Game {
       if (steps >= MAX_SIM_STEPS_PER_FRAME && this.simAccumulatorMs > SIM_STEP_MS) {
         this.simAccumulatorMs = 0;
       }
-      if (buildingsDirty) this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
+      if (buildingsDirty) {
+        // drawBuildings auto-refreshes the beautification overlay via
+        // the provider installed in init() — no separate call needed.
+        this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
+      } else if (this.renderer.getBeautificationTier() !== this.council.effectiveBeautificationTier) {
+        // Tier flipped without the building set changing — e.g. a
+        // council just elected a new tier or the budget defunded mid-
+        // month. Rebuild the overlay alone (cheap, no buildings rebuild).
+        this.refreshBeautification();
+      }
 
       // Render-rate dt: scale by simSpeed so vehicles/walkers visually move
       // faster at 2× / 3× and freeze at 0.
@@ -1272,6 +1333,8 @@ export class Game {
     this.strokePaths.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
+    this.terraformBlockNotifiedThisStroke = false;
+    this.councilBlockNotifiedThisStroke = false;
   }
 
   /**
@@ -1325,6 +1388,28 @@ export class Game {
         this.onStatusMessage?.('Ferry dock needs an adjacent water tile');
         return false;
       }
+    }
+    // Pier (Alpha 4.0) — must be on water with at least one 4-connected
+    // non-water neighbour. Reads as a wooden deck extending into the
+    // lake from the shore. Pure decorative, no transit hookup.
+    if (kind === 'pier') {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.terrain !== 'water') {
+        this.onStatusMessage?.('Pier must be placed on a water tile');
+        return false;
+      }
+      if (!this.grid.has4LandNeighbour(x, y)) {
+        this.onStatusMessage?.('Pier must touch the shore');
+        return false;
+      }
+    }
+    // Reflecting pool / fountain (Alpha 4.0) — large water-feature
+    // monuments that sit on land but evoke water. No special gates;
+    // we just want to surface a friendlier reject when the player
+    // taps on a body of water trying to place one.
+    if ((kind === 'reflecting_pool' || kind === 'fountain') && this.grid.get(x, y)?.terrain === 'water') {
+      this.onStatusMessage?.(`${kind === 'fountain' ? 'Fountain' : 'Reflecting pool'} must be placed on land`);
+      return false;
     }
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
@@ -1622,6 +1707,17 @@ export class Game {
       this.applyDistrictEraseStroke(path);
       return;
     }
+    // Terraforming (Alpha 4.0 — Architect Mode). Each terra_* tool maps
+    // to a target terrain kind plus a per-tile cost. Painted tiles must
+    // be free of road / zone / building / path / luxury / skyscraper —
+    // we don't allow terraforming a developed city.
+    if (
+      this.tool === 'terra_tree' || this.tool === 'terra_meadow' ||
+      this.tool === 'terra_pond' || this.tool === 'terra_smooth'
+    ) {
+      this.applyTerraformStroke(path, this.tool);
+      return;
+    }
     const zoneInfo = ZONE_TOOL_INFO.get(this.tool);
     if (zoneInfo) {
       this.applyZoneStroke(path, zoneInfo.zone, ZONE_TIER_CAP[zoneInfo.tier]);
@@ -1662,6 +1758,76 @@ export class Game {
     }
     if (touched) this.renderer.drawDistricts(this.grid, this.districts);
   }
+
+  /**
+   * Terraforming stroke (Alpha 4.0 — Architect Mode). Mutates a tile's
+   * terrain in place; cheap because the renderer's terrain + trees mesh
+   * is rebuilt by `drawWorld` (already a sub-frame operation on Small/
+   * Medium). Per-tile cost is deducted incrementally — strokes that
+   * outrun the treasury simply stop applying mid-stroke.
+   *
+   * Refuses tiles that are developed (road / zone / building / path /
+   * luxury / skyscraper / bridge) — terraforming a built city would
+   * leave roads floating or zones marooned in water.
+   */
+  private applyTerraformStroke(
+    path: { x: number; y: number }[],
+    tool: 'terra_tree' | 'terra_meadow' | 'terra_pond' | 'terra_smooth'
+  ): void {
+    const target: import('../types').TerrainType =
+      tool === 'terra_tree'   ? 'forest' :
+      tool === 'terra_meadow' ? 'sand'   :
+      tool === 'terra_pond'   ? 'water'  :
+      'grass';
+    const baseCost = TERRAFORM_COSTS[tool];
+    const mult = this.council.costMultiplier('park'); // reuse park stance for terraforming pricing
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return;
+    }
+    const perTileCost = Math.round(baseCost * mult);
+    let changed = false;
+    let blockedByCash = false;
+    let blockedByDeveloped = false;
+    const seen = new Set<number>();
+    for (const p of path) {
+      const idx = this.tileIndex(p.x, p.y);
+      if (seen.has(idx)) continue;
+      seen.add(idx);
+      const t = this.grid.get(p.x, p.y);
+      if (!t) continue;
+      if (!t.owned) continue;
+      if (t.terrain === target) continue;
+      // Refuse developed tiles — terraforming would leave roads floating
+      // / zones marooned. Player must bulldoze first.
+      if (
+        t.road || t.bridge || t.bridgeRoad || t.path ||
+        t.zone !== 'none' || t.building !== 'none' ||
+        t.luxury || t.skyscraper
+      ) { blockedByDeveloped = true; continue; }
+      if (this.economy.treasury < perTileCost) { blockedByCash = true; continue; }
+      this.economy.treasury -= perTileCost;
+      t.terrain = target;
+      changed = true;
+    }
+    if (changed) {
+      // drawWorld rebuilds terrain + trees in one shot; cheap on Small/Medium.
+      this.renderer.drawWorld(this.grid);
+      // Path graph reads non-water tiles as walkable in places — rebuild
+      // defensively so a meadow → pond stroke updates pedestrian routing.
+      this.pathGraph.rebuild(this.grid);
+    }
+    if (blockedByCash && !this.terraformBlockNotifiedThisStroke) {
+      this.terraformBlockNotifiedThisStroke = true;
+      this.onStatusMessage?.(`Stroke stopped — need $${perTileCost.toLocaleString()}/tile`);
+    } else if (blockedByDeveloped && !changed && !this.terraformBlockNotifiedThisStroke) {
+      this.terraformBlockNotifiedThisStroke = true;
+      this.onStatusMessage?.('Bulldoze first — terraforming refuses developed tiles');
+    }
+  }
+  /** Per-stroke guard so the terraform "not enough money" toast fires
+   *  exactly once even on a long unaffordable stroke. */
+  private terraformBlockNotifiedThisStroke = false;
 
   // --- Road tool stroke ---------------------------------------------------
 

@@ -382,6 +382,18 @@ export class Grid {
     return false;
   }
 
+  /** True if any 4-connected neighbour of (x, y) is non-water land
+   *  (Alpha 4.0). Used by the pier placement gate — a pier sits on
+   *  water, but must touch the shore. */
+  has4LandNeighbour(x: number, y: number): boolean {
+    const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    for (const [dx, dy] of dirs) {
+      const t = this.get(x + dx, y + dy);
+      if (t && t.terrain !== 'water') return true;
+    }
+    return false;
+  }
+
   // --- Zoning -----------------------------------------------------------
 
   /**

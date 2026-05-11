@@ -95,7 +95,117 @@ const ICON_TIER_SKY = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="1.4"/>
 </svg>`;
 
-const ITEMS: readonly ToolbarItem[] = [
+/* ---------------------------------------------------------------------- *
+ * Architect Mode (Alpha 4.0) — premium / end-game tools.
+ *
+ * The toolbar swaps between two ITEM arrays via a leading mode-toggle
+ * pill (🏗 Build / 🎨 Architect). Build mode shows the existing roster
+ * (zones, roads, services, transit, etc.). Architect mode replaces it
+ * with terraforming + decorative monuments — the late-game money sink
+ * for cash-rich cities.
+ *
+ * Pan + Bulldoze stay pinned in BOTH modes so navigation + cleanup
+ * never disappear behind a mode switch.
+ * ---------------------------------------------------------------------- */
+
+const ICON_TREE = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 2l5 8h-3l4 6h-4v3h-4v-3H6l4-6H7z"
+        stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+</svg>`;
+const ICON_MEADOW = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M4 20h16 M7 20c0-3 1-5 1-7 M12 20c0-4 1-6 1-9 M17 20c0-3 1-5 1-7"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <circle cx="8" cy="13" r="0.9" fill="currentColor"/>
+  <circle cx="13" cy="11" r="0.9" fill="currentColor"/>
+  <circle cx="18" cy="13" r="0.9" fill="currentColor"/>
+</svg>`;
+const ICON_POND = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <ellipse cx="12" cy="14" rx="8" ry="5"
+        stroke="currentColor" stroke-width="1.6" fill="none"/>
+  <path d="M5 12c2 1 4-1 6 0s4-1 7 0"
+        stroke="currentColor" stroke-width="1.4" fill="none"/>
+</svg>`;
+const ICON_SMOOTH = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 16q3-4 9-4t9 4"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <path d="M3 19h18"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>`;
+const ICON_PLAZA = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="4" y="4" width="16" height="16"
+        stroke="currentColor" stroke-width="1.6" fill="none"/>
+  <path d="M4 12h16 M12 4v16 M8 8h2v2H8z M14 14h2v2h-2z"
+        stroke="currentColor" stroke-width="1.4" fill="none"/>
+</svg>`;
+const ICON_FOUNTAIN = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <ellipse cx="12" cy="18" rx="8" ry="2.5"
+        stroke="currentColor" stroke-width="1.5" fill="none"/>
+  <path d="M12 18V8 M9 11c1-1 2-3 3-5 1 2 2 4 3 5 M7 14c1-1 1-2 2-3 M17 14c-1-1-1-2-2-3"
+        stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+</svg>`;
+const ICON_STATUE = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="8" y="18" width="8" height="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <path d="M12 18V11 M10 11h4 M11 11l-1-3h4l-1 3 M12 8a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"
+        stroke="currentColor" stroke-width="1.4" fill="none"/>
+</svg>`;
+const ICON_FLOWER = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <circle cx="12" cy="9" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="8" cy="11" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="16" cy="11" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="10" cy="14" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="14" cy="14" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <path d="M12 16v5" stroke="currentColor" stroke-width="1.4"/>
+</svg>`;
+const ICON_TOPIARY = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M5 18V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10z M5 12h14 M9 6v12 M15 6v12"
+        stroke="currentColor" stroke-width="1.5" fill="none"/>
+</svg>`;
+const ICON_PERGOLA = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M4 6h16 M5 6v14 M19 6v14 M4 6q4-4 8-4t8 4 M8 10h8 M8 14h8"
+        stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+</svg>`;
+const ICON_REFLECT = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="3" y="9" width="18" height="6" rx="1"
+        stroke="currentColor" stroke-width="1.6" fill="none"/>
+  <path d="M5 12h14"
+        stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/>
+</svg>`;
+const ICON_MEMORIAL = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 3l3 4-3 4-3-4z M12 11v9 M5 20h14"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+  <path d="M7 17q1 2 5 1t5-1"
+        stroke="currentColor" stroke-width="1.2" fill="none"/>
+</svg>`;
+const ICON_CLOCK_TOWER = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M9 21V8h6v13 M9 8l3-5 3 5 M11 21v-3h2v3"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+  <circle cx="12" cy="13" r="2.2" stroke="currentColor" stroke-width="1.2" fill="none"/>
+  <path d="M12 12v1.5l1 0.5" stroke="currentColor" stroke-width="1.1"/>
+</svg>`;
+const ICON_ARCH = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M4 21V11a8 8 0 0 1 16 0v10 M8 21V13a4 4 0 0 1 8 0v8 M4 21h16"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+</svg>`;
+const ICON_PIER = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 13h18 M5 13v8 M9 13v8 M13 13v8 M17 13v8 M21 13v8 M3 13l2-3h12l2 3"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+</svg>`;
+const ICON_TERRA = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 18l5-7 4 4 4-6 5 9z M3 21h18"
+        stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+</svg>`;
+const ICON_GARDEN = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="16" cy="9" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="11" cy="14" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <path d="M3 21h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+const ICON_MONUMENT = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M9 21V7l3-4 3 4v14 M5 21h14"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+</svg>`;
+
+const BUILD_ITEMS: readonly ToolbarItem[] = [
   { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M12 2v6M12 22v-6M2 12h6M22 12h-6"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
@@ -324,6 +434,78 @@ const ITEMS: readonly ToolbarItem[] = [
   // the toolbar.
 ];
 
+const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
+  { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 2v6M12 22v-6M2 12h6M22 12h-6"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <circle cx="12" cy="12" r="3" fill="currentColor"/>
+  </svg>` },
+  // Bulldoze is pinned in BOTH modes — terraforming + decorative
+  // placements still need a way to undo a misplaced item.
+  { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
+          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round" fill="none"/>
+  </svg>` },
+  // Terraforming — landscape sculpting (cheap basics).
+  {
+    kind: 'group',
+    id: 'terra',
+    label: 'Terra',
+    icon: ICON_TERRA,
+    members: [
+      { kind: 'tool', tool: 'terra_tree',   label: 'Tree',     icon: ICON_TREE },
+      { kind: 'tool', tool: 'terra_meadow', label: 'Meadow',   icon: ICON_MEADOW },
+      { kind: 'tool', tool: 'terra_pond',   label: 'Pond',     icon: ICON_POND },
+      { kind: 'tool', tool: 'terra_smooth', label: 'Smooth',   icon: ICON_SMOOTH }
+    ]
+  },
+  // Plazas — paved public realm. Mid-tier prestige.
+  {
+    kind: 'group',
+    id: 'plazas',
+    label: 'Plaza',
+    icon: ICON_PLAZA,
+    members: [
+      { kind: 'tool', tool: 'place_plaza',          label: 'Plaza',   icon: ICON_PLAZA },
+      { kind: 'tool', tool: 'place_pergola',        label: 'Pergola', icon: ICON_PERGOLA },
+      { kind: 'tool', tool: 'place_reflecting_pool',label: 'Pool',    icon: ICON_REFLECT },
+      { kind: 'tool', tool: 'place_pier',           label: 'Pier',    icon: ICON_PIER }
+    ]
+  },
+  // Gardens — soft landscape features.
+  {
+    kind: 'group',
+    id: 'gardens',
+    label: 'Garden',
+    icon: ICON_GARDEN,
+    members: [
+      { kind: 'tool', tool: 'place_flower_bed',     label: 'Bed',     icon: ICON_FLOWER },
+      { kind: 'tool', tool: 'place_topiary',        label: 'Topiary', icon: ICON_TOPIARY },
+      { kind: 'tool', tool: 'place_memorial_garden',label: 'Memorial',icon: ICON_MEMORIAL }
+    ]
+  },
+  // Monuments — premium end-game money sinks.
+  {
+    kind: 'group',
+    id: 'monuments',
+    label: 'Mon',
+    icon: ICON_MONUMENT,
+    members: [
+      { kind: 'tool', tool: 'place_statue',          label: 'Statue',   icon: ICON_STATUE },
+      { kind: 'tool', tool: 'place_fountain',        label: 'Fountain', icon: ICON_FOUNTAIN },
+      { kind: 'tool', tool: 'place_clock_tower',     label: 'Tower',    icon: ICON_CLOCK_TOWER },
+      { kind: 'tool', tool: 'place_triumphal_arch',  label: 'Arch',     icon: ICON_ARCH }
+    ]
+  }
+];
+
+/** Toolbar mode (Alpha 4.0). 'build' = the simulation toolbar; 'architect'
+ *  = the terraforming + monuments toolbar. The mode-toggle pill at the
+ *  far left swaps between them. Pan + Bulldoze stay pinned in both modes
+ *  so navigation + cleanup never disappear. */
+export type ToolbarMode = 'build' | 'architect';
+
 export class Toolbar {
   private readonly el: HTMLElement;
   private readonly toolButtons = new Map<Tool, HTMLButtonElement>();
@@ -334,9 +516,26 @@ export class Toolbar {
   private bannedTools: Set<Tool> = new Set();
   /** Tools gated behind a milestone (Alpha 2.8). */
   private lockedTools: Set<Tool> = new Set();
+  /** Lock tooltip hints — last passed via setLockedTools. Kept around
+   *  so a mode-swap re-render can re-apply them without Game having
+   *  to re-broadcast (Alpha 4.0). */
+  private lockedHints: ReadonlyMap<Tool, string> | undefined;
+  /** Active mode (Alpha 4.0). 'build' = simulation toolbar (default),
+   *  'architect' = terraforming + monuments toolbar. The leading
+   *  mode-toggle pill swaps between them. */
+  private mode: ToolbarMode = 'build';
   onChange?: (tool: Tool) => void;
   /** Fired when the user taps a locked tool — Game wires this to a toast. */
   onLocked?: (tool: Tool) => void;
+  /** Fired when the player toggles between Build / Architect modes
+   *  (Alpha 4.0). Game wires this so it can pre-select Pan on the swap
+   *  (no orphan paint state across modes). */
+  onModeChange?: (mode: ToolbarMode) => void;
+
+  /** Currently-active items array. Driven by `mode`. */
+  private get items(): readonly ToolbarItem[] {
+    return this.mode === 'architect' ? ARCHITECT_ITEMS : BUILD_ITEMS;
+  }
 
   constructor() {
     const el = document.getElementById('toolbar');
@@ -394,7 +593,7 @@ export class Toolbar {
     // Group buttons get a 'partial' or 'all' ban indicator depending on
     // how many of their members are banned. Anything ≥ 1 banned member
     // gets the visual cue so the player notices before opening the popover.
-    for (const item of ITEMS) {
+    for (const item of this.items) {
       if (item.kind !== 'group') continue;
       const btn = this.groupButtons.get(item.id);
       if (!btn) continue;
@@ -412,12 +611,23 @@ export class Toolbar {
   }
 
   private render(): void {
+    // Tear down any popovers from a previous render — they live on
+    // <body>, not in `this.el`, so emptying `el.innerHTML` won't reach
+    // them and they'd leak as the toolbar is re-rendered (e.g. when
+    // swapping modes). Free each one explicitly first.
+    for (const pop of this.groupPopovers.values()) {
+      pop.parentElement?.removeChild(pop);
+    }
+    this.groupPopovers.clear();
+    this.groupButtons.clear();
+    this.toolButtons.clear();
+
     this.el.innerHTML = '';
-    // Two sections (Alpha 2.7.3): Pan + Bulldoze pin to the left as a
-    // fixed-width "always visible" cluster; everything else lives in a
-    // horizontally scrollable strip on the right. Pan and Bulldoze are
-    // the two most-used tools and were getting buried behind a long
-    // scroll once we added forestry / farm / luxury.
+    // Three sections (Alpha 4.0): the leading mode-toggle pill swaps
+    // Build ↔ Architect; pinned cluster (Pan + Bulldoze) is always
+    // visible regardless of mode; scroll strip carries everything else.
+    const modeWrap = document.createElement('div');
+    modeWrap.className = 'toolbar__mode';
     const pinned = document.createElement('div');
     pinned.className = 'toolbar__pinned';
     const scroll = document.createElement('div');
@@ -425,11 +635,39 @@ export class Toolbar {
     // Re-close popovers when the scroll strip is panned (used to live
     // on `this.el` directly).
     scroll.addEventListener('scroll', () => this.closePopovers(), { passive: true });
+    this.el.appendChild(modeWrap);
     this.el.appendChild(pinned);
     this.el.appendChild(scroll);
 
+    // Mode-toggle pill (Alpha 4.0). Cycles Build → Architect → Build.
+    // Renders as a single pill with a dynamic label/icon so the player
+    // can always see which mode they're in at a glance.
+    const modeBtn = document.createElement('button');
+    modeBtn.type = 'button';
+    modeBtn.className = 'toolbar__btn toolbar__btn--mode';
+    modeBtn.dataset.mode = this.mode;
+    modeBtn.setAttribute('aria-label',
+      this.mode === 'architect' ? 'Switch to Build mode' : 'Switch to Architect mode'
+    );
+    const isArchitect = this.mode === 'architect';
+    const modeIcon = isArchitect
+      ? `<svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 19l4-1 9-9-3-3-9 9z M14 6l3 3"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/>
+        </svg>`
+      : `<svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 11l9-7 9 7v9H3z M9 20v-6h6v6"
+                stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+        </svg>`;
+    modeBtn.innerHTML = `<span class="toolbar__icon" aria-hidden="true">${modeIcon}</span><span class="toolbar__label">${isArchitect ? 'Architect' : 'Build'}</span>`;
+    modeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleMode();
+    });
+    modeWrap.appendChild(modeBtn);
+
     const PINNED_TOOLS = new Set<Tool>(['pan', 'bulldoze']);
-    for (const item of ITEMS) {
+    for (const item of this.items) {
       if (item.kind === 'tool') {
         const btn = this.makeToolButton(item);
         if (PINNED_TOOLS.has(item.tool)) pinned.appendChild(btn);
@@ -438,6 +676,32 @@ export class Toolbar {
         scroll.appendChild(this.makeGroup(item));
       }
     }
+  }
+
+  /**
+   * Swap Build ↔ Architect mode (Alpha 4.0). Re-renders the toolbar
+   * with the new ITEMS array and resets the active tool to Pan so the
+   * player doesn't keep painting under a tool that no longer exists in
+   * the new mode. Re-applies banned + locked state so visual gating
+   * carries across mode switches.
+   */
+  private toggleMode(): void {
+    this.mode = this.mode === 'architect' ? 'build' : 'architect';
+    this.closePopovers();
+    this.current = 'pan';
+    this.render();
+    // Re-apply gating since render() rebuilt every button. Maps stay
+    // intact across the swap (banned / locked sets are the same).
+    this.setBannedTools(this.bannedTools);
+    this.setLockedTools(this.lockedTools);
+    this.refreshActive();
+    this.onModeChange?.(this.mode);
+    this.onChange?.(this.current);
+  }
+
+  /** Public mode getter for Game (e.g. status messages, tool-info hints). */
+  getMode(): ToolbarMode {
+    return this.mode;
   }
 
   private makeToolButton(item: ToolButton): HTMLElement {
@@ -561,11 +825,12 @@ export class Toolbar {
    */
   setLockedTools(locked: ReadonlySet<Tool>, hints?: ReadonlyMap<Tool, string>): void {
     this.lockedTools = new Set(locked);
+    if (hints) this.lockedHints = hints;
     for (const [tool, btn] of this.toolButtons) {
       const isLocked = this.lockedTools.has(tool);
       btn.dataset.locked = isLocked ? 'true' : 'false';
       if (isLocked) {
-        const hint = hints?.get(tool);
+        const hint = (hints ?? this.lockedHints)?.get(tool);
         btn.setAttribute('title', hint ? `Locked — Unlocks at ${hint}` : 'Locked');
       } else if (!this.bannedTools.has(tool)) {
         // Don't blow away a ban-tooltip when un-locking.
@@ -574,7 +839,7 @@ export class Toolbar {
     }
     // Group buttons get a 'partial' / 'all' lock state so a player sees
     // at-a-glance which whole groups (e.g. Roads) are still gated.
-    for (const item of ITEMS) {
+    for (const item of this.items) {
       if (item.kind !== 'group') continue;
       const btn = this.groupButtons.get(item.id);
       if (!btn) continue;
@@ -597,7 +862,7 @@ export class Toolbar {
     }
     // Group highlights when any of its members is active. Also scroll the
     // group button into view if its member just got picked.
-    for (const item of ITEMS) {
+    for (const item of this.items) {
       if (item.kind !== 'group') continue;
       const isActive = item.members.some((m) => m.tool === this.current);
       const btn = this.groupButtons.get(item.id);

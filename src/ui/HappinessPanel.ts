@@ -77,6 +77,9 @@ export class HappinessPanel {
   private currentSelections: FactionId[] = [];
 
   onClose?: () => void;
+  /** Fired when the player taps a leader row (Alpha 4.9). main.ts
+   *  wires this to FactionDetailPanel.show(factionId). */
+  onLeaderTap?: (faction: FactionId) => void;
 
   constructor(private readonly deps: Deps) {
     this.el = mustGet('happiness-panel');
@@ -118,6 +121,12 @@ export class HappinessPanel {
     this.listEl.innerHTML = '';
     for (const f of FACTIONS) {
       const row = makeFactionRow(f);
+      // Tap a leader row → open the Faction Detail panel (Alpha 4.9).
+      // The factionId is captured in the closure so each row routes to
+      // its own faction without an attribute lookup.
+      row.el.addEventListener('click', () => {
+        this.onLeaderTap?.(f.id);
+      });
       this.listEl.appendChild(row.el);
       this.rows.set(f.id, row);
     }

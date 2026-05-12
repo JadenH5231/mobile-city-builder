@@ -3074,6 +3074,177 @@ body.photo-mode .photo-op {
   }
 }
 
+/* ---------- Faction Detail panel (Alpha 4.9) ---------- *
+ * Opened from a leader row in the Community Sentiment panel. All
+ * content rendered by FactionDetailPanel.ts on show.
+ */
+.faction-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  margin: 12px 0;
+}
+.faction-detail__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.30);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  border: 2px solid rgba(255, 255, 255, 0.40);
+  flex: 0 0 auto;
+}
+.faction-detail__hdr-text { flex: 1; }
+.faction-detail__leader { font-size: 16px; font-weight: 700; color: #fff; }
+.faction-detail__title { font-size: 12px; opacity: 0.85; color: #fff; }
+.faction-detail__faction { font-size: 11px; opacity: 0.70; color: #fff; margin-top: 4px; }
+
+.faction-detail__role {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+.faction-detail__role.role--council {
+  background: rgba(255, 216, 77, 0.18);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.50);
+}
+.faction-detail__role.role--opponent {
+  background: rgba(216, 69, 69, 0.18);
+  color: #ff9e9e;
+  border: 1px solid rgba(216, 69, 69, 0.50);
+}
+.faction-detail__role.role--none {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.faction-detail__bio {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.85;
+  margin-bottom: 12px;
+}
+.faction-detail__cares-block {
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.faction-detail__cares-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffe98a;
+  margin-bottom: 4px;
+}
+.faction-detail__cares {
+  font-size: 12.5px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.faction-detail__mood {
+  margin: 12px 0 6px;
+}
+.faction-detail__mood-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.faction-detail__mood-label { font-weight: 700; }
+.faction-detail__mood-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.faction-detail__mood-fill {
+  height: 100%;
+  transition: width 200ms ease;
+}
+
+.faction-detail__pop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 12px;
+}
+
+.faction-detail__stance-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.faction-detail__stance-col {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.faction-detail__stance-col--love { border: 1px solid rgba(109, 208, 106, 0.25); }
+.faction-detail__stance-col--hate { border: 1px solid rgba(216, 69, 69, 0.25); }
+.faction-detail__stance-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.faction-detail__stance-col--love .faction-detail__stance-label { color: #9bd08e; }
+.faction-detail__stance-col--hate .faction-detail__stance-label { color: #ff9e9e; }
+.faction-detail__stance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.faction-detail__stance-name {
+  flex: 1;
+  padding-right: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.faction-detail__stance-val {
+  font-weight: 700;
+  font-size: 11px;
+}
+.faction-detail__stance-col--love .faction-detail__stance-val { color: #6dd06a; }
+.faction-detail__stance-col--hate .faction-detail__stance-val { color: #ff8888; }
+.faction-detail__empty {
+  font-size: 11.5px;
+  opacity: 0.50;
+  padding: 4px 0;
+}
+
+/* Tap-affordance hint on leader rows now that they open the Faction
+   Detail panel (Alpha 4.9). BEM class name is `happiness__row`. */
+.happiness__row {
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.happiness__row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 /* ---------- Settings panel (Alpha 4.8) ---------- *
  * Slide-up modal opened from the More popover. Sections: difficulty
  * picker, audio sliders (inert for now — placeholder until B1 sound

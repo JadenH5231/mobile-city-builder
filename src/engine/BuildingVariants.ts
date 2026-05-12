@@ -141,8 +141,183 @@ export function buildVariantParts(
   const cz = tileY + 0.5 + oz;
 
   const out: VariantPart[] = [];
+  emitGroundAccents(spec.body, zone, density, cx, cz, yaw, tileX, tileY, out);
   applySpec(spec, cx, cz, yaw, out, zone, tileX, tileY, happiness);
   return out;
+}
+
+/**
+ * Curb appeal — every zoned tile gets a ground pad, a walkway to the
+ * "front" face (chosen by the body's yaw), and zone-appropriate accents:
+ *   - Residential L1/L2: hedge along back, shrubs flanking entrance
+ *   - Residential L3 / Mixed L2+: planter near entrance
+ *   - Commercial: planter boxes at corners on some variants
+ *   - Industrial: chain-link perimeter (4 corner posts + 4 rails)
+ *
+ * Drawn BEFORE the body so the body always sits on top — no z-fighting
+ * between pad and building.
+ */
+function emitGroundAccents(
+  body: Body, zone: Zone, density: number,
+  cx: number, cz: number, yaw: number,
+  tileX: number, tileY: number, out: VariantPart[]
+): void {
+  if (zone === 'none' || body.w <= 0 || body.d <= 0) return;
+  const r = Math.abs(((tileX * 1597334677) ^ (tileY * 2246822519)) | 0);
+
+  // Quantised yaw → which face is "front" (0=+Z, 1=+X, 2=-Z, 3=-X).
+  const yawIdx = Math.round(yaw / (Math.PI / 2)) & 3;
+
+  // Ground pad colour per zone — green lawn for R, paved for C, concrete
+  // dust for I, garden mix for MU.
+  let padColor: number;
+  let walkColor: number;
+  if (zone === 'residential') {
+    padColor = 0x4a8a44;
+    walkColor = 0xc7b08a;
+  } else if (zone === 'commercial') {
+    padColor = 0xa8a094;
+    walkColor = 0xc7c2b3;
+  } else if (zone === 'industrial') {
+    padColor = 0x8a7a5c;
+    walkColor = 0x9a9080;
+  } else {
+    // mixed-use
+    padColor = 0x6a8a5e;
+    walkColor = 0xc7b08a;
+  }
+
+  // 1) Lawn / pavement pad covering the tile.
+  const pad = new BoxGeometry(0.94, 0.008, 0.94);
+  pad.translate(cx, 0.004, cz);
+  out.push({ geom: pad, color: padColor });
+
+  // 2) Front walkway — from the body's front face out to the tile edge.
+  const halfTile = 0.46;
+  const bodyHalf = (yawIdx & 1) ? body.w / 2 : body.d / 2;
+  const walkLen = halfTile - bodyHalf;
+  if (walkLen > 0.05) {
+    const walkW = 0.18;
+    let walkX = 0, walkZ = 0, gw = walkW, gd = walkW;
+    if (yawIdx === 0)      { walkZ =  bodyHalf + walkLen / 2; gd = walkLen; }
+    else if (yawIdx === 1) { walkX =  bodyHalf + walkLen / 2; gw = walkLen; }
+    else if (yawIdx === 2) { walkZ = -bodyHalf - walkLen / 2; gd = walkLen; }
+    else                   { walkX = -bodyHalf - walkLen / 2; gw = walkLen; }
+    const walk = new BoxGeometry(gw, 0.014, gd);
+    walk.translate(cx + walkX, 0.011, cz + walkZ);
+    out.push({ geom: walk, color: walkColor });
+  }
+
+  // 3) Per-zone accents.
+  if (zone === 'residential' && density === 1) {
+    // Two shrubs flanking the entrance.
+    const shrubR = 0.06;
+    const shrubH = 0.10;
+    const gap = 0.18;
+    let s1x = 0, s1z = 0, s2x = 0, s2z = 0;
+    if (yawIdx === 0)      { s1x = -gap; s1z =  body.d/2 + 0.08; s2x =  gap; s2z =  body.d/2 + 0.08; }
+    else if (yawIdx === 1) { s1x =  body.w/2 + 0.08; s1z = -gap; s2x =  body.w/2 + 0.08; s2z =  gap; }
+    else if (yawIdx === 2) { s1x = -gap; s1z = -body.d/2 - 0.08; s2x =  gap; s2z = -body.d/2 - 0.08; }
+    else                   { s1x = -body.w/2 - 0.08; s1z = -gap; s2x = -body.w/2 - 0.08; s2z =  gap; }
+    const s1 = new ConeGeometry(shrubR, shrubH, 6);
+    s1.translate(cx + s1x, shrubH / 2 + 0.008, cz + s1z);
+    out.push({ geom: s1, color: 0x4f6b3a });
+    const s2 = new ConeGeometry(shrubR, shrubH, 6);
+    s2.translate(cx + s2x, shrubH / 2 + 0.008, cz + s2z);
+    out.push({ geom: s2, color: 0x4f6b3a });
+  }
+
+  // 4) Hedge along the back of residential/mixed lots (deterministic).
+  if ((zone === 'residential' || zone === 'mixed') && (r & 1) === 0) {
+    const backIdx = (yawIdx + 2) & 3;
+    const hedgeColor = 0x4a6b3a;
+    const hedgeH = 0.09;
+    const hedgeLen = 0.55;
+    const hedgeThick = 0.06;
+    let hx = 0, hz = 0, hw = 0, hd = 0;
+    if (backIdx === 0)      { hz =  body.d/2 + 0.11; hw = hedgeLen;  hd = hedgeThick; }
+    else if (backIdx === 1) { hx =  body.w/2 + 0.11; hw = hedgeThick; hd = hedgeLen; }
+    else if (backIdx === 2) { hz = -body.d/2 - 0.11; hw = hedgeLen;  hd = hedgeThick; }
+    else                    { hx = -body.w/2 - 0.11; hw = hedgeThick; hd = hedgeLen; }
+    const hedge = new BoxGeometry(hw, hedgeH, hd);
+    hedge.translate(cx + hx, hedgeH / 2 + 0.008, cz + hz);
+    out.push({ geom: hedge, color: hedgeColor });
+  }
+
+  // 5) Industrial chain-link perimeter.
+  if (zone === 'industrial') {
+    const fenceColor = 0x5a5a5a;
+    const postH = 0.11;
+    const postOffs = [
+      [-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42],
+      [0, -0.42], [0, 0.42], [-0.42, 0], [0.42, 0]
+    ];
+    for (const [px, pz] of postOffs) {
+      const post = new BoxGeometry(0.022, postH, 0.022);
+      post.translate(cx + px!, postH / 2 + 0.008, cz + pz!);
+      out.push({ geom: post, color: fenceColor });
+    }
+    // Top + middle rails on the 4 sides.
+    const rail = (w: number, d: number, dx: number, dz: number, y: number) => {
+      const g = new BoxGeometry(w, 0.018, d);
+      g.translate(cx + dx, y, cz + dz);
+      out.push({ geom: g, color: fenceColor });
+    };
+    rail(0.84, 0.012, 0, -0.42, 0.10);
+    rail(0.84, 0.012, 0,  0.42, 0.10);
+    rail(0.012, 0.84, -0.42, 0,  0.10);
+    rail(0.012, 0.84,  0.42, 0,  0.10);
+  }
+
+  // 6) Commercial planter boxes at the front corners (1-in-4 variant).
+  if (zone === 'commercial' && (r & 3) === 0) {
+    const planterColor = 0x6b4f3a;
+    const plantColor = 0x4a7a3a;
+    // Place planters near the entrance corner.
+    let corners: [number, number][] = [];
+    if (yawIdx === 0)      corners = [[-0.36, 0.36], [0.36, 0.36]];
+    else if (yawIdx === 1) corners = [[0.36, -0.36], [0.36, 0.36]];
+    else if (yawIdx === 2) corners = [[-0.36, -0.36], [0.36, -0.36]];
+    else                   corners = [[-0.36, -0.36], [-0.36, 0.36]];
+    for (const [px, pz] of corners) {
+      const pl = new BoxGeometry(0.10, 0.05, 0.10);
+      pl.translate(cx + px, 0.033, cz + pz);
+      out.push({ geom: pl, color: planterColor });
+      const plant = new ConeGeometry(0.05, 0.10, 6);
+      plant.translate(cx + px, 0.058 + 0.05, cz + pz);
+      out.push({ geom: plant, color: plantColor });
+    }
+  }
+
+  // 7) Mixed-use: bike rack along the front sidewalk (1-in-2 variant).
+  if (zone === 'mixed' && (r & 2) === 0 && density >= 2) {
+    const rackColor = 0x4a4a52;
+    const rackH = 0.08;
+    let rx = 0, rz = 0, rw = 0.22, rd = 0.025;
+    if (yawIdx === 0)      { rz =  body.d/2 + 0.12; }
+    else if (yawIdx === 1) { rx =  body.w/2 + 0.12; rw = 0.025; rd = 0.22; }
+    else if (yawIdx === 2) { rz = -body.d/2 - 0.12; }
+    else                   { rx = -body.w/2 - 0.12; rw = 0.025; rd = 0.22; }
+    // Three loops on a horizontal bar
+    const rack = new BoxGeometry(rw, 0.012, rd);
+    rack.translate(cx + rx, rackH, cz + rz);
+    out.push({ geom: rack, color: rackColor });
+    // Two end posts
+    const post1 = new BoxGeometry(0.018, rackH, 0.018);
+    if (yawIdx & 1) {
+      post1.translate(cx + rx, rackH / 2, cz + rz - rd / 2 + 0.01);
+    } else {
+      post1.translate(cx + rx - rw / 2 + 0.01, rackH / 2, cz + rz);
+    }
+    out.push({ geom: post1, color: rackColor });
+    const post2 = new BoxGeometry(0.018, rackH, 0.018);
+    if (yawIdx & 1) {
+      post2.translate(cx + rx, rackH / 2, cz + rz + rd / 2 - 0.01);
+    } else {
+      post2.translate(cx + rx + rw / 2 - 0.01, rackH / 2, cz + rz);
+    }
+    out.push({ geom: post2, color: rackColor });
+  }
 }
 
 function pickVariant(x: number, y: number, n: number): number {

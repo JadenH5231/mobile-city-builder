@@ -140,31 +140,32 @@ export class Events {
     }
 
     // Industrial fire — chance scales with weighted industrial footprint.
-    // (Alpha 2.12.1) Fire chance halved from previous tuning — events
-    // fired too often per playtest feedback. Fire-station damping still
-    // multiplies on top via FIRE_PROTECTION_MULT.
-    if (pickedFireTile && rng() < weightedFireChance * 0.55) {
+    // Per-roll chance halved again per playtest feedback — notifications
+    // were still firing too often even after the Alpha 2.12.1 cut.
+    // Fire-station damping still multiplies on top via FIRE_PROTECTION_MULT.
+    if (pickedFireTile && rng() < weightedFireChance * 0.275) {
       this.queueFire(grid, economy, pickedFireTile);
     }
     // Power plant outage — rare per plant.
-    if (powerPlantCount > 0 && rng() < 0.014 * powerPlantCount) {
+    if (powerPlantCount > 0 && rng() < 0.007 * powerPlantCount) {
       this.queuePowerOutage(economy);
     }
     // Tax audit — only when the treasury has notable cash.
-    if (economy.treasury > 100_000 && rng() < 0.014) {
+    if (economy.treasury > 100_000 && rng() < 0.007) {
       this.queueAudit(economy);
     }
 
-    // Big events space themselves out — minimum 14-month gap (raised
-    // from 8 in Alpha 2.12.1) so a player isn't constantly reacting.
+    // Big events space themselves out — minimum 14-month gap so a
+    // player isn't constantly reacting. Per-roll chances also halved
+    // in the same pass that halved the hazard rolls above.
     if (this.monthsSinceBigEvent >= 14) {
       // Recession or boom — mutually exclusive, low odds.
       const econRoll = rng();
-      if (econRoll < 0.007) {
+      if (econRoll < 0.0035) {
         this.queueRecession();
         this.monthsSinceBigEvent = 0;
         return;
-      } else if (econRoll < 0.014) {
+      } else if (econRoll < 0.007) {
         this.queueBoom();
         this.monthsSinceBigEvent = 0;
         return;
@@ -172,14 +173,14 @@ export class Events {
 
       // Trade deal — only if connected (city has a road touching the edge).
       // This is checked by GlobalMarket externally; we keep it simple here.
-      if (rng() < 0.009) {
+      if (rng() < 0.0045) {
         this.queueTradeDeal();
         this.monthsSinceBigEvent = 0;
         return;
       }
 
       // Lawsuit — RARE per user spec.
-      if (rng() < 0.005) {
+      if (rng() < 0.0025) {
         const furious = this.findFurious(happiness);
         if (furious) {
           this.queueLawsuit(furious);
@@ -188,7 +189,7 @@ export class Events {
         }
       }
       // Referendum — RARE. Population gate, plus a faction with notable share.
-      if (population.totalResidents > 800 && rng() < 0.004) {
+      if (population.totalResidents > 800 && rng() < 0.002) {
         const proposer = this.pickReferendumProposer(population, council);
         if (proposer) {
           this.queueReferendum(proposer);

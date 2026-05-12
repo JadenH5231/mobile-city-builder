@@ -3753,9 +3753,32 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
       ];
     }
     case 'bus_stop':
+      // Premium pass — proper shelter with bench, back glass wall,
+      // canopy roof, route placard, and a wayfinding flag pole.
       return [
-        { makeGeom: () => box(0.06, 0.45, 0.06), color: 0xc9a437, dx: 0, dy: 0.225, dz: 0 },
-        { makeGeom: () => box(0.30, 0.04, 0.18), color: 0xe5c25a, dx: 0, dy: 0.45 + 0.02, dz: 0 }
+        // Concrete pad under the shelter.
+        { makeGeom: () => box(0.62, 0.02, 0.30), color: 0x9a9690, dx: 0, dy: 0.01, dz: 0 },
+        // Bench seat — wooden slats on two iron legs.
+        { makeGeom: () => box(0.50, 0.03, 0.10), color: 0x6b4f3a, dx: 0, dy: 0.13, dz: 0.02 },
+        { makeGeom: () => box(0.02, 0.12, 0.10), color: 0x2a2a2a, dx: -0.22, dy: 0.07, dz: 0.02 },
+        { makeGeom: () => box(0.02, 0.12, 0.10), color: 0x2a2a2a, dx:  0.22, dy: 0.07, dz: 0.02 },
+        // Back glass wall (tinted slab).
+        { makeGeom: () => box(0.56, 0.30, 0.018), color: 0x8caec9, dx: 0, dy: 0.18, dz: -0.10 },
+        // Two side glass panels.
+        { makeGeom: () => box(0.018, 0.30, 0.12), color: 0x8caec9, dx: -0.27, dy: 0.18, dz: -0.04 },
+        { makeGeom: () => box(0.018, 0.30, 0.12), color: 0x8caec9, dx:  0.27, dy: 0.18, dz: -0.04 },
+        // Canopy roof — slim slab cantilevered over the bench.
+        { makeGeom: () => box(0.66, 0.025, 0.32), color: 0x3a4a5a, dx: 0, dy: 0.34, dz: -0.02 },
+        { makeGeom: () => box(0.66, 0.01, 0.32), color: 0xe5c25a, dx: 0, dy: 0.355, dz: -0.02 },
+        // Route placard mounted on the back glass.
+        { makeGeom: () => box(0.24, 0.10, 0.016), color: 0xeae3d0, dx: 0, dy: 0.26, dz: -0.09 },
+        { makeGeom: () => box(0.22, 0.022, 0.018), color: 0xb14a3a, dx: 0, dy: 0.28, dz: -0.085 },
+        // Flag pole + bus-stop flag on the side, away from the bench.
+        { makeGeom: () => box(0.04, 0.55, 0.04), color: 0xb0aca2, dx: 0.30, dy: 0.275, dz: 0.10 },
+        { makeGeom: () => box(0.20, 0.10, 0.018), color: 0xc9a437, dx: 0.38, dy: 0.50, dz: 0.10 },
+        // Trash bin tucked at one end.
+        { makeGeom: () => cyl(0.06, 0.16, 8), color: 0x3a3a3a, dx: -0.30, dy: 0.08, dz: 0.10 },
+        { makeGeom: () => cyl(0.065, 0.018, 8), color: 0x222222, dx: -0.30, dy: 0.17, dz: 0.10 }
       ];
     case 'museum': {
       // Neoclassical: stone podium + columned colonnade + pedimented roof.

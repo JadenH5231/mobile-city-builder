@@ -16,7 +16,10 @@
   <body>
     <div id="app"></div>
     <div id="hud">
-      <button id="hud-pop" type="button" class="pill mono action" aria-label="Open community sentiment">Pop · 0</button>
+      <button id="hud-pop" type="button" class="pill mono action" aria-label="Open community sentiment">
+        <span id="hud-pop-label">Pop · 0</span>
+        <span id="hud-pop-trend" class="trend trend--flat" aria-hidden="true"></span>
+      </button>
       <div id="hud-rci" class="pill rci" aria-label="RCI demand">
         <div class="rci__bar" data-zone="r" title="Residential demand">
           <div class="rci__fill"></div>
@@ -31,12 +34,19 @@
           <span class="rci__label">I</span>
         </div>
       </div>
-      <button id="hud-treasury" type="button" class="pill mono treasury" aria-label="Open budget">$50,000</button>
+      <button id="hud-treasury" type="button" class="pill mono treasury" aria-label="Open budget">
+        <span id="hud-treasury-label">$50,000</span>
+        <span id="hud-treasury-trend" class="trend trend--flat" aria-hidden="true"></span>
+      </button>
       <button id="hud-undo" type="button" class="pill action" aria-label="Undo last change" disabled>Undo</button>
       <button id="hud-speed" type="button" class="pill action speed" aria-label="Cycle simulation speed">▶</button>
       <!-- More-menu pill collects secondary toggles + panel openers (Alpha 3.1.1).
            Keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed. -->
       <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">More</button>
+      <!-- Time-of-day pill (Alpha 4.6). Shows current phase + icon;
+           tapping toggles between morning (~7am) and peak night
+           (~midnight) so the player can switch the lighting on demand. -->
+      <button id="hud-time" type="button" class="pill mono action" aria-label="Toggle time of day">☀ Day</button>
       <div id="hud-fps" class="pill mono">— fps</div>
       <!-- Active-tool cost preview (Alpha 4.5). Shown only when a paid
            tool is selected — gives the player a clear cost number

@@ -8,7 +8,12 @@ if (!appEl) throw new Error('Missing #app element');
 
 const fpsEl = document.getElementById('hud-fps');
 const popEl = document.getElementById('hud-pop');
+const popLabelEl = document.getElementById('hud-pop-label');
+const popTrendEl = document.getElementById('hud-pop-trend');
 const treasuryEl = document.getElementById('hud-treasury');
+const treasuryLabelEl = document.getElementById('hud-treasury-label');
+const treasuryTrendEl = document.getElementById('hud-treasury-trend');
+const timeEl = document.getElementById('hud-time');
 const rciFills: Record<'r' | 'c' | 'i', HTMLElement | null> = {
   r: document.querySelector('.rci__bar[data-zone="r"] .rci__fill'),
   c: document.querySelector('.rci__bar[data-zone="c"] .rci__fill'),
@@ -549,15 +554,33 @@ game.tickCallbacks.push(() => {
   if (now - lastUiUpdate < 250) return;
   lastUiUpdate = now;
 
-  if (popEl) {
+  if (popLabelEl) {
     // totalResidents is a float (faction populations lerp through fractions).
     // Round for display — there is no such thing as 0.4 of a person.
-    popEl.textContent = `Pop · ${Math.round(game.population.totalResidents).toLocaleString()}`;
+    popLabelEl.textContent = `Pop · ${Math.round(game.population.totalResidents).toLocaleString()}`;
+  }
+  if (treasuryLabelEl) {
+    treasuryLabelEl.textContent = formatCurrency(game.economy.treasury);
+  }
+  if (treasuryEl) {
+    treasuryEl.classList.toggle('treasury--negative', game.economy.treasury < 0);
   }
 
-  if (treasuryEl) {
-    treasuryEl.textContent = formatCurrency(game.economy.treasury);
-    treasuryEl.classList.toggle('treasury--negative', game.economy.treasury < 0);
+  // Trend arrows on Pop + Treasury (Alpha 4.6) — compare the latest
+  // Stats sample against the one from 3 months ago. Cheap O(1) lookup.
+  // Hidden / flat when there aren't enough samples yet.
+  applyTrend(popTrendEl, latestVs(game.stats.samples, 'population', 3));
+  applyTrend(treasuryTrendEl, latestVs(game.stats.samples, 'treasury', 3));
+
+  // Time-of-day pill — refresh the icon + label to match current phase.
+  if (timeEl) {
+    const phase = game.timeOfDay;
+    let icon = '☀'; let label = 'Day';
+    if (phase < 0.15 || phase >= 0.85) { icon = '🌙'; label = 'Night'; }
+    else if (phase < 0.30)              { icon = '🌅'; label = 'Dawn'; }
+    else if (phase < 0.70)              { icon = '☀'; label = 'Day'; }
+    else                                { icon = '🌇'; label = 'Dusk'; }
+    timeEl.textContent = `${icon} ${label}`;
   }
 
   // Keep the budget / happiness panel numbers fresh while either is open.
@@ -588,6 +611,51 @@ function setBar(el: HTMLElement | null, demand: number): void {
     el.style.top = '50%';
     el.style.bottom = `${50 - mag}%`;
   }
+}
+
+/**
+ * Trend arrow helper (Alpha 4.6). Look up the value at the latest
+ * Stats sample and the value `lookbackMonths` ago; return -1 / 0 / +1
+ * based on the sign of the delta. Returns 0 (flat) until there are
+ * enough samples to compute a trend.
+ */
+function latestVs(
+  samples: ReadonlyArray<import('./simulation/Stats').StatsSample>,
+  key: 'population' | 'treasury',
+  lookbackMonths: number
+): -1 | 0 | 1 {
+  if (samples.length < lookbackMonths + 1) return 0;
+  const latest = samples[samples.length - 1]![key];
+  const past = samples[samples.length - 1 - lookbackMonths]![key];
+  // Dead-zone: ignore tiny fluctuations so the arrow doesn't flicker.
+  // 2% relative delta or 50 absolute (whichever is bigger).
+  const delta = latest - past;
+  const threshold = Math.max(50, Math.abs(past) * 0.02);
+  if (Math.abs(delta) < threshold) return 0;
+  return delta > 0 ? 1 : -1;
+}
+
+/** Update a trend-arrow span's class based on the trend direction. */
+function applyTrend(el: HTMLElement | null, dir: -1 | 0 | 1): void {
+  if (!el) return;
+  el.classList.remove('trend--up', 'trend--down', 'trend--flat');
+  if (dir > 0) el.classList.add('trend--up');
+  else if (dir < 0) el.classList.add('trend--down');
+  else el.classList.add('trend--flat');
+}
+
+// Time-of-day pill click handler (Alpha 4.6). Toggles between morning
+// (timeOfDay = 0.25, ~7am — early sun) and peak night (timeOfDay =
+// 0.00, midnight). The day/night cycle continues forward from
+// whichever phase the player set; tap again to jump back.
+if (timeEl) {
+  timeEl.addEventListener('click', () => {
+    // If we're currently in the night phase, jump to morning.
+    // Otherwise jump to peak night.
+    const cur = game.timeOfDay;
+    const isNight = cur < 0.15 || cur >= 0.85;
+    game.timeOfDay = isNight ? 0.25 : 0.0;
+  });
 }
 
 // Expose for ad-hoc debugging from the device's remote inspector.

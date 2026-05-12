@@ -4,6 +4,16 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.7 — Camera rotation + PWA install with Mayor's Mansion icon** — two production-readiness items from the audit (B6 + B8).
+  - **90° camera rotation.** `Camera.yaw` is no longer `readonly` — new `Camera.rotateBy90(direction)` snaps the orthographic camera through the four cardinal iso angles (45° → 135° → 225° → 315°). `panBy` and `screenToWorld` already derive their right/forward vectors from the camera's matrix so they keep working after rotation with no other changes. New `↻` pill in the HUD strip (between Speed and More) — tap to rotate clockwise. Lets the player see behind tall buildings / mansions.
+  - **PWA install with Mayor's Mansion icon.** Three new files in `public/`:
+    - `manifest.webmanifest` — name "Greenmeadow — City Builder", short_name "Greenmeadow", display "standalone", theme + background `#1a2722`. References both icons.
+    - `mansion-icon.svg` — hand-drawn 512×512 silhouette of the 4×2 showpiece: 5-block mansion with copper-green dome + spire + gold ball finial, pedimented portico with 6 columns + gold escutcheon, perimeter wall with gold-finial gate posts, lawn grounds, warm sky. Same palette as the in-game mansion.
+    - `mansion-icon-maskable.svg` — same drawing on the safe-zone (40% padding) with theme-colour background so iOS/Android can mask to any shape.
+    - `sw.js` — minimal service worker. Network-first for the HTML shell, cache-first for assets / icons / manifest. Versioned cache name (`mq-city-v1`) so a new build invalidates the old one. IndexedDB save data is untouched.
+  - **index.html** gets a `<link rel="manifest">`, a `favicon.svg` link, and an `apple-touch-icon`. `main.ts` registers the SW on `load` (only on production builds — dev / HMR sessions skip it). Players can now "Add to home screen" on iOS/Android and play offline once loaded.
+  - **No save schema bump, no faction-stance changes, no new Tools.** Bundle 863 KB raw / 229 KB gzipped (no JS change — assets are static).
+
 - **Alpha 4.6 — HUD pill polish (trend arrows + time-of-day pill)** — two small "feels finished" additions to the HUD.
   - **Trend arrows on Pop + Treasury pills.** Tiny ↑ (green) / ↓ (red) / → (grey-flat) glyph appended to each pill, indicating the 3-month trend pulled from `Stats.samples`. Dead-zone of max(50, 2% relative delta) so the arrow doesn't flicker on tiny fluctuations. The player gets an at-a-glance "are things getting better or worse" signal without opening the Stats panel.
   - **Time-of-day pill.** New `#hud-time` HUD button between More and FPS, showing `🌙 Night` / `🌅 Dawn` / `☀ Day` / `🌇 Dusk` based on the current `game.timeOfDay` phase. Tapping toggles between morning (phase 0.25, ~7am) and peak night (phase 0.00, midnight) — the day/night cycle continues forward from whichever phase the player set. Lets the player jump the lighting on demand for screenshots or to see their lit-window/lamp-glow work without waiting through a full cycle.

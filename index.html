@@ -11,6 +11,12 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0a1410" />
+    <!-- PWA install (Alpha 4.7). manifest + service worker are in
+         public/. Icon is a Mayor's Mansion silhouette so the home-
+         screen icon reads as the showpiece-build flagship. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./mansion-icon.svg" />
+    <link rel="apple-touch-icon" href="./mansion-icon.svg" />
     <title>City Builder — prototype</title>
   </head>
   <body>
@@ -42,6 +48,11 @@
       <button id="hud-speed" type="button" class="pill action speed" aria-label="Cycle simulation speed">▶</button>
       <!-- More-menu pill collects secondary toggles + panel openers (Alpha 3.1.1).
            Keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed. -->
+      <!-- Camera rotation pill (Alpha 4.7). Tap to rotate the
+           orthographic camera by 90° clockwise. Snaps to the four
+           cardinal iso angles so the chunky low-poly aesthetic stays
+           clean. Useful for seeing behind tall buildings / skyscrapers. -->
+      <button id="hud-rotate" type="button" class="pill action mono" aria-label="Rotate camera 90°">↻</button>
       <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">More</button>
       <!-- Time-of-day pill (Alpha 4.6). Shows current phase + icon;
            tapping toggles between morning (~7am) and peak night

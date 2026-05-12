@@ -1521,6 +1521,70 @@ function computeRoadFacingYaw(grid: Grid, x: number, y: number): number | undefi
   return undefined;
 }
 
+/**
+ * Service buildings that should rotate to face the nearest road
+ * (Alpha 4.3). Each has an asymmetric front face that reads weird if
+ * pointed away from the street: school clock-tower + flagpole, hospital
+ * red-cross sign + entry, fire-station bay doors, police porch + step,
+ * museum colonnade entry, bus-stop bench + canopy, depot garage door.
+ *
+ * Deliberately excluded:
+ * - park: symmetric (lawn + path + benches all around)
+ * - power_plant / water_tower: symmetric cylinders + boxes
+ * - stadium: oval, no front face
+ * - observatory: dome on a pad, symmetric
+ * - ferry_dock / subway_entrance: orientation is determined by the
+ *   water shoreline / sidewalk side they're placed against, not by
+ *   the nearest road tile
+ */
+const SERVICE_BUILDING_ROTATES = new Set<string>([
+  'school', 'hospital', 'fire_station', 'police_station', 'museum',
+  'bus_stop', 'bus_depot'
+]);
+
+/**
+ * Build a short paved walkway from the service building's front face
+ * toward the centre of the adjacent road tile (Alpha 4.3). Reuses the
+ * same flagstone palette as the zoned-tile walkways from commit
+ * `313b61e` so the city's pedestrian infrastructure reads as a single
+ * coherent layer.
+ *
+ * Returns an empty array when no road is adjacent — service tiles
+ * dropped mid-block (e.g. a school placed deep on a park-bordered lot)
+ * don't get a path leading to nowhere. Same guard applies to buildings
+ * that don't rotate (park, utilities, etc.) — no walkway because there's
+ * no front face to anchor it.
+ */
+function buildServiceWalkway(grid: Grid, x: number, y: number, kind: string): CityBuildingPart[] {
+  if (!SERVICE_BUILDING_ROTATES.has(kind)) return [];
+  const yaw = computeRoadFacingYaw(grid, x, y);
+  if (yaw === undefined) return [];
+  // Walkway runs from the body's front edge (~0.25 in front of the
+  // tile centre) to the road edge (~0.48 in front), in the building's
+  // facing direction. We emit it in local frame (along +Z at yaw=0)
+  // and use sin/cos to push it along the chosen yaw.
+  const sin = Math.sin(yaw);
+  const cos = Math.cos(yaw);
+  const walkLen = 0.36;
+  const walkWidth = 0.16;
+  const midDist = 0.30;  // distance from tile centre along the front axis
+  const dx = sin * midDist;
+  const dz = cos * midDist;
+  // Box orientation: long axis follows the yaw vector. Easiest is to
+  // emit a box that's long along Z then rotate it into place via the
+  // makeGeom callback.
+  const walkway: CityBuildingPart = {
+    makeGeom: () => {
+      const g = new BoxGeometry(walkWidth, 0.022, walkLen);
+      g.rotateY(yaw);
+      return g;
+    },
+    color: 0xc7c2b3,
+    dx, dy: 0.011, dz
+  };
+  return [walkway];
+}
+
 /** First 4-neighbour with `luxury && zone==='residential'`, else null. */
 function findLuxuryPartner(grid: Grid, x: number, y: number): { x: number; y: number } | null {
   const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -2568,8 +2632,43 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     }
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
+    // Service buildings (Alpha 4.3) — asymmetric kinds (school clock-
+    // tower, hospital red-cross sign, fire-station bay doors, police
+    // porch, museum colonnade, bus stop bench/canopy, depot garage
+    // door) rotate to face the nearest road. Symmetric kinds (park,
+    // utilities, stadium, observatory, ferry, subway) skip rotation
+    // because they look the same from any angle.
+    const yaw = SERVICE_BUILDING_ROTATES.has(t.building as Exclude<typeof t.building, 'none'>)
+      ? computeRoadFacingYaw(grid, t.x, t.y) ?? 0
+      : 0;
     const parts = cityBuildingParts(t.building);
-    for (const p of parts) {
+    if (yaw !== 0) {
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.rotateY(yaw);
+        // Rotate the (dx, dz) offset around the tile centre so the
+        // whole composition turns as one rigid body.
+        const dxR = p.dx * cosY - p.dz * sinY;
+        const dzR = p.dx * sinY + p.dz * cosY;
+        g.translate(cx + dxR, p.dy, cz + dzR);
+        geoms.push(g);
+        colours.push(p.color);
+      }
+    } else {
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(cx + p.dx, p.dy, cz + p.dz);
+        geoms.push(g);
+        colours.push(p.color);
+      }
+    }
+    // Walkway connecting the building's front face to the adjacent road
+    // tile (Alpha 4.3). Empty when no road is adjacent — service tiles
+    // dropped mid-block don't get a path leading to grass.
+    const walkway = buildServiceWalkway(grid, t.x, t.y, t.building);
+    for (const p of walkway) {
       const g = p.makeGeom();
       g.translate(cx + p.dx, p.dy, cz + p.dz);
       geoms.push(g);

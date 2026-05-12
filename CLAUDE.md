@@ -336,6 +336,20 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.2 (The Mayor's Mansion — showpiece build)
+
+Single-instance 4×2 footprint architectural build that the user explicitly asked to be the **most detailed build in the game**. Sits in the Architect Mode `Mon` group as the apex prestige item. Save schema v21 (back-compat with v20+). Bundle 844 KB raw / 223 KB gzipped.
+
+**The mansion itself is part — the lavish grounds are the rest.** Footprint is 4 wide × 2 deep. The mansion runs along the back row (4 tiles wide × 1 deep) as a 5-block composition (2 outer wings + 2 inner blocks + 1 grand 3-storey central block with copper-green dome, spire, gold ball finial, pedimented portico with 6 columns, ~30 individually-placed shutter-flanked windows, parapet balustrade, 4 chimneys, gold escutcheon, grand arched door). The front row is the formal estate grounds (central flagstone driveway, 2 reflecting pools with bronze statues, 2 parterre gardens with hedge cross + 4-quadrant flower dots + topiary cones + lawn infill, 3-step grand entrance, 2 wrought-iron lampposts, 2 ornamental urns, 2 ornamental trees in the back corners, low limestone perimeter wall with gold-finial corner posts and centre-front gate opening). ~140 BufferGeometry parts total.
+
+**Anchor pattern** mirrors skyscrapers: lex-smallest tile of the 8 carries `building='mayor_mansion'`; the other seven are marked-only via `Tile.mayorMansion=true`. Bulldozing any of the 8 tiles tears down the entire showpiece (Game.applyBulldozeStroke walks left+up to find the anchor, then clears the full rectangle).
+
+**Capital-tier milestone gate** ($500K up-front, $1.5K/mo upkeep). One-per-city — placement refuses with toast if a mansion already exists. All 8 tiles must be on owned grass land.
+
+**Faction stances** strongly polarized so the placement is a real political event: Hometown Heritage +1.0 (their dream), NIMBYs +0.8 (property values), Chamber +0.8 (city prestige), YIMBYs -0.9 (non-housing footprint), Working Families -0.8 (could've been housing), Taxpayers -1.0 (apex vanity build).
+
+When adding a new mega-build with a multi-tile footprint, the right pattern is the **anchor-tile model**: the lex-smallest tile carries `building` + the marker bit; all other tiles share the marker bit only; a single Renderer dispatch from the anchor emits the merged geometry across all tiles. See `buildMayorMansionParts` for the most elaborated example, `buildLuxuryParts` for the 2-tile pair version, `buildSkyscraperParts` for the 2×2 version.
+
 ## Status: Alpha 4.1 (Toolbar QoL rework for portrait phones)
 
 The bottom toolbar was built when the game had ~12 tools; it grew to 30+ across two modes, and on a portrait phone the long horizontal scroll was the worst-feeling thing in the UX. Alpha 4.1 reworks it. No save schema bump, no new Tools — pure UX restructuring.

@@ -29,7 +29,7 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildLuxuryParts, buildSkyscraperParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
+import { buildLuxuryParts, buildMayorMansionParts, buildSkyscraperParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -2124,6 +2124,23 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
         const g = p.makeGeom();
         g.translate(p.dx, p.dy, p.dz);
         geoms.push(g);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    // Mayor's Mansion (Alpha 4.2) — single-instance 4×2 showpiece. The
+    // anchor tile (lex-smallest of the footprint) carries `building =
+    // 'mayor_mansion'`; the other seven tiles have `mayorMansion=true`
+    // but `building='none'` (so the generic loop skips them via the
+    // `'none'` check at the top). Emit the entire merged composition
+    // from the anchor; lift by the anchor tile's elevation so the
+    // estate sits on the ground.
+    if (t.building === 'mayor_mansion') {
+      const parts = buildMayorMansionParts(t.x, t.y);
+      const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
         colours.push(p.color);
       }
       continue;

@@ -336,7 +336,17 @@ export type Building =
   | 'memorial_garden'
   | 'clock_tower'
   | 'triumphal_arch'
-  | 'pier';
+  | 'pier'
+  // The Mayor's Mansion (Alpha 4.2). Single-instance 4×2 showpiece —
+  // the most detailed build in the game. The mansion itself occupies
+  // the back row (4 tiles wide); the front row is lavish formal
+  // grounds (parterre gardens, reflecting pool with central fountain,
+  // bronze statues, balustrade, ornamental trees).
+  //
+  // Anchor pattern follows skyscrapers: the lex-smallest tile of the
+  // 8-tile footprint owns the rendered geometry; the other seven are
+  // marked-only via `Tile.mayorMansion`.
+  | 'mayor_mansion';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -384,7 +394,12 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   memorial_garden: 30000,
   clock_tower: 50000,
   triumphal_arch: 75000,
-  pier: 3000
+  pier: 3000,
+  // Mayor's Mansion (Alpha 4.2) — by far the most expensive single
+  // placement in the game. 4×2 footprint, single-instance, late-game
+  // prestige sink. Replaces "what to spend a fat treasury on" with a
+  // concrete monumental answer.
+  mayor_mansion: 500000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -419,7 +434,11 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   memorial_garden: 120,
   clock_tower: 200,
   triumphal_arch: 250,
-  pier: 15
+  pier: 15,
+  // Mayor's Mansion upkeep — equal to the most expensive ongoing line
+  // in the game. Staff, gardeners, security. Cash-rich endgame
+  // cities feel this on the budget panel forever.
+  mayor_mansion: 1500
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
@@ -659,7 +678,11 @@ export const MILESTONES: readonly Milestone[] = [
       // Capital tier monumental architecture (Alpha 4.0) — the most
       // expensive single-tile placements in the game. Capitals can
       // build clock towers and triumphal arches; nobody else can.
-      'place_clock_tower', 'place_triumphal_arch'
+      'place_clock_tower', 'place_triumphal_arch',
+      // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2
+      // showpiece, the most detailed build in the game. Only a
+      // Capital deserves one.
+      'place_mayor_mansion'
     ],
     rewardCash: 50000,
     rewardPC: 15,
@@ -792,7 +815,10 @@ export type Tool =
   | 'place_memorial_garden'
   | 'place_clock_tower'
   | 'place_triumphal_arch'
-  | 'place_pier';
+  | 'place_pier'
+  // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2 footprint
+  // showpiece. Tap-only; refuses if a mayor's mansion already exists.
+  | 'place_mayor_mansion';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -849,7 +875,8 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_memorial_garden', 'memorial_garden' as const],
   ['place_clock_tower', 'clock_tower' as const],
   ['place_triumphal_arch', 'triumphal_arch' as const],
-  ['place_pier', 'pier' as const]
+  ['place_pier', 'pier' as const],
+  ['place_mayor_mansion', 'mayor_mansion' as const]
 ]);
 
 /* ---- Architect Mode terraforming costs (Alpha 4.0) -------------------- */
@@ -873,8 +900,15 @@ export const TERRAFORM_COSTS: Record<
 export const ARCHITECTURAL_BUILDINGS: ReadonlySet<Exclude<Building, 'none'>> = new Set([
   'plaza', 'fountain', 'statue', 'flower_bed', 'topiary',
   'pergola', 'reflecting_pool', 'memorial_garden',
-  'clock_tower', 'triumphal_arch', 'pier'
+  'clock_tower', 'triumphal_arch', 'pier', 'mayor_mansion'
 ] as const);
+
+/** Mayor's Mansion footprint (Alpha 4.2) — 4 wide × 2 deep. The
+ *  anchor tile is the lex-smallest of the 8-tile footprint (lowest
+ *  x first, then lowest y). All 8 tiles share `Tile.mayorMansion =
+ *  true`; the anchor's `Tile.building` is `'mayor_mansion'`. */
+export const MAYOR_MANSION_WIDTH = 4;
+export const MAYOR_MANSION_DEPTH = 2;
 
 /* ---- Beautification Budget (Alpha 4.0 — council-only) ----------------- */
 

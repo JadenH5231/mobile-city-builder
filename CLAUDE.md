@@ -336,6 +336,15 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.2.1 (Popover full-word headers + architectural night lights)
+
+Two QoL polish passes on top of 4.2:
+
+- **Popover full-word headers.** When the toolbar goes icon-only on portrait phones, players tapping a 1-2 letter pill (R / C / I / MU / Mon) now see the full word in the popover header ("Residential", "Commercial", "Industrial", "Mixed-Use", "Monuments"). New optional `ToolGroup.headerLabel` field — defaults to `label`. Only set it for groups whose pill label is cryptic.
+- **Architectural decoratives glow at night.** Every plaza / fountain / statue / clock tower / triumphal arch / pergola / reflecting pool / topiary / flower bed / memorial garden / pier / Mayor's Mansion gains unique lit-overlay geometry via a new `addArchitecturalLights(t, addWin, pushLit)` helper inside `buildLitWindowsMesh`, AND a glow halo disc via `buildLampGlowMesh`. The halo radius scales with build importance: Mayor's Mansion 6 halos covering its 4×2 footprint, Triumphal Arch 2.0, Memorial Garden 1.8, Clock Tower 1.7, Fountain 1.6, etc. Without the halos the lit accents were tiny dots lost in the dark; with them, every monument reads as a beacon — the mid-zoom city visibly glows where the player has invested in architecture.
+
+When adding a new architectural decorative, the right pattern is to extend BOTH `addArchitecturalLights` (per-piece lit overlays — windows, finials, glowing surfaces) AND the `buildLampGlowMesh` switch (radial halo size). The lit overlays add detail at close zoom; the halo makes it visible at mid zoom.
+
 ## Status: Alpha 4.2 (The Mayor's Mansion — showpiece build)
 
 Single-instance 4×2 footprint architectural build that the user explicitly asked to be the **most detailed build in the game**. Sits in the Architect Mode `Mon` group as the apex prestige item. Save schema v21 (back-compat with v20+). Bundle 844 KB raw / 223 KB gzipped.

@@ -4,6 +4,24 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.2.1 — Popover full-word headers + architectural night lights** — two QoL polish passes on top of 4.2.
+  - **Popover headers use full words.** When the Alpha 4.1 toolbar rework went icon-only on portrait phones, players tapping a 1-2 letter pill (R / C / I / MU / Mon) had no confirmation of what they opened. New `ToolGroup.headerLabel?: string` field defaults to `label` but overrides it for the cryptic-pill groups: R → "Residential", C → "Commercial", I → "Industrial", MU → "Mixed-Use", Mon → "Monuments". Other groups already had readable labels (Roads, Services, Transit, etc) so they're unchanged.
+  - **Architectural decoratives glow at night.** Plazas / fountains / statues / clock towers / triumphal arches / pergolas / reflecting pools / topiary / flower beds / memorial gardens / piers / and the Mayor's Mansion all gain unique lit-overlay geometry that fades in with the day/night cycle. Implemented as new `addArchitecturalLights(t, addWin, pushLit)` helper inside `buildLitWindowsMesh`:
+    - Plaza: 4 corner bollard tops (amber) + central planter glow.
+    - Fountain: glowing crown sphere (gold) + lit central column (warm white) + dusk-blue water disc.
+    - Statue: uplighting ring around the plinth + amber halo above the bronze head.
+    - Flower bed: 4 gold accent dots on the dot-flowers.
+    - Topiary: 4 corner amber tops + central white glow.
+    - Pergola: 4 corner posts + 5 string-light bulbs hanging under the cross-beams.
+    - Reflecting pool: long dusk-blue surface strip + 4 corner bollard caps.
+    - Memorial garden: lit obelisk top (gold) + mid-glow + base spotlight ring.
+    - Clock tower: glowing white clock face + amber belfry openings + gold spire finial + 2 tower-body window lights.
+    - Triumphal arch: floodlit gold lettering plaque + glowing gold crown ornament + soft warm glow inside the arch opening.
+    - Pier: 2 amber bulbs on the seaward bollards.
+    - Mayor's Mansion: 12 wing windows (warm white) + 8 inner-block windows + 6 central-block windows + amber grand door + gold pediment escutcheon + pale-teal glowing dome + 2 gold cupola/finial beacons + 2 amber lamppost bulbs at the entrance + 2 gold gate-post finials + 2 dusk-blue reflecting-pool surfaces.
+  - **Glow halos for architectural buildings.** The biggest UX win: extended `buildLampGlowMesh` to add radial-gradient halo discs under each architectural building, sized by build importance (mansion 6×, triumphal arch 2.0, memorial garden 1.8, clock tower 1.7, fountain 1.6, etc). Without these, the lit accents were tiny dots lost in a dark scene; with them, every monument reads as a beacon glowing in the dark. The mansion gets six halos covering both rows of its 4×2 footprint so the entire estate properly glows.
+  - **No save schema bump, no faction-stance changes, no new Tools.** Pure rendering polish. Bundle 847 KB raw / 224 KB gzipped (~3 KB raw added).
+
 - **Alpha 4.2 — The Mayor's Mansion (showpiece build)** — single-instance 4×2 footprint architectural build that the user explicitly asked to be the most detailed build in the game. Sits in the Architect Mode `Mon` group as the apex prestige item. Bundle 844 KB raw / 223 KB gzipped (~12 KB raw added for the showpiece). **Save schema v21** (back-compat with v20+).
   - **4×2 footprint with anchor-tile pattern.** Mirrors the skyscraper / luxury-pair design: the lex-smallest tile of the 8 (lowest x, then lowest y) carries `building='mayor_mansion'`; the other seven are marked-only via `Tile.mayorMansion=true`. Bulldozing any of the eight tiles tears down the entire showpiece (Game.applyBulldozeStroke walks left+up to find the anchor, then clears the full MAYOR_MANSION_WIDTH × MAYOR_MANSION_DEPTH rectangle).
   - **Capital-tier milestone gate** ($500K up-front, $1.5K/mo upkeep). Capital is 5,000 pop — only the largest cities can afford / unlock it. Single-instance per city (placement refuses with toast if a mansion already exists).

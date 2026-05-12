@@ -18,7 +18,14 @@ interface ToolButton {
 interface ToolGroup {
   readonly kind: 'group';
   readonly id: string;
+  /** Short label that fits on the tiny toolbar pill (e.g. "R", "MU"). */
   readonly label: string;
+  /** Optional full-name label shown in the popover header (e.g.
+   *  "Residential", "Mixed-Use"). Defaults to `label`. Useful for
+   *  groups with cryptic 1-2-letter pill labels — when the toolbar
+   *  goes icon-only on a portrait phone the player needs the popover
+   *  header to spell things out. */
+  readonly headerLabel?: string;
   readonly icon: string;
   readonly members: readonly ToolButton[];
 }
@@ -234,6 +241,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     kind: 'group',
     id: 'residential',
     label: 'R',
+    headerLabel: 'Residential',
     icon: ICON_R,
     members: [
       { kind: 'tool', tool: 'residential_low',    label: 'Low',  icon: ICON_TIER_LOW },
@@ -247,6 +255,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     kind: 'group',
     id: 'commercial',
     label: 'C',
+    headerLabel: 'Commercial',
     icon: ICON_C,
     members: [
       { kind: 'tool', tool: 'commercial_low',    label: 'Low',  icon: ICON_TIER_LOW },
@@ -259,6 +268,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     kind: 'group',
     id: 'industrial',
     label: 'I',
+    headerLabel: 'Industrial',
     icon: ICON_I,
     members: [
       { kind: 'tool', tool: 'industrial_low',    label: 'Low',  icon: ICON_TIER_LOW },
@@ -270,6 +280,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     kind: 'group',
     id: 'mixed',
     label: 'MU',
+    headerLabel: 'Mixed-Use',
     icon: ICON_MU,
     members: [
       { kind: 'tool', tool: 'mixed_low',    label: 'Low',  icon: ICON_TIER_LOW },
@@ -530,6 +541,7 @@ const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
     kind: 'group',
     id: 'monuments',
     label: 'Mon',
+    headerLabel: 'Monuments',
     icon: ICON_MONUMENT,
     members: [
       { kind: 'tool', tool: 'place_statue',          label: 'Statue',   icon: ICON_STATUE },
@@ -804,7 +816,10 @@ export class Toolbar {
     pop.setAttribute('role', 'menu');
     const header = document.createElement('div');
     header.className = 'toolbar__popover-header';
-    header.textContent = group.label;
+    // Prefer `headerLabel` (full word like "Residential") over the
+    // short pill `label` ("R") so a player tapping an icon-only pill
+    // on a portrait phone sees what they actually opened.
+    header.textContent = group.headerLabel ?? group.label;
     pop.appendChild(header);
     const grid = document.createElement('div');
     grid.className = 'toolbar__popover-grid';

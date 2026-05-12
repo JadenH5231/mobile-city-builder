@@ -121,7 +121,7 @@ interface Spec {
  */
 export function buildVariantParts(
   zone: Zone, density: number, tileX: number, tileY: number,
-  happiness = 0.5
+  happiness = 0.5, yawOverride?: number
 ): VariantPart[] {
   if (zone === 'none' || density <= 0) return [];
   const variants = VARIANTS[zone]?.[density as 1 | 2 | 3];
@@ -130,12 +130,19 @@ export function buildVariantParts(
   const variantIdx = pickVariant(tileX, tileY, variants.length);
   const spec = variants[variantIdx]!;
 
-  // Tiny deterministic jitter and rotation so a row of identical-variant
-  // tiles still reads as individual buildings rather than a stamp.
+  // Tiny deterministic jitter so a row of identical-variant tiles still
+  // reads as individual buildings rather than a stamp.
   const r = Math.abs(((tileX * 374761393) ^ (tileY * 668265263)) | 0);
   const ox = ((r % 1000) / 1000 - 0.5) * 0.05;
   const oz = (((r >> 10) % 1000) / 1000 - 0.5) * 0.05;
-  const yaw = ((r >> 20) & 3) * (Math.PI / 2);
+  // Yaw: prefer the road-facing override so the building's front face,
+  // awning, sign, walkway and shrubs all aim at the nearest road. Falls
+  // back to a deterministic random rotation when no road is adjacent
+  // (shouldn't happen in normal play, but it keeps the renderer robust
+  // for off-grid or transient states).
+  const yaw = yawOverride !== undefined
+    ? yawOverride
+    : ((r >> 20) & 3) * (Math.PI / 2);
 
   const cx = tileX + 0.5 + ox;
   const cz = tileY + 0.5 + oz;

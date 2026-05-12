@@ -1387,7 +1387,8 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
     // faster than its walls).
     const ageMonths = Math.max(0, monthsElapsed - t.developedAt);
     const patina = patinaFactor(ageMonths);
-    const parts = buildVariantParts(t.zone, t.density, t.x, t.y, happy);
+    const yawForRoad = computeRoadFacingYaw(grid, t.x, t.y);
+    const parts = buildVariantParts(t.zone, t.density, t.x, t.y, happy, yawForRoad);
     const yLift = baseLift + t.elevation;
     for (const p of parts) {
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -1465,6 +1466,59 @@ function darkenHex(hex: number, factor: number): number {
   const g = Math.max(0, Math.min(255, Math.round(((hex >> 8) & 0xff) * factor)));
   const b = Math.max(0, Math.min(255, Math.round((hex & 0xff) * factor)));
   return (r << 16) | (g << 8) | b;
+}
+
+/**
+ * Yaw (radians) that rotates a building's "front" face (the spec's south
+ * / +Z face — where awnings, doors and walkways are authored) toward the
+ * nearest road. Returns undefined if no road is adjacent so the caller
+ * can fall back to a deterministic random rotation.
+ *
+ * Yaw convention:
+ *   0      → front faces +Z (south)  → road is south of the building
+ *   π/2    → front faces +X (east)   → road is east
+ *   π      → front faces -Z (north)  → road is north
+ *   3π/2   → front faces -X (west)   → road is west
+ *
+ * Preference rules:
+ *   1. Non-highway cardinal neighbour first (S, E, N, W in order).
+ *   2. Any cardinal road neighbour (including highways).
+ *   3. Diagonal road neighbour (fallback for corner lots).
+ */
+function computeRoadFacingYaw(grid: Grid, x: number, y: number): number | undefined {
+  const candidates: Array<{ dx: number; dy: number; yaw: number }> = [
+    { dx: 0,  dy: 1,  yaw: 0 },                // road south → face south
+    { dx: 1,  dy: 0,  yaw: Math.PI / 2 },      // road east  → face east
+    { dx: 0,  dy: -1, yaw: Math.PI },          // road north → face north
+    { dx: -1, dy: 0,  yaw: (3 * Math.PI) / 2 } // road west  → face west
+  ];
+  // Pass 1: non-highway cardinal road.
+  for (const c of candidates) {
+    const n = grid.get(x + c.dx, y + c.dy);
+    if (n && n.road && n.roadType !== 'highway') return c.yaw;
+  }
+  // Pass 2: any cardinal road (highway accepted).
+  for (const c of candidates) {
+    const n = grid.get(x + c.dx, y + c.dy);
+    if (n && n.road) return c.yaw;
+  }
+  // Pass 3: diagonal fallback — quantise to the nearest cardinal yaw so
+  // the walkway still points roughly the right way.
+  const diagonals: Array<{ dx: number; dy: number; yaw: number }> = [
+    { dx: 1,  dy: 1,  yaw: Math.PI / 4 },
+    { dx: -1, dy: 1,  yaw: -Math.PI / 4 + 2 * Math.PI },
+    { dx: 1,  dy: -1, yaw: 3 * Math.PI / 4 },
+    { dx: -1, dy: -1, yaw: (5 * Math.PI) / 4 }
+  ];
+  for (const c of diagonals) {
+    const n = grid.get(x + c.dx, y + c.dy);
+    if (n && n.road) {
+      // Quantise to the nearest cardinal so emitGroundAccents (which
+      // expects yaw % π/2 ≈ 0) routes the walkway cleanly.
+      return Math.round(c.yaw / (Math.PI / 2)) * (Math.PI / 2);
+    }
+  }
+  return undefined;
 }
 
 /** First 4-neighbour with `luxury && zone==='residential'`, else null. */

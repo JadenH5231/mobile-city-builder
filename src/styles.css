@@ -391,15 +391,19 @@ body {
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  min-width: 120px;
+  gap: 6px;
+  padding: 8px;
+  /* Alpha 4.1: hard-clamp to viewport so a popover with many items
+     (Services has 7, Transit has 6) never spills off-screen on a
+     portrait phone. min-width keeps small popovers feeling solid. */
+  min-width: 200px;
+  max-width: calc(100vw - 24px);
   background: var(--pill-bg);
   border: 1px solid var(--pill-border);
-  border-radius: 12px;
+  border-radius: 14px;
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.50);
   z-index: 30;
   pointer-events: auto;
 }
@@ -408,22 +412,55 @@ body {
   display: none;
 }
 
+/* Popover header (Alpha 4.1) — small label that names the category so
+   the player can confirm what they tapped. Subtle, low-emphasis. */
+.toolbar__popover-header {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pill-fg);
+  opacity: 0.55;
+  padding: 2px 4px 0;
+}
+
+/* Popover grid (Alpha 4.1) — flex-wrap rows so larger categories
+   like Services (7 items) tile cleanly into 2 rows on portrait,
+   and small categories (Districts: 2 items) still look intentional. */
+.toolbar__popover-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .toolbar__popover-btn {
   appearance: none;
   background: transparent;
   border: none;
   color: var(--pill-fg);
-  border-radius: 8px;
-  height: 40px;
-  padding: 0 12px;
+  border-radius: 10px;
+  /* Bumped from 40 → 44 for a comfier touch target on phones. */
+  height: 44px;
+  /* Fixed-width pills so flex-wrap produces a clean grid (rather than
+     ragged rows where each pill sizes to its label). 84px fits the
+     longest member labels (Hospital, Subway, Forestry). */
+  flex: 0 0 84px;
+  padding: 0 8px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  justify-content: center;
+  gap: 2px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
+}
+
+.toolbar__popover-btn .toolbar__icon {
+  width: 22px;
+  height: 22px;
 }
 
 .toolbar__popover-btn:active {
@@ -3038,4 +3075,60 @@ body.photo-mode .photo-op {
   font-size: 13px;
   color: #fff;
   line-height: 1;
+}
+
+/* ---- Narrow-viewport toolbar (Alpha 4.1) ----------------------------- *
+ * Portrait phones (≤ 480px wide) — tighter pills, icon-only labels in
+ * the scroll strip so more categories fit without horizontal scrolling.
+ * The pinned cluster (Pan + Bulldoze) and the Architect/Build mode
+ * pill keep their labels because they're load-bearing.
+ * --------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  .toolbar__scroll .toolbar__btn {
+    /* Drop the per-pill padding on narrow phones so 7+ categories fit. */
+    padding: 0 10px;
+    gap: 4px;
+    min-width: 40px;
+    height: 44px;
+  }
+  .toolbar__scroll .toolbar__btn .toolbar__label {
+    /* Hide the label by default on narrow viewports — it reappears
+       when the category is the active one (selected member is in
+       this group), so the player still sees what they're painting. */
+    display: none;
+  }
+  .toolbar__scroll .toolbar__btn[aria-pressed="true"] .toolbar__label {
+    display: inline;
+    font-size: 11px;
+    margin-left: 2px;
+  }
+  .toolbar__scroll .toolbar__chevron {
+    /* Chevron is redundant when the label is hidden — popover opens
+       on tap regardless. */
+    display: none;
+  }
+  .toolbar__scroll .toolbar__btn[aria-pressed="true"] .toolbar__chevron {
+    display: inline;
+  }
+  .toolbar__pinned .toolbar__btn,
+  .toolbar__mode .toolbar__btn {
+    /* Pinned + mode pills: tighter padding but keep the label —
+       they're load-bearing context (mode + Pan + Bulldoze). */
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .toolbar {
+    /* Tighter outer pill on narrow phones so the toolbar doesn't
+       crowd the screen edges. */
+    max-width: calc(100vw - 12px);
+    padding: 3px;
+    gap: 2px;
+  }
+  /* Popover items shrink slightly on narrow phones so 4 fit per row
+     without overflow. */
+  .toolbar__popover-btn {
+    flex: 0 0 76px;
+    height: 42px;
+    font-size: 10.5px;
+  }
 }

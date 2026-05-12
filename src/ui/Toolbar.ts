@@ -271,82 +271,141 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'mixed_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },
-  { kind: 'tool', tool: 'place_power', label: 'Power', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M13 2L4 14h7l-1 8 9-12h-7z"
-          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_water', label: 'Water', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11z"
-          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_park', label: 'Park', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3l5 8h-3l4 6H6l4-6H7z M11 17v4h2v-4"
-          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_forestry', label: 'Forestry', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 2l4 7h-2.5l3 5H14v3h-4v-3H7.5l3-5H8z"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-    <path d="M5 19h14 M7 22h10"
-          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_farm', label: 'Farm', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M3 18l4-7 4 4 3-5 4 6 3-3v5z"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-    <path d="M3 21h18 M6 12v-3 M9 8v-2 M14 9v-3 M19 11v-2"
-          stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_school', label: 'School', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3l9 4-9 4-9-4z"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-    <path d="M5 9v5c0 1 3 3 7 3s7-2 7-3V9"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-    <path d="M21 7v6"
-          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_hospital', label: 'Hospital', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="4" y="5" width="16" height="15" rx="1.5"
-          stroke="currentColor" stroke-width="1.6" fill="none"/>
-    <path d="M12 9v7 M9 12.5h6"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_fire_station', label: 'Fire', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3c1 3-2 4 0 7 1.5 2 4 1 4 4a4 4 0 1 1-8 0c0-2 1-3 1-5 1 1 2 1 3-1z"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_police_station', label: 'Police', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"
-          stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-    <path d="M9 11l2 2 4-4"
-          stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_bus_stop', label: 'BusStop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="6" y="4" width="12" height="14" rx="2"
-          stroke="currentColor" stroke-width="1.8" fill="none"/>
-    <path d="M6 12h12 M9 18v2 M15 18v2"
-          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_bus_depot', label: 'Depot', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M3 10l3-5h12l3 5v9H3z M6 14h12 M7 19v2 M17 19v2"
-          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_stop_sign', label: 'Stop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"
-          stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
-    <path d="M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-  </svg>` },
-  { kind: 'tool', tool: 'place_traffic_light', label: 'Light', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="9" y="3" width="6" height="18" rx="1.5"
-          stroke="currentColor" stroke-width="1.6" fill="none"/>
-    <circle cx="12" cy="7"  r="1.4" fill="currentColor"/>
-    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
-    <circle cx="12" cy="17" r="1.4" fill="currentColor"/>
-  </svg>` },
+  // Services group (Alpha 4.1 toolbar rework) — utilities + parks +
+  // public services consolidated. Pre-4.1 these were 7 individual
+  // top-level toolbar buttons (Power, Water, Park, School, Hospital,
+  // Fire, Police), which buried the toolbar behind a long horizontal
+  // scroll on portrait phones. Same Tools, just one expandable pill
+  // instead of seven.
+  {
+    kind: 'group',
+    id: 'services',
+    label: 'Services',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3l8 4v5c0 5-4 8-8 9-4-1-8-4-8-9V7z M9 12.5h6 M12 9.5v6"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+            stroke-linecap="round" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'place_power', label: 'Power', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M13 2L4 14h7l-1 8 9-12h-7z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_water', label: 'Water', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_park', label: 'Park', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3l5 8h-3l4 6H6l4-6H7z M11 17v4h2v-4"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_school', label: 'School', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3l9 4-9 4-9-4z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M5 9v5c0 1 3 3 7 3s7-2 7-3V9"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M21 7v6"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_hospital', label: 'Hospital', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="5" width="16" height="15" rx="1.5"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M12 9v7 M9 12.5h6"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_fire_station', label: 'Fire', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3c1 3-2 4 0 7 1.5 2 4 1 4 4a4 4 0 1 1-8 0c0-2 1-3 1-5 1 1 2 1 3-1z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_police_station', label: 'Police', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M9 11l2 2 4-4"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>` }
+    ]
+  },
+  // Industry group (Alpha 4.1) — export industries.
+  {
+    kind: 'group',
+    id: 'industry',
+    label: 'Industry',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 18V11l5 4V11l5 4V8l8 4v6z M3 21h18"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'place_forestry', label: 'Forestry', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2l4 7h-2.5l3 5H14v3h-4v-3H7.5l3-5H8z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M5 19h14 M7 22h10"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_farm', label: 'Farm', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 18l4-7 4 4 3-5 4 6 3-3v5z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M3 21h18 M6 12v-3 M9 8v-2 M14 9v-3 M19 11v-2"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` }
+    ]
+  },
+  // Transit group (Alpha 4.1) — every transit-related tool consolidated:
+  // bus stop / depot, traffic control (stop sign + traffic light), and
+  // alternative modes (ferry + subway). Pre-4.1 these were split across
+  // 4 individual top-level buttons + a 2-item "Trnst" group.
+  {
+    kind: 'group',
+    id: 'transit',
+    label: 'Transit',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="6" y="4" width="12" height="14" rx="2"
+            stroke="currentColor" stroke-width="1.6" fill="none"/>
+      <path d="M6 12h12 M9 18v2 M15 18v2"
+            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'place_bus_stop', label: 'BusStop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="6" y="4" width="12" height="14" rx="2"
+              stroke="currentColor" stroke-width="1.8" fill="none"/>
+        <path d="M6 12h12 M9 18v2 M15 18v2"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_bus_depot', label: 'Depot', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10l3-5h12l3 5v9H3z M6 14h12 M7 19v2 M17 19v2"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_stop_sign', label: 'Stop', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+        <path d="M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_traffic_light', label: 'Light', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="18" rx="1.5"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <circle cx="12" cy="7"  r="1.4" fill="currentColor"/>
+        <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+        <circle cx="12" cy="17" r="1.4" fill="currentColor"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_ferry_dock', label: 'Ferry', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 16l3-7h12l3 7z M5 20q3-1 7 0 t7 0"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M11 9v-3h2v3"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_subway_entrance', label: 'Subway', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="6" y="4" width="12" height="14" rx="3"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M9 9l3 6 3-6 M9 18v3 M15 18v3"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>` }
+    ]
+  },
   // Landmarks (Alpha 2.17). Grouped popover so the toolbar stays scannable.
   // Each one generates monthly tourism revenue scaled by city pop.
   {
     kind: 'group',
     id: 'landmarks',
-    label: 'Land',
+    label: 'Landmarks',
     icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M3 20l9-15 9 15z M9 20v-5h6v5"
             stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
@@ -379,7 +438,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
   {
     kind: 'group',
     id: 'districts',
-    label: 'Dist',
+    label: 'Districts',
     icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M3 3v18h18V3z M3 11h18 M11 3v18"
             stroke="currentColor" stroke-width="1.6" fill="none"/>
@@ -394,32 +453,6 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
               stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         <rect x="4" y="14" width="9" height="7" transform="rotate(-45 8.5 17.5)"
               stroke="currentColor" stroke-width="1.6" fill="none"/>
-      </svg>` }
-    ]
-  },
-  // Transit pack (Alpha 2.19). Ferry dock + subway entrance live in their
-  // own group below the bus tools — both are "alternative transit modes"
-  // that aren't roads.
-  {
-    kind: 'group',
-    id: 'transit-modes',
-    label: 'Trnst',
-    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 17l5-2 4 2 4-2 5 2 M3 21l5-2 4 2 4-2 5 2"
-            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-    </svg>`,
-    members: [
-      { kind: 'tool', tool: 'place_ferry_dock', label: 'Ferry', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 16l3-7h12l3 7z M5 20q3-1 7 0 t7 0"
-              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-        <path d="M11 9v-3h2v3"
-              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-      </svg>` },
-      { kind: 'tool', tool: 'place_subway_entrance', label: 'Subway', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="6" y="4" width="12" height="14" rx="3"
-              stroke="currentColor" stroke-width="1.6" fill="none"/>
-        <path d="M9 9l3 6 3-6 M9 18v3 M15 18v3"
-              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>` }
     ]
   },
@@ -748,10 +781,23 @@ export class Toolbar {
     // overflow-x:auto for horizontal scrolling, which forces overflow-y to
     // a clipping value too (per CSS spec) and would clip a popover anchored
     // inside it. Body-level + position:fixed dodges all ancestor clipping.
+    //
+    // Alpha 4.1 toolbar rework: popovers now have a small header showing
+    // the category name (helps the player keep their place when they
+    // open a category by accident), and a flex-wrap grid body that lets
+    // 6-7-item categories like Services / Transit display tidily on a
+    // narrow phone instead of overflowing horizontally.
     const pop = document.createElement('div');
     pop.className = 'toolbar__popover hidden';
     pop.dataset.group = group.id;
     pop.setAttribute('role', 'menu');
+    const header = document.createElement('div');
+    header.className = 'toolbar__popover-header';
+    header.textContent = group.label;
+    pop.appendChild(header);
+    const grid = document.createElement('div');
+    grid.className = 'toolbar__popover-grid';
+    pop.appendChild(grid);
     for (const m of group.members) {
       const memBtn = document.createElement('button');
       memBtn.type = 'button';
@@ -769,7 +815,7 @@ export class Toolbar {
         this.activate(m.tool);
         this.closePopovers();
       });
-      pop.appendChild(memBtn);
+      grid.appendChild(memBtn);
       this.toolButtons.set(m.tool, memBtn);
     }
     document.body.appendChild(pop);
@@ -787,13 +833,22 @@ export class Toolbar {
     const pop = this.groupPopovers.get(id);
     const btn = this.groupButtons.get(id);
     if (!pop || !btn) return;
-    // Position the popover above the group button, centred horizontally.
-    // bottom-anchored so it sits just above the pill regardless of its
-    // own height.
-    const rect = btn.getBoundingClientRect();
-    pop.style.left = `${rect.left + rect.width / 2}px`;
-    pop.style.bottom = `${Math.max(0, window.innerHeight - rect.top + 6)}px`;
+    // Show first so we can measure the popover's actual rendered size
+    // (transform/translateX trick needs the post-layout width to clamp
+    // correctly inside the viewport on portrait phones — Alpha 4.1).
     pop.classList.remove('hidden');
+    const btnRect = btn.getBoundingClientRect();
+    const desiredCenter = btnRect.left + btnRect.width / 2;
+    // Clamp the popover so it never spills off-screen on a narrow
+    // phone. CSS uses translateX(-50%) so we anchor the centre line.
+    const popWidth = pop.offsetWidth || 280;
+    const margin = 12;
+    const halfPop = popWidth / 2;
+    const minCentre = margin + halfPop;
+    const maxCentre = window.innerWidth - margin - halfPop;
+    const clampedCentre = Math.max(minCentre, Math.min(maxCentre, desiredCenter));
+    pop.style.left = `${clampedCentre}px`;
+    pop.style.bottom = `${Math.max(0, window.innerHeight - btnRect.top + 6)}px`;
     this.openPopoverId = id;
   }
 

@@ -336,6 +336,18 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.1 (Toolbar QoL rework for portrait phones)
+
+The bottom toolbar was built when the game had ~12 tools; it grew to 30+ across two modes, and on a portrait phone the long horizontal scroll was the worst-feeling thing in the UX. Alpha 4.1 reworks it. No save schema bump, no new Tools — pure UX restructuring.
+
+The headline:
+- **21 → 13 top-level toolbar entries** in build mode. The loose `place_*` direct buttons (Power, Water, Park, School, Hospital, Fire, Police, Bus Stop, Bus Depot, Stop Sign, Traffic Light) plus the awkward 2-item `transit-modes` group all consolidate into 3 new semantic groups: **Services** (7 items: utilities + parks + civic), **Industry** (2 items: forestry, farm), **Transit** (6 items: bus + traffic control + ferry + subway).
+- **Popover header + flex-wrap grid layout.** Each popover now leads with a small uppercase category label ("SERVICES", "TRANSIT") and renders items in a fixed-width pill grid (84px on desktop, 76px on narrow phones) that wraps to multiple rows so a 7-item Services category tiles cleanly.
+- **Viewport-clamped popovers.** `Toolbar.toggleGroup` measures the popover's rendered width and clamps the centre line into `[12 + halfPop, viewportW - 12 - halfPop]`, so popovers anchored near screen edges no longer spill off-screen.
+- **Narrow-viewport CSS at `max-width: 480px`** — group pills hide their text and show icon-only at 40px wide; the active group restores its label so you always see what's painting; outer toolbar tightens its padding. **Result: all 10 build groups + 3 pinned items fit in a single non-scrolling row on a 390-420px portrait phone.**
+
+When adding a new buildable Tool, the right home is one of the 10 groups (Roads / R / C / I / MU / Services / Industry / Transit / Landmarks / Districts), NOT a new top-level direct button. Direct buttons should only be added if they're as load-bearing as Pan or Bulldoze.
+
 ## Status: Alpha 4.0 (Architect Mode + Council Beautification Budget)
 
 Major end-game-content drop layered on top of Alpha 3.2.4. Save schema bumped v18 → v20 (back-compat with v19+). Bundle 831 KB raw / 220 KB gzipped.

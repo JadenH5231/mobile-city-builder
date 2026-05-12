@@ -2,9 +2,54 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
 
-**Status: Alpha 3.2.4** — live at https://JadenH5231.github.io/mobile-city-builder/. Builds on the Alpha 3.0 feature-complete prototype with 3.0.x polish, 3.1.x skyscrapers + services rework, and 3.2.x grid expansion + QOL.
+**Status: Alpha 4.4** — live at https://JadenH5231.github.io/mobile-city-builder/. Save schema v21. Bundle 858 KB raw / 227 KB gzipped.
 
-**Alpha 3.2.x highlights (since 3.0):**
+## Alpha 4.x highlights
+
+### Architect Mode + Council Beautification Budget (4.0)
+- **Toolbar mode toggle** — leading pinned pill cycles 🏗 Build ↔ 🎨 Architect. Build mode is the existing simulation toolbar; Architect mode is terraforming + decorative monuments (the late-game money sink). Pan + Bulldoze stay pinned in both modes.
+- **Architect tools** — milestone-locked through Capital:
+  - Terraforming (cheap paint): Tree $200/tile · Meadow $400 · Pond $1.5K · Smooth $50
+  - Plazas: Plaza $5K · Pergola $6K · Reflecting Pool $20K · Pier $3K
+  - Gardens: Flower Bed $2K · Topiary $8K · Memorial Garden $30K
+  - Monuments: Statue $15K · Fountain $25K · Clock Tower $50K · Triumphal Arch $75K
+- **Council Beautification Budget** — first lever where the council acts independently of the mayor. Each election picks a tier (None / Light $500/mo / Standard $2K / Grand $5K / Opulent $12K) based on the sum of councillors' beautification stances. Drives procedural streetscape flair on developed Commercial / Mixed-Use blocks: planters, café tables, decorative streetlamps, banners, public-art pedestals. Defunds to "none" for any month the treasury can't cover; renderer wipes the streetscape mesh city-wide when defunded.
+- **Architectural night lights** (4.2.1) — every plaza / fountain / statue / clock tower / arch / memorial garden / pergola / mansion gets lit-overlay geometry that fades in at night, plus a glow halo disc so monuments read as beacons at mid-zoom.
+- **Mayoral Override extends to Beautification** (4.2.2) — when Override is active, the mayor can directly pick the tier via a 5-pill picker in the budget panel.
+
+### The Mayor's Mansion (4.2)
+Single-instance 4×2 footprint showpiece — the most detailed build in the game. Capital-tier unlock, **$500K** up-front + $1.5K/mo upkeep. The mansion is part — the lavish formal estate grounds are the rest:
+- 5-block mansion: 2 outer wings + 2 inner blocks + grand 3-storey central block with copper-green dome, spire, gold ball finial, pedimented portico with 6 columns + 4-piece classical pediment (4.2.2 cleanup), ~30 individually-shuttered windows, parapet balustrade, 4 chimneys, gold escutcheon, grand arched door
+- Formal grounds: central flagstone driveway, 2 reflecting pools with bronze statues, 2 parterre gardens with hedge crosses + 4-quadrant flower dots + topiary cones, 3-step grand entrance, 2 wrought-iron lampposts, 2 ornamental urns, 2 ornamental trees in back corners, low limestone perimeter wall with gold-finial corner posts and gate opening
+- ~140 BufferGeometry parts merged into one mesh. Bulldozing any of the 8 tiles tears down the whole showpiece (anchor pattern same as skyscrapers).
+
+### Toolbar QoL for portrait phones (4.1)
+- **21 → 13 top-level entries.** Loose Place tools consolidated into 3 new groups: **Services** (Power/Water/Park/School/Hospital/Fire/Police), **Industry** (Forestry/Farm), **Transit** (Bus Stop/Depot/Stop Sign/Traffic Light/Ferry/Subway).
+- **Popover header + flex-wrap grid** — every popover opens with a small uppercase category label. Items tile cleanly into 4-then-3 wraps for big groups.
+- **Viewport-clamped popovers** — `Toolbar.toggleGroup` measures rendered width and clamps the centre into the viewport so popovers near screen edges never spill off.
+- **Narrow-viewport CSS** (`max-width: 480px`) — group pills go icon-only at 40px wide; the active group restores its label. **All 10 build groups + 3 pinned items fit in a single non-scrolling row** on a 390-420px portrait phone.
+- **Full-word popover headers** (4.2.1) — R → "Residential", C → "Commercial", I → "Industrial", MU → "Mixed-Use", Mon → "Monuments" so icon-only pills still tell you what you opened.
+
+### Curb-appeal pass (4.3 + 4.3.1)
+- **Ground accents on every zoned tile** (commit `313b61e`) — per-zone ground pad (R green, C paved, I dirt, MU garden), front walkway, zone-specific accents (R shrubs/hedges, C planter boxes, I chain-link, MU bike racks).
+- **Premium bus stops** (commit `313b61e`) — proper transit shelter: concrete pad, wooden bench on iron legs, tinted glass back + side panels, cantilevered canopy with yellow drip-edge, route placard, flag pole, trash bin.
+- **Halved random-event frequency** (commit `313b61e`) — every per-month event roll halved (fires, outages, audits, recessions, booms, trade deals, lawsuits, referendums).
+- **Buildings face the road** (commit `252c770`) — `computeRoadFacingYaw` orients every zoned building toward its nearest road. Preference: non-highway cardinal → any cardinal → diagonal quantised to nearest cardinal.
+- **Service buildings rotate** (4.3) — school / hospital / fire station / police station / museum / bus stop / bus depot all rotate so their asymmetric front faces (clock tower, red cross, bay doors, porch, colonnade, bench/canopy, garage door) point at the nearest road. Each gets a paved walkway connecting front to road.
+- **Luxury mansion walkway aims at the road** (4.3.1) — pair-aware `computeLuxuryRoadYaw` checks 4-adjacent tiles of both pair tiles.
+
+### Vehicle + tree polish (4.4)
+- **Cars + buses gain window + light sibling meshes** — sibling InstancedMeshes mirror each vehicle body's per-instance matrix every frame. Body keeps the per-instance colour tint; windows use a fixed dark blue, headlights a warm amber, taillights red. Buses get longer side-window strips and bigger front headlights.
+- **Tree shadow discs extended to ALL trees** — forest tiles already had them since Alpha 2.6; now park-cluster trees and the Mayor's Mansion's ornamental trees also get the slim dark-green disc at the base. Park trees use a post-process pass that scans for trunk-coloured parts and injects shadows automatically.
+
+## Save schema
+
+Currently v21 (Mayor's Mansion bit added in 4.2). Backwards-compat with v12+. New `Building` enum values (plaza, fountain, statue, mayor_mansion, etc.) round-trip via the existing per-tile `building` field. Council Beautification Budget (elected + effective tier) persists per term.
+
+> **Note**: Alpha 3.2.5 (Max density tier — cluster of L4 tiles → Mega → Twin → Skyscraper) was attempted but **reverted** after a freeze report. The work lives on branch `claude/max-density`. See `CLAUDE.md` for the root-cause hypothesis and re-roll plan.
+
+## Alpha 3.x baseline
+
 - **Skyscrapers** (3.1.2) — 2×2 footprint, 4-stage construction over 12 sim months, 18 visual variants across R/C/MU. Translucent on zoom-in (3.1.7). Lit windows at night (3.1.6).
 - **Grid expansion** (3.2.3) — `+` buttons on each map edge grow the world by one starter region for $1M each. Genuine reallocation: tile array shifts, new strip gets fresh terrain.
 - **Buy land** (3.1.3) — tap-to-buy individual unowned tiles for $5K to grow into the wilderness gradually.
@@ -13,9 +58,6 @@ Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No 
 - **Settings cheats** (3.2.4) — unlimited money / unlimited demand toggles for playtesting.
 - **More-menu HUD popover** (3.1.1) keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed.
 - **8 park variations** (3.1.9), **5 building variants per (zone, density)** (3.0.x → 3.2.0).
-- Save schema bumped to v18 (skyscrapers in 3.1.2). Backwards-compat with v12+.
-
-> **Note**: Alpha 3.2.5 (Max density tier — cluster of L4 tiles → Mega → Twin → Skyscraper) was attempted but **reverted** after a freeze report. The work lives on branch `claude/max-density`. See `CLAUDE.md` for the root-cause hypothesis and re-roll plan.
 
 **Alpha 3.0 feature-complete baseline** — the single autonomous build session that landed Alpha 3.0 added 16 PRs of systems + content on top of the Alpha 2.6 visual baseline:
 
@@ -148,36 +190,59 @@ If anything's off — jitter, slow zoom, mis-aligned roads, sub-30fps on a mid-r
 
 ```
 src/
-  main.ts            entry point, FPS counter, HUD wiring
-  styles.css         HUD pills, toolbar, info panels
-  types.ts           shared constants + enums
+  main.ts                entry point, FPS counter, HUD wiring
+  styles.css             HUD pills, toolbar, info panels, popovers
+  types.ts               shared constants + enums (Tools, Buildings, milestones, tiers)
   engine/
-    Game.ts          owns loop, paint logic, undo stack
-    Camera.ts        3D ortho camera (panBy / zoomAt / screenToWorld)
-    Input.ts         pointer-events gesture handler (navigate / paint modes)
-    Renderer.ts      Three.js scene (terrain, roads, sidewalks, crosswalks, paths, trees, buildings, cars, buses, pedestrians, traffic-lights, heatmap)
+    Game.ts              owns loop, paint logic, undo stack, all dispatch
+    Camera.ts            3D ortho camera (panBy / zoomAt / screenToWorld)
+    Input.ts             pointer-events gesture handler (navigate / paint modes)
+    Renderer.ts          Three.js scene (terrain, roads, sidewalks, crosswalks, paths, trees, buildings, skyscrapers, vehicles + window/light overlays, pedestrians, traffic-lights, heatmap, beautification streetscape, architectural night lights)
+    BuildingVariants.ts  per-(zone, density) variant catalogue + buildLuxuryParts (2-tile mansion) + buildSkyscraperParts (2×2) + buildMayorMansionParts (4×2 showpiece)
   world/
-    Grid.ts          tile container + road-edge graph + walking-path bit
-    Tile.ts          single-tile struct (terrain, road, path, …)
+    Grid.ts              tile container + road-edge graph + bridge edges
+    Tile.ts              single-tile struct (terrain, road, path, zone, density, services, luxury, skyscraper, mayorMansion, owned, …)
+    TerrainGenerator.ts  noise-based lakes/rivers/forests/sand/elevation
   simulation/
-    Population.ts    residents/jobs aggregation, RCI demand
-    Development.ts   demand-driven density growth, service gates
-    RoadGraph.ts     car adjacency rebuilt on road changes
-    PathGraph.ts     pedestrian adjacency: paths + non-highway road tiles
-    Pathfinding.ts   A* over any PathfindGraph, reusable buffers
-    Vehicles.ts      cars + park-then-return + path-coverage suppression
-    Pedestrians.ts   walker spawn + motion on the pedestrian graph
-    Buses.ts         per-depot buses + sidewalk pull-over dwell
-    TrafficLights.ts adaptive 2-phase queue-aware signal controller
-    Economy.ts       treasury, monthly settlement, tax demand penalty
-    Services.ts      radius-sweep coverage flags
-    Traffic.ts       per-tile EMA + city-wide stress
+    Population.ts        residents/jobs aggregation, RCI demand, per-faction shares
+    Development.ts       demand-driven density growth, service gates
+    RoadGraph.ts         car adjacency rebuilt on road changes
+    PathGraph.ts         pedestrian adjacency: paths + non-highway road tiles
+    Pathfinding.ts       A* over any PathfindGraph, reusable buffers
+    Vehicles.ts          cars + park-then-return + path-coverage suppression
+    Pedestrians.ts       walker spawn + motion on the pedestrian graph
+    Buses.ts             per-depot buses + sidewalk pull-over dwell
+    Ferries.ts           boat routes between paired docks (Alpha 2.19)
+    TrafficLights.ts     adaptive 2-phase queue-aware signal controller
+    Economy.ts           treasury, monthly settlement, tax demand penalty, beautification deduction
+    Services.ts          radius-sweep coverage flags (city-wide power/water in 3.1.4+)
+    Traffic.ts           per-tile EMA + city-wide stress
+    Happiness.ts         10-faction mood + comments + Community Sentiment data
+    Council.ts           yearly elections, cost multipliers, civic actions, Beautification Budget tier, Mayoral Override
+    Milestones.ts        pop-threshold milestones + tool unlocks
+    Events.ts            random events + crisis modal queue
+    Stats.ts             240-month ring buffer (line graphs)
+    GlobalMarket.ts      lumber + produce price oscillation + connection check
+    Achievements.ts      28 lifetime achievements + leader-met set
+    Bonds.ts             municipal bond catalog + active loan tracker
+    Crime.ts             per-tile crime score + commercial revenue penalty
+    Districts.ts         district registry + per-zone surtax
+    Skyscrapers.ts       2×2 footprint, 12-month construction lifecycle
   ui/
-    TileInfoPanel.ts long-press info card
-    BudgetPanel.ts   treasury + tax sliders
-    Toolbar.ts       scrollable bottom tool selector
+    TileInfoPanel.ts     long-press info card with diagnostic chips
+    BudgetPanel.ts       treasury + tax sliders + surtax + bonds + Beautification Budget readout/picker
+    HappinessPanel.ts    Community Sentiment + Civic Actions (Endorse / Coalition / Override)
+    CouncilPanel.ts      election-results modal
+    EventModal.ts        queued severity-tinted event modal
+    StatsPanel.ts        canvas line graphs
+    AchievementsPanel.ts grid of badges
+    LeaderBioModal.ts    one-time leader meet popup
+    SlotPicker.ts        3-up save slot picker
+    DistrictsPanel.ts    district registry editor
+    PhotoOpBanner.ts     opportunistic photo-op banner
+    Toolbar.ts           Build/Architect mode toggle + grouped popover toolbar
   persistence/
-    SaveGame.ts      IndexedDB single-slot auto-save
+    SaveGame.ts          IndexedDB multi-slot auto-save (3 slots since Alpha 2.20)
 ```
 
 ## Tech notes

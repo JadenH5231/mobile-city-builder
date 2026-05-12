@@ -120,7 +120,16 @@ export class Renderer {
   private hemisphereLight!: HemisphereLight;
   private sunLight!: DirectionalLight;
   private carsMesh: InstancedMesh;
+  /** Vehicle window/light overlays (Alpha 4.4). Sibling InstancedMeshes
+   *  that mirror their parent's per-instance matrix every frame —
+   *  fixed-colour materials so the per-instance body tint doesn't
+   *  wash out window glass / headlights / taillights. */
+  private carWindowsMesh!: InstancedMesh;
+  private carHeadlightsMesh!: InstancedMesh;
+  private carTaillightsMesh!: InstancedMesh;
   private busesMesh: InstancedMesh;
+  private busWindowsMesh!: InstancedMesh;
+  private busHeadlightsMesh!: InstancedMesh;
   private ferriesMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
   /** Sibling head mesh for pedestrians (Alpha 3.2.2). Its matrices are
@@ -206,6 +215,47 @@ export class Renderer {
     this.carsMesh.count = 0;
     this.carsMesh.frustumCulled = false;
     this.worldGroup.add(this.carsMesh);
+    // Car windows (Alpha 4.4) — sibling InstancedMesh that mirrors the
+    // body's per-instance matrix. Fixed dark-tint material so windows
+    // don't pick up the car's body colour. Two thin slabs: a flat
+    // windshield strip on top of the cabin face and a side-window strip
+    // along the cabin's flanks.
+    const winRect = new BoxGeometry(0.10, 0.05, 0.005);
+    winRect.translate(0, 0.10 + 0.035, -0.02 + 0.09);
+    const sideWinL = new BoxGeometry(0.005, 0.045, 0.14);
+    sideWinL.translate(-0.080, 0.105 + 0.035, -0.02);
+    const sideWinR = new BoxGeometry(0.005, 0.045, 0.14);
+    sideWinR.translate(0.080, 0.105 + 0.035, -0.02);
+    const carWindowsGeom = mergeGeoms([winRect, sideWinL, sideWinR], [0xffffff, 0xffffff, 0xffffff]);
+    const carWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
+    this.carWindowsMesh = new InstancedMesh(carWindowsGeom, carWindowsMat, MAX_VEHICLES);
+    this.carWindowsMesh.count = 0;
+    this.carWindowsMesh.frustumCulled = false;
+    this.worldGroup.add(this.carWindowsMesh);
+    // Headlights — two small bright dots on the front face.
+    // Local front is -Z (forward-facing geometry was built with cabin
+    // pulled back at z=-0.02, so the chassis front is at z = +0.17).
+    const hlL = new BoxGeometry(0.030, 0.020, 0.012);
+    hlL.translate(-0.066, 0.040, 0.170);
+    const hlR = new BoxGeometry(0.030, 0.020, 0.012);
+    hlR.translate(0.066, 0.040, 0.170);
+    const carHeadlightsGeom = mergeGeoms([hlL, hlR], [0xffffff, 0xffffff]);
+    const carHeadlightsMat = new MeshBasicMaterial({ color: 0xfff4c0 });
+    this.carHeadlightsMesh = new InstancedMesh(carHeadlightsGeom, carHeadlightsMat, MAX_VEHICLES);
+    this.carHeadlightsMesh.count = 0;
+    this.carHeadlightsMesh.frustumCulled = false;
+    this.worldGroup.add(this.carHeadlightsMesh);
+    // Taillights — two small red dots on the rear face (z = -0.17).
+    const tlL = new BoxGeometry(0.024, 0.018, 0.010);
+    tlL.translate(-0.066, 0.040, -0.170);
+    const tlR = new BoxGeometry(0.024, 0.018, 0.010);
+    tlR.translate(0.066, 0.040, -0.170);
+    const carTailGeom = mergeGeoms([tlL, tlR], [0xffffff, 0xffffff]);
+    const carTailMat = new MeshBasicMaterial({ color: 0xd83838 });
+    this.carTaillightsMesh = new InstancedMesh(carTailGeom, carTailMat, MAX_VEHICLES);
+    this.carTaillightsMesh.count = 0;
+    this.carTaillightsMesh.frustumCulled = false;
+    this.worldGroup.add(this.carTaillightsMesh);
 
     // Buses — bigger silhouette so they read as transit, separate from cars.
     // Bus silhouette (Alpha 2.1) — chunky body with a slight cab notch
@@ -220,6 +270,32 @@ export class Renderer {
     this.busesMesh.count = 0;
     this.busesMesh.frustumCulled = false;
     this.worldGroup.add(this.busesMesh);
+    // Bus windows (Alpha 4.4) — long row of dark-tinted side windows +
+    // a front windshield. Same shared-matrix pattern as cars.
+    const busWinL = new BoxGeometry(0.005, 0.070, 0.42);
+    busWinL.translate(-0.122, 0.110, 0);
+    const busWinR = new BoxGeometry(0.005, 0.070, 0.42);
+    busWinR.translate(0.122, 0.110, 0);
+    const busWindshield = new BoxGeometry(0.14, 0.065, 0.005);
+    busWindshield.translate(0, 0.110, 0.277);
+    const busWindowsGeom = mergeGeoms([busWinL, busWinR, busWindshield], [0xffffff, 0xffffff, 0xffffff]);
+    const busWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
+    this.busWindowsMesh = new InstancedMesh(busWindowsGeom, busWindowsMat, 16);
+    this.busWindowsMesh.count = 0;
+    this.busWindowsMesh.frustumCulled = false;
+    this.worldGroup.add(this.busWindowsMesh);
+    // Bus headlights — two on the front, slightly larger than car
+    // headlights because buses are bigger.
+    const bhlL = new BoxGeometry(0.040, 0.030, 0.012);
+    bhlL.translate(-0.085, 0.060, 0.277);
+    const bhlR = new BoxGeometry(0.040, 0.030, 0.012);
+    bhlR.translate(0.085, 0.060, 0.277);
+    const busHeadlightsGeom = mergeGeoms([bhlL, bhlR], [0xffffff, 0xffffff]);
+    const busHeadlightsMat = new MeshBasicMaterial({ color: 0xfff4c0 });
+    this.busHeadlightsMesh = new InstancedMesh(busHeadlightsGeom, busHeadlightsMat, 16);
+    this.busHeadlightsMesh.count = 0;
+    this.busHeadlightsMesh.frustumCulled = false;
+    this.worldGroup.add(this.busHeadlightsMesh);
 
     // Pedestrians (Alpha 3.2.2): small humanoid silhouette built from
     // two legs + a torso + arms, sitting under a separate head mesh
@@ -766,13 +842,23 @@ export class Renderer {
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.carsMesh.setMatrixAt(i, obj.matrix);
+      // Sibling overlays mirror the body's matrix (Alpha 4.4).
+      this.carWindowsMesh.setMatrixAt(i, obj.matrix);
+      this.carHeadlightsMesh.setMatrixAt(i, obj.matrix);
+      this.carTaillightsMesh.setMatrixAt(i, obj.matrix);
       c.setHex(car.color);
       this.carsMesh.setColorAt(i, c);
     }
     this.carsMesh.count = vehicles.cars.length;
+    this.carWindowsMesh.count = vehicles.cars.length;
+    this.carHeadlightsMesh.count = vehicles.cars.length;
+    this.carTaillightsMesh.count = vehicles.cars.length;
     if (vehicles.cars.length > 0) {
       this.carsMesh.instanceMatrix.needsUpdate = true;
       if (this.carsMesh.instanceColor) this.carsMesh.instanceColor.needsUpdate = true;
+      this.carWindowsMesh.instanceMatrix.needsUpdate = true;
+      this.carHeadlightsMesh.instanceMatrix.needsUpdate = true;
+      this.carTaillightsMesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -942,14 +1028,21 @@ export class Renderer {
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.busesMesh.setMatrixAt(visible, obj.matrix);
+      // Sibling overlays mirror the body's matrix (Alpha 4.4).
+      this.busWindowsMesh.setMatrixAt(visible, obj.matrix);
+      this.busHeadlightsMesh.setMatrixAt(visible, obj.matrix);
       c.setHex(bus.color);
       this.busesMesh.setColorAt(visible, c);
       visible++;
     }
     this.busesMesh.count = visible;
+    this.busWindowsMesh.count = visible;
+    this.busHeadlightsMesh.count = visible;
     if (visible > 0) {
       this.busesMesh.instanceMatrix.needsUpdate = true;
       if (this.busesMesh.instanceColor) this.busesMesh.instanceColor.needsUpdate = true;
+      this.busWindowsMesh.instanceMatrix.needsUpdate = true;
+      this.busHeadlightsMesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -2799,6 +2892,28 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
   const centerX = sumX / cluster.length;
   const centerZ = sumZ / cluster.length;
   const size = cluster.length;
+  // Alpha 4.4 — every park tree gets a slim dark-green shadow disc
+  // under it, matching the Alpha 2.6 forest-tile polish. Trunks are
+  // emitted across multiple cluster-size code paths; rather than
+  // duplicate shadow emission at each, we run a single pass at every
+  // return site that finds parts with the trunk colour (0x6b3f1f) and
+  // pushes a sibling shadow part at the same (dx, dz).
+  const finalize = (parts: CityBuildingPart[]): CityBuildingPart[] => {
+    const shadows: CityBuildingPart[] = [];
+    for (const p of parts) {
+      if (p.color !== 0x6b3f1f) continue;
+      shadows.push({
+        makeGeom: () => cyl(0.20, 0.005, 8),
+        color: 0x2a3a22,
+        dx: p.dx,
+        dy: 0.005,
+        dz: p.dz
+      });
+    }
+    // Push shadows first in the array so they render before the
+    // trunks/leaves above them — visually correct, no z-fighting.
+    return [...shadows, ...parts];
+  };
 
   // Lawn pad on every tile — the green base regardless of cluster size.
   for (const c of cluster) {
@@ -2818,7 +2933,7 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
   if (size === 1) {
     if (subVariant === 1) {
       addSculpturePlaza(cluster[0]!, centerX, centerZ, out);
-      return out;
+      return finalize(out);
     }
     // === 1-tile cottage park ===
     const c = cluster[0]!;
@@ -2842,13 +2957,13 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
     out.push({ makeGeom: () => cone(0.16, 0.26, 8), color: 0x3a7a3a, dx: cx - 0.32, dy: 0.30, dz: cz - 0.05 });
     out.push({ makeGeom: () => cyl(0.028, 0.10, 6), color: 0x6b3f1f, dx: cx + 0.32, dy: 0.08, dz: cz + 0.05 });
     out.push({ makeGeom: () => cone(0.13, 0.20, 8), color: 0x4a8e44, dx: cx + 0.32, dy: 0.25, dz: cz + 0.05 });
-    return out;
+    return finalize(out);
   }
 
   if (size === 2) {
     if (subVariant === 1) {
       addTennisCourt(cluster, centerX, centerZ, out);
-      return out;
+      return finalize(out);
     }
     // === 2-tile community park: playground + pond + paths ===
     // Determine axis: tiles share an x or share a y.
@@ -2888,13 +3003,13 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
     out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x3a7a3a, dx: cx - 0.35, dy: 0.28, dz: cz + 0.30 });
     out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: pondX - 0.30, dy: 0.09, dz: pondZ - 0.30 });
     out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: pondX - 0.30, dy: 0.28, dz: pondZ - 0.30 });
-    return out;
+    return finalize(out);
   }
 
   if (size === 3) {
     if (subVariant === 1) {
       addRoseGarden(cluster, centerX, centerZ, out);
-      return out;
+      return finalize(out);
     }
     // === 3-tile neighbourhood park: pavilion + central pond + path ===
     // Pavilion (open-air shelter) at centroid.
@@ -2939,12 +3054,12 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
       out.push({ makeGeom: () => cyl(0.035, 0.12, 6), color: 0x6b3f1f, dx: cx + 0.32, dy: 0.09, dz: cz - 0.32 });
       out.push({ makeGeom: () => cone(0.15, 0.24, 8), color: 0x4a8e44, dx: cx + 0.32, dy: 0.28, dz: cz - 0.32 });
     }
-    return out;
+    return finalize(out);
   }
 
   if (subVariant === 1) {
     addBotanicalGarden(cluster, centerX, centerZ, out);
-    return out;
+    return finalize(out);
   }
 
   // === 4+ tile grand park: bandstand centerpiece + ring + dense trees ===
@@ -2999,7 +3114,7 @@ function parkClusterParts(cluster: Array<{ x: number; y: number }>): CityBuildin
       out.push({ makeGeom: () => box(0.16, 0.05, len), color: 0xc7c2b3, dx: cx, dy: 0.026, dz: (cz + centerZ) / 2 });
     }
   }
-  return out;
+  return finalize(out);
 }
 
 // --- Park sub-variant layouts (Alpha 3.1.9) ---------------------------

@@ -336,6 +336,18 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.4 (Vehicle window/light overlays + universal tree shadows)
+
+Two visual polish passes on top of 4.3.1, both addressing items from the prior session's handoff list.
+
+**Cars + buses gain sibling InstancedMeshes** for windows + headlights + taillights. The body mesh keeps its per-instance colour tint (so each car still picks from the VEHICLE_PALETTE), but windows / headlights / taillights now have their own fixed-colour materials so they don't get washed out by the body tint. Each frame, the body's per-instance matrix is mirrored to every sibling mesh — same position, same yaw, no extra per-frame math. Six new InstancedMesh objects total (cars: body + windows + headlights + taillights; buses: body + windows + headlights — buses don't have taillights because the in-game bus shape doesn't have a clear rear face).
+
+**Tree shadow discs extended to every instanced tree.** Forest tiles already had them since Alpha 2.6. Now park-cluster trees (8 layouts × multiple trees per layout) and the Mayor's Mansion's two back-corner ornamental trees also emit a slim dark-green octagonal pad at the trunk's base. Park trees use a post-process helper inside `parkClusterParts` — at every `return out` site, a `finalize(out)` pass scans for parts with the trunk colour (`0x6b3f1f`) and prepends a sibling shadow disc at the same (dx, dz). Avoids inline duplication across all 8 cluster-size code paths.
+
+When adding a new vehicle type with per-instance colour tint, the right pattern is: build the body geometry with white vertex colours (so per-instance color works), then create sibling InstancedMesh objects for any feature that should NOT get the tint (windows = fixed dark, lights = fixed bright colour). In the update loop, mirror the body's matrix to each sibling.
+
+When adding new tree emissions (in a building variant, a park layout, etc.), use trunk colour `0x6b3f1f` (or `MM_TREE_TRUNK` from BuildingVariants) so the shadow auto-pass picks it up — OR emit a slim dark-green `CylinderGeometry(r, r*0.92, 0.005, 8)` disc directly at the same (dx, dz) for a self-contained build.
+
 ## Status: Alpha 4.3.1 (Luxury mansion walkway aims at the road)
 
 Completes the curb-appeal pass. Every kind of building in the game now has a road-oriented walkway connecting its front face to the nearest road:

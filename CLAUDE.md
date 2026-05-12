@@ -210,6 +210,22 @@ are banned. When you add a new buildable Tool that maps to a stance
 key, append it to the `toolToKey` array in `Game.refreshToolbarBans`
 or the toolbar visual won't reflect council bans on it.
 
+**Council Beautification Budget (Alpha 4.0)**: the council elects a
+`BeautificationTier` (`'none' | 'light' | 'standard' | 'grand' | 'opulent'`)
+each term — sum-of-stances over `FACTION_STANCES[id].beautification`
+maps to a tier per `BEAUTIFICATION_TIERS[tier].stanceThreshold`. **The
+mayor cannot influence this lever**, even via Mayoral Override. The
+elected tier feeds a monthly bill (`Council.beautificationMonthlyCost()`);
+Economy.runMonth deducts it AFTER routine settlement and flips
+`effectiveBeautificationTier` to `'none'` if the projected treasury
+can't cover the bill. The renderer reads `effectiveBeautificationTier`
+in `buildBeautificationMesh` and emits per-corner decoratives on
+developed C/MU tiles (and L3-R/luxury at Grand+). The flair vanishes
+city-wide the moment the tier flips to none — defunding is a visible
+event. When you add a new faction-touching feature, ask if it should
+also influence `beautification` (transit/safer-streets care; drivers
+don't; chamber maxes it).
+
 **Civic actions** layer player-driven influence on top of organic
 happiness. Implemented in `Council.ts`:
 - *Endorse* (5 PC): boosts a faction's vote share, makes them immune
@@ -320,7 +336,30 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
-## Status: Alpha 3.2.4
+## Status: Alpha 4.0 (Architect Mode + Council Beautification Budget)
+
+Major end-game-content drop layered on top of Alpha 3.2.4. Save schema bumped v18 → v20 (back-compat with v19+). Bundle 831 KB raw / 220 KB gzipped.
+
+The headline:
+
+- **Toolbar mode toggle** — leading pinned pill swaps "🏗 Build" (existing roster) ↔ "🎨 Architect" (terraforming + decorative monuments). Pan + Bulldoze stay pinned in both modes. The toggle re-renders the toolbar, tears down popovers cleanly, and resets the active tool to Pan. Lock + ban state survives the swap.
+- **Architect Mode tools**:
+  - **Terra group** (terraforming paint stroke): Tree ($200/tile), Meadow ($400/tile), Pond ($1500/tile), Smooth ($50/tile reset). Refuses developed tiles.
+  - **Plaza group**: Plaza ($5K), Pergola ($6K), Reflecting Pool ($20K), Pier ($3K, water-only with shore neighbour).
+  - **Garden group**: Flower Bed ($2K, cheapest), Topiary ($8K), Memorial Garden ($30K).
+  - **Mon group** (premium end-game): Statue ($15K), Fountain ($25K), Clock Tower ($50K), Triumphal Arch ($75K — most expensive single-tile placement in the game).
+- **Council Beautification Budget** — first lever where the council acts independently of the mayor. Mayor cannot influence; even Mayoral Override has no effect. Each election picks a tier from sum of councillors' `beautification` stances:
+  - **None** ($0/mo) — no flair
+  - **Light** ($500/mo) — corner planters
+  - **Standard** ($2K/mo) — + outdoor café tables
+  - **Grand** ($5K/mo) — + decorative streetlamps + flag banners (also reaches L3 R / luxury)
+  - **Opulent** ($12K/mo) — + public-art pedestals + flower spillover
+  - **Defund-on-shortfall**: if the projected post-settlement treasury can't cover the bill, `effectiveBeautificationTier` drops to 'none' for the month, status toast fires, renderer wipes the streetscape mesh city-wide.
+- **Renderer streetscape flair**. New `buildBeautificationMesh(grid, tier)` walks every developed C/MU tile (and L3-R/luxury at Grand+) and emits per-corner decoratives based on the tier — single merged Mesh, vertex-coloured, flat-shaded. `Renderer.drawBuildings` auto-refreshes via injected `beautificationProvider` so every paint site stays in sync.
+- **`FACTION_STANCES` extended** with 11 new architectural keys + `beautification`. NIMBYs love everything that raises property values; Hometown loves classical pieces; Greenleaf loves gardens / fountains; Chamber maxes beautification budget; Taxpayers HATE everything on principle. Stances flow through existing council cost-mult + ban gate.
+- **Architect tools are milestone-locked** by tier: Town (basics), City (mid water/civic), Metro (fountain / reflecting pool / memorial garden), Capital (clock tower / triumphal arch).
+
+## Status: Alpha 3.2.4 (carryover)
 
 Currently shipped on `main` and live at https://JadenH5231.github.io/mobile-city-builder/.
 

@@ -318,7 +318,25 @@ export type Building =
   // run boats between paired docks; subway entrances are cosmetic
   // people-teleporters that suppress nearby car spawns.
   | 'ferry_dock'
-  | 'subway_entrance';
+  | 'subway_entrance'
+  // Architectural decoratives (Alpha 4.0 — Architect Mode). Each is a
+  // single-tile placeable building with no upkeep simulation hooks; their
+  // job is purely visual + civic prestige. Cheap basics (plaza / garden)
+  // through to monumental end-game sinks (clock tower / triumphal arch).
+  // Many cluster like parks — adjacent Architect tiles of the same kind
+  // are flood-filled in the renderer for richer compositions, but the
+  // building bit lives per-tile so save shape is unchanged.
+  | 'plaza'
+  | 'fountain'
+  | 'statue'
+  | 'flower_bed'
+  | 'topiary'
+  | 'pergola'
+  | 'reflecting_pool'
+  | 'memorial_garden'
+  | 'clock_tower'
+  | 'triumphal_arch'
+  | 'pier';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -350,7 +368,23 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // entrance is the most expensive single-tile build because of the
   // large car-spawn-suppression radius it commands.
   ferry_dock: 4000,
-  subway_entrance: 6000
+  subway_entrance: 6000,
+  // Architectural decoratives (Alpha 4.0). Pricing curve: cheap entry
+  // basics (~$2K), mid-tier civic features ($5–25K), and end-game
+  // monumental sinks ($50K+). These are deliberately the most
+  // expensive single-tile placements in the game — late-game cash
+  // dump for cities sitting on a fat treasury.
+  plaza: 5000,
+  fountain: 25000,
+  statue: 15000,
+  flower_bed: 2000,
+  topiary: 8000,
+  pergola: 6000,
+  reflecting_pool: 20000,
+  memorial_garden: 30000,
+  clock_tower: 50000,
+  triumphal_arch: 75000,
+  pier: 3000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -370,7 +404,22 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   stadium: 500,
   observatory: 250,
   ferry_dock: 250,
-  subway_entrance: 350
+  subway_entrance: 350,
+  // Architectural decoratives (Alpha 4.0) — modest upkeep on the cheap
+  // pieces, real upkeep on the monuments. Net effect: late-game flair
+  // costs ongoing money to keep, so a cash-rich player who built a row
+  // of statues will see a fresh expense line every month forever.
+  plaza: 20,
+  fountain: 80,
+  statue: 40,
+  flower_bed: 10,
+  topiary: 30,
+  pergola: 25,
+  reflecting_pool: 70,
+  memorial_garden: 120,
+  clock_tower: 200,
+  triumphal_arch: 250,
+  pier: 15
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
@@ -555,7 +604,11 @@ export const MILESTONES: readonly Milestone[] = [
       'place_bus_stop', 'place_bus_depot',
       'commercial_high', 'industrial_high', 'mixed_high',
       'place_school', 'place_fire_station', 'place_police_station',
-      'place_museum'
+      'place_museum',
+      // Architect Mode entry tier (Alpha 4.0) — cheap basics so any
+      // Town+ city can plant a tree, pour a flower bed, lay a plaza.
+      'terra_tree', 'terra_meadow', 'terra_smooth',
+      'place_flower_bed', 'place_plaza', 'place_pier'
     ],
     rewardCash: 5000,
     rewardPC: 3,
@@ -571,7 +624,9 @@ export const MILESTONES: readonly Milestone[] = [
       'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
       // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
       // city before they make sense.
-      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper'
+      'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
+      // Architect Mode mid-tier (Alpha 4.0) — water + civic features.
+      'terra_pond', 'place_pergola', 'place_topiary', 'place_statue'
     ],
     rewardCash: 10000,
     rewardPC: 5,
@@ -583,7 +638,12 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Metropolis',
     subtitle: 'Diversifying the tax base',
     popThreshold: 2500,
-    unlocks: ['place_forestry', 'place_farm', 'place_observatory'],
+    unlocks: [
+      'place_forestry', 'place_farm', 'place_observatory',
+      // Architect Mode upper-mid tier (Alpha 4.0) — premium water
+      // features unlock once the city reads as a metropolis.
+      'place_fountain', 'place_reflecting_pool', 'place_memorial_garden'
+    ],
     rewardCash: 20000,
     rewardPC: 8,
     herald: 'working_families',
@@ -594,7 +654,13 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Capital',
     subtitle: 'Region-defining city',
     popThreshold: 5000,
-    unlocks: ['place_subway_entrance'],
+    unlocks: [
+      'place_subway_entrance',
+      // Capital tier monumental architecture (Alpha 4.0) — the most
+      // expensive single-tile placements in the game. Capitals can
+      // build clock towers and triumphal arches; nobody else can.
+      'place_clock_tower', 'place_triumphal_arch'
+    ],
     rewardCash: 50000,
     rewardPC: 15,
     herald: 'taxpayers',
@@ -703,7 +769,30 @@ export type Tool =
   // Land purchase (Alpha 3.1.3). Tap-to-buy a single tile of unowned
   // land. Always available so the player can grow beyond the starter
   // area whenever they have the money.
-  | 'buy_land';
+  | 'buy_land'
+  // ---- Architect Mode (Alpha 4.0) -------------------------------------
+  // Terraforming paint tools — convert a tile's terrain so the player can
+  // sculpt natural features beyond what the procedural generator gave
+  // them. Paint flow (drag-stroke), per-tile cost. None of them touch
+  // road / zone / building state on their own — the tile must be free.
+  | 'terra_tree'        // grass → forest, single tile, cheap
+  | 'terra_meadow'      // grass → sand (warm-coloured wildflower meadow)
+  | 'terra_pond'        // grass → water, premium
+  | 'terra_smooth'      // any decorative terrain → grass, cheap
+  // Architectural decoratives — tap-to-place buildings (PLACE_TOOL_TO_BUILDING).
+  // Tier and price scale up; cheapest is the flower bed, most expensive
+  // is the triumphal arch.
+  | 'place_plaza'
+  | 'place_fountain'
+  | 'place_statue'
+  | 'place_flower_bed'
+  | 'place_topiary'
+  | 'place_pergola'
+  | 'place_reflecting_pool'
+  | 'place_memorial_garden'
+  | 'place_clock_tower'
+  | 'place_triumphal_arch'
+  | 'place_pier';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -748,8 +837,91 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_stadium', 'stadium' as const],
   ['place_observatory', 'observatory' as const],
   ['place_ferry_dock', 'ferry_dock' as const],
-  ['place_subway_entrance', 'subway_entrance' as const]
+  ['place_subway_entrance', 'subway_entrance' as const],
+  // Architect Mode decoratives (Alpha 4.0).
+  ['place_plaza', 'plaza' as const],
+  ['place_fountain', 'fountain' as const],
+  ['place_statue', 'statue' as const],
+  ['place_flower_bed', 'flower_bed' as const],
+  ['place_topiary', 'topiary' as const],
+  ['place_pergola', 'pergola' as const],
+  ['place_reflecting_pool', 'reflecting_pool' as const],
+  ['place_memorial_garden', 'memorial_garden' as const],
+  ['place_clock_tower', 'clock_tower' as const],
+  ['place_triumphal_arch', 'triumphal_arch' as const],
+  ['place_pier', 'pier' as const]
 ]);
+
+/* ---- Architect Mode terraforming costs (Alpha 4.0) -------------------- */
+/** Cost in $ per painted tile for each terraforming tool. Cheap baseline
+ *  basics so any city can sculpt; premium pricing on water (creates new
+ *  shoreline) so cash-rich cities still feel the spend. Smooth-land is
+ *  the cheap reset. */
+export const TERRAFORM_COSTS: Record<
+  'terra_tree' | 'terra_meadow' | 'terra_pond' | 'terra_smooth',
+  number
+> = {
+  terra_tree: 200,
+  terra_meadow: 400,
+  terra_pond: 1500,
+  terra_smooth: 50
+};
+
+/** All architectural decorative buildings (Alpha 4.0). Used by Renderer
+ *  to recognise the "Architect-mode building" class without listing them
+ *  by name in dozens of switch arms. */
+export const ARCHITECTURAL_BUILDINGS: ReadonlySet<Exclude<Building, 'none'>> = new Set([
+  'plaza', 'fountain', 'statue', 'flower_bed', 'topiary',
+  'pergola', 'reflecting_pool', 'memorial_garden',
+  'clock_tower', 'triumphal_arch', 'pier'
+] as const);
+
+/* ---- Beautification Budget (Alpha 4.0 — council-only) ----------------- */
+
+/**
+ * Council Beautification Budget tier — sets the level of automatic
+ * downtown streetscape flair on developed Commercial / Mixed-Use blocks.
+ *
+ * **CRITICAL DESIGN:** the mayor (the player) does NOT set this. Each
+ * elected council picks one tier based on the sum of councillors'
+ * `beautification` stances; mayoral override has no effect on it. This
+ * is the first lever in the game where the council acts independently
+ * of the mayor — explicitly modelling that downtown beautification
+ * spending in real cities is typically a council line item.
+ *
+ * If a month rolls over and the treasury can't pay the bill, the tier
+ * is *defunded* for that month: streetscape flare disappears city-wide
+ * until the next council picks it up again or the player pays.
+ */
+export type BeautificationTier = 'none' | 'light' | 'standard' | 'grand' | 'opulent';
+
+export interface BeautificationTierProps {
+  /** Display label shown in the budget panel. */
+  readonly label: string;
+  /** Monthly $ deducted from treasury. 0 means no spend. */
+  readonly monthlyCost: number;
+  /** Sum-of-councillor-stances threshold: tier picked is the highest one
+   *  whose threshold is ≤ summed stance. */
+  readonly stanceThreshold: number;
+}
+
+/**
+ * Tier table. Stance thresholds are calibrated so a council with mostly
+ * neutral stances on beautification lands at "light", a chamber+
+ * environmentalist majority lands at "standard", and a council where
+ * every seat actively supports flair maxes out at "opulent".
+ */
+export const BEAUTIFICATION_TIERS: Record<BeautificationTier, BeautificationTierProps> = {
+  none:     { label: 'None',     monthlyCost:     0, stanceThreshold: -99 },
+  light:    { label: 'Light',    monthlyCost:   500, stanceThreshold: -1.0 },
+  standard: { label: 'Standard', monthlyCost:  2000, stanceThreshold:  0.5 },
+  grand:    { label: 'Grand',    monthlyCost:  5000, stanceThreshold:  1.8 },
+  opulent:  { label: 'Opulent',  monthlyCost: 12000, stanceThreshold:  3.2 }
+};
+/** Display order — used by the budget panel + UI tooltips. */
+export const BEAUTIFICATION_TIER_ORDER: readonly BeautificationTier[] = [
+  'none', 'light', 'standard', 'grand', 'opulent'
+];
 
 /**
  * Eight directional connections from a tile. Indices double as bits in a

@@ -165,6 +165,34 @@ body {
   pointer-events: auto;
 }
 
+/* Mode-toggle wrapper (Alpha 4.0). The leading pill that swaps between
+   Build and Architect mode. Sits flush left of the pinned cluster with
+   its own subtle separator so the player reads it as the mode switch
+   rather than just another tool. */
+.toolbar__mode {
+  display: flex;
+  flex: 0 0 auto;
+  padding-right: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  margin-right: 2px;
+}
+.toolbar__btn--mode {
+  background: rgba(255, 216, 77, 0.08);
+  color: #ffe98a;
+  font-weight: 600;
+}
+.toolbar__btn--mode[data-mode="architect"] {
+  background: rgba(170, 130, 240, 0.18);
+  color: #d4baff;
+  box-shadow: inset 0 0 0 1px rgba(170, 130, 240, 0.35);
+}
+.toolbar__btn--mode:active {
+  background: rgba(255, 216, 77, 0.18);
+}
+.toolbar__btn--mode[data-mode="architect"]:active {
+  background: rgba(170, 130, 240, 0.30);
+}
+
 /* Pinned section — fixed-width, never scrolls. Holds Pan + Bulldoze. */
 .toolbar__pinned {
   display: flex;
@@ -2329,6 +2357,56 @@ body.photo-mode .photo-op {
   background: rgba(0, 0, 0, 0.30);
   border: 1px solid rgba(207, 232, 214, 0.10);
   border-radius: 12px;
+}
+
+/* Beautification Budget block (Alpha 4.0) — council-controlled,
+   read-only. Lavender accent so it visually reads as "council
+   territory" distinct from the gold-accented bond block. */
+.beautification {
+  margin-top: 14px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(170, 130, 240, 0.20);
+  border-radius: 12px;
+}
+.beautification__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d4baff;
+  margin-bottom: 2px;
+}
+.beautification__sub {
+  font-size: 11px;
+  opacity: 0.65;
+  margin-bottom: 8px;
+}
+.beautification__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.beautification__tier strong {
+  color: #ffe98a;
+  margin-left: 4px;
+}
+.beautification__cost {
+  font-weight: 600;
+  font-size: 13px;
+}
+.beautification__state {
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+.beautification__state--active {
+  color: #9bd0a4;
+  opacity: 1;
+}
+.beautification__state--defunded {
+  color: #ff9e6e;
+  opacity: 1;
+  font-weight: 600;
 }
 
 .bonds__title {

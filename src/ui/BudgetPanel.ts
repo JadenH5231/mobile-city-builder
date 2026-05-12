@@ -1,5 +1,7 @@
 import type { Economy } from '../simulation/Economy';
 import { BOND_SPECS, MAX_ACTIVE_BONDS, type BondId, type Bonds } from '../simulation/Bonds';
+import type { Council } from '../simulation/Council';
+import { BEAUTIFICATION_TIERS } from '../types';
 
 const fmt = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -42,7 +44,7 @@ export class BudgetPanel {
    *  Game.issueBond which credits the principal + adds to active bonds. */
   onIssueBond?: (id: BondId) => void;
 
-  constructor(private readonly economy: Economy, private readonly bonds: Bonds) {
+  constructor(private readonly economy: Economy, private readonly bonds: Bonds, private readonly council?: Council) {
     this.el = mustGet('budget-panel');
     this.closeBtn = mustGet('budget-close');
 
@@ -159,6 +161,43 @@ export class BudgetPanel {
       }
     }
     this.refreshBondsUI();
+    this.refreshBeautificationUI();
+  }
+
+  /**
+   * Council Beautification Budget readout (Alpha 4.0). Read-only —
+   * the council picks the tier each term, the mayor cannot change it.
+   * Surfaces the elected tier, the monthly bill, and a defunded
+   * marker when the bill couldn't clear last month.
+   *
+   * Lives in an optional `#beautification-readout` block so older
+   * builds without the row in index.html still load.
+   */
+  private refreshBeautificationUI(): void {
+    const wrap = document.getElementById('beautification-readout');
+    if (!wrap || !this.council) return;
+    const elected = this.council.beautificationTier;
+    const effective = this.council.effectiveBeautificationTier;
+    const props = BEAUTIFICATION_TIERS[elected];
+    const labelEl = document.getElementById('beautification-label');
+    const costEl = document.getElementById('beautification-cost');
+    const stateEl = document.getElementById('beautification-state');
+    if (labelEl) labelEl.textContent = props.label;
+    if (costEl) costEl.textContent = props.monthlyCost > 0
+      ? `${formatCurrency(props.monthlyCost)}/mo`
+      : '—';
+    if (stateEl) {
+      if (elected === 'none') {
+        stateEl.textContent = 'Council has chosen no streetscape program this term.';
+        stateEl.className = 'beautification__state';
+      } else if (effective === 'none') {
+        stateEl.textContent = 'DEFUNDED — treasury short, streetscape stripped this month.';
+        stateEl.className = 'beautification__state beautification__state--defunded';
+      } else {
+        stateEl.textContent = 'Active — funded by council, mayor has no override.';
+        stateEl.className = 'beautification__state beautification__state--active';
+      }
+    }
   }
 
   private refreshBondsUI(): void {

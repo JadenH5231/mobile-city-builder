@@ -1,6 +1,11 @@
 import type { Happiness, FactionId } from './Happiness';
 import type { Population } from './Population';
-import type { ZoneTier } from '../types';
+import {
+  BEAUTIFICATION_TIERS,
+  BEAUTIFICATION_TIER_ORDER,
+  type BeautificationTier,
+  type ZoneTier
+} from '../types';
 
 /**
  * Council — the governance layer that turns Happiness from "vibes" into
@@ -88,6 +93,28 @@ export interface FactionStances {
    *  drivers stay neutral (their roads aren't taken). */
   ferry_dock: number;
   subway_entrance: number;
+  /** Architect Mode decoratives (Alpha 4.0). Each row mirrors the kind
+   *  of player who'd cheer / object to a given monumental build. NIMBYs
+   *  love anything that raises property values without bringing density;
+   *  Greenleaf loves gardens / fountains / trees; Hometown loves
+   *  classical heritage (statues, clock towers, arches); Chamber loves
+   *  anything that draws shoppers; Taxpayers hate them on principle
+   *  (vanity spending). */
+  plaza: number;
+  fountain: number;
+  statue: number;
+  flower_bed: number;
+  topiary: number;
+  pergola: number;
+  reflecting_pool: number;
+  memorial_garden: number;
+  clock_tower: number;
+  triumphal_arch: number;
+  pier: number;
+  /** Council Beautification Budget stance (Alpha 4.0). Read by the
+   *  council each election to pick a tier — see `Council.electBeautificationTier`.
+   *  Mayor cannot influence; this is a council-only lever. */
+  beautification: number;
 }
 
 export type StanceKey = keyof FactionStances;
@@ -111,7 +138,11 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: -0.2,
     school: 0.3, hospital: 0.4, fire_station: 0.5, police_station: 0.7,
     museum: -0.1, stadium: -0.6, observatory: 0.2,
-    ferry_dock: 0.1, subway_entrance: -0.2
+    ferry_dock: 0.1, subway_entrance: -0.2,
+    plaza: 0.6, fountain: 0.8, statue: 0.5, flower_bed: 0.7, topiary: 0.8,
+    pergola: 0.5, reflecting_pool: 0.6, memorial_garden: 0.7,
+    clock_tower: 0.4, triumphal_arch: 0.3, pier: 0.4,
+    beautification: 0.7
   },
   yimbys: {
     road_local: -0.1, road_avenue: 0.3, road_highway: 0.0,
@@ -126,7 +157,14 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: -0.1,
     school: 0.5, hospital: 0.5, fire_station: 0.3, police_station: 0.0,
     museum: 0.0, stadium: -0.2, observatory: 0.4,
-    ferry_dock: 0.4, subway_entrance: 0.7
+    ferry_dock: 0.4, subway_entrance: 0.7,
+    // Yimbys mildly resent monumental decoratives that occupy buildable
+    // tiles (could've been housing). Plaza / pergola get a pass — they
+    // promote walkability.
+    plaza: 0.4, fountain: -0.1, statue: -0.3, flower_bed: 0.1, topiary: -0.2,
+    pergola: 0.4, reflecting_pool: -0.4, memorial_garden: -0.4,
+    clock_tower: -0.3, triumphal_arch: -0.6, pier: 0.3,
+    beautification: 0.3
   },
   environmentalists: {
     road_local: -0.2, road_avenue: -0.4, road_highway: -0.8,
@@ -141,7 +179,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.4,
     school: 0.4, hospital: 0.5, fire_station: 0.2, police_station: -0.1,
     museum: 0.4, stadium: -0.4, observatory: 0.5,
-    ferry_dock: 0.5, subway_entrance: 0.7
+    ferry_dock: 0.5, subway_entrance: 0.7,
+    // Greenleaf adores anything that adds nature: gardens, water
+    // features, trees-in-architecture. Stone monuments are neutral.
+    plaza: 0.2, fountain: 0.8, statue: 0.0, flower_bed: 1.0, topiary: 0.9,
+    pergola: 0.7, reflecting_pool: 0.7, memorial_garden: 0.8,
+    clock_tower: 0.0, triumphal_arch: -0.2, pier: 0.3,
+    beautification: 0.6
   },
   hometown: {
     road_local: 0.1, road_avenue: -0.3, road_highway: -0.6,
@@ -156,7 +200,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.8,
     school: 0.4, hospital: 0.5, fire_station: 0.7, police_station: 0.6,
     museum: 0.7, stadium: -0.4, observatory: 0.1,
-    ferry_dock: 0.2, subway_entrance: -0.1
+    ferry_dock: 0.2, subway_entrance: -0.1,
+    // Hometown Heritage venerates classical decoratives — statues, clock
+    // towers, arches, memorial gardens are exactly their bag.
+    plaza: 0.5, fountain: 0.6, statue: 0.9, flower_bed: 0.5, topiary: 0.6,
+    pergola: 0.5, reflecting_pool: 0.4, memorial_garden: 0.9,
+    clock_tower: 0.9, triumphal_arch: 0.8, pier: 0.6,
+    beautification: 0.7
   },
   chamber: {
     road_local: 0.1, road_avenue: 0.3, road_highway: 0.4,
@@ -171,7 +221,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.6,
     school: 0.3, hospital: 0.4, fire_station: 0.4, police_station: 0.5,
     museum: 0.5, stadium: 0.8, observatory: 0.3,
-    ferry_dock: 0.3, subway_entrance: 0.4
+    ferry_dock: 0.3, subway_entrance: 0.4,
+    // Chamber loves anything that draws shoppers to downtown.
+    // Streetscape beautification is their #1 issue (they want it MAX).
+    plaza: 0.8, fountain: 0.6, statue: 0.5, flower_bed: 0.4, topiary: 0.4,
+    pergola: 0.5, reflecting_pool: 0.5, memorial_garden: 0.4,
+    clock_tower: 0.7, triumphal_arch: 0.6, pier: 0.7,
+    beautification: 0.9
   },
   transit: {
     road_local: -0.1, road_avenue: 0.3, road_highway: -0.5,
@@ -186,7 +242,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.1,
     school: 0.4, hospital: 0.4, fire_station: 0.3, police_station: 0.1,
     museum: 0.4, stadium: 0.5, observatory: 0.4,
-    ferry_dock: 0.7, subway_entrance: 1.0
+    ferry_dock: 0.7, subway_entrance: 1.0,
+    // Transit loves walkability features (plaza/pergola/pier) — those
+    // make a transit trip feel like a destination, not just transport.
+    plaza: 0.7, fountain: 0.4, statue: 0.2, flower_bed: 0.3, topiary: 0.2,
+    pergola: 0.6, reflecting_pool: 0.3, memorial_garden: 0.3,
+    clock_tower: 0.4, triumphal_arch: 0.1, pier: 0.7,
+    beautification: 0.5
   },
   drivers: {
     road_local: 0.5, road_avenue: 0.8, road_highway: 1.0,
@@ -201,7 +263,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.3,
     school: 0.2, hospital: 0.4, fire_station: 0.5, police_station: 0.6,
     museum: 0.0, stadium: 0.4, observatory: 0.0,
-    ferry_dock: 0.0, subway_entrance: -0.1
+    ferry_dock: 0.0, subway_entrance: -0.1,
+    // Drivers don't care either way about streetscape — but they
+    // dislike pedestrian-only plazas (no parking).
+    plaza: -0.2, fountain: 0.0, statue: 0.0, flower_bed: 0.0, topiary: 0.0,
+    pergola: -0.1, reflecting_pool: 0.0, memorial_garden: 0.0,
+    clock_tower: 0.1, triumphal_arch: 0.1, pier: 0.0,
+    beautification: 0.0
   },
   taxpayers: {
     road_local: -0.2, road_avenue: -0.3, road_highway: -0.5,
@@ -216,7 +284,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.4,
     school: 0.1, hospital: -0.1, fire_station: 0.3, police_station: 0.3,
     museum: 0.2, stadium: 0.0, observatory: -0.1,
-    ferry_dock: -0.1, subway_entrance: -0.3
+    ferry_dock: -0.1, subway_entrance: -0.3,
+    // Taxpayers Alliance HATES vanity spending on principle.
+    // Beautification is the policy lever they're most opposed to.
+    plaza: -0.5, fountain: -0.7, statue: -0.6, flower_bed: -0.3, topiary: -0.5,
+    pergola: -0.4, reflecting_pool: -0.7, memorial_garden: -0.6,
+    clock_tower: -0.7, triumphal_arch: -0.9, pier: -0.3,
+    beautification: -0.9
   },
   safer_streets: {
     road_local: 0.1, road_avenue: 0.0, road_highway: -0.4,
@@ -231,7 +305,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.2,
     school: 0.6, hospital: 0.7, fire_station: 0.9, police_station: 0.7,
     museum: 0.4, stadium: -0.1, observatory: 0.3,
-    ferry_dock: 0.4, subway_entrance: 0.6
+    ferry_dock: 0.4, subway_entrance: 0.6,
+    // Safer Streets: more eyes-on-the-street = safer. Plazas and
+    // gardens activate the public realm; supports beautification.
+    plaza: 0.7, fountain: 0.4, statue: 0.3, flower_bed: 0.5, topiary: 0.3,
+    pergola: 0.5, reflecting_pool: 0.3, memorial_garden: 0.4,
+    clock_tower: 0.4, triumphal_arch: 0.2, pier: 0.4,
+    beautification: 0.5
   },
   working_families: {
     road_local: 0.1, road_avenue: 0.2, road_highway: 0.1,
@@ -246,7 +326,13 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     farm: 0.7,
     school: 0.8, hospital: 0.8, fire_station: 0.5, police_station: 0.4,
     museum: 0.5, stadium: 0.6, observatory: 0.3,
-    ferry_dock: 0.3, subway_entrance: 0.6
+    ferry_dock: 0.3, subway_entrance: 0.6,
+    // Working Families resent monuments-vs-housing trade-off but DO
+    // value local plazas, flower beds, free public spaces.
+    plaza: 0.5, fountain: 0.2, statue: -0.2, flower_bed: 0.4, topiary: 0.0,
+    pergola: 0.2, reflecting_pool: -0.3, memorial_garden: -0.1,
+    clock_tower: -0.2, triumphal_arch: -0.5, pier: 0.5,
+    beautification: 0.2
   }
 };
 
@@ -388,6 +474,31 @@ export class Council {
   private overrideTerm = -1;
 
   /**
+   * Beautification Budget tier (Alpha 4.0) — chosen by the council each
+   * term. **Mayor cannot override.** This is the first lever in the
+   * game where the council acts independently of the mayor and even
+   * Mayoral Override cannot touch it (the override only affects cost
+   * multipliers + zoning approval, both of which are mayor-vs-council
+   * gating; this lever is council-vs-treasury and the mayor was never
+   * a party to it).
+   *
+   * Defaults to 'none' for term 0 (pre-election starter cities).
+   * Re-elected each term in `electBeautificationTier`.
+   */
+  beautificationTier: BeautificationTier = 'none';
+  /**
+   * Effective beautification tier for the current month. Equal to
+   * `beautificationTier` when the bill is paid, drops to 'none' if the
+   * monthly settlement could not afford the cost. Read by the renderer
+   * to decide whether to draw streetscape flair. Set by Economy each
+   * monthly tick.
+   */
+  effectiveBeautificationTier: BeautificationTier = 'none';
+  /** True for one frame after the budget defunded — Game pumps a status
+   *  toast so the player knows the streetscape just changed. */
+  beautificationJustDefunded = false;
+
+  /**
    * Run an election if it's due (every 12 months on the boundary). Returns
    * the new ElectionResult if one fired, else null.
    */
@@ -447,6 +558,12 @@ export class Council {
     this.term++;
     this.councillors = councillors;
     this.opponent = opponentId;
+    // Council picks its beautification budget for the new term (Alpha 4.0).
+    // Mayor has no say. Effective tier is conservatively initialised to
+    // the elected tier; if the next monthly settlement can't afford it,
+    // Economy will demote it to 'none'.
+    this.electBeautificationTier();
+    this.effectiveBeautificationTier = this.beautificationTier;
 
     // Civic actions consumed at election: endorsement, coalition, photo-ops.
     this.endorsedFaction = null;
@@ -615,5 +732,50 @@ export class Council {
   /** Clear the pending result (called by UI after the popup is dismissed). */
   acknowledgeResult(): void {
     this.pendingResult = null;
+  }
+
+  /**
+   * Council Beautification Budget — pick a tier based on the sum of
+   * sitting councillors' `beautification` stances (Alpha 4.0).
+   *
+   * Sum is in [-N, +N] where N = councillor count. Walking
+   * `BEAUTIFICATION_TIER_ORDER` highest-first picks the most expensive
+   * tier whose `stanceThreshold` is met. With no council seated yet
+   * (term 0), defaults to 'none'.
+   *
+   * **Mayor has no input.** This is intentional — the lever exists to
+   * showcase that the council can act independently of the mayor's
+   * priorities. A mayor who wants more (or less) flair has to influence
+   * who sits on council via Endorse / Coalition / photo-op campaigns.
+   */
+  private electBeautificationTier(): void {
+    if (this.councillors.length === 0) {
+      this.beautificationTier = 'none';
+      return;
+    }
+    let sum = 0;
+    for (const id of this.councillors) sum += FACTION_STANCES[id].beautification;
+    let picked: BeautificationTier = 'none';
+    for (const tier of BEAUTIFICATION_TIER_ORDER) {
+      if (sum >= BEAUTIFICATION_TIERS[tier].stanceThreshold) picked = tier;
+    }
+    this.beautificationTier = picked;
+  }
+
+  /** Monthly cost of the elected beautification tier in $. Settled by
+   *  Economy.runMonth — if the treasury can't afford it, the effective
+   *  tier drops to 'none' for that month. */
+  beautificationMonthlyCost(): number {
+    return BEAUTIFICATION_TIERS[this.beautificationTier].monthlyCost;
+  }
+
+  /**
+   * Restore beautification state from a save snapshot. Called by
+   * SaveGame.applySave so a reload doesn't lose the elected tier
+   * mid-term. Defaults preserve back-compat with pre-4.0 saves.
+   */
+  restoreBeautification(elected?: BeautificationTier, effective?: BeautificationTier): void {
+    if (elected) this.beautificationTier = elected;
+    if (effective) this.effectiveBeautificationTier = effective;
   }
 }

@@ -24,6 +24,7 @@ import type { Events } from './Events';
 import type { Bonds } from './Bonds';
 import type { Crime } from './Crime';
 import type { Districts } from './Districts';
+import type { Council } from './Council';
 
 /** Real-time milliseconds per simulated month. ~3 months/min on a stable tab. */
 const MONTH_MS = 20_000;
@@ -114,6 +115,11 @@ export class Economy {
   /** Last month's surtax revenue (Alpha 2.18) — high-density / luxury
    *  tax bracket layered on top of base R/C rates. */
   lastSurtaxRevenue = 0;
+  /** Last completed month's beautification budget paid out (Alpha 4.0).
+   *  Council-elected line item; equals 0 when the bill defunded
+   *  (treasury was short). Surfaced in BudgetPanel as a read-only
+   *  council-controlled line. */
+  lastBeautificationCost = 0;
   /** Player-set wealth surtax (Alpha 2.18). 0..30 (%) added on top of the
    *  base R/C rate for L3 R, L3 C, and luxury R tiles. Drives a small
    *  faction effect: taxpayers love surtax revenue, chamber hates it. */
@@ -129,11 +135,11 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts): void {
+  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts, council?: Council): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds, crime, districts);
+      this.runMonth(grid, population, market, events, bonds, crime, districts, council);
     }
   }
 
@@ -149,7 +155,7 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts): void {
+  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts, council?: Council): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -296,6 +302,31 @@ export class Economy {
       SERVICES_BASE_PER_RESIDENT +
       (population.totalResidents / 1000) * SERVICES_GROWTH_PER_1K;
     expenses += population.totalResidents * ratePerResident;
+
+    // Council Beautification Budget (Alpha 4.0) — deducted BEFORE bond
+    // debt service so the cheaper recurring expense settles first.
+    // Council elects a tier each term (mayor cannot influence). If the
+    // post-revenue/expenses treasury can't afford the bill, the bill
+    // is *defunded* for this month: 0 paid, effective tier drops to
+    // 'none' (renderer reads it and stops drawing flair city-wide).
+    // Council relinks effective tier to elected at the next election or
+    // any month where the bill clears.
+    let beautCost = 0;
+    if (council) {
+      const billed = council.beautificationMonthlyCost();
+      const projectedTreasury = this.treasury + (revenue - expenses);
+      if (billed > 0 && projectedTreasury >= billed) {
+        beautCost = billed;
+        council.effectiveBeautificationTier = council.beautificationTier;
+        council.beautificationJustDefunded = false;
+      } else {
+        const wasFunded = council.effectiveBeautificationTier !== 'none';
+        council.effectiveBeautificationTier = 'none';
+        council.beautificationJustDefunded = wasFunded && billed > 0;
+      }
+    }
+    this.lastBeautificationCost = beautCost;
+    expenses += beautCost;
 
     // Bond debt service (Alpha 2.18): runs AFTER routine revenue and
     // expenses settle, so a bond payment can pull the treasury into the

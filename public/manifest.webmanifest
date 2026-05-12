@@ -1,0 +1,26 @@
+{
+  "name": "Greenmeadow — City Builder",
+  "short_name": "Greenmeadow",
+  "description": "Premium mobile-first low-poly 3D city builder. No microtransactions, no timers — just a city to grow.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a2722",
+  "theme_color": "#1a2722",
+  "categories": ["games", "simulation", "casual"],
+  "icons": [
+    {
+      "src": "./mansion-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./mansion-icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

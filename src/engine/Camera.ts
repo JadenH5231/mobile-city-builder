@@ -24,7 +24,10 @@ export class Camera {
 
   readonly three = new OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
 
-  private readonly yaw = Math.PI / 4; // 45° → looks NE/SW
+  /** Yaw is mutable as of Alpha 4.7. Starts at 45° (NE/SW iso view);
+   *  `rotateBy90` increments by ±90° steps, snapped to the four
+   *  cardinal iso angles so the player can see behind tall buildings. */
+  private yaw = Math.PI / 4;
   private readonly pitch = (35 * Math.PI) / 180; // 35° down from horizontal
   private readonly camDistance = 200;
 
@@ -114,6 +117,27 @@ export class Camera {
     this.target.x += before.x - after.x;
     this.target.z += before.z - after.z;
     this.update();
+  }
+
+  /**
+   * Rotate the camera by 90° around its target (Alpha 4.7). Direction
+   * is `+1` for clockwise, `-1` for counter-clockwise. The view always
+   * snaps to one of the four cardinal iso angles (NE / SE / SW / NW)
+   * so the chunky low-poly aesthetic stays clean — no in-between
+   * rotation. `panBy` and `screenToWorld` already use the camera's
+   * derived right/forward vectors, so they keep working after rotation
+   * with no other changes.
+   */
+  rotateBy90(direction: 1 | -1 = 1): void {
+    const step = (Math.PI / 2) * direction;
+    // Normalise to [0, 2π) so the modulo stays clean across many rotations.
+    this.yaw = ((this.yaw + step) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    this.update();
+  }
+
+  /** Current yaw in radians — read for debug / save / status. */
+  getYaw(): number {
+    return this.yaw;
   }
 
   /** Screen pixel → ground-plane world point. Returns null if no hit. */

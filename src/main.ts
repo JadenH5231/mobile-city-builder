@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { Game } from './engine/Game';
 import { MAP_SIZES } from './types';
 import { formatCurrency } from './ui/BudgetPanel';
@@ -644,6 +645,14 @@ function applyTrend(el: HTMLElement | null, dir: -1 | 0 | 1): void {
   else el.classList.add('trend--flat');
 }
 
+// Camera rotation pill (Alpha 4.7). Tap rotates the orthographic
+// camera 90° clockwise around its target, snapping to the four
+// cardinal iso angles. Lets the player see behind tall buildings.
+const rotateBtn = document.getElementById('hud-rotate');
+if (rotateBtn) {
+  rotateBtn.addEventListener('click', () => game.camera.rotateBy90(1));
+}
+
 // Time-of-day pill click handler (Alpha 4.6). Toggles between morning
 // (timeOfDay = 0.25, ~7am — early sun) and peak night (timeOfDay =
 // 0.00, midnight). The day/night cycle continues forward from
@@ -655,6 +664,20 @@ if (timeEl) {
     const cur = game.timeOfDay;
     const isNight = cur < 0.15 || cur >= 0.85;
     game.timeOfDay = isNight ? 0.25 : 0.0;
+  });
+}
+
+// Service worker registration (Alpha 4.7). Enables PWA install +
+// offline play once the player has loaded the game once. Only
+// registers on production builds (Vite sets `import.meta.env.PROD`)
+// so dev / HMR sessions don't get a stale cached shell.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      // SW registration failure is non-fatal — the game still works,
+      // it just won't be installable / offline-capable.
+      console.warn('Service worker registration failed:', err);
+    });
   });
 }
 

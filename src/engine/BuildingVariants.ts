@@ -2899,6 +2899,13 @@ export function buildMayorMansionParts(ax: number, ay: number): VariantPart[] {
 
   // ===== ORNAMENTAL TREES in the back corners (behind wings) =====
   for (const tx of [-1.75, 1.75]) {
+    // Shadow disc (Alpha 4.4) — slim dark-green octagonal pad under
+    // the tree at the estate-pad surface. Matches the Alpha 2.6 polish
+    // for forest tiles; extends shadow treatment to every tree-shaped
+    // emission in the game.
+    const shadow = new CylinderGeometry(0.34, 0.30, 0.005, 8);
+    shadow.translate(cx + tx + 0.04, 0.030, mz - 0.27);
+    out.push({ geom: shadow, color: 0x2a3a22 });
     const trunk = new CylinderGeometry(0.05, 0.06, 0.30, 6);
     trunk.translate(cx + tx, 0.18, mz - 0.30);
     out.push({ geom: trunk, color: MM_TREE_TRUNK });

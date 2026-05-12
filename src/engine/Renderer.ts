@@ -222,10 +222,17 @@ export class Renderer {
     // along the cabin's flanks.
     const winRect = new BoxGeometry(0.10, 0.05, 0.005);
     winRect.translate(0, 0.10 + 0.035, -0.02 + 0.09);
+    // Side windows (Alpha 4.4.1 fix) — cabin body spans y=0.07 to
+    // y=0.14. Pre-fix these were centred at y=0.14 (cabin's TOP) so
+    // their top edge sat at y=0.1625 — ~22mm above the roof, read as
+    // floating slabs hovering over the car. Re-centre at y=0.115 so
+    // the glass sits inside the cabin face (top y=0.1375, bottom
+    // y=0.0925) with a slim ~5mm of cabin showing above like a real
+    // car's roofline.
     const sideWinL = new BoxGeometry(0.005, 0.045, 0.14);
-    sideWinL.translate(-0.080, 0.105 + 0.035, -0.02);
+    sideWinL.translate(-0.080, 0.115, -0.02);
     const sideWinR = new BoxGeometry(0.005, 0.045, 0.14);
-    sideWinR.translate(0.080, 0.105 + 0.035, -0.02);
+    sideWinR.translate(0.080, 0.115, -0.02);
     const carWindowsGeom = mergeGeoms([winRect, sideWinL, sideWinR], [0xffffff, 0xffffff, 0xffffff]);
     const carWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
     this.carWindowsMesh = new InstancedMesh(carWindowsGeom, carWindowsMat, MAX_VEHICLES);

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { Game } from './engine/Game';
+import { Settings, bindSettingsPanel, DIFFICULTY_EFFECTS } from './ui/SettingsPanel';
 import { MAP_SIZES } from './types';
 import { formatCurrency } from './ui/BudgetPanel';
 import './styles.css';
@@ -29,8 +30,31 @@ const activeSlot = (() => {
   try { return localStorage.getItem(ACTIVE_SLOT_KEY) || 'main'; } catch { return 'main'; }
 })();
 
+// Settings (Alpha 4.8) — load BEFORE game init so the CSS side effects
+// (UI scale, palette) apply during render, and so the default sim
+// speed is known. Difficulty applies on city reset / fresh slot.
+const settings = new Settings();
+settings.load();
+
 const game = new Game();
 await game.init(appEl, MAP_SIZES.small, activeSlot);
+
+// If the just-loaded slot was empty (treasury still at the default
+// pre-load Economy seed of $15K) and a non-Normal difficulty was
+// picked in settings, seed the treasury to the difficulty's starting
+// value. Skips when an existing save was restored (the restore wrote
+// the saved treasury and that's what we want to preserve).
+if (game.economy.monthsElapsed === 0 && settings.data.difficulty !== 'normal') {
+  game.economy.treasury = DIFFICULTY_EFFECTS[settings.data.difficulty].startingTreasury;
+}
+
+// Apply default sim speed preference (only if not paused before — we
+// don't override the player's explicit pause state from a restore).
+if (game.simSpeed === 1 && settings.data.defaultSimSpeed !== 1) {
+  game.simSpeed = settings.data.defaultSimSpeed;
+}
+// Reduce motion (Alpha 4.8) — slows the day/night sun arc.
+game.reduceMotion = settings.data.reduceMotion;
 
 // Active-tool cost preview pill (Alpha 4.5). Game updates it via
 // refreshToolCostPill whenever the active tool, the treasury, or
@@ -498,6 +522,28 @@ if (photoBtn) {
     renderPhoto();
   });
 }
+
+// Settings panel entry (Alpha 4.8). Opens the modal in `index.html`
+// with difficulty, audio, display, simulation tabs.
+const settingsPanel = bindSettingsPanel(settings, {
+  onShowTutorial: () => {
+    // Re-trigger the existing tutorial flow. The tutorial DOM lives in
+    // index.html under `#tutorial`; the close button hides it. Showing
+    // it is just un-hiding.
+    const tut = document.getElementById('tutorial');
+    if (tut) {
+      tut.classList.remove('hidden');
+      tut.setAttribute('aria-hidden', 'false');
+    }
+  },
+  onResetAll: () => {
+    // After resetting settings to defaults, the CSS side effects have
+    // already been applied by Settings.applyCssSideEffects. We don't
+    // touch the game's sim state — defaults only affects future cities.
+  }
+});
+const settingsBtn = document.getElementById('hud-settings');
+if (settingsBtn) settingsBtn.addEventListener('click', () => settingsPanel.show());
 
 // Reset button uses an inline two-tap confirmation rather than confirm().
 // Reason: iOS Safari standalone mode (page added to home screen via the

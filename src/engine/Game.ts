@@ -243,6 +243,11 @@ export class Game {
    * toggle owned by main.ts.
    */
   photoMode = false;
+  /** Reduce-motion preference (Alpha 4.8). When true, the day/night
+   *  sun arc slows to 10% of normal speed so the ambient sky doesn't
+   *  pulse for motion-sensitive players. Set by main.ts from the
+   *  Settings panel's checkbox. */
+  reduceMotion = false;
 
   private host!: HTMLElement;
 
@@ -1113,8 +1118,11 @@ export class Game {
       for (const cb of this.tickCallbacks) cb(dt);
       // Day/night advance (Alpha 2.14). Sim-speed multiplies so fast-
       // forwarding the city also speeds up the sun. Paused = sun freeze.
+      // Reduce-motion (Alpha 4.8) slows the cycle 10× so the sky doesn't
+      // pulse for players who prefer less ambient motion.
       if (this.simSpeed > 0) {
-        const dayDelta = (dt / Game.DAY_SECONDS) * this.simSpeed;
+        const motionMult = this.reduceMotion ? 0.1 : 1;
+        const dayDelta = (dt / Game.DAY_SECONDS) * this.simSpeed * motionMult;
         this.timeOfDay = (this.timeOfDay + dayDelta) % 1;
       }
       this.renderer.applyTimeOfDay(this.timeOfDay);

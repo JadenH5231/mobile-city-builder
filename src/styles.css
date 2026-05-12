@@ -3074,6 +3074,192 @@ body.photo-mode .photo-op {
   }
 }
 
+/* ---------- Settings panel (Alpha 4.8) ---------- *
+ * Slide-up modal opened from the More popover. Sections: difficulty
+ * picker, audio sliders (inert for now — placeholder until B1 sound
+ * lands), display options (UI scale, colourblind palette, reduce
+ * motion), simulation defaults. All persisted to localStorage via the
+ * Settings class.
+ */
+.settings__group {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(207, 232, 214, 0.10);
+  border-radius: 12px;
+}
+.settings__group-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffe98a;
+  margin-bottom: 4px;
+}
+.settings__group-sub {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.settings__diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.settings__diff {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(207, 232, 214, 0.15);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--pill-fg);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.settings__diff:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.settings__diff[aria-pressed="true"] {
+  background: rgba(255, 216, 77, 0.18);
+  border-color: rgba(255, 216, 77, 0.55);
+  color: #ffe98a;
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.35);
+}
+.settings__diff-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.settings__diff-sub {
+  font-size: 10.5px;
+  opacity: 0.70;
+}
+.settings__slider {
+  margin: 8px 0;
+}
+.settings__slider label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.settings__slider input[type="range"] {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+}
+.settings__slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #ffe98a;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.settings__slider input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #ffe98a;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+.settings__field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.settings__field label {
+  flex: 1;
+}
+.settings__select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(207, 232, 214, 0.15);
+  color: var(--pill-fg);
+  border-radius: 8px;
+  padding: 6px 26px 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23ffe98a' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.settings__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+.settings__check input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(207, 232, 214, 0.25);
+  position: relative;
+  cursor: pointer;
+}
+.settings__check input[type="checkbox"]:checked {
+  background: #ffe98a;
+  border-color: #ffe98a;
+}
+.settings__check input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  color: #1a2722;
+  font-size: 13px;
+  font-weight: 700;
+}
+.settings__button {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(207, 232, 214, 0.15);
+  color: var(--pill-fg);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 100%;
+  margin-top: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 140ms ease;
+}
+.settings__button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.settings__button--danger {
+  color: #ff9e9e;
+  border-color: rgba(216, 69, 69, 0.40);
+}
+.settings__button--danger:hover {
+  background: rgba(216, 69, 69, 0.18);
+}
+
+/* UI-scale (Alpha 4.8) — applied to <html> by the Settings class. */
+html.ui-scale-small  { font-size: 90%; }
+html.ui-scale-large  { font-size: 115%; }
+html.ui-scale-xlarge { font-size: 130%; }
+
+/* Reduce-motion (Alpha 4.8) — when checked, the day/night sun arc
+   slows to a crawl (Game reads this flag). */
+
 /* ---------- HUD trend arrows (Alpha 4.6) ---------- *
  * Small ↑/↓/→ glyph appended to the Pop and Treasury pills,
  * indicating the trend over the last 3 months (vs the sample from

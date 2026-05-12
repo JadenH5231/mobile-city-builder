@@ -336,6 +336,23 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.3 (Service buildings rotate toward the road)
+
+Finishes the curb-appeal pass started in commits `313b61e` (ground accents on every zoned tile) and `252c770` (zoned buildings face the road). The seven asymmetric-front service kinds — **school, hospital, fire_station, police_station, museum, bus_stop, bus_depot** — now also rotate so their front face (clock tower, red cross, bay doors, porch, colonnade, bench/canopy, garage door) points toward the nearest adjacent road tile. Each rotated service tile also gets a short paved walkway connecting its front to the road, matching the flagstone palette used for zoned-tile walkways.
+
+Implementation: `SERVICE_BUILDING_ROTATES` set + `buildServiceWalkway()` helper, both in `src/engine/Renderer.ts`. The rotation hook in `buildCityBuildingsMesh` reuses the same `computeRoadFacingYaw()` helper from commit 252c770 (zoned-tile rotation), rotates each part's geometry AND its (dx, dz) offset around the tile centre so the whole composition turns as a rigid body.
+
+Deliberately excluded from rotation:
+- `park` — symmetric (lawn + path + benches all around)
+- `power_plant` / `water_tower` — symmetric cylinders + boxes
+- `stadium` — oval, no front face
+- `observatory` — dome on a pad, symmetric
+- `ferry_dock` / `subway_entrance` — orientation is driven by the water shoreline / sidewalk side they're placed against, not by the nearest road tile
+
+When adding a new service building: if it has an asymmetric front face, add it to `SERVICE_BUILDING_ROTATES` and have `cityBuildingParts` emit its geometry with the front on the +Z side (yaw=0 = "facing south"). The rotation hook handles the rest.
+
+**Trap to avoid:** `buildServiceWalkway` returns empty when no road is 4-adjacent. Don't draw a walkway leading to grass when a service tile is dropped mid-block.
+
 ## Status: Alpha 4.2.2 (Mansion glitch fix + Mayoral Override extends to Beautification)
 
 Two targeted fixes on top of 4.2.1:

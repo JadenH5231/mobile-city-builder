@@ -4,6 +4,13 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.3 — Service buildings rotate toward the road** — the final piece of the curb-appeal pass that started with commits `313b61e` (ground accents on zoned tiles) and `252c770` (zoned buildings face the road). Now school, hospital, fire station, police station, museum, bus stop, and bus depot also rotate so their asymmetric front faces (clock tower, red-cross sign, bay doors, porch, colonnade, bench/canopy, garage) point toward the nearest adjacent road tile. Each rotated service tile also gets a short paved walkway connecting its front to the road, matching the flagstone palette used for the zoned-tile walkways.
+  - **New `SERVICE_BUILDING_ROTATES: Set<string>`** in Renderer.ts — the seven asymmetric-front service kinds. Symmetric kinds (park, power, water, stadium, observatory, ferry, subway) are deliberately excluded — they look the same from any angle, and ferry/subway have their own orientation logic driven by the water/sidewalk side they're placed against.
+  - **`buildCityBuildingsMesh` rotation hook** — at the generic-cityBuildingParts dispatch, the renderer now calls `computeRoadFacingYaw(grid, x, y)` for tiles in `SERVICE_BUILDING_ROTATES`, then rotates each part's geometry by yaw AND rotates the (dx, dz) offset around the tile centre so the whole composition turns as one rigid body. Reuses the same `computeRoadFacingYaw` helper shipped in 252c770 for zoned buildings.
+  - **`buildServiceWalkway(grid, x, y, kind)`** — emits a short paved strip (0.16 wide × 0.36 long, flagstone colour) from the body's front edge toward the centre of the adjacent road tile. Returns an empty array when the tile has no adjacent road (handoff trap: service tiles dropped mid-block on a park lot shouldn't get a path leading to grass).
+  - **Verified visually** in the dev preview with a synthetic test: a + of 5 road tiles at (32, 32) with school / hospital / fire / police placed at each of the 4 cardinal arms. Each service building rotated correctly to face its road and emitted its walkway.
+  - **No save schema bump, no faction-stance changes, no new Tools.** Bundle 854 KB raw / 226 KB gzipped (~5 KB raw added).
+
 - **Alpha 4.2.2 — Mansion glitch fix + Mayoral Override extends to Beautification** — two targeted fixes.
   - **Mansion top "weird black box" bug.** Two issues compounded:
     1. The wing-chimney cap had a typo — `chimney.translate(...)` instead of `chimneyCap.translate(...)` — so the chimney got translated TWICE (once to the base position, then again by the cap delta), and the cap stayed at world origin (0, 0, 0) which rendered as a stray dark box at the corner of the map. Fixed.

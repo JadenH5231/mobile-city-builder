@@ -59,11 +59,13 @@
            (~midnight) so the player can switch the lighting on demand. -->
       <button id="hud-time" type="button" class="pill mono action" aria-label="Toggle time of day">☀ Day</button>
       <div id="hud-fps" class="pill mono">— fps</div>
-      <!-- Active-tool cost preview (Alpha 4.5). Shown only when a paid
-           tool is selected — gives the player a clear cost number
-           before tapping, including the council multiplier. -->
-      <div id="hud-tool-cost" class="pill mono tool-cost hidden" aria-live="polite"></div>
     </div>
+    <!-- Active-tool cost preview (Alpha 4.5). Shown only when a paid
+         tool is selected — gives the player a clear cost number
+         before tapping, including the council multiplier. Lives
+         OUTSIDE #hud so toggling its visibility (Alpha 4.10.1) doesn't
+         reflow the wrapping HUD pill row. -->
+    <div id="hud-tool-cost" class="pill mono tool-cost hidden" aria-live="polite"></div>
     <!-- Popover lives at body level so it can render above the HUD without
          being clipped by anything. Hidden by default; toggled by hud-more. -->
     <div id="hud-more-popover" class="hud-more-popover hidden" role="menu" aria-hidden="true">
@@ -121,6 +123,10 @@
       <div class="info-panel__title">Settings</div>
       <div class="info-panel__sub">Persists across reloads in this browser.</div>
 
+      <!-- Scrollable settings body (Alpha 4.10.1). info-panel--tall caps the
+           outer panel at 100vh - 120px with overflow:hidden, so the actual
+           scroll has to happen on this inner wrapper. -->
+      <div class="settings__scroll">
       <div class="settings__group">
         <div class="settings__group-title">Difficulty (new cities only)</div>
         <div class="settings__group-sub">Applied when you reset a city or start an empty slot. Current cities keep their difficulty.</div>
@@ -205,6 +211,25 @@
         <button id="setting-show-tutorial" type="button" class="settings__button">Show tutorial again</button>
         <button id="setting-reset-all" type="button" class="settings__button settings__button--danger">Reset all settings to defaults</button>
       </div>
+
+      <!-- Cheats (Alpha 4.10.1; moved from budget panel). Enabling either
+           cheat disables achievements for the rest of this session.
+           Existing unlocks stay, but no new ones are awarded. -->
+      <div class="settings__group settings__group--cheats">
+        <div class="settings__group-title">Playtest cheats</div>
+        <div class="settings__group-sub">Enabling any cheat freezes achievements (existing unlocks keep; new ones won't fire).</div>
+        <label class="settings__check">
+          <input id="setting-cheat-unlimited-money" type="checkbox">
+          <span>Unlimited money</span>
+        </label>
+        <label class="settings__check">
+          <input id="setting-cheat-unlimited-demand" type="checkbox">
+          <span>Unlimited demand</span>
+        </label>
+        <div id="setting-cheats-active" class="settings__cheats-active hidden">⚠ Achievements paused while cheats are on.</div>
+      </div>
+
+      </div><!-- /.settings__scroll -->
     </section>
     <section
       id="tile-info"
@@ -332,18 +357,6 @@
         </div>
         <div id="beautification-state" class="beautification__state">Council has chosen no streetscape program this term.</div>
         <div id="beautification-picker" class="beautification__picker hidden"></div>
-      </div>
-
-      <div class="budget__cheats">
-        <div class="budget__cheats-title">Playtest cheats</div>
-        <label class="budget__cheat-toggle">
-          <input id="cheat-unlimited-money" type="checkbox">
-          <span>Unlimited money</span>
-        </label>
-        <label class="budget__cheat-toggle">
-          <input id="cheat-unlimited-demand" type="checkbox">
-          <span>Unlimited demand</span>
-        </label>
       </div>
 
       <button id="budget-reset" type="button" class="budget__reset">Reset city</button>

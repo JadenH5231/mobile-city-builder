@@ -73,21 +73,32 @@ if (cityNameInput) {
   });
 }
 
-// Playtest cheats (Alpha 3.2.4) — checkboxes in the budget panel.
-const cheatMoneyEl = document.getElementById('cheat-unlimited-money') as HTMLInputElement | null;
-const cheatDemandEl = document.getElementById('cheat-unlimited-demand') as HTMLInputElement | null;
+// Playtest cheats (Alpha 3.2.4; moved to Settings in Alpha 4.10.1).
+// When either cheat is enabled, Achievements stops awarding new unlocks
+// for the rest of the session. Existing unlocks are kept.
+const cheatMoneyEl = document.getElementById('setting-cheat-unlimited-money') as HTMLInputElement | null;
+const cheatDemandEl = document.getElementById('setting-cheat-unlimited-demand') as HTMLInputElement | null;
+const cheatsActiveEl = document.getElementById('setting-cheats-active');
+const refreshCheatsActiveLabel = (): void => {
+  const active = game.cheatUnlimitedMoney || game.cheatUnlimitedDemand;
+  game.achievements.cheatsActive = active;
+  if (cheatsActiveEl) cheatsActiveEl.classList.toggle('hidden', !active);
+};
 if (cheatMoneyEl) {
   cheatMoneyEl.checked = game.cheatUnlimitedMoney;
   cheatMoneyEl.addEventListener('change', () => {
     game.cheatUnlimitedMoney = cheatMoneyEl.checked;
+    refreshCheatsActiveLabel();
   });
 }
 if (cheatDemandEl) {
   cheatDemandEl.checked = game.cheatUnlimitedDemand;
   cheatDemandEl.addEventListener('change', () => {
     game.cheatUnlimitedDemand = cheatDemandEl.checked;
+    refreshCheatsActiveLabel();
   });
 }
+refreshCheatsActiveLabel();
 
 // Slot picker — accessible via the 🏙 HUD pill. Picking a different slot
 // writes to localStorage and reloads so the chosen slot's save is the

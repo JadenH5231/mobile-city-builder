@@ -424,6 +424,12 @@ export class Achievements {
   /** Pending toast queue — main.ts pulls + clears one per frame. */
   private readonly pending: Achievement[] = [];
 
+  /** Cheat-mode kill switch (Alpha 4.10.1). When true, evaluateMonth
+   *  bails before unlocking and record* methods become no-ops so the
+   *  player can't farm achievements via unlimited money / demand.
+   *  Existing unlocks stay; only new unlocks + counter bumps freeze. */
+  cheatsActive = false;
+
   /**
    * Run once per monthly tick. Updates streak counters, snapshots state,
    * runs every achievement check that hasn't yet unlocked.
@@ -447,6 +453,11 @@ export class Achievements {
     /** Optional Crime — current city-wide score for Safe Streets. */
     cityCrime?: number;
   }): boolean {
+    // Cheat-mode kill switch (Alpha 4.10.1). Skip the entire monthly
+    // evaluation so streak counters + peak-pop/peak-treasury don't get
+    // bumped past honest values either. Without this you could enable
+    // unlimited money for one month and unlock "Mogul" for free.
+    if (this.cheatsActive) return false;
     const { economy, population, happiness, grid } = args;
 
     // Streak math first. monthsRun is the per-city absolute count; we let it
@@ -571,27 +582,32 @@ export class Achievements {
 
   /** Bump on each completed election. Drives Re-elected / Career Politician. */
   recordElection(): void {
+    if (this.cheatsActive) return;
     this.electionsWon++;
   }
 
   /** Bump on each event resolved (resolveChoice or auto-resolve). */
   recordEventResolved(): void {
+    if (this.cheatsActive) return;
     this.eventsResolved++;
   }
 
   /** Track a civic action's PC spend. Drives the (currently invisible)
    *  pcSpentLifetime counter. */
   recordPCSpent(amount: number): void {
+    if (this.cheatsActive) return;
     this.pcSpentLifetime += amount;
   }
 
   /** Bump on every endorsement and remember the faction (Big Tent). */
   recordEndorsement(id: FactionId): void {
+    if (this.cheatsActive) return;
     this.endorsementsLifetime++;
     this.uniqueFactionsEndorsed.add(id);
   }
 
   recordOverrideActivation(): void {
+    if (this.cheatsActive) return;
     this.overrideActivations++;
   }
 

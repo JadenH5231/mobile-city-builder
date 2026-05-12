@@ -60,6 +60,31 @@ body {
   gap: 8px;
 }
 
+/* Stable widths on the variable-content pills (Alpha 4.10.1).
+ * Without these the HUD pill row visibly jumps as Pop / Treasury
+ * digits grow, the time pill swaps icons + words, and the trend
+ * arrows flip — distracting on every render tick. */
+#hud-pop-label {
+  display: inline-block;
+  min-width: 8ch;   /* fits "Pop · 99,999" */
+  text-align: left;
+}
+#hud-treasury-label {
+  display: inline-block;
+  min-width: 9ch;   /* fits "$9,999,999" */
+  text-align: left;
+}
+#hud-time {
+  min-width: 86px;
+  text-align: center;
+}
+#hud-pop-trend,
+#hud-treasury-trend {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+}
+
 /* Push the FPS readout to the far-right of its row so the long stack
  * of action pills stays compactly left-aligned. Once the HUD wraps,
  * FPS becomes the lone right-pinned chip on its row. */
@@ -3311,6 +3336,20 @@ body.photo-mode .tutorial-banner {
  * motion), simulation defaults. All persisted to localStorage via the
  * Settings class.
  */
+/* Scrollable settings body (Alpha 4.10.1). The outer .info-panel--tall
+ * has overflow:hidden + display:flex column, so the inner scroll has
+ * to flex-grow with min-height:0 (otherwise child content forces the
+ * flex item to stretch, defeating the cap). */
+.settings__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Some bottom padding so the last button isn't flush against the
+   * scroll boundary on a phone with a tall safe-area. */
+  padding-bottom: 8px;
+}
+
 .settings__group {
   margin-top: 16px;
   padding: 12px;
@@ -3318,6 +3357,20 @@ body.photo-mode .tutorial-banner {
   border: 1px solid rgba(207, 232, 214, 0.10);
   border-radius: 12px;
 }
+
+/* Cheats section in Settings (Alpha 4.10.1). Tinted dashed border so
+ * it reads as "off-the-record / developer mode" the same way the old
+ * budget cheats block did. */
+.settings__group--cheats {
+  background: rgba(76, 152, 88, 0.10);
+  border: 1px dashed rgba(102, 192, 122, 0.45);
+}
+.settings__cheats-active {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #ffd166;
+}
+.settings__cheats-active.hidden { display: none; }
 .settings__group-title {
   font-size: 12px;
   font-weight: 700;
@@ -3518,13 +3571,24 @@ html.ui-scale-xlarge { font-size: 130%; }
  * Gold-tinted to match the toolbar's "active tool" highlight; flips
  * to red when the council has banned the action.
  */
-.pill.tool-cost {
+/* Tool-cost pill (Alpha 4.5; relocated 4.10.1). Pinned just above the
+ * toolbar so it doesn't reflow the wrapping HUD row when it toggles
+ * visibility. */
+#hud-tool-cost.pill.tool-cost {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 72px);
+  transform: translateX(-50%);
+  z-index: 14;
   background: rgba(255, 216, 77, 0.16);
   color: #ffe98a;
   box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.35);
   font-weight: 600;
   letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: nowrap;
 }
+#hud-tool-cost.hidden { display: none; }
 .pill.tool-cost.banned {
   background: rgba(216, 69, 69, 0.18);
   color: #ff9e9e;
@@ -3536,61 +3600,8 @@ html.ui-scale-xlarge { font-size: 130%; }
   box-shadow: inset 0 0 0 1px rgba(216, 134, 69, 0.40);
 }
 
-/* ---------- Cheats (Alpha 3.2.4) ---------- */
-
-.budget__cheats {
-  margin-top: 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(76, 152, 88, 0.10);
-  border: 1px dashed rgba(102, 192, 122, 0.45);
-}
-
-.budget__cheats-title {
-  font-size: 11px;
-  font-family: var(--mono-font, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.10em;
-  color: rgba(216, 255, 226, 0.85);
-  margin-bottom: 6px;
-}
-
-.budget__cheat-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 12px;
-  color: var(--pill-fg);
-  cursor: pointer;
-}
-
-.budget__cheat-toggle input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.30);
-  border: 1px solid rgba(207, 232, 214, 0.40);
-  position: relative;
-  cursor: pointer;
-}
-
-.budget__cheat-toggle input[type="checkbox"]:checked {
-  background: rgba(76, 152, 88, 0.65);
-  border-color: rgba(102, 192, 122, 0.85);
-}
-
-.budget__cheat-toggle input[type="checkbox"]:checked::after {
-  content: '✓';
-  position: absolute;
-  top: -1px;
-  left: 2px;
-  font-size: 13px;
-  color: #fff;
-  line-height: 1;
-}
+/* (Old .budget__cheats* rules removed in Alpha 4.10.1 — cheats moved
+ * to the Settings modal and reuse the .settings__check checkbox style.) */
 
 /* ---- Narrow-viewport toolbar (Alpha 4.1) ----------------------------- *
  * Portrait phones (≤ 480px wide) — tighter pills, icon-only labels in

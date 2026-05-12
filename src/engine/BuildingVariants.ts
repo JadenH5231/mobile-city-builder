@@ -2467,7 +2467,7 @@ export function buildMayorMansionParts(ax: number, ay: number): VariantPart[] {
       chimney.translate(cx + wingX + chx, 0.06 + wingH + 0.03 + 0.18, mansionBackZ - 0.10);
       out.push({ geom: chimney, color: MM_LIMESTONE_DARK });
       const chimneyCap = new BoxGeometry(0.09, 0.025, 0.09);
-      chimney.translate(cx + wingX + chx, 0.06 + wingH + 0.03 + 0.255, mansionBackZ - 0.10);
+      chimneyCap.translate(cx + wingX + chx, 0.06 + wingH + 0.03 + 0.255, mansionBackZ - 0.10);
       out.push({ geom: chimneyCap, color: MM_ROOF_GABLE });
     }
     // Wing windows — 3 per story × 2 stories = 6 windows per wing.
@@ -2549,21 +2549,47 @@ export function buildMayorMansionParts(ax: number, ay: number): VariantPart[] {
     out.push({ geom: post, color: MM_LIMESTONE });
   }
   // ===== PEDIMENT (triangular gable above the entrance, on the front) =====
-  // Three slabs forming a triangle silhouette.
-  // Base of pediment (a flat horizontal slab).
+  // Classical pediment built from 4 pieces:
+  //   1. Horizontal entablature base (the architrave below the gable)
+  //   2. Tympanum — flat triangular wall behind the gable, holds the
+  //      gold escutcheon. Sits slightly recessed so the slopes cast a
+  //      subtle shadow on it.
+  //   3-4. Two angled slabs forming the triangular roof silhouette.
+  // Pre-4.2.2 used a rotated 3-segment cone for the gable which produced
+  // a wedge artifact protruding behind the central block ("weird black
+  // box at the top"). The 4-piece composition is both cleaner visually
+  // and structurally honest — the gable + tympanum + base read as a
+  // proper Beaux-Arts pediment.
+  const pedY = 0.06 + centralH * 0.85;       // base of the pediment
+  const pedZ = mansionBackZ + mansionDepth / 2 + 0.05;
+  // 1. Base entablature.
   const pedBase = new BoxGeometry(0.85, 0.04, 0.07);
-  pedBase.translate(cx, 0.06 + centralH * 0.85, mansionBackZ + mansionDepth / 2 + 0.10);
+  pedBase.translate(cx, pedY, pedZ + 0.05);
   out.push({ geom: pedBase, color: MM_LIMESTONE_DEEP });
-  // Triangular pediment fascia — a cone with 3 segments creates a triangle
-  // when oriented correctly.
-  const pediment = new ConeGeometry(0.50, 0.20, 3);
-  pediment.rotateX(Math.PI / 2);
-  pediment.rotateZ(Math.PI / 6); // align flat side down
-  pediment.translate(cx, 0.06 + centralH * 0.85 + 0.10, mansionBackZ + mansionDepth / 2 + 0.10);
-  out.push({ geom: pediment, color: MM_ROOF_GABLE });
-  // Gold escutcheon in the centre of the pediment.
+  // 2. Tympanum (triangular wall behind the gable). Uses a 4-segment
+  //    cone scaled thin in Z so it reads as a triangular slab from the
+  //    front face. No rotation drama — the cone's natural apex-up
+  //    orientation IS the pediment shape.
+  const tympanum = new ConeGeometry(0.42, 0.20, 4);
+  tympanum.rotateY(Math.PI / 4);   // align flat face to front
+  tympanum.scale(1.0, 1.0, 0.18);  // squash in Z so it's a thin slab
+  tympanum.translate(cx, pedY + 0.10, pedZ);
+  out.push({ geom: tympanum, color: MM_LIMESTONE_DEEP });
+  // 3-4. Two angled roof slabs forming the gable apex, in the darker
+  //      slate-gable colour so the silhouette reads.
+  const slopeLen = Math.hypot(0.40, 0.20);
+  const slopeAngle = Math.atan2(0.20, 0.40);
+  const leftSlope = new BoxGeometry(slopeLen, 0.04, 0.09);
+  leftSlope.rotateZ(slopeAngle);
+  leftSlope.translate(cx - 0.20, pedY + 0.10, pedZ + 0.005);
+  out.push({ geom: leftSlope, color: MM_ROOF_GABLE });
+  const rightSlope = new BoxGeometry(slopeLen, 0.04, 0.09);
+  rightSlope.rotateZ(-slopeAngle);
+  rightSlope.translate(cx + 0.20, pedY + 0.10, pedZ + 0.005);
+  out.push({ geom: rightSlope, color: MM_ROOF_GABLE });
+  // Gold escutcheon in the centre of the tympanum.
   const escutcheon = new BoxGeometry(0.10, 0.07, 0.022);
-  escutcheon.translate(cx, 0.06 + centralH * 0.85 + 0.07, mansionBackZ + mansionDepth / 2 + 0.115);
+  escutcheon.translate(cx, pedY + 0.10, pedZ + 0.07);
   out.push({ geom: escutcheon, color: MM_GOLD_TRIM });
 
   // ===== PORTICO COLUMNS (6 columns supporting the pediment) =====

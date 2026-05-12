@@ -2274,9 +2274,11 @@ function addArchitecturalLights(
       }
       // Grand door — warm doorway light.
       addWin(mcx, 0.06 + 0.22, frontFace, 0.18, 0.40, 'X', AMBER);
-      // Pediment escutcheon — gold relief plaque glow.
+      // Pediment escutcheon — gold relief plaque glow. Matches the
+      // 4.2.2 cleaned-up pediment geometry: pedY = 0.06 + 1.10*0.85,
+      // pedZ = mansionBackZ + 0.65/2 + 0.05; escutcheon at +0.10/+0.07.
       const escutcheon = new BoxGeometry(0.10, 0.07, 0.022);
-      escutcheon.translate(mcx, 0.06 + 1.10 * 0.85 + 0.07, mansionBackZ + mansionDepth / 2 + 0.116);
+      escutcheon.translate(mcx, 0.06 + 1.10 * 0.85 + 0.10, mansionBackZ + mansionDepth / 2 + 0.05 + 0.07);
       pushLit(escutcheon, GOLD);
       // Dome glow — entire dome reads luminous (soft uplighting).
       const dome = new ConeGeometry(0.20, 0.30, 16);

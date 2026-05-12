@@ -4,6 +4,19 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.8 — Settings menu + Difficulty selector** — two production-readiness items from the audit (B1 + B2). The first dedicated settings surface in the game beyond the cheat toggles in the budget panel.
+  - **New `Settings` class** (`src/ui/SettingsPanel.ts`) + `bindSettingsPanel(settings, hooks)` factory. Owns a SettingsData dict persisted to `localStorage` under key `mq-city-settings`. Fields: difficulty, volumeMaster, volumeMusic, volumeSfx, uiScale, palette, reduceMotion, defaultSimSpeed, confirmReset. `load()` reads + applies CSS side effects (UI scale class on `<html>`, palette class on `<body>`).
+  - **Settings modal** in the More-menu popover via new `⚙ Settings` pill. Sections: difficulty (4-card picker), audio (3 inert sliders ready for the future sound system), display (UI scale select, colourblind palette select, reduce-motion checkbox), simulation (default sim speed select, confirm-reset checkbox, "Show tutorial again" button, "Reset all settings" button).
+  - **`DIFFICULTY_EFFECTS` table** — single source of truth for downstream systems:
+    - Easy: $30K start, demand +15%, events ×0.5
+    - Normal: $15K, defaults, ×1
+    - Hard: $8K, demand −10%, events ×1.5
+    - Sandbox: $1M, demand +30%, events ×0 (no random events)
+  - **Difficulty applies to NEW cities only.** Mid-game changes don't retroactively resize treasury. main.ts seeds `game.economy.treasury` to the difficulty's starting value when `game.economy.monthsElapsed === 0` (fresh slot / just-reset).
+  - **Reduce-motion (Alpha 4.8)** — when checked, the day/night sun arc slows to 10% of normal speed. Implemented via new `Game.reduceMotion` field consulted in the time-of-day advance.
+  - **Default sim speed preference** — main.ts reads `settings.data.defaultSimSpeed` at boot and applies if not 1.
+  - **No save schema bump** (settings live in `localStorage`, not the IndexedDB save). **No faction-stance changes, no new Tools.** Bundle 867 KB raw / 230 KB gzipped (~4 KB raw added).
+
 - **Alpha 4.7 — Camera rotation + PWA install with Mayor's Mansion icon** — two production-readiness items from the audit (B6 + B8).
   - **90° camera rotation.** `Camera.yaw` is no longer `readonly` — new `Camera.rotateBy90(direction)` snaps the orthographic camera through the four cardinal iso angles (45° → 135° → 225° → 315°). `panBy` and `screenToWorld` already derive their right/forward vectors from the camera's matrix so they keep working after rotation with no other changes. New `↻` pill in the HUD strip (between Speed and More) — tap to rotate clockwise. Lets the player see behind tall buildings / mansions.
   - **PWA install with Mayor's Mansion icon.** Three new files in `public/`:

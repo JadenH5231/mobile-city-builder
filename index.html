@@ -386,44 +386,48 @@
       </div>
       <div id="happiness-list" class="happiness__list"></div>
     </section>
+    <!-- Tutorial entry prompt (Alpha 4.10). Shown once on a fresh install
+         right after the game initializes; offers the player a guided
+         playthrough or skips straight to free play. -->
     <div
-      id="tutorial"
-      class="tutorial hidden"
+      id="tutorial-prompt"
+      class="tutorial-prompt hidden"
       role="dialog"
-      aria-label="Welcome to Greenmeadow"
+      aria-label="Start tutorial?"
       aria-hidden="true"
     >
-      <div class="tutorial__sheet">
-        <div class="tutorial__title">Welcome to Greenmeadow</div>
-        <div class="tutorial__step" data-step="1">
-          <div class="tutorial__step-num">1 / 4</div>
-          <div class="tutorial__body">
-            <strong>Roads first.</strong> Pick the Roads tool from the bottom bar and drag to paint. Diagonals work — try a curve.
-          </div>
+      <div class="tutorial-prompt__sheet">
+        <div class="tutorial-prompt__title">Welcome to Greenmeadow</div>
+        <div class="tutorial-prompt__body">
+          New to city builders? Take a quick guided playthrough — you'll
+          build a real city while we point out one thing at a time.
+          You can skip at any moment.
         </div>
-        <div class="tutorial__step hidden" data-step="2">
-          <div class="tutorial__step-num">2 / 4</div>
-          <div class="tutorial__body">
-            <strong>Zone next to a road.</strong> Pick R / C / I and drag-paint on grass touching a road. Buildings sprout over a few seconds.
-          </div>
+        <div class="tutorial-prompt__actions">
+          <button id="tutorial-prompt-skip" type="button" class="tutorial-prompt__skip">No thanks</button>
+          <button id="tutorial-prompt-start" type="button" class="tutorial-prompt__cta">Start tutorial</button>
         </div>
-        <div class="tutorial__step hidden" data-step="3">
-          <div class="tutorial__step-num">3 / 4</div>
-          <div class="tutorial__body">
-            <strong>Drop services.</strong> Power, Water, and a Park within reach unlock high-density. The treasury pill opens taxes + reset.
-          </div>
-        </div>
-        <div class="tutorial__step hidden" data-step="4">
-          <div class="tutorial__step-num">4 / 4</div>
-          <div class="tutorial__body">
-            <strong>Watch the city react.</strong> Tap the Pop pill to read what your factions are saying. Yearly elections decide who sits on your council and what they'll let you build.
-          </div>
-        </div>
-        <div class="tutorial__actions">
-          <button id="tutorial-skip" type="button" class="tutorial__skip">Skip</button>
-          <button id="tutorial-prev" type="button" class="tutorial__nav" disabled>Back</button>
-          <button id="tutorial-next" type="button" class="tutorial__cta">Next</button>
-        </div>
+      </div>
+    </div>
+    <!-- Tutorial banner (Alpha 4.10). Persistent top-center pill that
+         shows the current objective. Updates as the player satisfies
+         each step. -->
+    <div
+      id="tutorial-banner"
+      class="tutorial-banner hidden"
+      role="status"
+      aria-live="polite"
+      aria-hidden="true"
+    >
+      <div class="tutorial-banner__progress">
+        <span id="tutorial-banner-step">Step 1 of 9</span>
+      </div>
+      <div class="tutorial-banner__title" id="tutorial-banner-title"></div>
+      <div class="tutorial-banner__hint" id="tutorial-banner-hint"></div>
+      <div class="tutorial-banner__actions">
+        <button id="tutorial-banner-skip" type="button" class="tutorial-banner__skip">Skip tutorial</button>
+        <button id="tutorial-banner-advance" type="button" class="tutorial-banner__advance">Already did this</button>
+        <button id="tutorial-banner-done" type="button" class="tutorial-banner__done hidden">Got it</button>
       </div>
     </div>
     <div id="bulldoze-toast" class="toast hidden" role="status" aria-live="polite">

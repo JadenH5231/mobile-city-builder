@@ -967,119 +967,178 @@ body.photo-mode .photo-op {
   background: rgba(255, 216, 77, 0.06);
 }
 
-/* ---- Tutorial overlay ----------------------------------------------- */
+/* ---- Tutorial — Welcome prompt (Alpha 4.10) ------------------------- */
+/* First-launch modal asking the player whether to take the guided
+   playthrough. Center-anchored so it can't be confused with the
+   bottom-sheet panels. */
 
-.tutorial {
+.tutorial-prompt {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
-  z-index: 110;
+  z-index: 130;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   padding: 16px;
   pointer-events: auto;
 }
 
-.tutorial.hidden {
+.tutorial-prompt.hidden {
   display: none;
 }
 
-.tutorial__sheet {
+.tutorial-prompt__sheet {
   background: var(--pill-bg);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--pill-border);
   border-radius: 18px;
-  padding: 18px 18px 14px;
-  max-width: 520px;
+  padding: 22px 22px 18px;
+  max-width: 440px;
   width: 100%;
-  margin-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
-.tutorial__title {
-  font-size: 16px;
+.tutorial-prompt__title {
+  font-size: 18px;
   font-weight: 700;
   color: #fff;
   margin-bottom: 12px;
 }
 
-.tutorial__step {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 12px;
-  margin-bottom: 12px;
-}
-
-.tutorial__step.hidden {
-  display: none;
-}
-
-.tutorial__step-num {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(207, 232, 214, 0.55);
-}
-
-.tutorial__body {
-  font-size: 13px;
-  line-height: 1.4;
+.tutorial-prompt__body {
+  font-size: 14px;
+  line-height: 1.45;
   color: var(--pill-fg);
+  margin-bottom: 18px;
 }
 
-.tutorial__body strong {
-  color: #fff;
-}
-
-.tutorial__actions {
+.tutorial-prompt__actions {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
-.tutorial__skip {
+.tutorial-prompt__skip {
   appearance: none;
   background: transparent;
   border: 1px solid var(--pill-border);
-  color: rgba(207, 232, 214, 0.7);
-  font-size: 12px;
-  padding: 8px 12px;
+  color: rgba(207, 232, 214, 0.75);
+  font-size: 13px;
+  padding: 10px 14px;
   border-radius: 999px;
   cursor: pointer;
 }
 
-.tutorial__nav {
+.tutorial-prompt__cta {
   appearance: none;
+  background: rgba(255, 216, 77, 0.18);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.45);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* ---- Tutorial — Live banner (Alpha 4.10) ---------------------------- */
+/* Persistent top-center pill that surfaces the current objective.
+   Updates automatically as the player satisfies each step's predicate.
+   Stays out of the way of the HUD pills above it and the toolbar below. */
+
+.tutorial-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 64px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 105;
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 216, 77, 0.45);
+  border-radius: 16px;
+  padding: 10px 14px 12px;
+  max-width: min(92vw, 460px);
+  width: max-content;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  text-align: left;
+}
+
+.tutorial-banner.hidden {
+  display: none;
+}
+
+.tutorial-banner__progress {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffe98a;
+  margin-bottom: 4px;
+}
+
+.tutorial-banner__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+  line-height: 1.25;
+}
+
+.tutorial-banner__hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--pill-fg);
+  margin-bottom: 10px;
+}
+
+.tutorial-banner__actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tutorial-banner__skip,
+.tutorial-banner__advance,
+.tutorial-banner__done {
+  appearance: none;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tutorial-banner__skip {
+  background: transparent;
+  border: 1px solid var(--pill-border);
+  color: rgba(207, 232, 214, 0.65);
+}
+
+.tutorial-banner__advance {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--pill-border);
   color: var(--pill-fg);
-  font-size: 12px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  cursor: pointer;
   margin-left: auto;
 }
 
-.tutorial__nav:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.tutorial-banner__done {
+  background: rgba(255, 216, 77, 0.18);
+  border: 1px solid rgba(255, 216, 77, 0.45);
+  color: #ffe98a;
+  font-weight: 600;
+  margin-left: auto;
 }
 
-.tutorial__cta {
-  appearance: none;
-  background: rgba(255, 216, 77, 0.16);
-  color: #ffe98a;
-  border: 1px solid rgba(255, 216, 77, 0.4);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 999px;
-  cursor: pointer;
+.tutorial-banner__done.hidden {
+  display: none;
+}
+
+/* Photo-mode hides the banner alongside other HUD chrome. */
+body.photo-mode .tutorial-banner {
+  display: none;
 }
 
 /* ---- Generic toast (bulldoze count, etc.) --------------------------- */

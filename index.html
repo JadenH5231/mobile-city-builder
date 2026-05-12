@@ -38,6 +38,10 @@
            Keeps the primary HUD focused on Pop / RCI / Treasury / Undo / Speed. -->
       <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">More</button>
       <div id="hud-fps" class="pill mono">— fps</div>
+      <!-- Active-tool cost preview (Alpha 4.5). Shown only when a paid
+           tool is selected — gives the player a clear cost number
+           before tapping, including the council multiplier. -->
+      <div id="hud-tool-cost" class="pill mono tool-cost hidden" aria-live="polite"></div>
     </div>
     <!-- Popover lives at body level so it can render above the HUD without
          being clipped by anything. Hidden by default; toggled by hud-more. -->

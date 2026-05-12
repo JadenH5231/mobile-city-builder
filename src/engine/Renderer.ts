@@ -1748,6 +1748,76 @@ function buildLampGlowMesh(grid: Grid, texture: import('three').Texture): Mesh |
       const baseY = SIDEWALK_LIFT + t.elevation + 0.01;
       lamps.push({ cx, cz, y: baseY, r: 1.50 });
     }
+    // Architectural decoratives (Alpha 4.2.1) — soft halo glow under
+    // each plaza / fountain / statue / monument so the showpieces
+    // properly read as lit at night, not just dim icons. Halo radius
+    // scales with build importance (mansion > arch > clock > fountain).
+    const baseY = SIDEWALK_LIFT + t.elevation + 0.01;
+    switch (t.building) {
+      case 'plaza':
+        // Soft warm glow filling the entire plaza pad.
+        lamps.push({ cx, cz, y: baseY, r: 1.40 });
+        break;
+      case 'fountain':
+        // Bright central halo + slightly-larger outer wash.
+        lamps.push({ cx, cz, y: baseY, r: 1.60 });
+        break;
+      case 'statue':
+        // Dramatic statue uplighting — narrower but intense halo.
+        lamps.push({ cx, cz, y: baseY, r: 1.20 });
+        break;
+      case 'flower_bed':
+        // Subtle accent on the planter row.
+        lamps.push({ cx, cz, y: baseY, r: 0.90 });
+        break;
+      case 'topiary':
+        lamps.push({ cx, cz, y: baseY, r: 1.20 });
+        break;
+      case 'pergola':
+        // String-light pool under the pergola.
+        lamps.push({ cx, cz, y: baseY, r: 1.40 });
+        break;
+      case 'reflecting_pool':
+        // Long pool of moonlight along the water.
+        lamps.push({ cx, cz, y: baseY, r: 1.50 });
+        break;
+      case 'memorial_garden':
+        // Grand civic monument floodlight effect.
+        lamps.push({ cx, cz, y: baseY, r: 1.80 });
+        break;
+      case 'clock_tower':
+        // Beacon glow from the lit clock face + cupola.
+        lamps.push({ cx, cz, y: baseY, r: 1.70 });
+        break;
+      case 'triumphal_arch':
+        // Big floodlight halo befitting the most expensive single-tile
+        // monument in the game.
+        lamps.push({ cx, cz, y: baseY, r: 2.00 });
+        break;
+      case 'pier':
+        // End-of-pier accent.
+        lamps.push({ cx, cz: cz + 0.30, y: baseY, r: 0.90 });
+        break;
+      case 'mayor_mansion': {
+        // Multiple halos across the 4×2 footprint so the entire estate
+        // glows. Anchor is at (t.x, t.y); cover both rows + both
+        // outer sides + the centre.
+        const ax = t.x;
+        const ay = t.y;
+        const mcx = ax + 2;
+        const fcz = ay + 1;
+        const mz = fcz - 0.5;
+        // Mansion-row halos (one per ~2 tiles wide section).
+        lamps.push({ cx: mcx - 1.30, cz: mz, y: baseY, r: 1.60 });
+        lamps.push({ cx: mcx,        cz: mz, y: baseY, r: 2.20 });  // grand central halo
+        lamps.push({ cx: mcx + 1.30, cz: mz, y: baseY, r: 1.60 });
+        // Front-row grounds halos (parterre + driveway + pools).
+        lamps.push({ cx: mcx - 1.65, cz: fcz + 0.5, y: baseY, r: 1.40 });
+        lamps.push({ cx: mcx,        cz: fcz + 0.5, y: baseY, r: 1.80 });  // fountain-drive area
+        lamps.push({ cx: mcx + 1.65, cz: fcz + 0.5, y: baseY, r: 1.40 });
+        break;
+      }
+    }
   }
   if (lamps.length === 0) return null;
 
@@ -1929,6 +1999,33 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
         }
       }
     }
+    // Architectural decoratives (Alpha 4.2.1) — every plaza / fountain /
+    // statue / clock-tower / monument that is touchable from the
+    // Architect Mode menu gets a unique lit overlay so the late-game
+    // city becomes a luminous showpiece at night. Each case emits its
+    // own pattern. We piggyback on the same addWindow quad helper
+    // (cheap, vertex-coloured, MeshBasicMaterial) and a new pushLit
+    // helper for non-quad lights (spheres, cylinders, accent rings)
+    // declared just below.
+    addArchitecturalLights(t, addWindow, (geom, hex) => {
+      const r2 = ((hex >> 16) & 0xff) / 255;
+      const g2 = ((hex >> 8) & 0xff) / 255;
+      const b2 = (hex & 0xff) / 255;
+      const p = geom.getAttribute('position');
+      const idx = geom.getIndex();
+      const baseV = v;
+      for (let i = 0; i < p.count; i++) {
+        positions.push(p.getX(i), p.getY(i), p.getZ(i));
+        colours.push(r2, g2, b2);
+      }
+      if (idx) {
+        for (let i = 0; i < idx.count; i++) indices.push(baseV + idx.getX(i));
+      } else {
+        for (let i = 0; i < p.count; i++) indices.push(baseV + i);
+      }
+      v += p.count;
+      geom.dispose();
+    });
   }
 
   if (positions.length === 0) return null;
@@ -1945,6 +2042,274 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
   const mesh = new Mesh(geom, mat);
   mesh.visible = false;
   return mesh;
+}
+
+/**
+ * Per-architectural-building lit overlay (Alpha 4.2.1). Each plaza /
+ * fountain / statue / clock-tower / arch / mansion gets a tailored
+ * set of glowing accents that fade in at night. Reuses the lit-windows
+ * mesh's MeshBasicMaterial pipeline so opacity ramps with the
+ * day/night cycle without any extra material work.
+ *
+ * `addWin` paints a flat lit quad on a vertical face (unchanged from
+ * the C/MU window pipeline). `pushLit` accepts arbitrary BufferGeometry
+ * and pushes its vertices into the lit-mesh stream — used for spheres,
+ * cylinders, and other 3D accents that read as "light fixtures glowing
+ * in the dark" rather than "windows on a face".
+ *
+ * Colours: a warm amber (0xffe8a0) for table lamps + bollards + door
+ * lights; a soft white (0xfff8e0) for window glass; a gold (0xfff0a0)
+ * for monument finials + escutcheons; a cool dusk blue (0xa0d0f0) for
+ * water surfaces + reflecting pools (reads as moonlight bouncing).
+ */
+function addArchitecturalLights(
+  t: import('../world/Tile').Tile,
+  addWin: (x: number, y: number, z: number, w: number, h: number, dir: 'X' | 'Z', hex: number) => void,
+  pushLit: (geom: BufferGeometry, hex: number) => void
+): void {
+  const cx = t.x + 0.5;
+  const cz = t.y + 0.5;
+  const AMBER = 0xffe8a0;
+  const WARM_WHITE = 0xfff8e0;
+  const GOLD = 0xfff0a0;
+  const DUSK_WATER = 0xa0d0f0;
+  const PALE_TEAL = 0xb0e0d0;
+
+  switch (t.building) {
+    case 'plaza': {
+      // Lit bollard tops at the four lot corners + glow on top of the
+      // central planter so the plaza reads as occupied at night.
+      for (const [dx, dz] of [[-0.36, -0.36], [0.36, -0.36], [-0.36, 0.36], [0.36, 0.36]] as Array<[number, number]>) {
+        const bulb = new IcosahedronGeometry(0.040, 1);
+        bulb.translate(cx + dx, 0.20, cz + dz);
+        pushLit(bulb, AMBER);
+      }
+      // Soft glow ring on the central planter (reads as accent uplighting).
+      const planterGlow = new BoxGeometry(0.32, 0.020, 0.32);
+      planterGlow.translate(cx, 0.18, cz);
+      pushLit(planterGlow, WARM_WHITE);
+      break;
+    }
+    case 'fountain': {
+      // Glowing crown sphere + glowing central column (the column reads
+      // as a lit shaft at night) + glowing water surface.
+      const crown = new IcosahedronGeometry(0.085, 1);
+      crown.translate(cx, 0.72, cz);
+      pushLit(crown, GOLD);
+      // Central column glow — slightly larger than the column itself so
+      // it reads as the column emitting light.
+      const colGlow = new CylinderGeometry(0.075, 0.075, 0.40, 8);
+      colGlow.translate(cx, 0.32, cz);
+      pushLit(colGlow, WARM_WHITE);
+      // Water disc inside the basin — soft blue glow as if uplit.
+      const waterGlow = new CylinderGeometry(0.32, 0.32, 0.020, 16);
+      waterGlow.translate(cx, 0.155, cz);
+      pushLit(waterGlow, DUSK_WATER);
+      break;
+    }
+    case 'statue': {
+      // Bronze figure backlit by a low ring of uplighting around the
+      // plinth + a halo glow above the head.
+      const ring = new CylinderGeometry(0.18, 0.18, 0.014, 12);
+      ring.translate(cx, 0.025, cz);
+      pushLit(ring, WARM_WHITE);
+      // Subtle head glow (the bronze head catches the uplight).
+      const headHalo = new IcosahedronGeometry(0.06, 1);
+      headHalo.translate(cx, 0.86, cz);
+      pushLit(headHalo, AMBER);
+      break;
+    }
+    case 'flower_bed': {
+      // Tiny accent dots on the dot-flowers so the bed reads as
+      // luminous wildflowers at night.
+      for (const [dx, dz] of [[-0.28, -0.06], [-0.10, 0.06], [0.08, -0.06], [0.26, 0.06]] as Array<[number, number]>) {
+        const accent = new IcosahedronGeometry(0.025, 1);
+        accent.translate(cx + dx, 0.13, cz + dz);
+        pushLit(accent, GOLD);
+      }
+      break;
+    }
+    case 'topiary': {
+      // Glowing tops on the four corner topiary cones.
+      for (const [dx, dz] of [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]] as Array<[number, number]>) {
+        const top = new IcosahedronGeometry(0.030, 1);
+        top.translate(cx + dx, 0.24, cz + dz);
+        pushLit(top, AMBER);
+      }
+      // Centre topiary ball glow.
+      const centre = new IcosahedronGeometry(0.045, 1);
+      centre.translate(cx, 0.24, cz);
+      pushLit(centre, WARM_WHITE);
+      break;
+    }
+    case 'pergola': {
+      // String-light effect: 5 bulbs hanging under the cross-beams +
+      // bulb at each of the 4 corner posts.
+      for (const [dx, dz] of [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]] as Array<[number, number]>) {
+        const post = new IcosahedronGeometry(0.040, 1);
+        post.translate(cx + dx, 0.50, cz + dz);
+        pushLit(post, AMBER);
+      }
+      for (const dx of [-0.32, -0.16, 0.0, 0.16, 0.32]) {
+        const string = new IcosahedronGeometry(0.030, 1);
+        string.translate(cx + dx, 0.46, cz);
+        pushLit(string, GOLD);
+      }
+      break;
+    }
+    case 'reflecting_pool': {
+      // Long glowing strip along the centre of the water — reads as
+      // moonlight catching the still surface.
+      const surface = new BoxGeometry(0.70, 0.018, 0.06);
+      surface.translate(cx, 0.07, cz);
+      pushLit(surface, DUSK_WATER);
+      // Four corner bollard caps glow.
+      for (const [dx, dz] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]] as Array<[number, number]>) {
+        const cap = new IcosahedronGeometry(0.030, 1);
+        cap.translate(cx + dx, 0.13, cz + dz);
+        pushLit(cap, AMBER);
+      }
+      break;
+    }
+    case 'memorial_garden': {
+      // Spotlit obelisk (top + base ring) — reads as a national-style
+      // floodlit civic monument at night.
+      const obeliskTop = new IcosahedronGeometry(0.06, 1);
+      obeliskTop.translate(cx, 1.05, cz);
+      pushLit(obeliskTop, GOLD);
+      const obeliskMid = new IcosahedronGeometry(0.05, 1);
+      obeliskMid.translate(cx, 0.65, cz);
+      pushLit(obeliskMid, WARM_WHITE);
+      // Base spotlight ring.
+      const baseRing = new CylinderGeometry(0.22, 0.22, 0.014, 12);
+      baseRing.translate(cx, 0.09, cz);
+      pushLit(baseRing, WARM_WHITE);
+      break;
+    }
+    case 'clock_tower': {
+      // Glowing clock face (white ring around the dark dial), glowing
+      // belfry openings, glowing cupola lantern, glowing finial.
+      // The clock-face geometry sits at z = +0.245 of the tile centre.
+      const clockFace = new CylinderGeometry(0.11, 0.11, 0.018, 16);
+      clockFace.rotateX(Math.PI / 2);
+      clockFace.translate(cx, 1.05, cz + 0.247);
+      pushLit(clockFace, WARM_WHITE);
+      // Belfry — open arched section glows.
+      const belfry = new BoxGeometry(0.45, 0.14, 0.45);
+      belfry.translate(cx, 1.30, cz);
+      pushLit(belfry, AMBER);
+      // Spire ball finial — shines bright.
+      const finial = new IcosahedronGeometry(0.05, 1);
+      finial.translate(cx, 1.91, cz);
+      pushLit(finial, GOLD);
+      // Tower-body windows on the front face.
+      for (const dy of [0.50, 0.78]) {
+        addWin(cx, dy, cz + 0.205, 0.10, 0.18, 'X', WARM_WHITE);
+      }
+      break;
+    }
+    case 'triumphal_arch': {
+      // Floodlit gold lettering plaque + glowing crown ornament + a
+      // soft glow inside the archway opening.
+      const plaque = new BoxGeometry(0.32, 0.06, 0.020);
+      plaque.translate(cx, 1.08, cz + 0.255);
+      pushLit(plaque, GOLD);
+      const crown = new IcosahedronGeometry(0.07, 1);
+      crown.translate(cx, 1.32, cz);
+      pushLit(crown, GOLD);
+      // Glow under the arch (soft warm light filling the opening).
+      const archGlow = new BoxGeometry(0.40, 0.40, 0.40);
+      archGlow.translate(cx, 0.55, cz);
+      pushLit(archGlow, AMBER);
+      break;
+    }
+    case 'pier': {
+      // Glowing seaward bollards (the rope-end posts on the deck).
+      for (const dx of [-0.30, 0.30]) {
+        const cap = new IcosahedronGeometry(0.040, 1);
+        cap.translate(cx + dx, 0.30, cz + 0.36);
+        pushLit(cap, AMBER);
+      }
+      break;
+    }
+    case 'mayor_mansion': {
+      // The showpiece. Lit windows across all five mansion blocks +
+      // glowing dome + glowing pediment escutcheon + glowing grand door
+      // + glowing lamppost bulbs. Mansion geometry is anchored at
+      // (ax, ay) = (t.x, t.y) (lex-smallest tile of the 4×2 footprint).
+      const ax = t.x;
+      const ay = t.y;
+      const mcx = ax + 2;          // footprint centre X
+      const fcz = ay + 1;          // footprint centre Z
+      const mz = fcz - 0.5;        // mansion-row centre Z
+      const mansionDepth = 0.65;
+      const mansionBackZ = mz - 0.10;
+      const frontFace = mansionBackZ + mansionDepth / 2 + 0.005;
+
+      // Wing windows — 6 lit panels per wing × 2 wings = 12.
+      for (const wingX of [-1.30, 1.30]) {
+        for (let story = 0; story < 2; story++) {
+          const yWindow = 0.06 + 0.18 + story * 0.32;
+          for (const wxOff of [-0.25, 0.0, 0.25]) {
+            addWin(mcx + wingX + wxOff, yWindow, frontFace, 0.08, 0.16, 'X', WARM_WHITE);
+          }
+        }
+      }
+      // Inner-block windows — 4 lit per block × 2 = 8.
+      for (const innerX of [-0.55, 0.55]) {
+        for (let story = 0; story < 2; story++) {
+          const yWindow = 0.06 + 0.22 + story * 0.38;
+          for (const wxOff of [-0.13, 0.13]) {
+            addWin(mcx + innerX + wxOff, yWindow, frontFace, 0.09, 0.20, 'X', WARM_WHITE);
+          }
+        }
+      }
+      // Central-block: story-2 (2 windows flanking pediment) + story-3
+      // (4 round-top windows above the pediment).
+      for (const wxOff of [-0.34, 0.34]) {
+        addWin(mcx + wxOff, 0.06 + 0.55, frontFace, 0.10, 0.22, 'X', WARM_WHITE);
+      }
+      for (const wxOff of [-0.30, -0.10, 0.10, 0.30]) {
+        addWin(mcx + wxOff, 0.06 + 0.95, frontFace, 0.08, 0.14, 'X', WARM_WHITE);
+      }
+      // Grand door — warm doorway light.
+      addWin(mcx, 0.06 + 0.22, frontFace, 0.18, 0.40, 'X', AMBER);
+      // Pediment escutcheon — gold relief plaque glow.
+      const escutcheon = new BoxGeometry(0.10, 0.07, 0.022);
+      escutcheon.translate(mcx, 0.06 + 1.10 * 0.85 + 0.07, mansionBackZ + mansionDepth / 2 + 0.116);
+      pushLit(escutcheon, GOLD);
+      // Dome glow — entire dome reads luminous (soft uplighting).
+      const dome = new ConeGeometry(0.20, 0.30, 16);
+      dome.translate(mcx, 0.06 + 1.10 + 0.36, mansionBackZ);
+      pushLit(dome, PALE_TEAL);
+      // Cupola + spire finial — bright gold beacons on top.
+      const cupola = new IcosahedronGeometry(0.055, 1);
+      cupola.translate(mcx, 0.06 + 1.10 + 0.64, mansionBackZ);
+      pushLit(cupola, GOLD);
+      const ball = new IcosahedronGeometry(0.045, 1);
+      ball.translate(mcx, 0.06 + 1.10 + 0.91, mansionBackZ);
+      pushLit(ball, GOLD);
+      // Lamppost bulbs flanking the entrance steps — bright amber.
+      for (const lx of [-0.85, 0.85]) {
+        const bulb = new IcosahedronGeometry(0.045, 1);
+        bulb.translate(mcx + lx, 0.55, mz + 0.50);
+        pushLit(bulb, AMBER);
+      }
+      // Front-gate-post finials glow gold.
+      for (const px of [-0.50, 0.50]) {
+        const gateF = new IcosahedronGeometry(0.040, 1);
+        gateF.translate(mcx + px, 0.34, fcz + 0.97);
+        pushLit(gateF, GOLD);
+      }
+      // Reflecting-pool surface glow strips — moonlight on the water.
+      for (const sideX of [-1.10, 1.10]) {
+        const surf = new BoxGeometry(0.35, 0.018, 0.04);
+        surf.translate(mcx + sideX, 0.052, fcz + 0.50);
+        pushLit(surf, DUSK_WATER);
+      }
+      break;
+    }
+  }
 }
 
 /** Districts overlay mesh (Alpha 2.22). Translucent tint per district. */

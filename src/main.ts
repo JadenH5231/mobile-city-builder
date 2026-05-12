@@ -26,6 +26,12 @@ const activeSlot = (() => {
 const game = new Game();
 await game.init(appEl, MAP_SIZES.small, activeSlot);
 
+// Active-tool cost preview pill (Alpha 4.5). Game updates it via
+// refreshToolCostPill whenever the active tool, the treasury, or
+// the council's cost multipliers change.
+game.toolCostPillEl = document.getElementById('hud-tool-cost');
+game.refreshToolCostPill();
+
 // City-name input on the budget panel (Alpha 2.20). Live binding into
 // game.cityName so the next autosave persists it.
 const cityNameInput = document.getElementById('budget-city-name') as HTMLInputElement | null;

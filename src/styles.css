@@ -3074,6 +3074,30 @@ body.photo-mode .photo-op {
   }
 }
 
+/* ---------- Active tool cost preview pill (Alpha 4.5) ---------- *
+ * Shown when a paid Place / road / luxury / skyscraper tool is the
+ * active tool — gives the player a clear cost BEFORE they tap.
+ * Gold-tinted to match the toolbar's "active tool" highlight; flips
+ * to red when the council has banned the action.
+ */
+.pill.tool-cost {
+  background: rgba(255, 216, 77, 0.16);
+  color: #ffe98a;
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.35);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pill.tool-cost.banned {
+  background: rgba(216, 69, 69, 0.18);
+  color: #ff9e9e;
+  box-shadow: inset 0 0 0 1px rgba(216, 69, 69, 0.40);
+}
+.pill.tool-cost.short {
+  background: rgba(216, 134, 69, 0.18);
+  color: #ffae5e;
+  box-shadow: inset 0 0 0 1px rgba(216, 134, 69, 0.40);
+}
+
 /* ---------- Cheats (Alpha 3.2.4) ---------- */
 
 .budget__cheats {

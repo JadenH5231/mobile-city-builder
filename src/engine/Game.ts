@@ -48,7 +48,9 @@ import {
   SKYSCRAPER_VARIANT_COUNT,
   MAP_SIZES,
   PLACE_TOOL_TO_BUILDING,
+  ROAD_TIER,
   ROAD_TOOLS,
+  SERVICE_RADIUS,
   STOP_SIGN_COST,
   TERRAFORM_COSTS,
   TILE_SIZE,
@@ -76,6 +78,57 @@ const UNDO_STACK_LIMIT = 20;
  *  loading any stray autosave that won the race. */
 const RESET_FLAG = 'city-builder-just-reset';
 
+/** Human-readable labels for the cost-pill display (Alpha 4.5). Falls
+ *  back to the Building key when missing. */
+const TOOL_LABEL: Partial<Record<Tool, string>> = {
+  road_local: 'Local Road',
+  road_avenue: 'Avenue',
+  road_highway: 'Highway',
+  place_path: 'Walking Path',
+  place_power: 'Power Plant',
+  place_water: 'Water Tower',
+  place_park: 'Park',
+  place_forestry: 'Forestry',
+  place_farm: 'Farm',
+  place_school: 'School',
+  place_hospital: 'Hospital',
+  place_fire_station: 'Fire Station',
+  place_police_station: 'Police Station',
+  place_bus_stop: 'Bus Stop',
+  place_bus_depot: 'Bus Depot',
+  place_museum: 'Museum',
+  place_stadium: 'Stadium',
+  place_observatory: 'Observatory',
+  place_ferry_dock: 'Ferry Dock',
+  place_subway_entrance: 'Subway',
+  place_plaza: 'Plaza',
+  place_fountain: 'Fountain',
+  place_statue: 'Statue',
+  place_flower_bed: 'Flower Bed',
+  place_topiary: 'Topiary',
+  place_pergola: 'Pergola',
+  place_reflecting_pool: 'Reflecting Pool',
+  place_memorial_garden: 'Memorial Garden',
+  place_clock_tower: 'Clock Tower',
+  place_triumphal_arch: 'Triumphal Arch',
+  place_pier: 'Pier',
+  place_mayor_mansion: 'Mayor\'s Mansion'
+};
+
+/**
+ * Service buildings whose radius should be previewed when their Place
+ * tool is the active tool (Alpha 4.5). Each maps to the SERVICE_RADIUS
+ * key that drives the disc size — most match the kind, but power /
+ * water are city-wide as of 3.1.4 and don't get a tile-radius disc.
+ */
+const SERVICE_RADIUS_PREVIEW: Partial<Record<Tool, { key: keyof typeof SERVICE_RADIUS; label: string }>> = {
+  place_park:   { key: 'park',   label: 'Park coverage' },
+  place_school: { key: 'school', label: 'School coverage' },
+  place_hospital: { key: 'hospital', label: 'Hospital coverage' },
+  place_fire_station: { key: 'fire', label: 'Fire protection' },
+  place_police_station: { key: 'police', label: 'Police coverage' }
+};
+
 /**
  * Game owns the Three.js renderer, the camera, and the top-level systems.
  *
@@ -101,6 +154,11 @@ export class Game {
   input!: Input;
   panel!: TileInfoPanel;
   toolbar!: Toolbar;
+  /** Active-tool cost pill (Alpha 4.5). Updated by `refreshToolCostPill`
+   *  whenever the active tool changes, the council elects a new term,
+   *  or the treasury crosses below the active tool's cost. main.ts
+   *  passes in the HTMLElement reference at init. */
+  toolCostPillEl: HTMLElement | null = null;
   budgetPanel!: BudgetPanel;
   happinessPanel!: HappinessPanel;
   councilPanel!: CouncilPanel;
@@ -617,6 +675,133 @@ export class Game {
       this.selected = null;
       this.panel.hide();
     }
+    this.refreshToolCostPill();
+    this.refreshServiceRadiusPreview();
+  }
+
+  /**
+   * Update the HUD "active tool cost" pill (Alpha 4.5). Shown only
+   * when the active tool has a per-tap cost — i.e. paid Place tools,
+   * roads (per-edge cost), luxury pair, skyscrapers, mayor's mansion.
+   * Reflects the council multiplier in the displayed cost so the
+   * player sees what they'll actually pay, not the base price.
+   *
+   * States:
+   * - hidden when active tool is `pan` / `bulldoze` / district paint
+   *   etc. (anything not paid)
+   * - gold "{name} · ${cost}" when affordable + not banned
+   * - red "{name} · Banned" when council banned
+   * - amber "{name} · ${cost} (short)" when treasury is below cost
+   */
+  refreshToolCostPill(): void {
+    if (!this.toolCostPillEl) return;
+    const info = this.toolCostInfo(this.tool);
+    if (!info) {
+      this.toolCostPillEl.classList.add('hidden');
+      return;
+    }
+    this.toolCostPillEl.classList.remove('hidden');
+    this.toolCostPillEl.classList.remove('banned', 'short');
+    if (info.banned) {
+      this.toolCostPillEl.classList.add('banned');
+      this.toolCostPillEl.textContent = `${info.label} · Banned`;
+      return;
+    }
+    if (this.economy.treasury < info.cost) {
+      this.toolCostPillEl.classList.add('short');
+    }
+    this.toolCostPillEl.textContent = `${info.label} · $${info.cost.toLocaleString()}`;
+  }
+
+  /**
+   * Update the service-radius preview disc (Alpha 4.5). Shown when a
+   * service tool (park / school / hospital / fire / police) is the
+   * active tool AND the player has a tile selected — the disc
+   * appears around the selected tile at the building's coverage
+   * radius, giving an immediate "would this reach the block I care
+   * about?" check before tapping to place.
+   *
+   * Triggers:
+   * - On `setTool` (service tool selected → show; non-service → hide)
+   * - On tile selection change (Pan tool tap)
+   * - On tile inspection from any source
+   */
+  private refreshServiceRadiusPreview(): void {
+    const spec = SERVICE_RADIUS_PREVIEW[this.tool];
+    if (!spec || !this.selected) {
+      this.renderer.clearServiceRadiusPreview();
+      return;
+    }
+    const radius = SERVICE_RADIUS[spec.key];
+    const tile = this.grid.get(this.selected.x, this.selected.y);
+    const elevation = tile ? tile.elevation : 0;
+    this.renderer.showServiceRadiusPreview(this.selected.x, this.selected.y, radius, elevation);
+  }
+
+  /** Inspect the active tool and return its display label + cost.
+   *  Returns null for free-of-charge tools (pan, bulldoze, district
+   *  paint, terraforming-smooth, etc.) so the cost pill hides. */
+  private toolCostInfo(tool: Tool): { label: string; cost: number; banned: boolean } | null {
+    // Paid place tools (matches PLACE_TOOL_TO_BUILDING).
+    const placeKind = PLACE_TOOL_TO_BUILDING.get(tool);
+    if (placeKind) {
+      const base = BUILDING_COSTS[placeKind];
+      const stanceKey = placeKind as StanceKey;
+      const mult = this.council.costMultiplier(stanceKey);
+      const banned = !isFinite(mult);
+      const cost = banned ? base : Math.round(base * mult);
+      return { label: TOOL_LABEL[tool] ?? placeKind, cost, banned };
+    }
+    // Roads — per-edge cost. Tiers come from ROAD_TIER.
+    const roadTier = ROAD_TOOLS.get(tool);
+    if (roadTier) {
+      const baseCost = ROAD_TIER[roadTier].maintenance; // surrogate: 1mo of upkeep ≈ build cost feel
+      // Roads don't have an up-front cost in this game — they only pay
+      // monthly maintenance — so show maintenance/mo as a proxy.
+      return { label: TOOL_LABEL[tool] ?? `Road ${roadTier}`, cost: baseCost, banned: false };
+    }
+    if (tool === 'place_path') {
+      return { label: 'Walking Path', cost: 0, banned: false };
+    }
+    // Luxury pair — one-time placement cost.
+    if (tool === 'residential_luxury_low') {
+      const mult = this.council.costMultiplier('r_lux');
+      const banned = !isFinite(mult);
+      const cost = banned ? LUXURY_LOW_COST : Math.round(LUXURY_LOW_COST * mult);
+      return { label: 'Luxury Lot', cost, banned };
+    }
+    // Stop sign + traffic light — flat costs.
+    if (tool === 'place_stop_sign') {
+      const mult = this.council.costMultiplier('stop_sign');
+      const banned = !isFinite(mult);
+      const cost = banned ? STOP_SIGN_COST : Math.round(STOP_SIGN_COST * mult);
+      return { label: 'Stop Sign', cost, banned };
+    }
+    if (tool === 'place_traffic_light') {
+      return { label: 'Traffic Light', cost: TRAFFIC_LIGHT_COST, banned: false };
+    }
+    // Skyscrapers — fixed cost per zone variant.
+    if (tool === 'residential_skyscraper') return { label: 'R Skyscraper', cost: SKYSCRAPER_COST.residential, banned: false };
+    if (tool === 'commercial_skyscraper') return { label: 'C Skyscraper', cost: SKYSCRAPER_COST.commercial, banned: false };
+    if (tool === 'mixed_skyscraper')       return { label: 'MU Skyscraper', cost: SKYSCRAPER_COST.mixed,       banned: false };
+    // Mayor's Mansion — single-instance prestige build.
+    if (tool === 'place_mayor_mansion') {
+      const mult = this.council.costMultiplier('mayor_mansion');
+      const banned = !isFinite(mult);
+      const cost = banned ? BUILDING_COSTS.mayor_mansion : Math.round(BUILDING_COSTS.mayor_mansion * mult);
+      return { label: 'Mayor\'s Mansion', cost, banned };
+    }
+    // Land purchase.
+    if (tool === 'buy_land') {
+      return { label: 'Buy Land', cost: LAND_PURCHASE_COST_PER_TILE, banned: false };
+    }
+    // Terraforming paint tools (Alpha 4.0). Per-tile costs.
+    if (tool === 'terra_tree')    return { label: 'Plant Tree', cost: TERRAFORM_COSTS.terra_tree, banned: false };
+    if (tool === 'terra_meadow')  return { label: 'Meadow', cost: TERRAFORM_COSTS.terra_meadow, banned: false };
+    if (tool === 'terra_pond')    return { label: 'Pond', cost: TERRAFORM_COSTS.terra_pond, banned: false };
+    if (tool === 'terra_smooth')  return { label: 'Smooth Land', cost: TERRAFORM_COSTS.terra_smooth, banned: false };
+    // Zone paints + bulldoze + districts + pan are free.
+    return null;
   }
 
   // --- Camera framing -----------------------------------------------------
@@ -725,6 +910,10 @@ export class Game {
           // we want existing buildings to dim as they age. Cheap rebuild —
           // sub-millisecond on Small/Medium and only fires on month rollover.
           buildingsDirty = true;
+          // Treasury may have crossed the "can afford the active tool"
+          // threshold — refresh the cost pill so the colour stays in
+          // sync (Alpha 4.5).
+          this.refreshToolCostPill();
           // PC accrues every month (before the election so the player
           // walks into election day with the latest balance).
           this.council.awardMonthlyPC(this.happiness);
@@ -748,6 +937,9 @@ export class Game {
           if (fired) {
             this.councilPanel.show();
             this.refreshToolbarBans();
+            // Cost mults flipped — refresh the active-tool cost pill
+            // so the new council's pricing is reflected immediately.
+            this.refreshToolCostPill();
             this.achievements.recordElection();
             // Surface bio popups for any new council member or opponent
             // the player has never met. Each emit is queued in main.ts.
@@ -976,6 +1168,7 @@ export class Game {
     this.selected = tile;
     this.renderer.drawSelection(tile.x, tile.y);
     this.panel.hide();
+    this.refreshServiceRadiusPreview();
   }
 
   /** Pay $1M and grow the WORLD itself in the given direction (Alpha 3.2.3).

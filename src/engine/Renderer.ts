@@ -1084,6 +1084,48 @@ export class Renderer {
     this.selectionMesh.visible = false;
   }
 
+  /**
+   * Service-radius preview disc (Alpha 4.5). Shown when the player
+   * selects a service tool (park / school / hospital / fire / police)
+   * — translucent gold circle around the currently-selected tile at
+   * the radius the building will actually cover. Hides on tool deselect
+   * or when no tile is selected.
+   */
+  private radiusPreviewMesh: Mesh | null = null;
+  showServiceRadiusPreview(gx: number, gy: number, radius: number, elevation: number): void {
+    if (this.radiusPreviewMesh) {
+      this.worldGroup.remove(this.radiusPreviewMesh);
+      this.radiusPreviewMesh.geometry.dispose();
+      (this.radiusPreviewMesh.material as MeshBasicMaterial).dispose();
+      this.radiusPreviewMesh = null;
+    }
+    if (radius <= 0 || !isFinite(radius)) return;
+    const r = radius * TILE_SIZE;
+    const geom = new CylinderGeometry(r, r, 0.012, 48);
+    const mat = new MeshBasicMaterial({
+      color: 0xffd84d,
+      transparent: true,
+      opacity: 0.18,
+      depthWrite: false
+    });
+    const mesh = new Mesh(geom, mat);
+    mesh.position.set(
+      (gx + 0.5) * TILE_SIZE,
+      elevation + 0.018,
+      (gy + 0.5) * TILE_SIZE
+    );
+    this.radiusPreviewMesh = mesh;
+    this.worldGroup.add(mesh);
+  }
+  clearServiceRadiusPreview(): void {
+    if (this.radiusPreviewMesh) {
+      this.worldGroup.remove(this.radiusPreviewMesh);
+      this.radiusPreviewMesh.geometry.dispose();
+      (this.radiusPreviewMesh.material as MeshBasicMaterial).dispose();
+      this.radiusPreviewMesh = null;
+    }
+  }
+
   render(camera: Camera): void {
     this.three.render(this.scene, camera.three);
   }

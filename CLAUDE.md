@@ -336,6 +336,15 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.3.1 (Luxury mansion walkway aims at the road)
+
+Completes the curb-appeal pass. Every kind of building in the game now has a road-oriented walkway connecting its front face to the nearest road:
+- Zoned tiles (R/C/I/MU) — commit `313b61e` + `252c770`
+- Service buildings (school/hospital/fire/police/museum/bus_stop/bus_depot) — Alpha 4.3
+- Luxury 2-tile mansions — Alpha 4.3.1
+
+For luxury pairs the helper is `computeLuxuryRoadYaw(grid, ax, ay, bx, by)` — a pair-aware analogue of `computeRoadFacingYaw` that checks 4-adjacent tiles of BOTH pair tiles, preference order S → E → N → W, non-highway roads outrank highways. `buildLuxuryParts` accepts an optional `roadYaw?: number` and emits the walkway as a strip from the body edge to the pair tile-edge in the chosen direction; falls back to a centred T-shape when no road is adjacent (e.g. luxury home placed deep on a park lot before paving).
+
 ## Status: Alpha 4.3 (Service buildings rotate toward the road)
 
 Finishes the curb-appeal pass started in commits `313b61e` (ground accents on every zoned tile) and `252c770` (zoned buildings face the road). The seven asymmetric-front service kinds — **school, hospital, fire_station, police_station, museum, bus_stop, bus_depot** — now also rotate so their front face (clock tower, red cross, bay doors, porch, colonnade, bench/canopy, garage door) points toward the nearest adjacent road tile. Each rotated service tile also gets a short paved walkway connecting its front to the road, matching the flagstone palette used for zoned-tile walkways.

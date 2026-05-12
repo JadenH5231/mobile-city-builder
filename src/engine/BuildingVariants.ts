@@ -345,7 +345,12 @@ function pickVariant(x: number, y: number, n: number): number {
  * deterministic variants per pair (mansion, ranch, modern-glass).
  */
 export function buildLuxuryParts(
-  ax: number, ay: number, bx: number, by: number
+  ax: number, ay: number, bx: number, by: number,
+  /** Cardinal yaw (0=S, π/2=E, π=N, 3π/2=W) pointing toward the
+   *  nearest road tile, or undefined when no road is 4-adjacent to
+   *  either tile of the pair. Alpha 4.3.1: when provided, the walkway
+   *  is aimed at the road instead of laid as a centred T. */
+  roadYaw?: number
 ): VariantPart[] {
   const out: VariantPart[] = [];
   // Pair centre (midpoint between the two tile centres).
@@ -366,14 +371,40 @@ export function buildLuxuryParts(
   lawn.translate(cx, 0.0075, cz);
   out.push({ geom: lawn, color: v.lawnColor });
 
-  // Paved walkway from front of house to road side. Pick the side that
-  // doesn't have the garage. Simplification: just lay a small T of
-  // pavement in the middle.
-  const walkW = longX ? 0.9 : 0.18;
-  const walkD = longX ? 0.18 : 0.9;
-  const walk = new BoxGeometry(walkW, 0.018, walkD);
-  walk.translate(cx, 0.009, cz);
-  out.push({ geom: walk, color: 0xb6ad9b });
+  // Paved walkway. Alpha 4.3.1: when the caller computed a road yaw,
+  // aim the walkway at the road instead of laying a centred T. Body
+  // dimensions are bodyLong=1.40, bodyShort=0.62 (see below); the
+  // walkway runs from the body's edge in the chosen direction out to
+  // the pair tile-edge.
+  if (roadYaw !== undefined) {
+    const yawIdx = Math.round(roadYaw / (Math.PI / 2)) & 3;  // 0=S, 1=E, 2=N, 3=W
+    // Is the road direction along the pair's long axis or perpendicular?
+    const alongLong = (longX && (yawIdx === 1 || yawIdx === 3))
+                   || (!longX && (yawIdx === 0 || yawIdx === 2));
+    const bodyHalf = alongLong ? 0.70 : 0.31;   // bodyLong/2 or bodyShort/2
+    const pairHalf = alongLong ? 1.0 : 0.5;     // half-length of pair along this axis
+    const walkLen = pairHalf - bodyHalf;
+    if (walkLen > 0.05) {
+      const walkOffset = bodyHalf + walkLen / 2;
+      let dx = 0, dz = 0, gw = 0.20, gd = 0.20;
+      if (yawIdx === 0)      { dz =  walkOffset; gd = walkLen; }
+      else if (yawIdx === 1) { dx =  walkOffset; gw = walkLen; }
+      else if (yawIdx === 2) { dz = -walkOffset; gd = walkLen; }
+      else                   { dx = -walkOffset; gw = walkLen; }
+      const walk = new BoxGeometry(gw, 0.018, gd);
+      walk.translate(cx + dx, 0.009, cz + dz);
+      out.push({ geom: walk, color: 0xb6ad9b });
+    }
+  } else {
+    // Fallback: no road adjacent (e.g. mansion deep on a park lot, or
+    // before the road is paved). Centred T-shape — matches pre-4.3.1
+    // behaviour so the lawn still has a visible front-walk element.
+    const walkW = longX ? 0.9 : 0.18;
+    const walkD = longX ? 0.18 : 0.9;
+    const walk = new BoxGeometry(walkW, 0.018, walkD);
+    walk.translate(cx, 0.009, cz);
+    out.push({ geom: walk, color: 0xb6ad9b });
+  }
 
   // Main body — wider on long axis. Sits centred but biased a touch
   // toward the "back" so the front lawn reads.

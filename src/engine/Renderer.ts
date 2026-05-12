@@ -1358,7 +1358,10 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
       if (!partner) continue; // orphan — render nothing
       // Lex order: lower x wins; tie → lower y wins.
       if (t.x > partner.x || (t.x === partner.x && t.y > partner.y)) continue;
-      const parts = buildLuxuryParts(t.x, t.y, partner.x, partner.y);
+      // Alpha 4.3.1: compute the road yaw for the pair so the walkway
+      // aims at the road instead of laying a centred T.
+      const roadYaw = computeLuxuryRoadYaw(grid, t.x, t.y, partner.x, partner.y);
+      const parts = buildLuxuryParts(t.x, t.y, partner.x, partner.y, roadYaw);
       const yLift = baseLift + t.elevation;
       for (const p of parts) {
         if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -1516,6 +1519,65 @@ function computeRoadFacingYaw(grid: Grid, x: number, y: number): number | undefi
       // Quantise to the nearest cardinal so emitGroundAccents (which
       // expects yaw % π/2 ≈ 0) routes the walkway cleanly.
       return Math.round(c.yaw / (Math.PI / 2)) * (Math.PI / 2);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Pair-aware road-facing yaw for luxury 2-tile mansions (Alpha 4.3.1).
+ * A luxury home spans two 4-adjacent tiles; we want the walkway to aim
+ * at whichever road tile is 4-adjacent to either of those two tiles.
+ *
+ * Cardinal order (S, E, N, W) matches `computeRoadFacingYaw` so the
+ * preference between two candidate roads is consistent across
+ * single-tile and pair-tile builds. Non-highway roads outrank highways
+ * (a quiet street is a better address than a freeway).
+ *
+ * Returns undefined when no cardinal road neighbour exists — caller
+ * falls back to the centred-T walkway.
+ */
+function computeLuxuryRoadYaw(
+  grid: Grid, ax: number, ay: number, bx: number, by: number
+): number | undefined {
+  const longX = bx !== ax;
+  // Build the per-cardinal candidate tile list, accounting for the
+  // pair's orientation. Tiles INSIDE the pair are never road neighbours
+  // (they're the building itself), so we only check tiles OUTSIDE the
+  // pair in each direction.
+  type Candidate = { tiles: Array<[number, number]>; yaw: number };
+  let candidates: Candidate[];
+  if (longX) {
+    const lx = Math.min(ax, bx);
+    const rx = Math.max(ax, bx);
+    candidates = [
+      { tiles: [[lx, ay + 1], [rx, ay + 1]], yaw: 0 },                    // S
+      { tiles: [[rx + 1, ay]],               yaw: Math.PI / 2 },          // E
+      { tiles: [[lx, ay - 1], [rx, ay - 1]], yaw: Math.PI },              // N
+      { tiles: [[lx - 1, ay]],               yaw: (3 * Math.PI) / 2 }     // W
+    ];
+  } else {
+    const ty = Math.min(ay, by);
+    const by2 = Math.max(ay, by);
+    candidates = [
+      { tiles: [[ax, by2 + 1]],              yaw: 0 },                    // S
+      { tiles: [[ax + 1, ty], [ax + 1, by2]], yaw: Math.PI / 2 },         // E
+      { tiles: [[ax, ty - 1]],               yaw: Math.PI },              // N
+      { tiles: [[ax - 1, ty], [ax - 1, by2]], yaw: (3 * Math.PI) / 2 }    // W
+    ];
+  }
+  // Pass 1: non-highway road in any candidate tile.
+  for (const c of candidates) {
+    for (const [tx, ty] of c.tiles) {
+      const n = grid.get(tx, ty);
+      if (n && n.road && n.roadType !== 'highway') return c.yaw;
+    }
+  }
+  // Pass 2: any road (highway accepted).
+  for (const c of candidates) {
+    for (const [tx, ty] of c.tiles) {
+      const n = grid.get(tx, ty);
+      if (n && n.road) return c.yaw;
     }
   }
   return undefined;

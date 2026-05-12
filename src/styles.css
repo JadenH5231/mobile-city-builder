@@ -3074,6 +3074,28 @@ body.photo-mode .photo-op {
   }
 }
 
+/* ---------- HUD trend arrows (Alpha 4.6) ---------- *
+ * Small ↑/↓/→ glyph appended to the Pop and Treasury pills,
+ * indicating the trend over the last 3 months (vs the sample from
+ * 3 months ago). Up = green, down = red, flat = grey. Cheap signal
+ * for "are things getting better or worse" without opening the
+ * stats panel.
+ */
+.trend {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+  letter-spacing: 0;
+}
+.trend--up    { color: #6dd06a; }  /* green */
+.trend--down  { color: #ff8888; }  /* red */
+.trend--flat  { color: rgba(255, 255, 255, 0.40); }
+.trend--flat::before { content: '→'; }
+.trend--up::before   { content: '↑'; }
+.trend--down::before { content: '↓'; }
+
 /* ---------- Active tool cost preview pill (Alpha 4.5) ---------- *
  * Shown when a paid Place / road / luxury / skyscraper tool is the
  * active tool — gives the player a clear cost BEFORE they tap.

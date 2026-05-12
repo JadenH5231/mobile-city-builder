@@ -111,6 +111,12 @@ export interface FactionStances {
   clock_tower: number;
   triumphal_arch: number;
   pier: number;
+  /** The Mayor's Mansion (Alpha 4.2) — single-instance 4×2 showpiece.
+   *  Hometown + NIMBYs + Chamber love (heritage / property values /
+   *  prestige); Yimbys + Working Families + Taxpayers HATE (massive
+   *  non-housing footprint, vanity spending, the wealthiest possible
+   *  build). */
+  mayor_mansion: number;
   /** Council Beautification Budget stance (Alpha 4.0). Read by the
    *  council each election to pick a tier — see `Council.electBeautificationTier`.
    *  Mayor cannot influence; this is a council-only lever. */
@@ -142,6 +148,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.6, fountain: 0.8, statue: 0.5, flower_bed: 0.7, topiary: 0.8,
     pergola: 0.5, reflecting_pool: 0.6, memorial_garden: 0.7,
     clock_tower: 0.4, triumphal_arch: 0.3, pier: 0.4,
+    mayor_mansion: 0.8,
     beautification: 0.7
   },
   yimbys: {
@@ -164,6 +171,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.4, fountain: -0.1, statue: -0.3, flower_bed: 0.1, topiary: -0.2,
     pergola: 0.4, reflecting_pool: -0.4, memorial_garden: -0.4,
     clock_tower: -0.3, triumphal_arch: -0.6, pier: 0.3,
+    mayor_mansion: -0.9,
     beautification: 0.3
   },
   environmentalists: {
@@ -185,6 +193,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.2, fountain: 0.8, statue: 0.0, flower_bed: 1.0, topiary: 0.9,
     pergola: 0.7, reflecting_pool: 0.7, memorial_garden: 0.8,
     clock_tower: 0.0, triumphal_arch: -0.2, pier: 0.3,
+    mayor_mansion: 0.2,
     beautification: 0.6
   },
   hometown: {
@@ -206,6 +215,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.5, fountain: 0.6, statue: 0.9, flower_bed: 0.5, topiary: 0.6,
     pergola: 0.5, reflecting_pool: 0.4, memorial_garden: 0.9,
     clock_tower: 0.9, triumphal_arch: 0.8, pier: 0.6,
+    mayor_mansion: 1.0,
     beautification: 0.7
   },
   chamber: {
@@ -227,6 +237,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.8, fountain: 0.6, statue: 0.5, flower_bed: 0.4, topiary: 0.4,
     pergola: 0.5, reflecting_pool: 0.5, memorial_garden: 0.4,
     clock_tower: 0.7, triumphal_arch: 0.6, pier: 0.7,
+    mayor_mansion: 0.8,
     beautification: 0.9
   },
   transit: {
@@ -248,6 +259,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.7, fountain: 0.4, statue: 0.2, flower_bed: 0.3, topiary: 0.2,
     pergola: 0.6, reflecting_pool: 0.3, memorial_garden: 0.3,
     clock_tower: 0.4, triumphal_arch: 0.1, pier: 0.7,
+    mayor_mansion: -0.2,
     beautification: 0.5
   },
   drivers: {
@@ -269,6 +281,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: -0.2, fountain: 0.0, statue: 0.0, flower_bed: 0.0, topiary: 0.0,
     pergola: -0.1, reflecting_pool: 0.0, memorial_garden: 0.0,
     clock_tower: 0.1, triumphal_arch: 0.1, pier: 0.0,
+    mayor_mansion: 0.2,
     beautification: 0.0
   },
   taxpayers: {
@@ -290,6 +303,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: -0.5, fountain: -0.7, statue: -0.6, flower_bed: -0.3, topiary: -0.5,
     pergola: -0.4, reflecting_pool: -0.7, memorial_garden: -0.6,
     clock_tower: -0.7, triumphal_arch: -0.9, pier: -0.3,
+    mayor_mansion: -1.0,
     beautification: -0.9
   },
   safer_streets: {
@@ -311,6 +325,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.7, fountain: 0.4, statue: 0.3, flower_bed: 0.5, topiary: 0.3,
     pergola: 0.5, reflecting_pool: 0.3, memorial_garden: 0.4,
     clock_tower: 0.4, triumphal_arch: 0.2, pier: 0.4,
+    mayor_mansion: -0.3,
     beautification: 0.5
   },
   working_families: {
@@ -332,6 +347,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     plaza: 0.5, fountain: 0.2, statue: -0.2, flower_bed: 0.4, topiary: 0.0,
     pergola: 0.2, reflecting_pool: -0.3, memorial_garden: -0.1,
     clock_tower: -0.2, triumphal_arch: -0.5, pier: 0.5,
+    mayor_mansion: -0.8,
     beautification: 0.2
   }
 };

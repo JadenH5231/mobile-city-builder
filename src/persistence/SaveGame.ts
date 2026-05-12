@@ -22,19 +22,18 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 20 (Alpha 4.0 — Architect Mode): persists the council's
- * elected + currently-effective Beautification Budget tier. New
- * `Building` enum values (plaza / fountain / statue / etc) round-trip
- * via the existing `building` field — the union widened, the JSON
- * key stayed the same. v19-and-earlier saves load with both
- * beautification fields defaulted to 'none' (their elected council
- * had no opinion on a feature that didn't yet exist).
+ * Schema 21 (Alpha 4.2 — Mayor's Mansion): persists per-tile
+ * `mayorMansion` bit so the 4×2 showpiece survives a reload. The
+ * `building` enum value `'mayor_mansion'` round-trips via the
+ * existing per-tile `building` field. v20-and-earlier saves load
+ * with `mayorMansion=false` everywhere.
  *
- * Earlier: v19 land ownership, v18 skyscrapers, v17 districts,
- * v16 bonds, v15 tourism, v14 patina, v13 achievements, v12 bridges,
- * v11 stats, v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v20 beautification, v19 land ownership, v18 skyscrapers,
+ * v17 districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
+ * v12 bridges, v11 stats, v10 events, v9 highestPop, v8 luxury,
+ * v7 elevation+bridge.
  */
-const SCHEMA = 20;
+const SCHEMA = 21;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -89,6 +88,11 @@ export interface TileSnapshot {
   /** Land ownership (Alpha 3.1.3 / schema 19+). v18 saves load with
    *  owned=true on every tile (back-compat). */
   owned?: boolean;
+  /** Mayor's Mansion bit (Alpha 4.2 / schema 21+). True on each of
+   *  the 4×2 footprint tiles; the lex-smallest tile is the anchor
+   *  with `building='mayor_mansion'`, the other seven are
+   *  marked-only. v20-and-earlier saves load with `false`. */
+  mayorMansion?: boolean;
 }
 
 export interface SaveData {
@@ -306,7 +310,8 @@ export function serialize(
       skyscraper: t.skyscraper,
       skyscraperStage: t.skyscraperStage,
       skyscraperVariant: t.skyscraperVariant,
-      owned: t.owned
+      owned: t.owned,
+      mayorMansion: t.mayorMansion
     };
   }
   const edges: number[] = [];
@@ -452,6 +457,9 @@ export function applySave(
     // Land ownership (schema 19+). v18 saves grandfather everything to
     // owned=true so existing cities don't suddenly lose half their map.
     t.owned = snap.owned ?? true;
+    // Mayor's Mansion bit (schema 21+). v20-and-earlier saves load
+    // with `false` since no mayor's mansion ever existed there.
+    t.mayorMansion = snap.mayorMansion ?? false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

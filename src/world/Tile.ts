@@ -180,4 +180,17 @@ export class Tile {
    * through the Land tool.
    */
   owned = true;
+  /**
+   * Mayor's Mansion bit (Alpha 4.2). When true, this tile is part of
+   * the single 4×2 footprint mayor's mansion. The lex-smallest tile
+   * (lowest x, then lowest y) is the *anchor* — its `building` field
+   * holds `'mayor_mansion'`; the other seven tiles are marked-only
+   * via this flag with `building='none'`. Bulldozing any of the 8
+   * tiles tears down the entire showpiece (Game.bulldoze handles the
+   * cleanup).
+   *
+   * Single-instance per city — `Game.placeMayorMansion` refuses if
+   * any tile already has `mayorMansion=true`.
+   */
+  mayorMansion = false;
 }

@@ -42,6 +42,8 @@ import {
   CITY_EXPANSION_COST,
   LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
+  MAYOR_MANSION_DEPTH,
+  MAYOR_MANSION_WIDTH,
   SKYSCRAPER_COST,
   SKYSCRAPER_VARIANT_COUNT,
   MAP_SIZES,
@@ -549,7 +551,9 @@ export class Game {
       ['place_memorial_garden', 'memorial_garden'],
       ['place_clock_tower', 'clock_tower'],
       ['place_triumphal_arch', 'triumphal_arch'],
-      ['place_pier', 'pier']
+      ['place_pier', 'pier'],
+      // Mayor's Mansion (Alpha 4.2) — single-instance prestige build.
+      ['place_mayor_mansion', 'mayor_mansion']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -587,7 +591,9 @@ export class Game {
       'place_plaza', 'place_fountain', 'place_statue',
       'place_flower_bed', 'place_topiary', 'place_pergola',
       'place_reflecting_pool', 'place_memorial_garden',
-      'place_clock_tower', 'place_triumphal_arch', 'place_pier'
+      'place_clock_tower', 'place_triumphal_arch', 'place_pier',
+      // Mayor's Mansion (Alpha 4.2) — Capital tier unlock.
+      'place_mayor_mansion'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -1286,6 +1292,22 @@ export class Game {
       return;
     }
 
+    // Mayor's Mansion (Alpha 4.2) — tap-only, single-instance, takes
+    // a 4×2 footprint anchored at the tap (tap is the lex-smallest
+    // tile of the 8). Validates the entire footprint is free + on
+    // owned grass land + treasury can afford + no mansion already
+    // exists. Stamps mayorMansion=true on all 8 tiles, building=
+    // 'mayor_mansion' on the anchor.
+    if (this.tool === 'place_mayor_mansion') {
+      const placed = this.placeMayorMansion(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Place tools are tap-only (single building per tap). Skip the rubber
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
@@ -1634,6 +1656,90 @@ export class Game {
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawZones(this.grid);
+    return true;
+  }
+
+  /**
+   * Mayor's Mansion placement (Alpha 4.2). Validates the 4×2 footprint
+   * starting at `(x, y)` (which is the lex-smallest tile of the eight),
+   * one-per-city constraint, treasury, and stamps the bits across all
+   * eight tiles. The anchor tile gets `building='mayor_mansion'`; the
+   * other seven get `mayorMansion=true` only.
+   *
+   * Failure reasons (each surfaces a clear toast so the player knows
+   * why placement was rejected):
+   * - Footprint runs off-map
+   * - Any of the 8 tiles is occupied / not owned / wrong terrain
+   * - A mayor's mansion already exists in this city
+   * - Treasury < $500K (after council multiplier)
+   * - Council banned (full ban from the costMultiplier gate)
+   *
+   * No road-adjacency requirement — this isn't a working civic build,
+   * it's a private estate; players can plant it deep in the woods.
+   */
+  private placeMayorMansion(x: number, y: number): boolean {
+    // One-per-city constraint. A quick sweep — cheap on Small/Medium
+    // and tolerable on Large since this is a one-time placement.
+    for (const t of this.grid.iter()) {
+      if (t.mayorMansion) {
+        this.onStatusMessage?.('Only one Mayor\'s Mansion per city');
+        return false;
+      }
+    }
+    // Cost + council gate.
+    const baseCost = BUILDING_COSTS.mayor_mansion;
+    const mult = this.council.costMultiplier('mayor_mansion');
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
+    const cost = Math.round(baseCost * mult);
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — Mayor's Mansion costs $${cost.toLocaleString()}`);
+      return false;
+    }
+    // Footprint validation. 4 wide × 2 deep = 8 tiles, all must be
+    // free, owned, on grass (no water / bridge / sand inside the
+    // grounds — the manicured estate doesn't make sense in mixed
+    // terrain).
+    const offsets: Array<[number, number]> = [];
+    for (let dy = 0; dy < MAYOR_MANSION_DEPTH; dy++) {
+      for (let dx = 0; dx < MAYOR_MANSION_WIDTH; dx++) {
+        offsets.push([dx, dy]);
+      }
+    }
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy);
+      if (!t) {
+        this.onStatusMessage?.('Mayor\'s Mansion needs a 4×2 free area');
+        return false;
+      }
+      if (!t.owned) {
+        this.onStatusMessage?.('Mayor\'s Mansion footprint includes unowned land');
+        return false;
+      }
+      if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') {
+        this.onStatusMessage?.('Mayor\'s Mansion needs all 8 tiles free');
+        return false;
+      }
+      if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury) {
+        this.onStatusMessage?.('Mayor\'s Mansion needs flat grass land');
+        return false;
+      }
+    }
+    // Stamp the bits. Anchor (lex-smallest = (x, y)) carries the
+    // `building` value; the other seven are marked-only.
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy)!;
+      t.mayorMansion = true;
+      if (dx === 0 && dy === 0) {
+        t.building = 'mayor_mansion';
+      }
+    }
+    this.economy.treasury -= cost;
+    this.services.recompute(this.grid);
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.maybeOfferPhotoOp('mayor_mansion');
     return true;
   }
 
@@ -2278,6 +2384,30 @@ export class Game {
       }
       if (tile.building !== 'none') {
         if (this.grid.setBuilding(x, y, 'none')) cityBuildingsChanged = true;
+      }
+      // Mayor's Mansion (Alpha 4.2) — bulldozing any of the 8 tiles
+      // tears down the whole 4×2 footprint. Find the lex-smallest
+      // bit-set tile (the anchor) by walking left+up from the tap, then
+      // clear the entire MAYOR_MANSION_WIDTH × MAYOR_MANSION_DEPTH
+      // rectangle from there.
+      if (tile.mayorMansion) {
+        // Walk left to find the western edge of the footprint.
+        let ax = x;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.mayorMansion) ax--;
+        // Walk up to find the northern edge.
+        let ay = y;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.mayorMansion) ay--;
+        for (let dy = 0; dy < MAYOR_MANSION_DEPTH; dy++) {
+          for (let dx = 0; dx < MAYOR_MANSION_WIDTH; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.mayorMansion) continue;
+            peer.mayorMansion = false;
+            if (peer.building === 'mayor_mansion') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
       }
       if (tile.path) {
         if (this.grid.setPath(x, y, false)) pathsChanged = true;

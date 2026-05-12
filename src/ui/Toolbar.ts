@@ -204,6 +204,13 @@ const ICON_MONUMENT = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M9 21V7l3-4 3 4v14 M5 21h14"
         stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
 </svg>`;
+/** Mayor's Mansion icon (Alpha 4.2) — colonnaded grand house with a
+ *  pediment, reads instantly as "civic estate". */
+const ICON_MANSION = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 21h18 M3 21V11l9-7 9 7v10 M6 21V14h3v7 M11 21v-5h2v5 M15 21v-7h3v7"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+  <circle cx="12" cy="3" r="0.6" fill="currentColor"/>
+</svg>`;
 
 const BUILD_ITEMS: readonly ToolbarItem[] = [
   { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -528,7 +535,11 @@ const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'place_statue',          label: 'Statue',   icon: ICON_STATUE },
       { kind: 'tool', tool: 'place_fountain',        label: 'Fountain', icon: ICON_FOUNTAIN },
       { kind: 'tool', tool: 'place_clock_tower',     label: 'Tower',    icon: ICON_CLOCK_TOWER },
-      { kind: 'tool', tool: 'place_triumphal_arch',  label: 'Arch',     icon: ICON_ARCH }
+      { kind: 'tool', tool: 'place_triumphal_arch',  label: 'Arch',     icon: ICON_ARCH },
+      // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2
+      // showpiece. Sits at the END of the Mon group so it reads as
+      // the apex prestige build.
+      { kind: 'tool', tool: 'place_mayor_mansion',   label: 'Mansion',  icon: ICON_MANSION }
     ]
   }
 ];

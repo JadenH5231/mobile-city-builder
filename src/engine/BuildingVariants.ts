@@ -2169,3 +2169,508 @@ function mixHexLocal(a: number, b: number, t: number): number {
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bl;
 }
+
+/* ============================================================================
+ * The Mayor's Mansion (Alpha 4.2)
+ *
+ * The most detailed single build in the game. 4 wide × 2 deep footprint.
+ * The mansion sits along the back row (4 tiles wide × 1 tile deep); the
+ * front row is the lavish formal estate grounds — central reflecting pool
+ * with a 3-tiered marble fountain, parterre gardens flanking the pool,
+ * paved drive leading to the front portico, bronze statues at the pool
+ * corners, ornamental topiary cones along the perimeter, two ornamental
+ * trees in the back corners, and a low stone balustrade ringing the lot.
+ *
+ * The mansion itself is a 5-section composition:
+ *   - 2 outer wings (flanks, 2-storey, hipped roof)
+ *   - 2 inner blocks (between wings + central, 2-storey, hipped roof)
+ *   - 1 grand central block (3-storey, parapet, copper-green dome with
+ *     spire + ball finial, pedimented portico with 6 columns + grand door
+ *     + sweeping front steps)
+ * Plus: 4 chimneys, ~30 individually-placed window panels with shutters,
+ * a balustrade running the entire roofline, decorative cornice band
+ * between stories, two flanking lampposts at the entrance, and an
+ * ornamental garden urn at each front corner.
+ *
+ * Coordinate convention: anchor (ax, ay) is the lex-smallest tile of
+ * the 4×2 footprint. The mansion footprint spans:
+ *   x ∈ [ax,     ax+4)  (4 tiles wide along the X axis)
+ *   z ∈ [ay,     ay+2)  (2 tiles deep along the Z axis)
+ * Mansion body sits in z ∈ [ay, ay+1); grounds sit in z ∈ [ay+1, ay+2).
+ *
+ * Performance: ~140 BufferGeometry parts total. They merge into the same
+ * `buildBuildingsMesh` (or `buildCityBuildingsMesh`) sweep that the rest
+ * of the world uses, so the cost is one extra draw call's worth of
+ * vertices — well within the per-frame budget on Pixel 7 / iPhone 13.
+ * ========================================================================== */
+
+/** Color palette — kept as constants up top so the whole composition
+ *  reads with one consistent material story. */
+const MM_LIMESTONE = 0xeae0c8;       // mansion walls, parapets
+const MM_LIMESTONE_DEEP = 0xd4c8a8;  // pedestal, podium, deep cornice
+const MM_LIMESTONE_DARK = 0xb8a684;  // step risers, pediment shadow
+const MM_ROOF_SLATE = 0x4a5060;      // wing hipped roofs
+const MM_ROOF_GABLE = 0x3a3e4a;      // pediment fascia
+const MM_DOME_COPPER = 0x4f9f7a;     // weathered copper dome (matches existing clock_tower)
+const MM_GOLD_TRIM = 0xeec453;       // lettering, finials
+const MM_WINDOW_DARK = 0x1f2a3a;     // window glass
+const MM_SHUTTER = 0x6e4622;         // dark wood shutters
+const MM_DOOR_DARK = 0x3a2010;       // grand entrance door
+const MM_LAWN = 0x4a8c3a;            // manicured estate lawn
+const MM_LAWN_LIGHT = 0x5fa14a;      // parterre infill
+const MM_HEDGE_DARK = 0x2d5e2a;      // formal hedge walls
+const MM_HEDGE_BRIGHT = 0x3a7a3a;    // inner parterre cross
+const MM_PAVING = 0xc7c0ad;          // driveway flagstone
+const MM_PAVING_DEEP = 0xb0a895;     // pool surround
+const MM_WATER = 0x4d8eb9;           // reflecting pool water
+const MM_WATER_LIGHT = 0xc6dff0;     // pool surface highlight
+const MM_BRONZE = 0x8c6a3a;          // statues
+const MM_BRONZE_BRIGHT = 0xa07a44;   // statue heads
+const MM_LAMPPOST = 0x222a32;        // wrought iron
+const MM_LAMP_BULB = 0xf2cd5c;       // lamps
+const MM_FLOWER_RED = 0xd84545;
+const MM_FLOWER_YELLOW = 0xf2cd5c;
+const MM_FLOWER_PURPLE = 0xa75ad4;
+const MM_FLOWER_WHITE = 0xf6f0e0;
+const MM_TREE_TRUNK = 0x6e3e1d;
+const MM_TREE_LEAF = 0x2f6a2d;
+
+export function buildMayorMansionParts(ax: number, ay: number): VariantPart[] {
+  const out: VariantPart[] = [];
+  // Footprint centre in world coords. TILE_SIZE = 1 so:
+  //   width along X = 4 units, depth along Z = 2 units
+  //   centre X = ax + 2; centre Z = ay + 1
+  const cx = ax + 2;
+  const cz = ay + 1;
+  // Mansion body sits centred at z = cz - 0.5 (back-row centre).
+  // Grounds sit centred at z = cz + 0.5 (front-row centre).
+  const mz = cz - 0.5;
+  const gz = cz + 0.5;
+
+  // ===== ESTATE PAD (entire 4×2 footprint) =====
+  // A subtle limestone-colored pad lifts the whole estate slightly off
+  // the natural terrain. Reads as "this is a continuous, deliberate
+  // composition" rather than a building dropped on grass.
+  const estatePad = new BoxGeometry(3.95, 0.025, 1.95);
+  estatePad.translate(cx, 0.0125, cz);
+  out.push({ geom: estatePad, color: MM_LIMESTONE_DEEP });
+  // Manicured lawn covers most of the front grounds + flanking borders.
+  const frontLawn = new BoxGeometry(3.85, 0.020, 0.92);
+  frontLawn.translate(cx, 0.024, gz);
+  out.push({ geom: frontLawn, color: MM_LAWN });
+  // ===== PERIMETER BALUSTRADE =====
+  // Low stone wall around the entire footprint, broken at the front
+  // centre by the main drive entrance.
+  // Front (south) edge — left + right segments flanking the drive opening.
+  const frontWallLeft = new BoxGeometry(1.45, 0.10, 0.06);
+  frontWallLeft.translate(cx - 1.20, 0.07, cz + 0.97);
+  out.push({ geom: frontWallLeft, color: MM_LIMESTONE });
+  const frontWallRight = new BoxGeometry(1.45, 0.10, 0.06);
+  frontWallRight.translate(cx + 1.20, 0.07, cz + 0.97);
+  out.push({ geom: frontWallRight, color: MM_LIMESTONE });
+  // Back (north) edge — solid, no break.
+  const backWall = new BoxGeometry(3.95, 0.10, 0.06);
+  backWall.translate(cx, 0.07, cz - 0.97);
+  out.push({ geom: backWall, color: MM_LIMESTONE });
+  // East + West edges.
+  const eastWall = new BoxGeometry(0.06, 0.10, 1.95);
+  eastWall.translate(cx + 1.97, 0.07, cz);
+  out.push({ geom: eastWall, color: MM_LIMESTONE });
+  const westWall = new BoxGeometry(0.06, 0.10, 1.95);
+  westWall.translate(cx - 1.97, 0.07, cz);
+  out.push({ geom: westWall, color: MM_LIMESTONE });
+  // Corner posts — taller blocks with gold-finial caps.
+  for (const [px, pz] of [[-1.97, -0.97], [1.97, -0.97], [-1.97, 0.97], [1.97, 0.97]] as Array<[number, number]>) {
+    const post = new BoxGeometry(0.10, 0.20, 0.10);
+    post.translate(cx + px, 0.10, cz + pz);
+    out.push({ geom: post, color: MM_LIMESTONE });
+    const finial = new ConeGeometry(0.05, 0.06, 6);
+    finial.translate(cx + px, 0.23, cz + pz);
+    out.push({ geom: finial, color: MM_GOLD_TRIM });
+  }
+  // Front gate posts (taller, flank the drive opening) with gold finials.
+  for (const px of [-0.50, 0.50]) {
+    const post = new BoxGeometry(0.10, 0.30, 0.10);
+    post.translate(cx + px, 0.15, cz + 0.97);
+    out.push({ geom: post, color: MM_LIMESTONE });
+    const finial = new ConeGeometry(0.06, 0.08, 6);
+    finial.translate(cx + px, 0.34, cz + 0.97);
+    out.push({ geom: finial, color: MM_GOLD_TRIM });
+  }
+
+  // ===== GRAND DRIVE =====
+  // Paved flagstone driveway running from the front gate to the steps
+  // at the foot of the entrance portico.
+  const drive = new BoxGeometry(1.00, 0.025, 0.95);
+  drive.translate(cx, 0.027, gz);
+  out.push({ geom: drive, color: MM_PAVING });
+  // Drive border — slim limestone strip on each side.
+  const driveBorderL = new BoxGeometry(0.06, 0.030, 0.95);
+  driveBorderL.translate(cx - 0.50, 0.029, gz);
+  out.push({ geom: driveBorderL, color: MM_LIMESTONE_DEEP });
+  const driveBorderR = new BoxGeometry(0.06, 0.030, 0.95);
+  driveBorderR.translate(cx + 0.50, 0.029, gz);
+  out.push({ geom: driveBorderR, color: MM_LIMESTONE_DEEP });
+
+  // ===== REFLECTING POOL with central FOUNTAIN =====
+  // Two long reflecting pool sections flanking the central drive — they
+  // run east-west between the drive border and the parterre garden.
+  // (Monumental "pool by the driveway" composition.)
+  for (const sideX of [-1.10, 1.10]) {
+    // Pool surround.
+    const surround = new BoxGeometry(1.05, 0.040, 0.50);
+    surround.translate(cx + sideX, 0.035, gz);
+    out.push({ geom: surround, color: MM_PAVING_DEEP });
+    // Water inset.
+    const water = new BoxGeometry(0.85, 0.030, 0.36);
+    water.translate(cx + sideX, 0.045, gz);
+    out.push({ geom: water, color: MM_WATER });
+    // Subtle light reflection slab.
+    const ripple = new BoxGeometry(0.30, 0.035, 0.05);
+    ripple.translate(cx + sideX, 0.050, gz);
+    out.push({ geom: ripple, color: MM_WATER_LIGHT });
+    // Bronze statue at each end of the pool.
+    for (const ex of [-0.42, 0.42]) {
+      const plinth = new BoxGeometry(0.10, 0.10, 0.10);
+      plinth.translate(cx + sideX + ex, 0.06, gz);
+      out.push({ geom: plinth, color: MM_PAVING_DEEP });
+      const statueLegs = new BoxGeometry(0.05, 0.10, 0.04);
+      statueLegs.translate(cx + sideX + ex, 0.16, gz);
+      out.push({ geom: statueLegs, color: MM_BRONZE });
+      const statueTorso = new BoxGeometry(0.07, 0.08, 0.05);
+      statueTorso.translate(cx + sideX + ex, 0.25, gz);
+      out.push({ geom: statueTorso, color: MM_BRONZE });
+      const statueHead = new BoxGeometry(0.04, 0.04, 0.04);
+      statueHead.translate(cx + sideX + ex, 0.31, gz);
+      out.push({ geom: statueHead, color: MM_BRONZE_BRIGHT });
+    }
+  }
+
+  // ===== PARTERRE GARDENS (at the outermost columns of the front row) =====
+  // Geometric formal hedges with flower-dot accents. One garden on each
+  // outer corner of the front row.
+  for (const sideX of [-1.65, 1.65]) {
+    // Outer hedge frame — square box.
+    const hedgeN = new BoxGeometry(0.60, 0.10, 0.04);
+    hedgeN.translate(cx + sideX, 0.075, gz - 0.28);
+    out.push({ geom: hedgeN, color: MM_HEDGE_DARK });
+    const hedgeS = new BoxGeometry(0.60, 0.10, 0.04);
+    hedgeS.translate(cx + sideX, 0.075, gz + 0.28);
+    out.push({ geom: hedgeS, color: MM_HEDGE_DARK });
+    const hedgeW = new BoxGeometry(0.04, 0.10, 0.60);
+    hedgeW.translate(cx + sideX - 0.28, 0.075, gz);
+    out.push({ geom: hedgeW, color: MM_HEDGE_DARK });
+    const hedgeE = new BoxGeometry(0.04, 0.10, 0.60);
+    hedgeE.translate(cx + sideX + 0.28, 0.075, gz);
+    out.push({ geom: hedgeE, color: MM_HEDGE_DARK });
+    // Inner cross hedge (forming 4 quadrants).
+    const hCrossH = new BoxGeometry(0.50, 0.07, 0.03);
+    hCrossH.translate(cx + sideX, 0.06, gz);
+    out.push({ geom: hCrossH, color: MM_HEDGE_BRIGHT });
+    const hCrossV = new BoxGeometry(0.03, 0.07, 0.50);
+    hCrossV.translate(cx + sideX, 0.06, gz);
+    out.push({ geom: hCrossV, color: MM_HEDGE_BRIGHT });
+    // Flower dots in each of the four quadrants.
+    const flowerColors = [MM_FLOWER_RED, MM_FLOWER_YELLOW, MM_FLOWER_PURPLE, MM_FLOWER_WHITE];
+    let i = 0;
+    for (const fz of [-0.13, 0.13]) {
+      for (const fx of [-0.13, 0.13]) {
+        const flower = new ConeGeometry(0.040, 0.06, 6);
+        flower.translate(cx + sideX + fx, 0.10, gz + fz);
+        out.push({ geom: flower, color: flowerColors[i++ % flowerColors.length]! });
+      }
+    }
+    // Topiary corners — small cones at the four outer corners.
+    for (const [tx, tz] of [[-0.30, -0.30], [0.30, -0.30], [-0.30, 0.30], [0.30, 0.30]] as Array<[number, number]>) {
+      const top = new ConeGeometry(0.07, 0.18, 8);
+      top.translate(cx + sideX + tx, 0.13, gz + tz);
+      out.push({ geom: top, color: MM_HEDGE_BRIGHT });
+    }
+    // Lawn infill behind the hedge frame to brighten the parterre.
+    const parterreLawn = new BoxGeometry(0.55, 0.025, 0.55);
+    parterreLawn.translate(cx + sideX, 0.030, gz);
+    out.push({ geom: parterreLawn, color: MM_LAWN_LIGHT });
+  }
+
+  // ===== ENTRANCE STEPS (foot of the portico, between drive + mansion) =====
+  // Three-step grand stair leading up to the mansion porch level.
+  for (let s = 0; s < 3; s++) {
+    const step = new BoxGeometry(1.20 - s * 0.10, 0.045, 0.10);
+    step.translate(cx, 0.045 + s * 0.045, mz + 0.45 - s * 0.05);
+    out.push({ geom: step, color: MM_LIMESTONE_DARK });
+  }
+  // Two ornamental urns flanking the steps.
+  for (const ux of [-0.65, 0.65]) {
+    const urnBase = new CylinderGeometry(0.06, 0.05, 0.04, 8);
+    urnBase.translate(cx + ux, 0.08, mz + 0.50);
+    out.push({ geom: urnBase, color: MM_LIMESTONE_DEEP });
+    const urnBowl = new CylinderGeometry(0.07, 0.06, 0.10, 8);
+    urnBowl.translate(cx + ux, 0.15, mz + 0.50);
+    out.push({ geom: urnBowl, color: MM_LIMESTONE });
+    const urnTopiary = new ConeGeometry(0.07, 0.16, 8);
+    urnTopiary.translate(cx + ux, 0.28, mz + 0.50);
+    out.push({ geom: urnTopiary, color: MM_HEDGE_BRIGHT });
+  }
+  // Two wrought-iron lampposts flanking the steps further out.
+  for (const lx of [-0.85, 0.85]) {
+    const lampPole = new CylinderGeometry(0.018, 0.018, 0.46, 6);
+    lampPole.translate(cx + lx, 0.27, mz + 0.50);
+    out.push({ geom: lampPole, color: MM_LAMPPOST });
+    const lampHead = new BoxGeometry(0.10, 0.10, 0.10);
+    lampHead.translate(cx + lx, 0.55, mz + 0.50);
+    out.push({ geom: lampHead, color: MM_LAMPPOST });
+    const lampBulb = new BoxGeometry(0.06, 0.06, 0.06);
+    lampBulb.translate(cx + lx, 0.55, mz + 0.50);
+    out.push({ geom: lampBulb, color: MM_LAMP_BULB });
+    const lampFinial = new ConeGeometry(0.025, 0.05, 6);
+    lampFinial.translate(cx + lx, 0.625, mz + 0.50);
+    out.push({ geom: lampFinial, color: MM_GOLD_TRIM });
+  }
+
+  // ===== MANSION BODY =====
+  // The mansion runs along the back row, 4 tiles wide × 1 tile deep.
+  // It's composed of 5 connected blocks: outer wings (×2), inner blocks
+  // (×2), grand central (×1, taller).
+  // Mansion footprint: width 3.40 (under the 4-unit estate width),
+  // depth 0.65 (under the 1-unit back-row depth).
+  const mansionDepth = 0.65;
+  const mansionBackZ = mz - 0.10;  // body centre slightly behind centre of back row
+
+  // Podium under the entire mansion — slim limestone slab.
+  const mansionPodium = new BoxGeometry(3.50, 0.06, mansionDepth + 0.10);
+  mansionPodium.translate(cx, 0.06, mansionBackZ);
+  out.push({ geom: mansionPodium, color: MM_LIMESTONE_DEEP });
+
+  // ----- OUTER WINGS (left + right, 2-storey, lower than centre) -----
+  for (const wingX of [-1.30, 1.30]) {
+    const wingW = 0.80;
+    const wingH = 0.70;
+    const wing = new BoxGeometry(wingW, wingH, mansionDepth);
+    wing.translate(cx + wingX, 0.06 + wingH / 2 + 0.03, mansionBackZ);
+    out.push({ geom: wing, color: MM_LIMESTONE });
+    // Cornice band between the two stories.
+    const cornice = new BoxGeometry(wingW + 0.02, 0.04, mansionDepth + 0.02);
+    cornice.translate(cx + wingX, 0.06 + wingH * 0.5 + 0.03, mansionBackZ);
+    out.push({ geom: cornice, color: MM_LIMESTONE_DEEP });
+    // Hipped roof.
+    const wingRoof = new ConeGeometry(0.55, 0.18, 4);
+    wingRoof.rotateY(Math.PI / 4);
+    wingRoof.translate(cx + wingX, 0.06 + wingH + 0.03 + 0.09, mansionBackZ);
+    out.push({ geom: wingRoof, color: MM_ROOF_SLATE });
+    // Roof balustrade — slim parapet running the wing's front edge.
+    const wingBalustrade = new BoxGeometry(wingW + 0.04, 0.04, 0.04);
+    wingBalustrade.translate(cx + wingX, 0.06 + wingH + 0.05, mansionBackZ + mansionDepth / 2 + 0.01);
+    out.push({ geom: wingBalustrade, color: MM_LIMESTONE });
+    // Twin chimneys per wing.
+    for (const chx of [-0.20, 0.20]) {
+      const chimney = new BoxGeometry(0.07, 0.12, 0.07);
+      chimney.translate(cx + wingX + chx, 0.06 + wingH + 0.03 + 0.18, mansionBackZ - 0.10);
+      out.push({ geom: chimney, color: MM_LIMESTONE_DARK });
+      const chimneyCap = new BoxGeometry(0.09, 0.025, 0.09);
+      chimney.translate(cx + wingX + chx, 0.06 + wingH + 0.03 + 0.255, mansionBackZ - 0.10);
+      out.push({ geom: chimneyCap, color: MM_ROOF_GABLE });
+    }
+    // Wing windows — 3 per story × 2 stories = 6 windows per wing.
+    // Tall narrow rectangle with shutters on each side.
+    for (let story = 0; story < 2; story++) {
+      const yWindow = 0.06 + 0.18 + story * 0.32;
+      for (const wxOff of [-0.25, 0.0, 0.25]) {
+        // Glass.
+        const win = new BoxGeometry(0.08, 0.16, 0.022);
+        win.translate(cx + wingX + wxOff, yWindow, mansionBackZ + mansionDepth / 2 + 0.003);
+        out.push({ geom: win, color: MM_WINDOW_DARK });
+        // Left shutter.
+        const sL = new BoxGeometry(0.045, 0.16, 0.018);
+        sL.translate(cx + wingX + wxOff - 0.07, yWindow, mansionBackZ + mansionDepth / 2 + 0.005);
+        out.push({ geom: sL, color: MM_SHUTTER });
+        // Right shutter.
+        const sR = new BoxGeometry(0.045, 0.16, 0.018);
+        sR.translate(cx + wingX + wxOff + 0.07, yWindow, mansionBackZ + mansionDepth / 2 + 0.005);
+        out.push({ geom: sR, color: MM_SHUTTER });
+      }
+    }
+  }
+
+  // ----- INNER BLOCKS (2-storey, between wings + central) -----
+  for (const innerX of [-0.55, 0.55]) {
+    const innerW = 0.55;
+    const innerH = 0.85;  // slightly taller than wings
+    const inner = new BoxGeometry(innerW, innerH, mansionDepth);
+    inner.translate(cx + innerX, 0.06 + innerH / 2 + 0.03, mansionBackZ);
+    out.push({ geom: inner, color: MM_LIMESTONE });
+    // Cornice band.
+    const cornice = new BoxGeometry(innerW + 0.02, 0.04, mansionDepth + 0.02);
+    cornice.translate(cx + innerX, 0.06 + innerH * 0.5 + 0.03, mansionBackZ);
+    out.push({ geom: cornice, color: MM_LIMESTONE_DEEP });
+    // Hipped roof.
+    const innerRoof = new ConeGeometry(0.40, 0.16, 4);
+    innerRoof.rotateY(Math.PI / 4);
+    innerRoof.translate(cx + innerX, 0.06 + innerH + 0.03 + 0.08, mansionBackZ);
+    out.push({ geom: innerRoof, color: MM_ROOF_SLATE });
+    // Inner-block windows — 2 per story × 2 stories = 4 each.
+    for (let story = 0; story < 2; story++) {
+      const yWindow = 0.06 + 0.22 + story * 0.38;
+      for (const wxOff of [-0.13, 0.13]) {
+        const win = new BoxGeometry(0.09, 0.20, 0.022);
+        win.translate(cx + innerX + wxOff, yWindow, mansionBackZ + mansionDepth / 2 + 0.003);
+        out.push({ geom: win, color: MM_WINDOW_DARK });
+        const sL = new BoxGeometry(0.045, 0.20, 0.018);
+        sL.translate(cx + innerX + wxOff - 0.075, yWindow, mansionBackZ + mansionDepth / 2 + 0.005);
+        out.push({ geom: sL, color: MM_SHUTTER });
+        const sR = new BoxGeometry(0.045, 0.20, 0.018);
+        sR.translate(cx + innerX + wxOff + 0.075, yWindow, mansionBackZ + mansionDepth / 2 + 0.005);
+        out.push({ geom: sR, color: MM_SHUTTER });
+      }
+    }
+  }
+
+  // ----- GRAND CENTRAL BLOCK (3-storey, parapet, dome, portico) -----
+  const centralW = 0.95;
+  const centralH = 1.10;
+  const central = new BoxGeometry(centralW, centralH, mansionDepth + 0.10);
+  central.translate(cx, 0.06 + centralH / 2 + 0.03, mansionBackZ);
+  out.push({ geom: central, color: MM_LIMESTONE });
+  // Two cornice bands (between three stories).
+  for (const yC of [centralH / 3, centralH * 2 / 3]) {
+    const cornice = new BoxGeometry(centralW + 0.03, 0.045, mansionDepth + 0.13);
+    cornice.translate(cx, 0.06 + yC + 0.03, mansionBackZ);
+    out.push({ geom: cornice, color: MM_LIMESTONE_DEEP });
+  }
+  // Roof parapet — wraps the top of the central block (no pitched roof,
+  // it's a flat-top with a balustrade so the dome sits clean).
+  const parapet = new BoxGeometry(centralW + 0.04, 0.06, mansionDepth + 0.14);
+  parapet.translate(cx, 0.06 + centralH + 0.06, mansionBackZ);
+  out.push({ geom: parapet, color: MM_LIMESTONE_DEEP });
+  // Balustrade detail — a row of tiny posts along the parapet front.
+  for (let i = 0; i < 11; i++) {
+    const px = -centralW * 0.45 + i * (centralW * 0.9 / 10);
+    const post = new BoxGeometry(0.022, 0.06, 0.022);
+    post.translate(cx + px, 0.06 + centralH + 0.06, mansionBackZ + (mansionDepth + 0.14) / 2 + 0.005);
+    out.push({ geom: post, color: MM_LIMESTONE });
+  }
+  // ===== PEDIMENT (triangular gable above the entrance, on the front) =====
+  // Three slabs forming a triangle silhouette.
+  // Base of pediment (a flat horizontal slab).
+  const pedBase = new BoxGeometry(0.85, 0.04, 0.07);
+  pedBase.translate(cx, 0.06 + centralH * 0.85, mansionBackZ + mansionDepth / 2 + 0.10);
+  out.push({ geom: pedBase, color: MM_LIMESTONE_DEEP });
+  // Triangular pediment fascia — a cone with 3 segments creates a triangle
+  // when oriented correctly.
+  const pediment = new ConeGeometry(0.50, 0.20, 3);
+  pediment.rotateX(Math.PI / 2);
+  pediment.rotateZ(Math.PI / 6); // align flat side down
+  pediment.translate(cx, 0.06 + centralH * 0.85 + 0.10, mansionBackZ + mansionDepth / 2 + 0.10);
+  out.push({ geom: pediment, color: MM_ROOF_GABLE });
+  // Gold escutcheon in the centre of the pediment.
+  const escutcheon = new BoxGeometry(0.10, 0.07, 0.022);
+  escutcheon.translate(cx, 0.06 + centralH * 0.85 + 0.07, mansionBackZ + mansionDepth / 2 + 0.115);
+  out.push({ geom: escutcheon, color: MM_GOLD_TRIM });
+
+  // ===== PORTICO COLUMNS (6 columns supporting the pediment) =====
+  // Tall slim cylinders running from podium to under the entablature.
+  const colY = 0.06 + 0.45;
+  const colH = 0.85;
+  for (let i = 0; i < 6; i++) {
+    const colX = -0.40 + i * (0.80 / 5);
+    const col = new CylinderGeometry(0.025, 0.030, colH, 8);
+    col.translate(cx + colX, colY, mansionBackZ + mansionDepth / 2 + 0.12);
+    out.push({ geom: col, color: MM_LIMESTONE });
+    // Capital (top of column).
+    const cap = new BoxGeometry(0.08, 0.025, 0.08);
+    cap.translate(cx + colX, colY + colH / 2 + 0.013, mansionBackZ + mansionDepth / 2 + 0.12);
+    out.push({ geom: cap, color: MM_LIMESTONE_DEEP });
+    // Base (bottom of column).
+    const cBase = new BoxGeometry(0.08, 0.025, 0.08);
+    cBase.translate(cx + colX, colY - colH / 2 - 0.013, mansionBackZ + mansionDepth / 2 + 0.12);
+    out.push({ geom: cBase, color: MM_LIMESTONE_DEEP });
+  }
+  // Entablature above the columns (slim slab connecting their tops).
+  const entablature = new BoxGeometry(0.95, 0.07, 0.08);
+  entablature.translate(cx, colY + colH / 2 + 0.05, mansionBackZ + mansionDepth / 2 + 0.12);
+  out.push({ geom: entablature, color: MM_LIMESTONE_DEEP });
+
+  // ===== GRAND DOOR (centred under the portico) =====
+  const door = new BoxGeometry(0.18, 0.40, 0.025);
+  door.translate(cx, 0.06 + 0.22, mansionBackZ + mansionDepth / 2 + 0.005);
+  out.push({ geom: door, color: MM_DOOR_DARK });
+  // Door arch (rounded top — half cone).
+  const doorArch = new ConeGeometry(0.10, 0.06, 12);
+  doorArch.translate(cx, 0.06 + 0.45, mansionBackZ + mansionDepth / 2 + 0.005);
+  out.push({ geom: doorArch, color: MM_LIMESTONE_DEEP });
+  // Gold door handle.
+  const handle = new BoxGeometry(0.020, 0.020, 0.030);
+  handle.translate(cx + 0.06, 0.06 + 0.22, mansionBackZ + mansionDepth / 2 + 0.020);
+  out.push({ geom: handle, color: MM_GOLD_TRIM });
+
+  // ===== CENTRAL BLOCK WINDOWS (story 2 + 3, flanking the pediment) =====
+  // Story 2 has 2 windows (one each side of the pediment area).
+  // Story 3 has 4 windows in a row (above the pediment).
+  for (const wxOff of [-0.34, 0.34]) {
+    const win = new BoxGeometry(0.10, 0.22, 0.022);
+    win.translate(cx + wxOff, 0.06 + 0.55, mansionBackZ + mansionDepth / 2 + 0.005);
+    out.push({ geom: win, color: MM_WINDOW_DARK });
+    const sL = new BoxGeometry(0.05, 0.22, 0.018);
+    sL.translate(cx + wxOff - 0.085, 0.06 + 0.55, mansionBackZ + mansionDepth / 2 + 0.007);
+    out.push({ geom: sL, color: MM_SHUTTER });
+    const sR = new BoxGeometry(0.05, 0.22, 0.018);
+    sR.translate(cx + wxOff + 0.085, 0.06 + 0.55, mansionBackZ + mansionDepth / 2 + 0.007);
+    out.push({ geom: sR, color: MM_SHUTTER });
+  }
+  // Story 3 — top floor row of round-topped windows above pediment.
+  for (const wxOff of [-0.30, -0.10, 0.10, 0.30]) {
+    const win = new BoxGeometry(0.08, 0.14, 0.022);
+    win.translate(cx + wxOff, 0.06 + 0.95, mansionBackZ + mansionDepth / 2 + 0.005);
+    out.push({ geom: win, color: MM_WINDOW_DARK });
+  }
+
+  // ===== DOME on top of the central block =====
+  // Drum (cylindrical base for the dome).
+  const drum = new CylinderGeometry(0.20, 0.22, 0.10, 16);
+  drum.translate(cx, 0.06 + centralH + 0.16, mansionBackZ);
+  out.push({ geom: drum, color: MM_LIMESTONE });
+  // Decorative columns around the drum.
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const px = Math.cos(angle) * 0.205;
+    const pz = Math.sin(angle) * 0.205;
+    const drumCol = new CylinderGeometry(0.012, 0.012, 0.10, 6);
+    drumCol.translate(cx + px, 0.06 + centralH + 0.16, mansionBackZ + pz);
+    out.push({ geom: drumCol, color: MM_LIMESTONE_DEEP });
+  }
+  // Dome itself — half-sphere via cone with many segments, topped by spire.
+  const dome = new ConeGeometry(0.20, 0.30, 16);
+  dome.translate(cx, 0.06 + centralH + 0.36, mansionBackZ);
+  out.push({ geom: dome, color: MM_DOME_COPPER });
+  // Lantern cupola at the top of the dome.
+  const cupolaBase = new CylinderGeometry(0.05, 0.06, 0.08, 8);
+  cupolaBase.translate(cx, 0.06 + centralH + 0.55, mansionBackZ);
+  out.push({ geom: cupolaBase, color: MM_LIMESTONE });
+  const cupolaTop = new ConeGeometry(0.06, 0.10, 8);
+  cupolaTop.translate(cx, 0.06 + centralH + 0.64, mansionBackZ);
+  out.push({ geom: cupolaTop, color: MM_DOME_COPPER });
+  // Spire above the cupola.
+  const spire = new CylinderGeometry(0.012, 0.012, 0.18, 5);
+  spire.translate(cx, 0.06 + centralH + 0.78, mansionBackZ);
+  out.push({ geom: spire, color: MM_GOLD_TRIM });
+  // Gold ball finial on top.
+  const ballFinial = new ConeGeometry(0.040, 0.07, 6);
+  ballFinial.rotateX(Math.PI);
+  ballFinial.translate(cx, 0.06 + centralH + 0.91, mansionBackZ);
+  out.push({ geom: ballFinial, color: MM_GOLD_TRIM });
+
+  // ===== ORNAMENTAL TREES in the back corners (behind wings) =====
+  for (const tx of [-1.75, 1.75]) {
+    const trunk = new CylinderGeometry(0.05, 0.06, 0.30, 6);
+    trunk.translate(cx + tx, 0.18, mz - 0.30);
+    out.push({ geom: trunk, color: MM_TREE_TRUNK });
+    const foliage = new ConeGeometry(0.30, 0.65, 8);
+    foliage.translate(cx + tx, 0.65, mz - 0.30);
+    out.push({ geom: foliage, color: MM_TREE_LEAF });
+    // Second smaller blob for a fuller crown.
+    const blob = new ConeGeometry(0.20, 0.40, 8);
+    blob.translate(cx + tx + 0.10, 0.85, mz - 0.20);
+    out.push({ geom: blob, color: MM_TREE_LEAF });
+  }
+
+  return out;
+}

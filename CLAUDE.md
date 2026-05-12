@@ -336,6 +336,18 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.10 (Play-as-you-learn tutorial — completes the production-readiness audit batch)
+
+Sixth and final batch from the audit. Replaces the legacy 4-step "reading cards" Welcome modal with a live coach that watches the player's city while they play it.
+
+**`src/engine/Tutorial.ts`** is a small state machine — `phase ∈ {prompt, active, skipped, completed}` + step index + 9-step curriculum, each step `{title, hint, check(game): boolean}`. On every render tick the active step's `check` predicate runs; satisfying it auto-advances. Steps are deliberately fuzzy ("any road exists", "population ≥ 20") so the player can build however they want.
+
+**Two UI surfaces** in `index.html`: a centred `#tutorial-prompt` first-launch modal ("Try the guided tutorial?") and a persistent top-center `#tutorial-banner` pill that shows the current objective while phase is `active`. The banner has three actions: **Skip tutorial**, **Already did this** (manual advance), and a terminal **Got it** on the final step.
+
+**Two new `Game` flags** — `happinessPanelOpenedOnce` and `budgetPanelOpenedOnce` — flip true the first time the player opens those panels, which lets the tutorial detect engagement with key UI without DOM polling. State persists in `localStorage` under `mq-tutorial-state`. Save schema unchanged.
+
+Re-launch points: **Settings → "Show tutorial again"** and the **budget panel "Show tutorial again" link** both call `tutorial.restart()`. The old `#tutorial` DOM block + `TUTORIAL_SEEN_KEY` flag were removed in this release — there's no fallback to the old reading-card flow.
+
 ## Status: Alpha 4.4 (Vehicle window/light overlays + universal tree shadows)
 
 Two visual polish passes on top of 4.3.1, both addressing items from the prior session's handoff list.

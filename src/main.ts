@@ -455,58 +455,78 @@ function unlockLabel(tool: string): string {
   return map[tool] ?? tool;
 }
 
-// "Show tutorial again" link in the budget panel.
-const showTutorialBtn = document.getElementById('budget-show-tutorial');
-if (showTutorialBtn) {
-  showTutorialBtn.addEventListener('click', () => {
-    const f = (window as unknown as { showTutorial?: () => void }).showTutorial;
-    if (f) f();
-  });
+// Tutorial — play-as-you-learn guided onboarding (Alpha 4.10). Replaces
+// the old 4-step reading-cards modal. The player sees a one-time
+// "Welcome — try the tutorial?" prompt on first launch; accepting
+// activates a top-center banner that updates as they progress. Each
+// step's completion predicate runs every tick.
+import { Tutorial } from './engine/Tutorial';
+const tutorial = new Tutorial();
+tutorial.load();
+
+const tutorialPrompt = document.getElementById('tutorial-prompt');
+const tutorialPromptStart = document.getElementById('tutorial-prompt-start');
+const tutorialPromptSkip = document.getElementById('tutorial-prompt-skip');
+const tutorialBanner = document.getElementById('tutorial-banner');
+const tutorialBannerStep = document.getElementById('tutorial-banner-step');
+const tutorialBannerTitle = document.getElementById('tutorial-banner-title');
+const tutorialBannerHint = document.getElementById('tutorial-banner-hint');
+const tutorialBannerSkip = document.getElementById('tutorial-banner-skip');
+const tutorialBannerAdvance = document.getElementById('tutorial-banner-advance');
+const tutorialBannerDone = document.getElementById('tutorial-banner-done');
+
+const showPrompt = (visible: boolean): void => {
+  if (!tutorialPrompt) return;
+  tutorialPrompt.classList.toggle('hidden', !visible);
+  tutorialPrompt.setAttribute('aria-hidden', String(!visible));
+};
+
+const renderBanner = (): void => {
+  if (!tutorialBanner) return;
+  const visible = tutorial.phase === 'active';
+  tutorialBanner.classList.toggle('hidden', !visible);
+  tutorialBanner.setAttribute('aria-hidden', String(!visible));
+  if (!visible) return;
+  const step = tutorial.currentStep;
+  const isFinal = tutorial.stepIndex >= tutorial.totalSteps - 1;
+  if (tutorialBannerStep) {
+    tutorialBannerStep.textContent = `Step ${tutorial.stepIndex + 1} of ${tutorial.totalSteps}`;
+  }
+  if (tutorialBannerTitle) tutorialBannerTitle.textContent = step?.title ?? '';
+  if (tutorialBannerHint) tutorialBannerHint.textContent = step?.hint ?? '';
+  // Final step swaps the "Already did this" Advance button for the
+  // terminal "Got it" button so the player has a clean way to dismiss.
+  if (tutorialBannerAdvance) tutorialBannerAdvance.classList.toggle('hidden', isFinal);
+  if (tutorialBannerDone) tutorialBannerDone.classList.toggle('hidden', !isFinal);
+};
+tutorial.onChange(renderBanner);
+renderBanner();
+
+// First-launch prompt — only when the player has never made a choice.
+if (tutorial.phase === 'prompt') {
+  showPrompt(true);
 }
 
-// Tutorial — 4-step welcome shown once on first launch. Skipped or
-// completed both write a localStorage flag so we never auto-show again.
-// Player can re-open via the budget panel's "Show tutorial" link.
-const TUTORIAL_SEEN_KEY = 'city-builder-tutorial-seen';
-const tutorial = document.getElementById('tutorial');
-if (tutorial) {
-  const stepEls = Array.from(tutorial.querySelectorAll<HTMLElement>('.tutorial__step'));
-  const prevBtn = document.getElementById('tutorial-prev') as HTMLButtonElement | null;
-  const nextBtn = document.getElementById('tutorial-next') as HTMLButtonElement | null;
-  const skipBtn = document.getElementById('tutorial-skip');
-  let cur = 0;
-  const showStep = (i: number): void => {
-    cur = Math.max(0, Math.min(stepEls.length - 1, i));
-    for (let k = 0; k < stepEls.length; k++) stepEls[k]!.classList.toggle('hidden', k !== cur);
-    if (prevBtn) prevBtn.disabled = cur === 0;
-    if (nextBtn) nextBtn.textContent = cur === stepEls.length - 1 ? "Got it" : 'Next';
-  };
-  const dismiss = (): void => {
-    tutorial.classList.add('hidden');
-    tutorial.setAttribute('aria-hidden', 'true');
-    try { localStorage.setItem(TUTORIAL_SEEN_KEY, '1'); } catch { /* private mode etc. */ }
-  };
-  prevBtn?.addEventListener('click', () => showStep(cur - 1));
-  nextBtn?.addEventListener('click', () => {
-    if (cur === stepEls.length - 1) dismiss();
-    else showStep(cur + 1);
-  });
-  skipBtn?.addEventListener('click', dismiss);
-  // Show on first launch only.
-  let seen = false;
-  try { seen = localStorage.getItem(TUTORIAL_SEEN_KEY) === '1'; } catch { seen = false; }
-  if (!seen) {
-    showStep(0);
-    tutorial.classList.remove('hidden');
-    tutorial.setAttribute('aria-hidden', 'false');
-  }
-  // Expose a re-opener so the budget panel can wire a "Show tutorial" link.
-  (window as unknown as { showTutorial?: () => void }).showTutorial = () => {
-    showStep(0);
-    tutorial.classList.remove('hidden');
-    tutorial.setAttribute('aria-hidden', 'false');
-  };
-}
+tutorialPromptStart?.addEventListener('click', () => {
+  showPrompt(false);
+  tutorial.start();
+});
+tutorialPromptSkip?.addEventListener('click', () => {
+  showPrompt(false);
+  tutorial.skip();
+});
+tutorialBannerSkip?.addEventListener('click', () => tutorial.skip());
+tutorialBannerAdvance?.addEventListener('click', () => tutorial.advance());
+tutorialBannerDone?.addEventListener('click', () => tutorial.finish());
+
+// Run the per-step predicate every render frame. Cheap — each predicate
+// is O(grid) at worst and only runs while phase === 'active'.
+game.tickCallbacks.push(() => tutorial.tick(game));
+
+// Settings + budget-panel "Show tutorial again" entry points.
+const showTutorialBtn = document.getElementById('budget-show-tutorial');
+showTutorialBtn?.addEventListener('click', () => tutorial.restart());
+// (Settings panel binds its show-tutorial via the hooks param below.)
 
 // Photo mode — hide all HUD chrome via a body-level CSS class so panels
 // and the toolbar disappear together. Tap anywhere on the canvas to exit
@@ -555,14 +575,9 @@ if (fdCloseBtn) {
 // with difficulty, audio, display, simulation tabs.
 const settingsPanel = bindSettingsPanel(settings, {
   onShowTutorial: () => {
-    // Re-trigger the existing tutorial flow. The tutorial DOM lives in
-    // index.html under `#tutorial`; the close button hides it. Showing
-    // it is just un-hiding.
-    const tut = document.getElementById('tutorial');
-    if (tut) {
-      tut.classList.remove('hidden');
-      tut.setAttribute('aria-hidden', 'false');
-    }
+    // Re-launches the live, play-as-you-learn tutorial (Alpha 4.10).
+    // The banner re-appears at step 1 and tracks the player from there.
+    tutorial.restart();
   },
   onResetAll: () => {
     // After resetting settings to defaults, the CSS side effects have

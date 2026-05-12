@@ -1335,6 +1335,13 @@ export class Game {
     location.reload();
   }
 
+  /** Tutorial uses these flags to detect the player opening the panel
+   *  at least once (Alpha 4.10). Setting once and never clearing is the
+   *  whole semantic — replaying the tutorial doesn't re-arm them, since
+   *  the player already knows where these panels live. */
+  happinessPanelOpenedOnce = false;
+  budgetPanelOpenedOnce = false;
+
   /** Toggle the budget panel; closes any other bottom panel. */
   toggleBudget(): void {
     if (this.budgetPanel.isOpen()) {
@@ -1343,6 +1350,7 @@ export class Game {
       this.panel.hide();
       this.happinessPanel.hide();
       this.budgetPanel.show();
+      this.budgetPanelOpenedOnce = true;
     }
   }
 
@@ -1354,6 +1362,7 @@ export class Game {
       this.panel.hide();
       this.budgetPanel.hide();
       this.happinessPanel.show();
+      this.happinessPanelOpenedOnce = true;
     }
   }
 

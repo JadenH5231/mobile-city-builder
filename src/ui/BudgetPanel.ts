@@ -1,7 +1,7 @@
 import type { Economy } from '../simulation/Economy';
 import { BOND_SPECS, MAX_ACTIVE_BONDS, type BondId, type Bonds } from '../simulation/Bonds';
 import type { Council } from '../simulation/Council';
-import { BEAUTIFICATION_TIERS } from '../types';
+import { BEAUTIFICATION_TIERS, BEAUTIFICATION_TIER_ORDER, type BeautificationTier } from '../types';
 
 const fmt = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -165,10 +165,13 @@ export class BudgetPanel {
   }
 
   /**
-   * Council Beautification Budget readout (Alpha 4.0). Read-only —
-   * the council picks the tier each term, the mayor cannot change it.
-   * Surfaces the elected tier, the monthly bill, and a defunded
-   * marker when the bill couldn't clear last month.
+   * Beautification Budget readout (Alpha 4.0; Alpha 4.2.2 added the
+   * override-mode editor). Council picks the tier each term and the
+   * line is read-only by default. When **Mayoral Override** is active,
+   * the read-only state line is swapped for a tier-picker row of pills
+   * so the mayor can directly set the tier — every change updates
+   * Council immediately and the renderer refreshes its streetscape
+   * mesh on the next sim tick.
    *
    * Lives in an optional `#beautification-readout` block so older
    * builds without the row in index.html still load.
@@ -179,23 +182,59 @@ export class BudgetPanel {
     const elected = this.council.beautificationTier;
     const effective = this.council.effectiveBeautificationTier;
     const props = BEAUTIFICATION_TIERS[elected];
+    const overrideOn = this.council.canMayorSetBeautification();
+
     const labelEl = document.getElementById('beautification-label');
     const costEl = document.getElementById('beautification-cost');
     const stateEl = document.getElementById('beautification-state');
+    const pickerEl = document.getElementById('beautification-picker');
     if (labelEl) labelEl.textContent = props.label;
     if (costEl) costEl.textContent = props.monthlyCost > 0
       ? `${formatCurrency(props.monthlyCost)}/mo`
       : '—';
+
+    // State line: read-only by default; when override is on, replaced
+    // by an "OVERRIDE ACTIVE" badge + the picker row.
     if (stateEl) {
-      if (elected === 'none') {
+      if (overrideOn) {
+        stateEl.textContent = 'MAYORAL OVERRIDE — pick any tier this term.';
+        stateEl.className = 'beautification__state beautification__state--override';
+      } else if (elected === 'none') {
         stateEl.textContent = 'Council has chosen no streetscape program this term.';
         stateEl.className = 'beautification__state';
       } else if (effective === 'none') {
         stateEl.textContent = 'DEFUNDED — treasury short, streetscape stripped this month.';
         stateEl.className = 'beautification__state beautification__state--defunded';
       } else {
-        stateEl.textContent = 'Active — funded by council, mayor has no override.';
+        stateEl.textContent = 'Active — funded by council. (Mayoral Override lets you change it.)';
         stateEl.className = 'beautification__state beautification__state--active';
+      }
+    }
+
+    // Picker row of 5 pills (None / Light / Standard / Grand / Opulent).
+    // Visible only when override is on. We rebuild the row each refresh
+    // so the active-state highlight stays in sync.
+    if (pickerEl) {
+      pickerEl.innerHTML = '';
+      pickerEl.classList.toggle('hidden', !overrideOn);
+      if (overrideOn) {
+        for (const tier of BEAUTIFICATION_TIER_ORDER) {
+          const t = tier as BeautificationTier;
+          const tProps = BEAUTIFICATION_TIERS[t];
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'beautification__pick';
+          btn.dataset.active = String(t === elected);
+          btn.innerHTML = `<span>${tProps.label}</span><span class="beautification__pick-cost mono">${tProps.monthlyCost > 0 ? formatCurrency(tProps.monthlyCost) : 'free'}</span>`;
+          btn.addEventListener('click', () => {
+            // Council.setBeautificationTier guards on isOverrideActive
+            // so this is safe even if override expires mid-tap.
+            if (this.council!.setBeautificationTier(t)) {
+              this.refresh();  // re-render to highlight the new pick
+            }
+          });
+          pickerEl.appendChild(btn);
+        }
       }
     }
   }

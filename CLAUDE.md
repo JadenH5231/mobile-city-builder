@@ -336,6 +336,15 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Alpha 4.2.2 (Mansion glitch fix + Mayoral Override extends to Beautification)
+
+Two targeted fixes on top of 4.2.1:
+
+- **Mansion top "weird black box" gone.** Fixed two compounding issues: (1) `chimney.translate()` typo on the cap line caused the chimney to translate twice and the cap to stay at world origin (rendering as a stray dark box at corner of map); (2) replaced the funky cone-rotation pediment with a clean 4-piece classical composition (entablature base + 4-segment-cone tympanum + 2 angled roof slabs + gold escutcheon).
+- **Mayoral Override now also lets the mayor set Beautification Budget.** Pre-4.2.2 the budget was strictly council-controlled. New `Council.setBeautificationTier(tier)` is gated on `isOverrideActive()`; BudgetPanel renders an editable 5-pill picker (None / Light / Standard / Grand / Opulent with monthly costs) when override is active, replacing the read-only state line. Tier change propagates immediately to `effectiveBeautificationTier` and the renderer refreshes the streetscape mesh on the next sim tick. Override is one-term-only — at the next election, council control resumes via `electBeautificationTier()`.
+
+When extending Mayoral Override to a new lever, the right pattern is: (1) check `Council.isOverrideActive()` to allow the mayor's input, (2) immediately update both the elected/preferred field AND the effective field so the renderer / sim picks up the change without waiting for the next monthly tick, (3) preserve the natural behaviour at the next election (override expires, normal council/sim flow resumes).
+
 ## Status: Alpha 4.2.1 (Popover full-word headers + architectural night lights)
 
 Two QoL polish passes on top of 4.2:

@@ -490,16 +490,23 @@ export class Council {
   private overrideTerm = -1;
 
   /**
-   * Beautification Budget tier (Alpha 4.0) — chosen by the council each
-   * term. **Mayor cannot override.** This is the first lever in the
-   * game where the council acts independently of the mayor and even
-   * Mayoral Override cannot touch it (the override only affects cost
-   * multipliers + zoning approval, both of which are mayor-vs-council
-   * gating; this lever is council-vs-treasury and the mayor was never
-   * a party to it).
+   * Beautification Budget tier — chosen by the council each term, but
+   * the mayor can override the pick when **Mayoral Override** is
+   * active (Alpha 4.2.2 expanded the override to cover this lever
+   * too — previously the council was sole decider).
+   *
+   * Lifecycle:
+   * - At every election, `electBeautificationTier()` recomputes the
+   *   tier from the new council's beautification stance sum.
+   * - During a term, if Mayoral Override is active, the mayor may
+   *   call `setBeautificationTier(tier)` to override the council's
+   *   pick. The override pick stays in effect until the next election,
+   *   when council control resumes (override is one-term-only).
+   * - The monthly bill is settled by Economy regardless of who picked
+   *   it; if treasury can't cover, the effective tier drops to 'none'
+   *   for that month (defunded), as before.
    *
    * Defaults to 'none' for term 0 (pre-election starter cities).
-   * Re-elected each term in `electBeautificationTier`.
    */
   beautificationTier: BeautificationTier = 'none';
   /**
@@ -759,10 +766,12 @@ export class Council {
    * tier whose `stanceThreshold` is met. With no council seated yet
    * (term 0), defaults to 'none'.
    *
-   * **Mayor has no input.** This is intentional — the lever exists to
-   * showcase that the council can act independently of the mayor's
-   * priorities. A mayor who wants more (or less) flair has to influence
-   * who sits on council via Endorse / Coalition / photo-op campaigns.
+   * Mayor's primary lever for changing this is **electing a different
+   * council** (via Endorse / Coalition / photo-op campaigns). For
+   * direct control mid-term, the mayor must spend Political Capital on
+   * Mayoral Override and then call `setBeautificationTier()` (Alpha
+   * 4.2.2). Both election and override eventually feed into the same
+   * `beautificationTier` field — Economy doesn't care who picked it.
    */
   private electBeautificationTier(): void {
     if (this.councillors.length === 0) {
@@ -783,6 +792,31 @@ export class Council {
    *  tier drops to 'none' for that month. */
   beautificationMonthlyCost(): number {
     return BEAUTIFICATION_TIERS[this.beautificationTier].monthlyCost;
+  }
+
+  /**
+   * Mayoral Override of the Beautification Budget tier (Alpha 4.2.2).
+   * Allowed ONLY when `isOverrideActive()` — refuses (returns false)
+   * otherwise. The mayor's override pick stays in effect until the
+   * next election, at which point council control resumes via
+   * `electBeautificationTier()`.
+   *
+   * The effective tier is also bumped immediately so the renderer
+   * picks up the change without waiting for the next monthly
+   * settlement (the bill still gets paid normally next month).
+   */
+  setBeautificationTier(tier: BeautificationTier): boolean {
+    if (!this.isOverrideActive()) return false;
+    this.beautificationTier = tier;
+    this.effectiveBeautificationTier = tier;
+    return true;
+  }
+
+  /** True iff the mayor can currently change the beautification tier
+   *  (i.e. Mayoral Override is active). UI uses this to swap the
+   *  read-only readout for an editable selector. */
+  canMayorSetBeautification(): boolean {
+    return this.isOverrideActive();
   }
 
   /**

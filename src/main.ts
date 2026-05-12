@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { Game } from './engine/Game';
 import { Settings, bindSettingsPanel, DIFFICULTY_EFFECTS } from './ui/SettingsPanel';
+import { FactionDetailPanel } from './ui/FactionDetailPanel';
 import { MAP_SIZES } from './types';
 import { formatCurrency } from './ui/BudgetPanel';
 import './styles.css';
@@ -520,6 +521,33 @@ if (photoBtn) {
   photoBtn.addEventListener('click', () => {
     game.photoMode = !game.photoMode;
     renderPhoto();
+  });
+}
+
+// Faction Detail panel (Alpha 4.9 — B3 from production audit).
+// Opens when the player taps a leader row in the Community Sentiment
+// panel. Shows the leader's bio + what their faction supports /
+// opposes most strongly + current mood + population share.
+const factionDetailPanel = new FactionDetailPanel({
+  happiness: game.happiness,
+  council: game.council,
+  population: game.population
+});
+game.happinessPanel.onLeaderTap = (factionId) => {
+  // Hide the Community Sentiment panel while the drill-in is open so
+  // the player isn't looking at two overlapping modals. Re-show on
+  // close. Wire that hide-on-close via the existing happinessPanel
+  // toggle so it re-binds clean.
+  game.happinessPanel.hide();
+  factionDetailPanel.show(factionId);
+};
+// When the FactionDetail close button fires, re-open Community Sentiment
+// so the player doesn't get dumped back to the map.
+const fdCloseBtn = document.getElementById('faction-detail-close');
+if (fdCloseBtn) {
+  fdCloseBtn.addEventListener('click', () => {
+    // Defer so FactionDetailPanel's own close handler runs first.
+    setTimeout(() => game.happinessPanel.show(), 0);
   });
 }
 

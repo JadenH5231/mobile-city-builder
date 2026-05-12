@@ -88,6 +88,24 @@
       </div>
     </div>
 
+    <!-- Faction Detail modal (Alpha 4.9). Opened from a leader row in
+         the Community Sentiment panel. Shows the leader's bio, what
+         they care about, the buildings / zones they support or oppose
+         most strongly (read from FACTION_STANCES), and their current
+         population share + happiness with mood bucket. -->
+    <section
+      id="faction-detail-panel"
+      class="info-panel info-panel--tall hidden"
+      role="dialog"
+      aria-label="Faction detail"
+      aria-hidden="true"
+    >
+      <div class="info-panel__handle" aria-hidden="true"></div>
+      <button id="faction-detail-close" class="info-panel__close" type="button" aria-label="Close faction detail">×</button>
+      <!-- All content is rendered by FactionDetailPanel.ts at show() time. -->
+      <div id="faction-detail-body"></div>
+    </section>
+
     <!-- Settings modal (Alpha 4.8). Wired in main.ts via Settings class.
          Audio sliders are persisted but inert until a sound system ships.
          Difficulty applies to NEW cities (reset / fresh slot) only. -->

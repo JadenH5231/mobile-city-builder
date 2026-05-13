@@ -4,6 +4,25 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.15 — Per-block placement for big civic builds (with construction sites + ghost web)** — user spec following the 4.14.3 road-access fix: "Make every big building require individual block placements... Break the cost down to its by-block cost... When the user places the first block the game should check if the rest of the building can be put. The game should also show a web of where to put the rest of the blocks." This is the big architectural pivot away from all-at-once monument placement.
+  - **New per-block placement flow** for **Mayor's Mansion (8 blocks), City Hall (15), Provincial Capital (24), National Capital (28)**.
+    - First tap → two-tap arm/confirm preview from Alpha 4.13 still applies. The "armed" position locks in the footprint anchor (top-left).
+    - Second tap on same tile → **reserves the footprint** (sets the kind-bit on every footprint tile), **charges per-block cost** for the first block only, marks the anchor as paid. Status: "City Hall reserved · 1 of 15 blocks placed · tap 14 more".
+    - Each subsequent tap on an unpaid reserved tile of the same kind → **single-tap installment**: charges per-block cost, marks paid, status: "City Hall · 5 of 15 blocks placed". When the final block is paid, the anchor's `building` value flips to the kind and the renderer switches from per-tile construction sites to the merged finished geometry. "City Hall complete! 🎉"
+    - The previous "drop $1.5M-$20M in one go" model is gone — players now spend over many sim months as cash accumulates.
+  - **Per-block cost** (`monumentBlockCost` helper in `types.ts`) — `ceil(BUILDING_COSTS[kind] / footprintTileCount)`:
+    - Mayor's Mansion: $500K / 8 = **$62,500 per block**
+    - City Hall: $1.5M / 15 = **$100,000 per block**
+    - Provincial Capital: $7.5M / 24 = **$312,500 per block**
+    - National Capital: $20M / 28 = **$714,286 per block**
+  - **Construction-site visuals** for every paid-but-incomplete block — earthen pad + plank decking + 4 corner safety posts with orange/white striped tape + mini-crane (mast + arm + hanging cable + hook) + rebar stack + yellow concrete mixer. ~22 BufferGeometry parts per tile, fits entirely within 1 tile.
+  - **Ghost web** showing every unpaid block of an active reservation as a soft gold outlined tile. Only visible when the matching big-build tool is the active tool — switching away clears it; switching back redraws it. Refreshes after every block placement so it shrinks one tile at a time.
+  - **Bulldoze unchanged in shape**: tearing down any tile of a footprint (complete OR in-progress) clears the entire reservation. No refund. `bigBuildBlockPaid` resets to false on every cleared tile so the next reservation starts fresh.
+  - **Save schema 22 → 23**: new per-tile `bigBuildBlockPaid` field. v22-and-earlier saves load with the bit defaulted to TRUE for any tile that has a kind-bit set, so previously-completed buildings remain complete across the upgrade (no migration pain).
+  - **Cost pill** updated — when a big-build tool is active, the pill shows the per-block installment (e.g. "$100K") instead of the total. Label suffix `(block)` makes it explicit.
+  - **The four toolbar entries remain** (Mansion / City Hall / Provincial / National in the Mon group) — the per-block flow IS the placement flow now. Existing built buildings render unchanged because the renderer's anchor-dispatch is gated on `building === kind`, which only happens at completion.
+  - Bundle 932 KB raw / 246 KB gzipped (+5 KB raw — construction-site geometry + ghost-web renderer).
+
 - **Alpha 4.14.3 — Motorcade road-access fix (scan the WHOLE capital footprint)** — playtest report: "It says capital has no road access but there is a road right in front of it."
   - **Root cause** — `Motorcade.nearestRoadTile` only searched a small ring (radius ~2) around the **anchor tile** (lex-smallest = top-left of the footprint). For a 7×4 National Capital that's the BACK corner of the building. The road the player painted along the visible "front" (south face, at `y + 4` from the anchor) was completely outside the search ring, so the motorcade saw "no road access" even when a road was hugging the front.
   - **Fix** — `nearestRoadTile` now takes `(ax, ay, w, h)` and walks all four faces of the footprint perimeter in priority order: south face → east face → north face → west face (south first because the ceremonial-front-door side is where players almost always paint the approach road). `findCapitalAnchor` now also returns the footprint dimensions.

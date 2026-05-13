@@ -43,6 +43,8 @@ import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
   MAX_VEHICLES,
+  MAX_TOURIST_VEHICLES,
+  MAX_SERVICE_VEHICLES,
   PATH_COLOR,
   PATH_LIFT,
   PATH_WIDTH,
@@ -220,7 +222,12 @@ export class Renderer {
     // vertexColors: false so the merged white vertex colours don't fight
     // the per-instance color tint set by updateCars.
     const carMat = new MeshLambertMaterial({ flatShading: true });
-    this.carsMesh = new InstancedMesh(carGeom, carMat, MAX_VEHICLES);
+    // InstancedMesh capacity (Alpha 4.14) — covers resident cars +
+    // tourists (above the resident cap) + emergency vehicles + the
+    // 3-car motorcade convoy. Total ~325. Capacity is a fixed
+    // allocation; per-frame `count` is what controls actual draw count.
+    const CAR_CAPACITY = MAX_VEHICLES + MAX_TOURIST_VEHICLES + MAX_SERVICE_VEHICLES + 3;
+    this.carsMesh = new InstancedMesh(carGeom, carMat, CAR_CAPACITY);
     this.carsMesh.count = 0;
     this.carsMesh.frustumCulled = false;
     this.worldGroup.add(this.carsMesh);
@@ -244,7 +251,7 @@ export class Renderer {
     sideWinR.translate(0.080, 0.115, -0.02);
     const carWindowsGeom = mergeGeoms([winRect, sideWinL, sideWinR], [0xffffff, 0xffffff, 0xffffff]);
     const carWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
-    this.carWindowsMesh = new InstancedMesh(carWindowsGeom, carWindowsMat, MAX_VEHICLES);
+    this.carWindowsMesh = new InstancedMesh(carWindowsGeom, carWindowsMat, CAR_CAPACITY);
     this.carWindowsMesh.count = 0;
     this.carWindowsMesh.frustumCulled = false;
     this.worldGroup.add(this.carWindowsMesh);
@@ -257,7 +264,7 @@ export class Renderer {
     hlR.translate(0.066, 0.040, 0.170);
     const carHeadlightsGeom = mergeGeoms([hlL, hlR], [0xffffff, 0xffffff]);
     const carHeadlightsMat = new MeshBasicMaterial({ color: 0xfff4c0 });
-    this.carHeadlightsMesh = new InstancedMesh(carHeadlightsGeom, carHeadlightsMat, MAX_VEHICLES);
+    this.carHeadlightsMesh = new InstancedMesh(carHeadlightsGeom, carHeadlightsMat, CAR_CAPACITY);
     this.carHeadlightsMesh.count = 0;
     this.carHeadlightsMesh.frustumCulled = false;
     this.worldGroup.add(this.carHeadlightsMesh);
@@ -268,7 +275,7 @@ export class Renderer {
     tlR.translate(0.066, 0.040, -0.170);
     const carTailGeom = mergeGeoms([tlL, tlR], [0xffffff, 0xffffff]);
     const carTailMat = new MeshBasicMaterial({ color: 0xd83838 });
-    this.carTaillightsMesh = new InstancedMesh(carTailGeom, carTailMat, MAX_VEHICLES);
+    this.carTaillightsMesh = new InstancedMesh(carTailGeom, carTailMat, CAR_CAPACITY);
     this.carTaillightsMesh.count = 0;
     this.carTaillightsMesh.frustumCulled = false;
     this.worldGroup.add(this.carTaillightsMesh);
@@ -855,7 +862,12 @@ export class Renderer {
       );
       // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
       obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
-      obj.scale.set(1, 1, 1);
+      // Per-kind scale (Alpha 4.14). Motorcade limousine gets a 1.6×
+      // length so it visually reads as a stretched limo. Other kinds
+      // use the default unit scale.
+      const kind = car.kind ?? 'resident';
+      if (kind === 'motorcade_limo') obj.scale.set(1, 1, 1.6);
+      else obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.carsMesh.setMatrixAt(i, obj.matrix);
       // Sibling overlays mirror the body's matrix (Alpha 4.4).

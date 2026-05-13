@@ -3,20 +3,62 @@ import type { Pathfinding } from './Pathfinding';
 import type { RoadGraph } from './RoadGraph';
 import type { PathGraph } from './PathGraph';
 import type { TrafficLights } from './TrafficLights';
+import type { Tile } from '../world/Tile';
 import {
   CAR_VISIT_HIGH_SEC,
   CAR_VISIT_LOW_SEC,
   COLLISION_RATE_CAP,
   COLLISION_RATE_PER_OTHER,
   MAX_VEHICLES,
+  MAX_TOURIST_VEHICLES,
+  MAX_SERVICE_VEHICLES,
   PATH_CAR_SUPPRESSION,
   SUBWAY_SUPPRESSION_RADIUS,
   ROAD_TIER,
   STOP_SIGN_PAUSE_SEC,
   VEHICLE_PALETTE,
+  type Building,
   type RoadType
 } from '../types';
 import { nearBusStop } from './Buses';
+
+/**
+ * Car kind (Alpha 4.14). The simulation gates spawn caps and visual
+ * appearance off this. Ordering matters slightly — `'resident'` is the
+ * default historical value and is what every legacy spawn path emits.
+ *
+ * - `resident`: classic R→C/I/MU commute. Counts against MAX_VEHICLES.
+ *   Subject to all stop signs / traffic lights / collisions.
+ * - `tourist`: arrives from the city's outside-edge road and visits a
+ *   landmark / park / civic monument. Counts against MAX_TOURIST_VEHICLES,
+ *   ABOVE MAX_VEHICLES so traffic visibly grows when tourists arrive.
+ *   Subject to normal traffic rules.
+ * - `patrol` / `fire_response`: emergency cars dispatched from a police
+ *   or fire station. Skip stop signs + traffic lights (running lights),
+ *   no collision rolls. Cap MAX_SERVICE_VEHICLES.
+ * - `motorcade_lead` / `motorcade_limo` / `motorcade_tail`: the three
+ *   members of a motorcade convoy spawned by `Motorcade.ts`. Skip stops
+ *   + lights, no collision rolls. Trigger `nearbyMotorcadePullover` —
+ *   any non-motorcade car within MOTORCADE_PULLOVER_RADIUS gets its
+ *   pauseRemaining bumped each tick (frozen on the shoulder until the
+ *   convoy passes).
+ */
+export type CarKind =
+  | 'resident'
+  | 'tourist'
+  | 'patrol'
+  | 'fire_response'
+  | 'motorcade_lead'
+  | 'motorcade_limo'
+  | 'motorcade_tail';
+
+/** Tile-radius around a motorcade vehicle inside which other cars freeze
+ *  on the shoulder (Alpha 4.14). Manhattan distance — cheap. */
+const MOTORCADE_PULLOVER_RADIUS = 4;
+/** Pullover pause refreshed each tick a car is within range of a
+ *  motorcade vehicle. Just long enough that the cars stay parked while
+ *  the convoy passes; drains naturally once the motorcade moves on. */
+const MOTORCADE_PULLOVER_PAUSE_SEC = 0.7;
 
 /**
  * Spawn attempts per resident per real-time second. With 1500 residents that's
@@ -81,6 +123,13 @@ export interface Car {
    *  attribution. Only meaningful when {@link originRoadIdx} is set. */
   originHomeX?: number;
   originHomeY?: number;
+  /** Car kind (Alpha 4.14). Defaults to 'resident' if undefined to keep
+   *  every existing code path working without an explicit set. Drives:
+   *  - cap counting (only 'resident' counts against MAX_VEHICLES)
+   *  - traffic-rule exemptions (emergency + motorcade skip stops/lights)
+   *  - render appearance (different colour / scale per kind)
+   *  - pullover behaviour (motorcade kinds force others off the road) */
+  kind?: CarKind;
 }
 
 /**
@@ -128,6 +177,12 @@ export interface PendingReturn {
   /** Original residential cell, for crash demand attribution if it crashes. */
   originHomeX: number;
   originHomeY: number;
+  /** Car kind to apply to the return car (Alpha 4.14). Tourists return as
+   *  tourists, patrols as patrols, etc. — keeps cap-counting + colour
+   *  consistent across the round trip. Defaults to 'resident'. */
+  kind?: CarKind;
+  /** Original colour, so the return car visually matches the outbound. */
+  color?: number;
 }
 
 export class Vehicles {
@@ -161,12 +216,26 @@ export class Vehicles {
     this.spawnAccumulator += residents * SPAWN_PER_RESIDENT_PER_SEC * seconds;
     while (this.spawnAccumulator >= 1) {
       this.spawnAccumulator -= 1;
-      if (this.cars.length >= MAX_VEHICLES) {
+      // Only resident cars count against MAX_VEHICLES (Alpha 4.14).
+      // Tourists / patrols / motorcade live in their own caps so total
+      // visible traffic can exceed MAX when those events fire.
+      if (this.countByKind('resident') >= MAX_VEHICLES) {
         this.spawnAccumulator = 0;
         break;
       }
       this.attemptSpawn(grid, roadGraph, pathfinder, pathGraph);
     }
+  }
+
+  /** Count active cars matching `kind` (or 'resident' if `kind` undefined,
+   *  which catches legacy spawns that didn't set the field). Cheap O(N)
+   *  pass — N is bounded by MAX_VEHICLES + MAX_TOURIST + MAX_SERVICE. */
+  countByKind(kind: CarKind): number {
+    let n = 0;
+    for (const c of this.cars) {
+      if ((c.kind ?? 'resident') === kind) n++;
+    }
+    return n;
   }
 
   /**
@@ -182,7 +251,13 @@ export class Vehicles {
       const r = this.pendingReturns[i]!;
       if (r.readyAt > now) continue;
       this.pendingReturns.splice(i, 1);
-      if (this.cars.length >= MAX_VEHICLES) continue;
+      // Cap check is per-kind so tourist returns don't get squeezed by
+      // the resident cap, and vice versa.
+      const kind = r.kind ?? 'resident';
+      if (kind === 'resident' && this.countByKind('resident') >= MAX_VEHICLES) continue;
+      if (kind === 'tourist'  && this.countByKind('tourist')  >= MAX_TOURIST_VEHICLES) continue;
+      if ((kind === 'patrol' || kind === 'fire_response')
+          && this.countByKind('patrol') + this.countByKind('fire_response') >= MAX_SERVICE_VEHICLES) continue;
       // Plan the reverse leg using the same congestion-aware cost the
       // outbound spawn used. This is the "rush hour back home" car.
       const edgeCost = (_from: number, to: number, base: number): number => {
@@ -194,19 +269,21 @@ export class Vehicles {
       };
       const path = pathfinder.findPath(roadGraph, r.destRoadIdx, r.originRoadIdx, grid.width, edgeCost);
       if (!path || path.length < 2) continue;
-      const color = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
+      const color = r.color ?? VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
       const car: Car = {
         pathTiles: path,
         segmentIdx: 0,
         segmentT: 0,
-        speed: 1.0,
+        // Emergency-vehicle slight speed boost preserved on return.
+        speed: (kind === 'patrol' || kind === 'fire_response') ? 1.15 : 1.0,
         color,
         loadedTile: path[1]!,
         pauseRemaining: 0,
         yielding: false,
         yieldSince: 0,
         destX: r.originHomeX,
-        destY: r.originHomeY
+        destY: r.originHomeY,
+        kind
       };
       this.cars.push(car);
       this.incrementLoad(grid, car.loadedTile);
@@ -229,8 +306,25 @@ export class Vehicles {
     // many more people per stop in real cities.
     if (nearSubwayEntrance(grid, origin.x, origin.y) && Math.random() < SUBWAY_SUPPRESSION) return;
 
-    const destZone = Math.random() < 0.5 ? 'commercial' : 'industrial';
-    const dest = pickRandomDevelopedTile(grid, destZone);
+    // Destination roll (Alpha 4.14): commercial / industrial commute as
+    // before, plus forestry + farm as employment destinations. Logging
+    // operations (forestry) draw more workers than farms — both spec'd
+    // by user playtest feedback. Roll: 45% C, 30% I, 17% forestry,
+    // 8% farm. The forestry / farm picks fall through to commercial
+    // when the map has no such buildings (small early cities).
+    const roll = Math.random();
+    let dest: { x: number; y: number } | null = null;
+    if (roll < 0.45) {
+      dest = pickRandomDevelopedTile(grid, 'commercial');
+    } else if (roll < 0.75) {
+      dest = pickRandomDevelopedTile(grid, 'industrial');
+    } else if (roll < 0.92) {
+      dest = pickRandomBuildingTile(grid, 'forestry');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial');
+    } else {
+      dest = pickRandomBuildingTile(grid, 'farm');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial');
+    }
     if (!dest) return;
 
     // Walking-path suppression. If both origin and destination tiles are
@@ -278,7 +372,171 @@ export class Vehicles {
       destY: dest.y,
       originRoadIdx: startIdx,
       originHomeX: origin.x,
-      originHomeY: origin.y
+      originHomeY: origin.y,
+      kind: 'resident'
+    };
+    this.cars.push(car);
+    this.incrementLoad(grid, car.loadedTile);
+  }
+
+  /**
+   * Tourist spawn (Alpha 4.14). Periodic — the caller (Game) calls this
+   * each sim tick passing `connected`. When the city has an outside-edge
+   * road AND there's at least one tourist destination, a small fraction
+   * of ticks spawn a tourist car driving from a random edge road tile to
+   * a random tourist building (park / landmark / civic monument).
+   * Tourists count against MAX_TOURIST_VEHICLES, ABOVE the resident cap.
+   */
+  private touristSpawnAccumulator = 0;
+  /** Spawn attempts per real-time second when the city is connected.
+   *  ~0.6 / sec means roughly 1 tourist every ~1.7 seconds tries to
+   *  spawn — actual rate is gated by destination availability + cap. */
+  private static readonly TOURIST_SPAWN_PER_SEC = 0.6;
+  spawnTouristTick(
+    stepMs: number,
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding,
+    connected: boolean
+  ): void {
+    if (!connected) return;
+    const seconds = stepMs / 1000;
+    this.touristSpawnAccumulator += Vehicles.TOURIST_SPAWN_PER_SEC * seconds;
+    while (this.touristSpawnAccumulator >= 1) {
+      this.touristSpawnAccumulator -= 1;
+      if (this.countByKind('tourist') >= MAX_TOURIST_VEHICLES) {
+        this.touristSpawnAccumulator = 0;
+        break;
+      }
+      this.attemptTouristSpawn(grid, roadGraph, pathfinder);
+    }
+  }
+  private attemptTouristSpawn(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
+    const edge = pickEdgeRoadTile(grid);
+    if (!edge) return;
+    const dest = pickTouristDestination(grid);
+    if (!dest) return;
+    const endRoad = nearestRoadTile(grid, dest.x, dest.y);
+    if (!endRoad) return;
+    const startIdx = edge.y * grid.width + edge.x;
+    const endIdx = endRoad.y * grid.width + endRoad.x;
+    if (startIdx === endIdx) return;
+    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width);
+    if (!path || path.length < 2) return;
+    // Tourists use a brighter palette so they're visually distinct (golds
+    // and pastels) and stand out against the muted resident palette.
+    const TOURIST_PALETTE = [0xf0c060, 0xe88a4d, 0xb8d068, 0xeac4e2, 0x6bc4c8];
+    const color = TOURIST_PALETTE[Math.floor(Math.random() * TOURIST_PALETTE.length)] ?? 0xffffff;
+    const car: Car = {
+      pathTiles: path, segmentIdx: 0, segmentT: 0, speed: 1.0,
+      color, loadedTile: path[1]!, pauseRemaining: 0,
+      yielding: false, yieldSince: 0,
+      destX: dest.x, destY: dest.y,
+      originRoadIdx: startIdx,
+      originHomeX: edge.x, originHomeY: edge.y,
+      kind: 'tourist'
+    };
+    this.cars.push(car);
+    this.incrementLoad(grid, car.loadedTile);
+  }
+
+  /**
+   * Emergency vehicle spawn (Alpha 4.14). Each police station / fire
+   * station can have at most one of its kind out at a time. We sweep
+   * the grid for stations once per call (cheap — at most a few dozen),
+   * find the ones currently without an active patrol/response car, and
+   * dispatch one to a random destination tile in the city. The car
+   * returns home when its trip ends (handled by the existing return-
+   * trip pipeline since `originRoadIdx` is set).
+   *
+   * The caller (Game) calls this on a slow cadence — every few seconds
+   * is plenty since each station only needs one car at a time.
+   */
+  private serviceSpawnAccumulator = 0;
+  /** Spawn-check cadence: ~0.4 / sec means we re-check every ~2.5s on
+   *  average. Cap the total at MAX_SERVICE_VEHICLES so a city with
+   *  dozens of stations doesn't drown the road network. */
+  private static readonly SERVICE_SPAWN_PER_SEC = 0.4;
+  spawnServiceTick(
+    stepMs: number,
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding
+  ): void {
+    const seconds = stepMs / 1000;
+    this.serviceSpawnAccumulator += Vehicles.SERVICE_SPAWN_PER_SEC * seconds;
+    while (this.serviceSpawnAccumulator >= 1) {
+      this.serviceSpawnAccumulator -= 1;
+      if (this.countByKind('patrol') + this.countByKind('fire_response') >= MAX_SERVICE_VEHICLES) {
+        this.serviceSpawnAccumulator = 0;
+        break;
+      }
+      this.attemptServiceSpawn(grid, roadGraph, pathfinder);
+    }
+  }
+  private attemptServiceSpawn(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
+    // Pick a random station to dispatch from. 60/40 police vs fire so
+    // patrols are slightly more frequent than fire responses (real-life
+    // ratio — fires are rare, patrols routine).
+    const useFire = Math.random() < 0.40;
+    const stationKind: Building = useFire ? 'fire_station' : 'police_station';
+    const station = pickRandomBuildingTile(grid, stationKind);
+    if (!station) return;
+    // Pick a random road tile in the city as the destination — patrol
+    // route is "tour the streets and come back".
+    const destRoad = pickRandomRoadTile(grid);
+    if (!destRoad) return;
+    const startRoad = nearestRoadTile(grid, station.x, station.y);
+    if (!startRoad) return;
+    const startIdx = startRoad.y * grid.width + startRoad.x;
+    const endIdx = destRoad.y * grid.width + destRoad.x;
+    if (startIdx === endIdx) return;
+    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width);
+    if (!path || path.length < 2) return;
+    const car: Car = {
+      pathTiles: path, segmentIdx: 0, segmentT: 0,
+      // Emergency vehicles are slightly faster (they're going somewhere).
+      speed: 1.15,
+      // Color: fire = bright red, patrol = white. The body colour is the
+      // primary identifier; subtle but enough to ID at typical zoom.
+      color: useFire ? 0xe14848 : 0xf2f2f2,
+      loadedTile: path[1]!, pauseRemaining: 0,
+      yielding: false, yieldSince: 0,
+      destX: destRoad.x, destY: destRoad.y,
+      originRoadIdx: startIdx,
+      originHomeX: station.x, originHomeY: station.y,
+      kind: useFire ? 'fire_response' : 'patrol'
+    };
+    this.cars.push(car);
+    this.incrementLoad(grid, car.loadedTile);
+  }
+
+  /**
+   * Spawn one motorcade vehicle on the supplied path (Alpha 4.14). Used
+   * by `Motorcade.ts` to push the lead/limo/tail cars onto the road one
+   * at a time with a short delay between them so they convoy correctly.
+   * The car runs the supplied path end-to-end then despawns.
+   */
+  spawnMotorcadeVehicle(
+    grid: Grid,
+    path: number[],
+    kind: 'motorcade_lead' | 'motorcade_limo' | 'motorcade_tail'
+  ): void {
+    if (path.length < 2) return;
+    const color =
+      kind === 'motorcade_limo' ? 0x141820 :  // black limousine
+                                   0xf2f2f2;   // police escort white
+    const car: Car = {
+      pathTiles: path, segmentIdx: 0, segmentT: 0,
+      // Motorcade moves at slightly above local-road tier speed so it
+      // visibly threads through traffic.
+      speed: 1.1,
+      color,
+      loadedTile: path[1]!, pauseRemaining: 0,
+      yielding: false, yieldSince: 0,
+      // No real "destination tile" — set to start so crash code is well-formed.
+      destX: path[0]! % grid.width, destY: Math.floor(path[0]! / grid.width),
+      kind
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
@@ -292,6 +550,52 @@ export class Vehicles {
   update(dt: number, grid: Grid, gridWidth: number, trafficLights?: TrafficLights): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
+
+    // Motorcade pullover pre-pass (Alpha 4.14): for each non-motorcade
+    // car within MOTORCADE_PULLOVER_RADIUS (Manhattan distance) of any
+    // motorcade vehicle, refresh its pauseRemaining so it freezes on
+    // the shoulder until the convoy passes. Cheap because there are at
+    // most 3 motorcade vehicles active and a single inner-loop pass.
+    let motorcadeActive = false;
+    for (const c of this.cars) {
+      const k = c.kind;
+      if (k === 'motorcade_lead' || k === 'motorcade_limo' || k === 'motorcade_tail') {
+        motorcadeActive = true;
+        break;
+      }
+    }
+    if (motorcadeActive) {
+      // Pre-extract motorcade tile positions for the inner sweep.
+      const motorcadeTiles: number[] = [];
+      for (const c of this.cars) {
+        const k = c.kind;
+        if (k !== 'motorcade_lead' && k !== 'motorcade_limo' && k !== 'motorcade_tail') continue;
+        // Use the segment endpoint the car is closer to as its "current tile".
+        const tile = c.segmentT < 0.5 ? c.pathTiles[c.segmentIdx] : c.pathTiles[c.segmentIdx + 1];
+        if (tile !== undefined) motorcadeTiles.push(tile);
+      }
+      for (const c of this.cars) {
+        const k = c.kind ?? 'resident';
+        if (k === 'motorcade_lead' || k === 'motorcade_limo' || k === 'motorcade_tail') continue;
+        const carTile = c.segmentT < 0.5 ? c.pathTiles[c.segmentIdx] : c.pathTiles[c.segmentIdx + 1];
+        if (carTile === undefined) continue;
+        const cx = carTile % gridWidth;
+        const cy = (carTile - cx) / gridWidth;
+        let nearMotorcade = false;
+        for (const mt of motorcadeTiles) {
+          const mx = mt % gridWidth;
+          const my = (mt - mx) / gridWidth;
+          if (Math.abs(mx - cx) + Math.abs(my - cy) <= MOTORCADE_PULLOVER_RADIUS) {
+            nearMotorcade = true;
+            break;
+          }
+        }
+        if (nearMotorcade) {
+          // Refresh the pause timer each tick the motorcade is in range.
+          c.pauseRemaining = Math.max(c.pauseRemaining, MOTORCADE_PULLOVER_PAUSE_SEC);
+        }
+      }
+    }
 
     // Per-segment leader pre-pass — used to keep cars from visually overlapping.
     const leaderT: number[] = new Array(this.cars.length);
@@ -398,10 +702,17 @@ export class Vehicles {
         advance = Math.min(advance, allowedAdvance);
       }
 
+      // Authority cars (Alpha 4.14) skip stops, lights, and collision
+      // rolls — they're emergency/VIP traffic running flashers.
+      const authority =
+        car.kind === 'patrol' || car.kind === 'fire_response' ||
+        car.kind === 'motorcade_lead' || car.kind === 'motorcade_limo' || car.kind === 'motorcade_tail';
+
       // Stop-sign approach: if the next tile is a stop-sign intersection
       // and we haven't reached STOP_PRE_T yet, cap advance so we park at
       // the boundary instead of barreling into the centre.
       const nextIsStop =
+        !authority &&
         destTile?.stopSign === true &&
         grid.incidentRoadEdgeCount(bx, by) >= 3 &&
         car.segmentT < STOP_PRE_T;
@@ -421,7 +732,9 @@ export class Vehicles {
       // but no min-pause — once the light turns green for our approach we
       // can roll on the next frame. That's what makes lights outperform
       // stops at busy junctions: green-direction cars never sit still.
+      // Authority vehicles skip lights too (Alpha 4.14).
       if (
+        !authority &&
         trafficLights &&
         destTile?.trafficLight === true &&
         car.segmentT < STOP_PRE_T &&
@@ -480,14 +793,21 @@ export class Vehicles {
             car.originHomeY !== undefined
           ) {
             const arrivedIdx = car.pathTiles[car.segmentIdx]!;
-            const visitMs =
-              (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
+            const carKind = car.kind ?? 'resident';
+            // Tourists get a shorter visit timer — they're tourists, not
+            // commuters. 8-15 sec for tourists vs the standard 8-22 for
+            // residents/emergency.
+            const visitMs = carKind === 'tourist'
+              ? (8 + Math.random() * 7) * 1000
+              : (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
             this.pendingReturns.push({
               readyAt: now + visitMs,
               originRoadIdx: car.originRoadIdx,
               destRoadIdx: arrivedIdx,
               originHomeX: car.originHomeX,
-              originHomeY: car.originHomeY
+              originHomeY: car.originHomeY,
+              kind: carKind,
+              color: car.color
             });
           }
           this.cars.splice(i, 1);
@@ -510,8 +830,10 @@ export class Vehicles {
         // Intersection collision check. Stop signs and traffic lights both
         // suppress the roll: a stop sign forces a yielding handshake on the
         // previous segment, a traffic light controls the conflict via phase.
+        // Authority vehicles also skip the roll (Alpha 4.14) — emergency
+        // and motorcade traffic shouldn't get into ambient collisions.
         const isIntersection = grid.incidentRoadEdgeCount(arrivedX, arrivedY) >= 3;
-        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight) {
+        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !authority) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {
@@ -574,6 +896,102 @@ function pickRandomDevelopedTile(
     if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
   }
   return chosen;
+}
+
+/**
+ * Pick a random tile that holds a specific Building kind (Alpha 4.14).
+ * Used as employment destination for farms + forestry, and as the
+ * tourist destination set (parks / landmarks / civic monuments). Reservoir
+ * sample so we touch the grid once.
+ */
+function pickRandomBuildingTile(
+  grid: Grid,
+  kind: Building
+): { x: number; y: number } | null {
+  let chosen: { x: number; y: number } | null = null;
+  let count = 0;
+  for (const t of grid.iter()) {
+    if (t.building !== kind) continue;
+    count++;
+    if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
+  }
+  return chosen;
+}
+
+/** Tile is a tourist destination if it's any of the player's "look at me"
+ *  buildings (Alpha 4.14). Public art, parks, landmarks, civic
+ *  monuments, and the Mansion all draw outside-of-city visitors. */
+function isTouristDestination(t: Tile): boolean {
+  switch (t.building) {
+    case 'park':
+    case 'museum':
+    case 'stadium':
+    case 'observatory':
+    case 'plaza':
+    case 'fountain':
+    case 'statue':
+    case 'memorial_garden':
+    case 'reflecting_pool':
+    case 'clock_tower':
+    case 'triumphal_arch':
+    case 'topiary':
+    case 'flower_bed':
+    case 'pergola':
+    case 'pier':
+    case 'mayor_mansion':
+    case 'city_hall':
+    case 'provincial_capital':
+    case 'national_capital':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Pick a random tourist destination from anywhere in the grid (Alpha 4.14).
+ *  Reservoir sample so callers don't need to maintain an index. */
+function pickTouristDestination(grid: Grid): { x: number; y: number } | null {
+  let chosen: { x: number; y: number } | null = null;
+  let count = 0;
+  for (const t of grid.iter()) {
+    if (!isTouristDestination(t)) continue;
+    count++;
+    if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
+  }
+  return chosen;
+}
+
+/** Pick a random road tile anywhere in the city (Alpha 4.14). Used by
+ *  emergency-vehicle dispatch to give patrols + fire trucks a roving
+ *  destination — they tour the streets then return home. */
+function pickRandomRoadTile(grid: Grid): { x: number; y: number } | null {
+  let chosen: { x: number; y: number } | null = null;
+  let count = 0;
+  for (const t of grid.iter()) {
+    if (!t.road) continue;
+    count++;
+    if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
+  }
+  return chosen;
+}
+
+/** Pick a random road tile that touches the city's outside edge (i.e. is
+ *  on the perimeter of the grid). Used as the spawn point for tourist
+ *  cars (they "drive in from out of town"). Returns null if no edge
+ *  road exists (i.e. the city isn't connected to the outside world). */
+function pickEdgeRoadTile(grid: Grid): { x: number; y: number } | null {
+  const w = grid.width, h = grid.height;
+  const candidates: Array<{ x: number; y: number }> = [];
+  for (let x = 0; x < w; x++) {
+    if (grid.get(x, 0)?.road) candidates.push({ x, y: 0 });
+    if (grid.get(x, h - 1)?.road) candidates.push({ x, y: h - 1 });
+  }
+  for (let y = 1; y < h - 1; y++) {
+    if (grid.get(0, y)?.road) candidates.push({ x: 0, y });
+    if (grid.get(w - 1, y)?.road) candidates.push({ x: w - 1, y });
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
 }
 
 /**

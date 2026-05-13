@@ -294,6 +294,30 @@ export class Game {
   /** Per-stroke tracking for upper-layer edges (parallel to strokeEdges). */
   private readonly strokeBridgeEdges = new Set<number>();
 
+  /**
+   * Monument placement preview (Alpha 4.13). The four large multi-tile
+   * builds (Mayor's Mansion, City Hall, Provincial Capital, National
+   * Capital) use a two-tap arm/confirm flow because they're expensive
+   * AND immovable — players were committing huge spends before seeing
+   * where the footprint landed.
+   *
+   * Flow:
+   *   1. Tap a tile with one of these tools → arm preview at that tile,
+   *      show a green/red ghost outline of the footprint.
+   *   2. Tap the SAME tile again within `MONUMENT_ARM_MS` → commit.
+   *   3. Tap a DIFFERENT tile → re-arm at the new tile (timer resets).
+   *   4. Timer expires → ghost clears, no commit.
+   *   5. Change tool / pan / undo / re-init → cancel.
+   */
+  private pendingMonument: {
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital';
+    x: number;
+    y: number;
+    expiresAt: number;
+    timer: number;
+  } | null = null;
+  private static readonly MONUMENT_ARM_MS = 8_000;
+
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
 
@@ -696,6 +720,10 @@ export class Game {
       this.selected = null;
       this.panel.hide();
     }
+    // Any armed monument preview cancels on tool change (Alpha 4.13).
+    // Otherwise the player would tap, switch tool, tap again, and the
+    // ghost would still be live from the wrong tool.
+    this.clearMonumentPreview();
     this.refreshToolCostPill();
     this.refreshServiceRadiusPreview();
   }
@@ -1313,6 +1341,9 @@ export class Game {
   undo(): void {
     const snap = this.undoStack.pop();
     if (!snap) return;
+    // Cancel any armed monument preview — its validity is now stale
+    // because the grid is about to revert.
+    this.clearMonumentPreview();
     applySave(snap, this.grid, this.economy, this.council, this.milestones, this.events, this.stats, this.achievements, this.bonds, this.districts);
     this.afterStateRestore();
   }
@@ -1538,42 +1569,27 @@ export class Game {
       return;
     }
 
-    // Mayor's Mansion (Alpha 4.2) — tap-only, single-instance, takes
-    // a 4×2 footprint anchored at the tap (tap is the lex-smallest
-    // tile of the 8). Validates the entire footprint is free + on
-    // owned grass land + treasury can afford + no mansion already
-    // exists. Stamps mayorMansion=true on all 8 tiles, building=
-    // 'mayor_mansion' on the anchor.
-    if (this.tool === 'place_mayor_mansion') {
-      const placed = this.placeMayorMansion(tile.x, tile.y);
+    // Large multi-tile civic builds (Mayor's Mansion + civic monuments)
+    // use a two-tap arm/confirm flow (Alpha 4.13). First tap shows a
+    // green/red footprint ghost at the tile; second tap on the same
+    // tile commits. A different tile re-arms. The ghost reads
+    // immediately so the player can verify exactly where the build
+    // will land before spending the millions.
+    if (this.tool === 'place_mayor_mansion'
+        || this.tool === 'place_city_hall'
+        || this.tool === 'place_provincial_capital'
+        || this.tool === 'place_national_capital') {
+      const kind =
+        this.tool === 'place_mayor_mansion'      ? 'mayor_mansion' :
+        this.tool === 'place_city_hall'          ? 'city_hall' :
+        this.tool === 'place_provincial_capital' ? 'provincial_capital' :
+                                                    'national_capital';
+      const placed = this.armOrConfirmMonument(kind, tile.x, tile.y);
       if (!placed) {
+        // Arm-only or invalid — keep the undo stack clean.
         this.undoStack.pop();
         this.strokeDidSnapshot = false;
       }
-      this.strokeOrigin = null;
-      return;
-    }
-
-    // Civic monuments (Alpha 4.12) — tap-only, single-instance per kind,
-    // each anchored at the tap (lex-smallest tile of the footprint).
-    // Same pattern as the Mansion: validate footprint + treasury, stamp
-    // the matching tile bit across every footprint tile, set the
-    // `building` value on the anchor only.
-    if (this.tool === 'place_city_hall') {
-      const placed = this.placeCivicMonument(tile.x, tile.y, 'city_hall');
-      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
-      this.strokeOrigin = null;
-      return;
-    }
-    if (this.tool === 'place_provincial_capital') {
-      const placed = this.placeCivicMonument(tile.x, tile.y, 'provincial_capital');
-      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
-      this.strokeOrigin = null;
-      return;
-    }
-    if (this.tool === 'place_national_capital') {
-      const placed = this.placeCivicMonument(tile.x, tile.y, 'national_capital');
-      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
       this.strokeOrigin = null;
       return;
     }
@@ -1927,6 +1943,139 @@ export class Game {
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawZones(this.grid);
     return true;
+  }
+
+  /**
+   * Footprint dimensions for the four large multi-tile civic builds
+   * (Alpha 4.13). Used both for the placement preview ghost and for
+   * the bulldoze walk-back. Single source of truth.
+   */
+  private monumentFootprint(
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+  ): { w: number; h: number; label: string; cost: number } {
+    switch (kind) {
+      case 'mayor_mansion':
+        return { w: MAYOR_MANSION_WIDTH, h: MAYOR_MANSION_DEPTH,
+                 label: "Mayor's Mansion", cost: BUILDING_COSTS.mayor_mansion };
+      case 'city_hall':
+        return { w: CITY_HALL_WIDTH, h: CITY_HALL_DEPTH,
+                 label: 'City Hall', cost: BUILDING_COSTS.city_hall };
+      case 'provincial_capital':
+        return { w: PROVINCIAL_CAPITAL_WIDTH, h: PROVINCIAL_CAPITAL_DEPTH,
+                 label: 'Provincial Capital', cost: BUILDING_COSTS.provincial_capital };
+      case 'national_capital':
+        return { w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH,
+                 label: 'National Capital', cost: BUILDING_COSTS.national_capital };
+    }
+  }
+
+  /**
+   * Validation predicate used by the preview ghost (Alpha 4.13). Mirrors
+   * the checks inside `placeMayorMansion` and `placeCivicMonument` but
+   * silent — no toasts, no side effects. Returns true iff a tap at this
+   * location would successfully place. Used to colour the preview ghost
+   * green (valid) vs red (invalid).
+   */
+  private canPlaceMonumentFootprint(
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    x: number, y: number
+  ): boolean {
+    const fp = this.monumentFootprint(kind);
+    // One-per-city: a quick existence sweep on the matching tile bit.
+    const occupiedBit: (t: Tile) => boolean =
+      kind === 'mayor_mansion'      ? (t) => t.mayorMansion :
+      kind === 'city_hall'          ? (t) => t.cityHall :
+      kind === 'provincial_capital' ? (t) => t.provincialCapital :
+                                       (t) => t.nationalCapital;
+    for (const t of this.grid.iter()) {
+      if (occupiedBit(t)) return false;
+    }
+    // Cost + council gate.
+    const mult = this.council.costMultiplier(kind);
+    if (!isFinite(mult)) return false;
+    const cost = Math.round(fp.cost * mult);
+    if (this.economy.treasury < cost && !this.cheatUnlimitedMoney) return false;
+    // Footprint validation — every tile must be owned grass with nothing on it.
+    for (let dy = 0; dy < fp.h; dy++) {
+      for (let dx = 0; dx < fp.w; dx++) {
+        const t = this.grid.get(x + dx, y + dy);
+        if (!t) return false;
+        if (!t.owned) return false;
+        if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') return false;
+        if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury || t.mayorMansion) return false;
+        if (t.cityHall || t.provincialCapital || t.nationalCapital) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Two-tap arm/confirm for the four large multi-tile civic builds
+   * (Alpha 4.13). First tap arms the preview ghost at this tile;
+   * second tap on the SAME tile commits. Tapping a different tile
+   * re-arms there. The ghost auto-clears after `MONUMENT_ARM_MS`.
+   *
+   * Returns true iff the placement was actually committed (so the
+   * caller can keep the undo snapshot); false on arm-only or invalid.
+   */
+  private armOrConfirmMonument(
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    x: number, y: number
+  ): boolean {
+    const fp = this.monumentFootprint(kind);
+    const valid = this.canPlaceMonumentFootprint(kind, x, y);
+    // Second tap on the same armed tile + same kind → commit.
+    if (this.pendingMonument
+        && this.pendingMonument.kind === kind
+        && this.pendingMonument.x === x
+        && this.pendingMonument.y === y) {
+      this.clearMonumentPreview();
+      if (kind === 'mayor_mansion') return this.placeMayorMansion(x, y);
+      return this.placeCivicMonument(x, y, kind);
+    }
+    // First tap (or different tile) → arm preview ghost. Show even if
+    // invalid (red ghost) so the player understands why it can't go here.
+    this.clearMonumentPreview();
+    // Use the anchor tile's elevation for the ghost lift so it follows hills.
+    const t = this.grid.get(x, y);
+    const elevation = t?.elevation ?? 0;
+    this.renderer.showFootprintPreview(x, y, fp.w, fp.h, valid, elevation);
+    if (!valid) {
+      // Surface a one-line reason that mirrors what the commit-time toast
+      // would say. The full placement method has more specific messages
+      // (off-map, occupied, etc.) — for preview we use a generic line.
+      this.onStatusMessage?.(`Cannot place ${fp.label} here`);
+      this.pendingMonument = null;
+      return false;
+    }
+    // Arm — preview shows, status toast prompts second tap.
+    const cost = Math.round(fp.cost * this.council.costMultiplier(kind));
+    this.onStatusMessage?.(`Tap again to confirm ${fp.label} ($${cost.toLocaleString()})`);
+    const timer = window.setTimeout(() => {
+      // Auto-clear after the arm window — no surprise commits.
+      if (this.pendingMonument
+          && this.pendingMonument.kind === kind
+          && this.pendingMonument.x === x
+          && this.pendingMonument.y === y) {
+        this.clearMonumentPreview();
+      }
+    }, Game.MONUMENT_ARM_MS);
+    this.pendingMonument = {
+      kind, x, y,
+      expiresAt: performance.now() + Game.MONUMENT_ARM_MS,
+      timer
+    };
+    return false;
+  }
+
+  /** Clear any armed monument preview — renderer ghost + state + timer.
+   *  Called on tool change, pan, undo, reset, and on successful commit. */
+  private clearMonumentPreview(): void {
+    if (this.pendingMonument) {
+      clearTimeout(this.pendingMonument.timer);
+      this.pendingMonument = null;
+    }
+    this.renderer.clearFootprintPreview();
   }
 
   /**

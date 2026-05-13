@@ -1075,13 +1075,30 @@ export class Game {
           this.stats.capture(
             this.economy.monthsElapsed, this.economy, this.population, this.happiness
           );
-          // Motorcade event (Alpha 4.14). Each month, tick the
-          // countdown; on fire, the convoy is queued for spawn over
-          // the next few seconds via the per-frame motorcade.tick().
-          // No-op if the city has no Provincial / National Capital
-          // (the inner check returns false silently).
-          if (this.motorcade.monthlyTick(this.grid, this.roadGraph, this.pathfinder)) {
-            this.onStatusMessage?.('Motorcade departing the capital');
+          // Motorcade event (Alpha 4.14, diagnostics 4.14.2). Each
+          // month, tick the countdown. On fire, the convoy is queued
+          // for spawn via the per-frame motorcade.tick(). On failure
+          // we surface a targeted toast so the player knows what
+          // prereq is missing — except for 'no_capital' which we
+          // ignore (the player just hasn't built one yet, no need
+          // to spam them every month).
+          const motorcadeResult = this.motorcade.monthlyTick(
+            this.grid, this.roadGraph, this.pathfinder
+          );
+          switch (motorcadeResult.kind) {
+            case 'started':
+              this.onStatusMessage?.('🚓 Motorcade departing the capital');
+              break;
+            case 'no_road_access':
+              this.onStatusMessage?.('Motorcade blocked — capital has no road access');
+              break;
+            case 'no_avenues':
+              this.onStatusMessage?.('Motorcade blocked — paint at least one Avenue tile');
+              break;
+            case 'no_route':
+              this.onStatusMessage?.('Motorcade blocked — couldn\'t route to your avenues');
+              break;
+            // 'pending' and 'no_capital' are silent (every-month spam).
           }
           // Achievements pass (Alpha 2.15) — runs once per month, drains
           // any newly-unlocked entries to the toast queue via onAchievementUnlocked.

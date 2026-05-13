@@ -1236,6 +1236,87 @@ export class Renderer {
     this.footprintPreviewGroup = null;
   }
 
+  /**
+   * Monument ghost-web (Alpha 4.15). Per-block placement requires the
+   * player to see WHICH tiles are still unpaid in their current
+   * reservation — otherwise they're tapping blind. When a big-build
+   * tool is active and a reservation of the matching kind exists, this
+   * renders a soft gold outline on every unpaid tile of that
+   * reservation. The web shrinks one tile at a time as the player
+   * pays. Lives in `worldGroup` so it follows camera + elevation.
+   */
+  private ghostWebGroup: Group | null = null;
+  showMonumentGhostWeb(
+    grid: Grid,
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+  ): void {
+    this.clearMonumentGhostWeb();
+    const group = new Group();
+    // Pulsing gold so the web reads as a placement target across both
+    // day + night. Two materials shared by every tile in the web so we
+    // only dispose two materials on clear.
+    const fillMat = new MeshBasicMaterial({
+      color: 0xffd84d, transparent: true, opacity: 0.20, depthWrite: false
+    });
+    const borderMat = new MeshBasicMaterial({
+      color: 0xffd84d, transparent: true, opacity: 0.85, depthWrite: false
+    });
+    let any = false;
+    for (const t of grid.iter()) {
+      if (!readKind(t, kind)) continue;
+      if (t.bigBuildBlockPaid) continue;   // already paid; renders construction site
+      any = true;
+      const cx = (t.x + 0.5) * TILE_SIZE;
+      const cz = (t.y + 0.5) * TILE_SIZE;
+      const y = t.elevation + 0.022;
+      // Translucent fill across the tile
+      const fill = new Mesh(new BoxGeometry(0.92 * TILE_SIZE, 0.005, 0.92 * TILE_SIZE), fillMat);
+      fill.position.set(cx, y, cz);
+      group.add(fill);
+      // Four border strips for a clear boundary
+      const bt = 0.04;
+      const w = TILE_SIZE * 0.96;
+      // North
+      const n = new Mesh(new BoxGeometry(w, 0.008, bt), borderMat);
+      n.position.set(cx, y + 0.003, cz - 0.48 * TILE_SIZE);
+      group.add(n);
+      // South
+      const s = new Mesh(new BoxGeometry(w, 0.008, bt), borderMat);
+      s.position.set(cx, y + 0.003, cz + 0.48 * TILE_SIZE);
+      group.add(s);
+      // West
+      const ws = new Mesh(new BoxGeometry(bt, 0.008, w), borderMat);
+      ws.position.set(cx - 0.48 * TILE_SIZE, y + 0.003, cz);
+      group.add(ws);
+      // East
+      const e = new Mesh(new BoxGeometry(bt, 0.008, w), borderMat);
+      e.position.set(cx + 0.48 * TILE_SIZE, y + 0.003, cz);
+      group.add(e);
+    }
+    if (!any) {
+      // No web to show — dispose the unused materials and bail.
+      fillMat.dispose();
+      borderMat.dispose();
+      return;
+    }
+    this.ghostWebGroup = group;
+    this.worldGroup.add(group);
+  }
+  clearMonumentGhostWeb(): void {
+    if (!this.ghostWebGroup) return;
+    this.worldGroup.remove(this.ghostWebGroup);
+    // Materials are shared across every Mesh in the group — collect the
+    // unique set for disposal so we don't double-dispose.
+    const mats = new Set<MeshBasicMaterial>();
+    for (const child of this.ghostWebGroup.children) {
+      const mesh = child as Mesh;
+      mesh.geometry.dispose();
+      mats.add(mesh.material as MeshBasicMaterial);
+    }
+    for (const m of mats) m.dispose();
+    this.ghostWebGroup = null;
+  }
+
   render(camera: Camera): void {
     this.three.render(this.scene, camera.three);
   }
@@ -1924,6 +2005,69 @@ function isSkyscraperAnchor(grid: Grid, x: number, y: number): boolean {
   if (cmp(x - 1, y - 1)) return false;
   if (!cmp(x + 1, y) || !cmp(x, y + 1) || !cmp(x + 1, y + 1)) return false;
   return true;
+}
+
+/** Read the matching big-build kind bit on a tile (Alpha 4.15). Used by
+ *  the per-block construction-site pass to walk back to the anchor. */
+function readKind(
+  t: import('../world/Tile').Tile,
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+): boolean {
+  switch (kind) {
+    case 'mayor_mansion':      return t.mayorMansion;
+    case 'city_hall':          return t.cityHall;
+    case 'provincial_capital': return t.provincialCapital;
+    case 'national_capital':   return t.nationalCapital;
+  }
+}
+
+/**
+ * Per-tile construction-site geometry (Alpha 4.15). Returned when a big
+ * civic build has had this tile's block paid but the overall footprint
+ * is still incomplete. Reads as "this block is paid for, the building
+ * isn't finished yet." Composition: wooden scaffolding pad +
+ * orange-and-white striped barriers + a few crane / material stacks.
+ * Fits entirely within one tile so adjacent tiles can render their
+ * own state independently.
+ */
+function constructionSiteParts(): Array<{
+  makeGeom: () => BufferGeometry; dx: number; dy: number; dz: number; color: number;
+}> {
+  // Earth-tone material pad (light brown — looks like dirt + plywood
+  // boards laid over the footprint). Almost full tile so the corners
+  // visually frame the construction.
+  const DIRT = 0xa07a4a;
+  const PLANK = 0x8a5a30;
+  const STRIPE_ORANGE = 0xe06030;
+  const STRIPE_WHITE = 0xf0f0e8;
+  const CRANE = 0xd8b020;
+  const REBAR = 0x484848;
+  const out: Array<{ makeGeom: () => BufferGeometry; dx: number; dy: number; dz: number; color: number }> = [];
+  // Earthen pad
+  out.push({ makeGeom: () => new BoxGeometry(0.92, 0.020, 0.92), dx: 0, dy: 0.010, dz: 0, color: DIRT });
+  // Two crossed plank boards (decking)
+  out.push({ makeGeom: () => new BoxGeometry(0.80, 0.030, 0.10), dx: 0, dy: 0.025, dz: 0.20, color: PLANK });
+  out.push({ makeGeom: () => new BoxGeometry(0.10, 0.030, 0.80), dx: -0.20, dy: 0.025, dz: 0, color: PLANK });
+  // Four corner safety posts with orange-and-white tape
+  for (const [px, pz] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]] as const) {
+    out.push({ makeGeom: () => new BoxGeometry(0.045, 0.25, 0.045), dx: px, dy: 0.135, dz: pz, color: STRIPE_WHITE });
+    out.push({ makeGeom: () => new BoxGeometry(0.050, 0.04, 0.050), dx: px, dy: 0.21, dz: pz, color: STRIPE_ORANGE });
+    out.push({ makeGeom: () => new BoxGeometry(0.050, 0.04, 0.050), dx: px, dy: 0.09, dz: pz, color: STRIPE_ORANGE });
+  }
+  // Tiny mini-crane: vertical mast + horizontal arm
+  out.push({ makeGeom: () => new BoxGeometry(0.040, 0.50, 0.040), dx: 0.18, dy: 0.27, dz: -0.18, color: CRANE });
+  out.push({ makeGeom: () => new BoxGeometry(0.30, 0.030, 0.030), dx: 0.05, dy: 0.50, dz: -0.18, color: CRANE });
+  // Hanging cable + hook
+  out.push({ makeGeom: () => new BoxGeometry(0.008, 0.18, 0.008), dx: -0.08, dy: 0.41, dz: -0.18, color: 0x202020 });
+  out.push({ makeGeom: () => new BoxGeometry(0.045, 0.025, 0.045), dx: -0.08, dy: 0.31, dz: -0.18, color: 0x303030 });
+  // Rebar stack
+  for (let i = 0; i < 4; i++) {
+    out.push({ makeGeom: () => new BoxGeometry(0.30, 0.015, 0.015), dx: -0.10, dy: 0.045 + i * 0.018, dz: -0.30, color: REBAR });
+  }
+  // A small "in progress" pile — yellow concrete-mixer body
+  out.push({ makeGeom: () => new BoxGeometry(0.18, 0.10, 0.14), dx: 0.25, dy: 0.075, dz: 0.25, color: 0xfecf45 });
+  out.push({ makeGeom: () => new BoxGeometry(0.045, 0.13, 0.045), dx: 0.18, dy: 0.085, dz: 0.30, color: 0x404040 });
+  return out;
 }
 
 // --- Traffic heatmap ----------------------------------------------------
@@ -3076,6 +3220,44 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     for (const p of walkway) {
       const g = p.makeGeom();
       g.translate(cx + p.dx, p.dy, cz + p.dz);
+      geoms.push(g);
+      colours.push(p.color);
+    }
+  }
+
+  // Per-block construction sites (Alpha 4.15). A second pass over every
+  // tile that is part of an INCOMPLETE big civic build (kind-bit set
+  // but `building` not yet promoted to the kind value, AND this tile's
+  // block has been paid for). Each emits a small scaffolding visual
+  // — wooden frame + corner posts + tarp — fitting inside one tile.
+  // Unpaid tiles of the same footprint render nothing here; they get
+  // the ghost-web overlay separately (Renderer.showMonumentGhostWeb).
+  for (const t of grid.iter()) {
+    if (!t.bigBuildBlockPaid) continue;
+    const isReserved = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital;
+    if (!isReserved) continue;
+    // Is this footprint COMPLETE? We detect by finding the anchor (lex-
+    // smallest of the kind-bit set) and checking its `building` value.
+    // If the anchor is promoted, the merged finished geometry already
+    // covered this tile — skip.
+    const kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' =
+      t.mayorMansion ? 'mayor_mansion' :
+      t.cityHall ? 'city_hall' :
+      t.provincialCapital ? 'provincial_capital' : 'national_capital';
+    // Cheap "is the building complete" check: scan north + west from this
+    // tile for the anchor; if anchor.building === kind we're complete.
+    let ax = t.x, ay = t.y;
+    while (ax > 0 && readKind(grid.get(ax - 1, ay)!, kind)) ax--;
+    while (ay > 0 && readKind(grid.get(ax, ay - 1)!, kind)) ay--;
+    const anchor = grid.get(ax, ay);
+    if (anchor && anchor.building === kind) continue;   // complete; skip
+    // Incomplete + paid → emit a construction-site visual on this tile.
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    const yLift = ROAD_LIFT * 0.5 + t.elevation;
+    for (const p of constructionSiteParts()) {
+      const g = p.makeGeom();
+      g.translate(cx + p.dx, p.dy + yLift, cz + p.dz);
       geoms.push(g);
       colours.push(p.color);
     }

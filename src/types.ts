@@ -1014,6 +1014,26 @@ export const NATIONAL_CAPITAL_DEPTH = 4;
  *  district. */
 export const CIVIC_MONUMENT_SERVICE_RADIUS = 35;
 
+/** Per-block cost for a big civic build (Alpha 4.15). Returns the
+ *  rounded-up integer cost of placing one tile of the kind's footprint.
+ *  Computed as ceil(BUILDING_COSTS[kind] / footprintTileCount) so the
+ *  total over all blocks lines up with the listed building price. The
+ *  player can spread the spend across many sim months, paying for
+ *  one block at a time as they earn the money. */
+export function monumentBlockCost(
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+): number {
+  const dims = (() => {
+    switch (kind) {
+      case 'mayor_mansion':      return MAYOR_MANSION_WIDTH * MAYOR_MANSION_DEPTH;
+      case 'city_hall':          return CITY_HALL_WIDTH * CITY_HALL_DEPTH;
+      case 'provincial_capital': return PROVINCIAL_CAPITAL_WIDTH * PROVINCIAL_CAPITAL_DEPTH;
+      case 'national_capital':   return NATIONAL_CAPITAL_WIDTH * NATIONAL_CAPITAL_DEPTH;
+    }
+  })();
+  return Math.ceil(BUILDING_COSTS[kind] / dims);
+}
+
 /* ---- Beautification Budget (Alpha 4.0 — council-only) ----------------- */
 
 /**

@@ -208,4 +208,22 @@ export class Tile {
   cityHall = false;
   provincialCapital = false;
   nationalCapital = false;
+  /**
+   * Per-block placement bit (Alpha 4.15). When a big civic build (Mayor's
+   * Mansion / City Hall / Provincial / National Capital) is placed via
+   * the per-block flow, all footprint tiles get the matching kind-bit
+   * set immediately to *reserve* the rectangle, but only individual
+   * tiles the player has actually paid for get this bit set. The
+   * renderer uses the combination:
+   *   - reserved + paid + ALL footprint tiles paid → anchor's `building`
+   *     field is set, anchor draws the merged finished geometry.
+   *   - reserved + paid + some footprint tiles unpaid → this tile shows
+   *     a per-tile construction site.
+   *   - reserved + unpaid → ghost outline, only when the matching tool
+   *     is active.
+   * Legacy saves (schema ≤ 22) load with this defaulted to TRUE on any
+   * footprint tile that has the kind-bit set, so previously-completed
+   * buildings stay completed across the upgrade.
+   */
+  bigBuildBlockPaid = false;
 }

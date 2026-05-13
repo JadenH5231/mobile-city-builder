@@ -22,21 +22,20 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 22 (Alpha 4.12 — Civic monuments): persists three new per-tile
- * bits — `cityHall`, `provincialCapital`, `nationalCapital` — for the
- * three new multi-tile civic monuments. Each follows the same anchor
- * pattern as the Mayor's Mansion: the lex-smallest tile of the
- * footprint carries the matching `building` value (`'city_hall'` /
- * `'provincial_capital'` / `'national_capital'`); every other tile in
- * the rectangle has only the matching bit set. v21-and-earlier saves
- * load with all three flags `false`.
+ * Schema 23 (Alpha 4.15 — Per-block big-building placement): adds
+ * `bigBuildBlockPaid` per tile so the four large civic builds (Mayor's
+ * Mansion + City Hall + Provincial Capital + National Capital) can
+ * persist mid-construction. Pre-4.15 these were all-or-nothing
+ * placements. v22-and-earlier saves load with `bigBuildBlockPaid = true`
+ * on every tile that has a kind-bit set, so previously-completed
+ * buildings remain completed across the upgrade.
  *
- * Earlier: v21 mansion, v20 beautification, v19 land ownership,
- * v18 skyscrapers, v17 districts, v16 bonds, v15 tourism, v14 patina,
- * v13 achievements, v12 bridges, v11 stats, v10 events, v9 highestPop,
- * v8 luxury, v7 elevation+bridge.
+ * Earlier: v22 civic monuments, v21 mansion, v20 beautification,
+ * v19 land ownership, v18 skyscrapers, v17 districts, v16 bonds,
+ * v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
+ * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 22;
+const SCHEMA = 23;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -102,6 +101,12 @@ export interface TileSnapshot {
   cityHall?: boolean;
   provincialCapital?: boolean;
   nationalCapital?: boolean;
+  /** Per-block placement bit (Alpha 4.15 / schema 23+). True iff the
+   *  player has paid for THIS block of a big civic build. v22-and-
+   *  earlier saves load with this defaulted to `true` for any tile
+   *  that has a kind-bit set, so previously-complete buildings
+   *  remain complete. */
+  bigBuildBlockPaid?: boolean;
 }
 
 export interface SaveData {
@@ -347,7 +352,8 @@ export function serialize(
       mayorMansion: t.mayorMansion,
       cityHall: t.cityHall,
       provincialCapital: t.provincialCapital,
-      nationalCapital: t.nationalCapital
+      nationalCapital: t.nationalCapital,
+      bigBuildBlockPaid: t.bigBuildBlockPaid
     };
   }
   const edges: number[] = [];
@@ -501,6 +507,15 @@ export function applySave(
     t.cityHall = snap.cityHall ?? false;
     t.provincialCapital = snap.provincialCapital ?? false;
     t.nationalCapital = snap.nationalCapital ?? false;
+    // Per-block placement bit (schema 23+). v22-and-earlier saves
+    // pre-date per-block construction, so any tile with a kind-bit
+    // set is implicitly already paid for (the building was complete
+    // when saved). New saves carry the explicit value.
+    if (snap.bigBuildBlockPaid !== undefined) {
+      t.bigBuildBlockPaid = snap.bigBuildBlockPaid;
+    } else {
+      t.bigBuildBlockPaid = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital;
+    }
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

@@ -38,6 +38,7 @@ import { PhotoOpBanner } from '../ui/PhotoOpBanner';
 import { SaveGame, applySave, serialize, type SaveData } from '../persistence/SaveGame';
 import {
   BUILDING_COSTS,
+  monumentBlockCost,
   CRASH_DEMAND_PENALTY,
   CRASH_TREASURY_PENALTY,
   CITY_EXPANSION_BLOCK_SIZE,
@@ -745,6 +746,9 @@ export class Game {
     this.clearMonumentPreview();
     this.refreshToolCostPill();
     this.refreshServiceRadiusPreview();
+    // Per-block ghost web (Alpha 4.15) — show the unpaid blocks of
+    // any in-progress big-build reservation matching the new tool.
+    this.refreshMonumentGhostWeb();
   }
 
   /**
@@ -852,32 +856,33 @@ export class Game {
     if (tool === 'residential_skyscraper') return { label: 'R Skyscraper', cost: SKYSCRAPER_COST.residential, banned: false };
     if (tool === 'commercial_skyscraper') return { label: 'C Skyscraper', cost: SKYSCRAPER_COST.commercial, banned: false };
     if (tool === 'mixed_skyscraper')       return { label: 'MU Skyscraper', cost: SKYSCRAPER_COST.mixed,       banned: false };
-    // Mayor's Mansion — single-instance prestige build.
+    // Big civic builds — per-block cost (Alpha 4.15). The cost shown is
+    // the PER-BLOCK installment, not the total — that's what the player
+    // will pay on the next tap. Each tile of the footprint costs the
+    // same amount; total = per-block * footprint-size.
     if (tool === 'place_mayor_mansion') {
       const mult = this.council.costMultiplier('mayor_mansion');
       const banned = !isFinite(mult);
-      const cost = banned ? BUILDING_COSTS.mayor_mansion : Math.round(BUILDING_COSTS.mayor_mansion * mult);
-      return { label: 'Mayor\'s Mansion', cost, banned };
+      const cost = banned ? monumentBlockCost('mayor_mansion') : Math.round(monumentBlockCost('mayor_mansion') * mult);
+      return { label: 'Mayor\'s Mansion (block)', cost, banned };
     }
-    // Civic monuments (Alpha 4.12) — three escalating one-per-city
-    // builds, each providing a 35-tile L3 service field.
     if (tool === 'place_city_hall') {
       const mult = this.council.costMultiplier('city_hall');
       const banned = !isFinite(mult);
-      const cost = banned ? BUILDING_COSTS.city_hall : Math.round(BUILDING_COSTS.city_hall * mult);
-      return { label: 'City Hall', cost, banned };
+      const cost = banned ? monumentBlockCost('city_hall') : Math.round(monumentBlockCost('city_hall') * mult);
+      return { label: 'City Hall (block)', cost, banned };
     }
     if (tool === 'place_provincial_capital') {
       const mult = this.council.costMultiplier('provincial_capital');
       const banned = !isFinite(mult);
-      const cost = banned ? BUILDING_COSTS.provincial_capital : Math.round(BUILDING_COSTS.provincial_capital * mult);
-      return { label: 'Provincial Capital', cost, banned };
+      const cost = banned ? monumentBlockCost('provincial_capital') : Math.round(monumentBlockCost('provincial_capital') * mult);
+      return { label: 'Provincial Capital (block)', cost, banned };
     }
     if (tool === 'place_national_capital') {
       const mult = this.council.costMultiplier('national_capital');
       const banned = !isFinite(mult);
-      const cost = banned ? BUILDING_COSTS.national_capital : Math.round(BUILDING_COSTS.national_capital * mult);
-      return { label: 'National Capital', cost, banned };
+      const cost = banned ? monumentBlockCost('national_capital') : Math.round(monumentBlockCost('national_capital') * mult);
+      return { label: 'National Capital (block)', cost, banned };
     }
     // Land purchase.
     if (tool === 'buy_land') {
@@ -1643,7 +1648,19 @@ export class Game {
         this.tool === 'place_city_hall'          ? 'city_hall' :
         this.tool === 'place_provincial_capital' ? 'provincial_capital' :
                                                     'national_capital';
-      const placed = this.armOrConfirmMonument(kind, tile.x, tile.y);
+      // Per-block placement (Alpha 4.15). If the player taps an
+      // existing reservation's unpaid tile, this is a single-tap
+      // installment payment. Otherwise it's a first-block placement
+      // attempt (still two-tap arm-then-confirm to lock in the
+      // footprint position).
+      const tapTile = this.grid.get(tile.x, tile.y);
+      const inExistingReservation = !!tapTile && this.tileBelongsToKind(tapTile, kind) && !tapTile.bigBuildBlockPaid;
+      let placed = false;
+      if (inExistingReservation) {
+        placed = this.payNextMonumentBlock(kind, tile.x, tile.y);
+      } else {
+        placed = this.armOrConfirmMonument(kind, tile.x, tile.y);
+      }
       if (!placed) {
         // Arm-only or invalid — keep the undo stack clean.
         this.undoStack.pop();
@@ -2029,11 +2046,12 @@ export class Game {
   }
 
   /**
-   * Validation predicate used by the preview ghost (Alpha 4.13). Mirrors
-   * the checks inside `placeMayorMansion` and `placeCivicMonument` but
-   * silent — no toasts, no side effects. Returns true iff a tap at this
-   * location would successfully place. Used to colour the preview ghost
-   * green (valid) vs red (invalid).
+   * Validation predicate used by the FIRST-BLOCK preview ghost (Alpha
+   * 4.13, repurposed for per-block in 4.15). Silent — no toasts, no
+   * side effects. Returns true iff a tap at this location would
+   * successfully reserve the footprint. Cost check uses the FIRST
+   * block's cost (per-block, Alpha 4.15) — subsequent installments
+   * are checked separately at pay time.
    */
   private canPlaceMonumentFootprint(
     kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
@@ -2049,11 +2067,12 @@ export class Game {
     for (const t of this.grid.iter()) {
       if (occupiedBit(t)) return false;
     }
-    // Cost + council gate.
+    // Cost + council gate. Per-block (Alpha 4.15) — only need to afford
+    // the FIRST installment to start the reservation.
     const mult = this.council.costMultiplier(kind);
     if (!isFinite(mult)) return false;
-    const cost = Math.round(fp.cost * mult);
-    if (this.economy.treasury < cost && !this.cheatUnlimitedMoney) return false;
+    const blockCost = Math.round(monumentBlockCost(kind) * mult);
+    if (this.economy.treasury < blockCost && !this.cheatUnlimitedMoney) return false;
     // Footprint validation — every tile must be owned grass with nothing on it.
     for (let dy = 0; dy < fp.h; dy++) {
       for (let dx = 0; dx < fp.w; dx++) {
@@ -2066,6 +2085,21 @@ export class Game {
       }
     }
     return true;
+  }
+
+  /** True iff `t` is part of a footprint of `kind` (Alpha 4.15). Used by
+   *  the per-block placement dispatcher to decide whether a tap is
+   *  paying an installment vs trying to start a fresh reservation. */
+  private tileBelongsToKind(
+    t: Tile,
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+  ): boolean {
+    switch (kind) {
+      case 'mayor_mansion':      return t.mayorMansion;
+      case 'city_hall':          return t.cityHall;
+      case 'provincial_capital': return t.provincialCapital;
+      case 'national_capital':   return t.nationalCapital;
+    }
   }
 
   /**
@@ -2138,186 +2172,202 @@ export class Game {
   }
 
   /**
-   * Mayor's Mansion placement (Alpha 4.2). Validates the 4×2 footprint
-   * starting at `(x, y)` (which is the lex-smallest tile of the eight),
-   * one-per-city constraint, treasury, and stamps the bits across all
-   * eight tiles. The anchor tile gets `building='mayor_mansion'`; the
-   * other seven get `mayorMansion=true` only.
+   * Mayor's Mansion FIRST-BLOCK placement (Alpha 4.2; per-block in 4.15).
+   * Validates the 4×2 footprint anchored at (x, y) and reserves the
+   * rectangle (sets `mayorMansion = true` on every tile). Charges the
+   * per-block cost for the FIRST block only; the player will pay for
+   * each subsequent block as they tap it. The anchor's `building`
+   * value stays `'none'` until ALL 8 blocks are paid — at that point
+   * the renderer flips from per-tile construction sites to the merged
+   * finished mansion geometry.
    *
-   * Failure reasons (each surfaces a clear toast so the player knows
-   * why placement was rejected):
+   * Failure reasons (each surfaces a clear toast):
    * - Footprint runs off-map
    * - Any of the 8 tiles is occupied / not owned / wrong terrain
    * - A mayor's mansion already exists in this city
-   * - Treasury < $500K (after council multiplier)
-   * - Council banned (full ban from the costMultiplier gate)
-   *
-   * No road-adjacency requirement — this isn't a working civic build,
-   * it's a private estate; players can plant it deep in the woods.
+   * - Treasury < per-block cost (~$62K)
+   * - Council banned
    */
   private placeMayorMansion(x: number, y: number): boolean {
-    // One-per-city constraint. A quick sweep — cheap on Small/Medium
-    // and tolerable on Large since this is a one-time placement.
-    for (const t of this.grid.iter()) {
-      if (t.mayorMansion) {
-        this.onStatusMessage?.('Only one Mayor\'s Mansion per city');
-        return false;
-      }
-    }
-    // Cost + council gate.
-    const baseCost = BUILDING_COSTS.mayor_mansion;
-    const mult = this.council.costMultiplier('mayor_mansion');
-    if (!isFinite(mult)) {
-      this.onStatusMessage?.('Banned by council');
-      return false;
-    }
-    const cost = Math.round(baseCost * mult);
-    if (this.economy.treasury < cost) {
-      this.onStatusMessage?.(`Not enough money — Mayor's Mansion costs $${cost.toLocaleString()}`);
-      return false;
-    }
-    // Footprint validation. 4 wide × 2 deep = 8 tiles, all must be
-    // free, owned, on grass (no water / bridge / sand inside the
-    // grounds — the manicured estate doesn't make sense in mixed
-    // terrain).
-    const offsets: Array<[number, number]> = [];
-    for (let dy = 0; dy < MAYOR_MANSION_DEPTH; dy++) {
-      for (let dx = 0; dx < MAYOR_MANSION_WIDTH; dx++) {
-        offsets.push([dx, dy]);
-      }
-    }
-    for (const [dx, dy] of offsets) {
-      const t = this.grid.get(x + dx, y + dy);
-      if (!t) {
-        this.onStatusMessage?.('Mayor\'s Mansion needs a 4×2 free area');
-        return false;
-      }
-      if (!t.owned) {
-        this.onStatusMessage?.('Mayor\'s Mansion footprint includes unowned land');
-        return false;
-      }
-      if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') {
-        this.onStatusMessage?.('Mayor\'s Mansion needs all 8 tiles free');
-        return false;
-      }
-      if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury) {
-        this.onStatusMessage?.('Mayor\'s Mansion needs flat grass land');
-        return false;
-      }
-    }
-    // Stamp the bits. Anchor (lex-smallest = (x, y)) carries the
-    // `building` value; the other seven are marked-only.
-    for (const [dx, dy] of offsets) {
-      const t = this.grid.get(x + dx, y + dy)!;
-      t.mayorMansion = true;
-      if (dx === 0 && dy === 0) {
-        t.building = 'mayor_mansion';
-      }
-    }
-    this.economy.treasury -= cost;
-    this.services.recompute(this.grid);
-    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
-    this.maybeOfferPhotoOp('mayor_mansion');
-    return true;
+    return this.reserveMonumentFootprint(x, y, 'mayor_mansion');
   }
 
-  /**
-   * Civic monument placement (Alpha 4.12) — covers City Hall (5×3),
-   * Provincial Capital (6×4), National Capital (7×4). Same anchor-
-   * tile pattern as the Mayor's Mansion: lex-smallest tile gets the
-   * `building` value, every other tile in the rectangle gets the
-   * matching bit set. Single-instance per kind.
-   *
-   * Failure reasons (each surfaces a toast):
-   *   - Footprint runs off-map
-   *   - Any footprint tile is occupied / not owned / wrong terrain
-   *   - Another instance of this kind already exists in the city
-   *   - Treasury < cost (after council multiplier)
-   *   - Banned by council
-   *
-   * No road-adjacency requirement (matches the Mansion) — the player
-   * can place it deep in a planned civic plaza before they pave it.
-   */
-  private placeCivicMonument(
+  /** Generalised first-block reservation (Alpha 4.15). Used for both
+   *  Mayor's Mansion and the three civic monuments. Validates the
+   *  footprint, charges the per-block cost for the FIRST block,
+   *  reserves every tile of the rectangle by setting the matching
+   *  kind-bit, and marks ONLY the anchor as paid. Subsequent blocks
+   *  are paid via `payNextMonumentBlock`. */
+  private reserveMonumentFootprint(
     x: number, y: number,
-    kind: 'city_hall' | 'provincial_capital' | 'national_capital'
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
   ): boolean {
-    // Pick footprint + tile-bit + display label per kind. The marker
-    // bit is the only thing that varies between the three placements
-    // beyond their dimensions and cost.
-    const spec = (() => {
-      switch (kind) {
-        case 'city_hall':
-          return { w: CITY_HALL_WIDTH, h: CITY_HALL_DEPTH, label: 'City Hall',
-                   read: (t: Tile) => t.cityHall,
-                   write: (t: Tile, v: boolean) => { t.cityHall = v; } };
-        case 'provincial_capital':
-          return { w: PROVINCIAL_CAPITAL_WIDTH, h: PROVINCIAL_CAPITAL_DEPTH, label: 'Provincial Capital',
-                   read: (t: Tile) => t.provincialCapital,
-                   write: (t: Tile, v: boolean) => { t.provincialCapital = v; } };
-        case 'national_capital':
-          return { w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH, label: 'National Capital',
-                   read: (t: Tile) => t.nationalCapital,
-                   write: (t: Tile, v: boolean) => { t.nationalCapital = v; } };
-      }
-    })();
+    const fp = this.monumentFootprint(kind);
+    // Pick the tile-bit accessor based on kind.
+    const setKindBit = (t: Tile, v: boolean): void => {
+      if (kind === 'mayor_mansion') t.mayorMansion = v;
+      else if (kind === 'city_hall') t.cityHall = v;
+      else if (kind === 'provincial_capital') t.provincialCapital = v;
+      else t.nationalCapital = v;
+    };
+    const readKindBit = (t: Tile): boolean => {
+      if (kind === 'mayor_mansion') return t.mayorMansion;
+      if (kind === 'city_hall') return t.cityHall;
+      if (kind === 'provincial_capital') return t.provincialCapital;
+      return t.nationalCapital;
+    };
     // One-per-city sweep.
     for (const t of this.grid.iter()) {
-      if (spec.read(t)) {
-        this.onStatusMessage?.(`Only one ${spec.label} per city`);
+      if (readKindBit(t)) {
+        this.onStatusMessage?.(`Only one ${fp.label} per city`);
         return false;
       }
     }
-    // Cost + council gate.
-    const baseCost = BUILDING_COSTS[kind];
+    // Cost + council gate. Per-block (Alpha 4.15) — first installment only.
     const mult = this.council.costMultiplier(kind);
     if (!isFinite(mult)) {
       this.onStatusMessage?.('Banned by council');
       return false;
     }
-    const cost = Math.round(baseCost * mult);
-    if (this.economy.treasury < cost) {
-      this.onStatusMessage?.(`Not enough money — ${spec.label} costs $${cost.toLocaleString()}`);
+    const blockCost = Math.round(monumentBlockCost(kind) * mult);
+    const totalBlocks = fp.w * fp.h;
+    if (this.economy.treasury < blockCost && !this.cheatUnlimitedMoney) {
+      this.onStatusMessage?.(`Not enough money — first block costs $${blockCost.toLocaleString()}`);
       return false;
     }
-    // Footprint validation. Every tile must be free, owned, grass, with
-    // no skyscraper / luxury / bridge state. Civic monuments live on
-    // pristine land — they're prestige showpieces.
+    // Footprint validation — every tile must be free, owned grass.
     const offsets: Array<[number, number]> = [];
-    for (let dy = 0; dy < spec.h; dy++) {
-      for (let dx = 0; dx < spec.w; dx++) offsets.push([dx, dy]);
+    for (let dy = 0; dy < fp.h; dy++) {
+      for (let dx = 0; dx < fp.w; dx++) offsets.push([dx, dy]);
     }
     for (const [dx, dy] of offsets) {
       const t = this.grid.get(x + dx, y + dy);
       if (!t) {
-        this.onStatusMessage?.(`${spec.label} needs a ${spec.w}×${spec.h} free area`);
+        this.onStatusMessage?.(`${fp.label} needs a ${fp.w}×${fp.h} free area`);
         return false;
       }
       if (!t.owned) {
-        this.onStatusMessage?.(`${spec.label} footprint includes unowned land`);
+        this.onStatusMessage?.(`${fp.label} footprint includes unowned land`);
         return false;
       }
       if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') {
-        this.onStatusMessage?.(`${spec.label} needs all ${spec.w * spec.h} tiles free`);
+        this.onStatusMessage?.(`${fp.label} needs all ${totalBlocks} tiles free`);
         return false;
       }
-      if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury || t.mayorMansion) {
-        this.onStatusMessage?.(`${spec.label} needs flat grass land`);
+      if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury
+          || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital) {
+        this.onStatusMessage?.(`${fp.label} needs flat grass land`);
         return false;
       }
     }
-    // Stamp the bits. Anchor (lex-smallest = (x, y)) carries the
-    // `building` value; the others are marked-only.
+    // Reserve the footprint — every tile gets the kind-bit, the anchor
+    // ALSO gets bigBuildBlockPaid = true (the first installment is
+    // included in this placement).
     for (const [dx, dy] of offsets) {
       const t = this.grid.get(x + dx, y + dy)!;
-      spec.write(t, true);
-      if (dx === 0 && dy === 0) t.building = kind;
+      setKindBit(t, true);
+      // Anchor is paid for; everything else awaits a tap.
+      if (dx === 0 && dy === 0) t.bigBuildBlockPaid = true;
     }
-    this.economy.treasury -= cost;
+    this.economy.treasury -= blockCost;
+    // No `building` value on the anchor yet — that flips on completion.
     this.services.recompute(this.grid);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
-    this.maybeOfferPhotoOp(kind);
+    // Refresh the ghost web to show the unpaid blocks.
+    this.refreshMonumentGhostWeb();
+    const remaining = totalBlocks - 1;
+    this.onStatusMessage?.(`${fp.label} reserved · 1 of ${totalBlocks} blocks placed · tap ${remaining} more`);
     return true;
+  }
+
+  /**
+   * Pay for one block of an existing per-block reservation (Alpha 4.15).
+   * Called when the player taps an unpaid tile of a footprint they've
+   * already started. Validates treasury, charges the per-block cost,
+   * marks the tile paid, and — if this completes the building — flips
+   * the anchor's `building` value to the kind so the renderer dispatches
+   * the merged finished geometry on the next draw.
+   */
+  private payNextMonumentBlock(
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    x: number, y: number
+  ): boolean {
+    const tile = this.grid.get(x, y);
+    if (!tile || !this.tileBelongsToKind(tile, kind)) return false;
+    if (tile.bigBuildBlockPaid) return false;   // already paid; no-op
+    const fp = this.monumentFootprint(kind);
+    const mult = this.council.costMultiplier(kind);
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
+    const blockCost = Math.round(monumentBlockCost(kind) * mult);
+    if (this.economy.treasury < blockCost && !this.cheatUnlimitedMoney) {
+      this.onStatusMessage?.(`Not enough money — block costs $${blockCost.toLocaleString()}`);
+      return false;
+    }
+    this.economy.treasury -= blockCost;
+    tile.bigBuildBlockPaid = true;
+    // Walk the whole footprint to count progress + check completion.
+    // The anchor is the lex-smallest tile of the kind-bit set.
+    let anchor: Tile | null = null;
+    let paidCount = 0;
+    let totalCount = 0;
+    for (const t of this.grid.iter()) {
+      if (!this.tileBelongsToKind(t, kind)) continue;
+      totalCount++;
+      if (t.bigBuildBlockPaid) paidCount++;
+      if (anchor === null || t.y < anchor.y || (t.y === anchor.y && t.x < anchor.x)) anchor = t;
+    }
+    const completed = paidCount === totalCount;
+    if (completed && anchor) {
+      // All blocks paid → flip the anchor's `building` to the kind so the
+      // renderer dispatches the merged finished geometry on next draw.
+      anchor.building = kind;
+      this.services.recompute(this.grid);
+      this.maybeOfferPhotoOp(kind);
+      this.onStatusMessage?.(`${fp.label} complete! 🎉`);
+    } else {
+      this.onStatusMessage?.(`${fp.label} · ${paidCount} of ${totalCount} blocks placed`);
+    }
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.refreshMonumentGhostWeb();
+    return true;
+  }
+
+  /** If the active tool is a big-building tool, redraw the ghost web so
+   *  unpaid reserved tiles glow as placement targets. Otherwise clears
+   *  any existing web. Called on tool change + every successful block
+   *  placement so the web shrinks one tile at a time. */
+  refreshMonumentGhostWeb(): void {
+    const kindFromTool = (() => {
+      switch (this.tool) {
+        case 'place_mayor_mansion':      return 'mayor_mansion' as const;
+        case 'place_city_hall':          return 'city_hall' as const;
+        case 'place_provincial_capital': return 'provincial_capital' as const;
+        case 'place_national_capital':   return 'national_capital' as const;
+        default: return null;
+      }
+    })();
+    if (!kindFromTool) {
+      this.renderer.clearMonumentGhostWeb();
+      return;
+    }
+    this.renderer.showMonumentGhostWeb(this.grid, kindFromTool);
+  }
+
+  /**
+   * Civic monument FIRST-BLOCK placement (Alpha 4.12; per-block in 4.15).
+   * Delegates to `reserveMonumentFootprint` which handles all the
+   * one-per-city / footprint / treasury checks + reservation. The
+   * anchor's `building` value flips to `kind` only after the player
+   * has paid for every footprint block via `payNextMonumentBlock`.
+   */
+  private placeCivicMonument(
+    x: number, y: number,
+    kind: 'city_hall' | 'provincial_capital' | 'national_capital'
+  ): boolean {
+    return this.reserveMonumentFootprint(x, y, kind);
   }
 
   /**
@@ -2967,11 +3017,14 @@ export class Game {
       // bit-set tile (the anchor) by walking left+up from the tap, then
       // clear the entire MAYOR_MANSION_WIDTH × MAYOR_MANSION_DEPTH
       // rectangle from there.
+      // Mayor's Mansion / civic monuments (Alpha 4.2+, per-block 4.15) —
+      // bulldozing ANY tile of a footprint (complete or in-progress)
+      // tears down the entire reservation. No refund — the player
+      // chose to bulldoze. `bigBuildBlockPaid` is reset on every
+      // cleared tile so the next reservation starts fresh.
       if (tile.mayorMansion) {
-        // Walk left to find the western edge of the footprint.
         let ax = x;
         while (ax > 0 && this.grid.get(ax - 1, y)?.mayorMansion) ax--;
-        // Walk up to find the northern edge.
         let ay = y;
         while (ay > 0 && this.grid.get(ax, ay - 1)?.mayorMansion) ay--;
         for (let dy = 0; dy < MAYOR_MANSION_DEPTH; dy++) {
@@ -2979,6 +3032,7 @@ export class Game {
             const peer = this.grid.get(ax + dx, ay + dy);
             if (!peer || !peer.mayorMansion) continue;
             peer.mayorMansion = false;
+            peer.bigBuildBlockPaid = false;
             if (peer.building === 'mayor_mansion') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
@@ -2986,9 +3040,6 @@ export class Game {
         }
         cityBuildingsChanged = true;
       }
-      // Civic monuments (Alpha 4.12) — same walk-back pattern, one
-      // branch per kind. Bulldozing any tile of the footprint clears
-      // the entire rectangle.
       if (tile.cityHall) {
         let ax = x, ay = y;
         while (ax > 0 && this.grid.get(ax - 1, y)?.cityHall) ax--;
@@ -2998,6 +3049,7 @@ export class Game {
             const peer = this.grid.get(ax + dx, ay + dy);
             if (!peer || !peer.cityHall) continue;
             peer.cityHall = false;
+            peer.bigBuildBlockPaid = false;
             if (peer.building === 'city_hall') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
@@ -3014,6 +3066,7 @@ export class Game {
             const peer = this.grid.get(ax + dx, ay + dy);
             if (!peer || !peer.provincialCapital) continue;
             peer.provincialCapital = false;
+            peer.bigBuildBlockPaid = false;
             if (peer.building === 'provincial_capital') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
@@ -3030,6 +3083,7 @@ export class Game {
             const peer = this.grid.get(ax + dx, ay + dy);
             if (!peer || !peer.nationalCapital) continue;
             peer.nationalCapital = false;
+            peer.bigBuildBlockPaid = false;
             if (peer.building === 'national_capital') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
@@ -3056,6 +3110,10 @@ export class Game {
       this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
       // Service coverage changed — rerun the sweep so Development sees it.
       this.services.recompute(this.grid);
+      // The bulldoze may have removed a tile of an in-progress big-build
+      // reservation matching the active tool — refresh the ghost web so
+      // it reflects the new state (Alpha 4.15).
+      this.refreshMonumentGhostWeb();
     }
     if (pathsChanged) {
       this.renderer.drawPaths(this.grid);

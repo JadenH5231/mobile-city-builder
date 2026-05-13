@@ -295,13 +295,14 @@ export const MAX_TOURIST_VEHICLES = 50;
  */
 export const MAX_SERVICE_VEHICLES = 20;
 /**
- * Motorcade event interval, in sim months (Alpha 4.14). Currently 6 for
- * playtest visibility (the user explicitly asked for a faster cadence
- * during testing — they'll bump this back to 48 / "every 4 years"
- * once verified). Triggers when the city has at least one Provincial
- * Capital or National Capital placed.
+ * Motorcade event interval, in sim months. Currently 1 for playtest
+ * verification (Alpha 4.14.2 — user reported they hadn't seen the
+ * motorcade at the 6-month cadence, so we're going monthly for
+ * faster feedback). Will bump to 48 / "every 4 years" once the
+ * spawn + route + pull-over chain is verified working. Triggers
+ * when the city has at least one Provincial / National Capital.
  */
-export const MOTORCADE_INTERVAL_MONTHS = 6;
+export const MOTORCADE_INTERVAL_MONTHS = 1;
 
 /** Per-instance car colours — picked at random when a car spawns. */
 export const VEHICLE_PALETTE: readonly number[] = [

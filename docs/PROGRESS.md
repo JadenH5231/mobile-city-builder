@@ -4,6 +4,17 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.14.2 — Motorcade now monthly + diagnostic toasts when blocked** — playtest follow-up: "I haven't seen the motorcade yet. Can you make it a monthly occurrence for now so I can make sure it works?"
+  - **Interval bumped** `MOTORCADE_INTERVAL_MONTHS = 6 → 1` so the convoy fires every sim month for verification. Will go back to 48 ("every 4 years") once the chain is confirmed.
+  - **Targeted failure toasts.** `Motorcade.monthlyTick` now returns a discriminated result (`'started' | 'no_capital' | 'no_road_access' | 'no_avenues' | 'no_route' | 'pending'`). Game routes each to a specific status toast so the player can see WHY the motorcade isn't firing if a prereq is missing:
+    - `started` → 🚓 "Motorcade departing the capital"
+    - `no_road_access` → "Motorcade blocked — capital has no road access"
+    - `no_avenues` → "Motorcade blocked — paint at least one Avenue tile"
+    - `no_route` → "Motorcade blocked — couldn't route to your avenues"
+    - `pending` and `no_capital` are silent (don't spam every month).
+  - **Failure doesn't reset the countdown** — the next month re-attempts so the convoy fires the moment the city qualifies (e.g. as soon as you paint an avenue, the next month's tick starts the motorcade).
+  - No save schema bump.
+
 - **Alpha 4.14.1 — Fix: import-from-code race against the 30s autosave** — playtest bug report: "I tested import/export and it worked but when I refreshed the world it reverted back to the untouched world. I made changes to the old world that are now lost because it reset."
   - **Root cause** — the import handler in main.ts did `await saveGame.writeRaw(data)` then `setTimeout(reload, 350)`. During the await AND during those 350ms the render loop kept ticking. If the 30-second autosave timer was already pending (i.e. `autosaveAccumMs >= AUTOSAVE_MS`) when the player clicked Import, it would fire mid-window, call `saveGame.save(...)`, serialize the in-memory OLD city, and overwrite the freshly-imported slot. After reload, init reads IDB and gets the auto-saved-old data — the player loses both their recent edits AND the import.
   - **Fix** — new `Game.suspendAutosavesForReload()` public method that flips `this.resetting = true`, the same flag the autosave check already gates on (`if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting)`). The import handler in main.ts now calls this BEFORE `writeRaw`. The reload tears down the runtime, so no resume call is needed.

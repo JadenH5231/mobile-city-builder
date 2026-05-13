@@ -5,6 +5,21 @@ import type { Vehicles } from './Vehicles';
 import { MOTORCADE_INTERVAL_MONTHS } from '../types';
 
 /**
+ * Result of a `Motorcade.monthlyTick` call (Alpha 4.14.2). Discriminated
+ * union so the caller (Game) can route each outcome to a specific status
+ * message. 'no_capital' is silent (player just doesn't have one yet);
+ * 'no_road_access' / 'no_avenues' / 'no_route' all surface targeted
+ * toasts so the player can fix the missing prereq.
+ */
+export type MotorcadeTickResult =
+  | { kind: 'pending' }              // countdown not yet elapsed
+  | { kind: 'started' }              // motorcade convoy queued
+  | { kind: 'no_capital' }           // no Provincial / National Capital placed
+  | { kind: 'no_road_access' }       // capital exists but has no adjacent road
+  | { kind: 'no_avenues' }           // no avenue tiles to tour
+  | { kind: 'no_route' };            // routing failed (likely disconnected avenues)
+
+/**
  * Motorcade event (Alpha 4.14).
  *
  * Triggered every {@link MOTORCADE_INTERVAL_MONTHS} when the city has at
@@ -62,16 +77,28 @@ export class Motorcade {
 
   /**
    * Monthly tick — decrement countdown and attempt to fire if elapsed.
-   * Returns true iff a motorcade was actually queued this call.
+   * Returns a result so callers can surface targeted feedback for each
+   * failure mode (Alpha 4.14.2). 'pending' means the countdown hasn't
+   * elapsed yet; 'no_capital' silently no-ops because the player just
+   * doesn't have one yet (no toast); the other failures DO surface a
+   * status toast so the player knows what's blocking the convoy.
    *
    * Called from Game's per-month rollover hook.
    */
-  monthlyTick(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): boolean {
+  monthlyTick(
+    grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding
+  ): MotorcadeTickResult {
     this.monthsToNext -= 1;
-    if (this.monthsToNext > 0) return false;
-    const ok = this.tryStart(grid, roadGraph, pathfinder);
-    if (ok) this.monthsToNext = MOTORCADE_INTERVAL_MONTHS;
-    return ok;
+    if (this.monthsToNext > 0) return { kind: 'pending' };
+    const result = this.tryStart(grid, roadGraph, pathfinder);
+    if (result.kind === 'started') {
+      this.monthsToNext = MOTORCADE_INTERVAL_MONTHS;
+    } else {
+      // Don't reset the countdown on failure — the next month's tick
+      // re-attempts so the player gets the motorcade as soon as the
+      // city actually qualifies (e.g. once they paint an avenue).
+    }
+    return result;
   }
 
   /**
@@ -100,14 +127,14 @@ export class Motorcade {
 
   /**
    * Build the motorcade route + queue the three vehicle spawns. Returns
-   * true on success, false if any prerequisite is missing (no capital,
-   * no avenue tiles, route can't be constructed).
+   * a discriminated result so the caller can surface targeted feedback
+   * for each failure mode.
    */
-  private tryStart(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): boolean {
+  private tryStart(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): MotorcadeTickResult {
     const capital = findCapitalAnchor(grid);
-    if (!capital) return false;
+    if (!capital) return { kind: 'no_capital' };
     const startRoad = nearestRoadTile(grid, capital.x, capital.y);
-    if (!startRoad) return false;
+    if (!startRoad) return { kind: 'no_road_access' };
     const startIdx = startRoad.y * grid.width + startRoad.x;
 
     // Collect every avenue road tile in the grid.
@@ -117,7 +144,7 @@ export class Motorcade {
       if (t.roadType !== 'avenue') continue;
       avenues.push({ x: t.x, y: t.y, idx: t.y * grid.width + t.x });
     }
-    if (avenues.length === 0) return false;
+    if (avenues.length === 0) return { kind: 'no_avenues' };
 
     // Sample down to MAX_WAYPOINTS via spatial spreading: greedy farthest-
     // point sampling so chosen waypoints cover the avenue network rather
@@ -157,7 +184,7 @@ export class Motorcade {
       if (fullPath.length === 0) fullPath.push(...homeSeg);
       else fullPath.push(...homeSeg.slice(1));
     }
-    if (fullPath.length < 2) return false;
+    if (fullPath.length < 2) return { kind: 'no_route' };
 
     // Queue the three vehicles. Lead spawns immediately, limo +
     // SPAWN_INTERVAL_SEC, tail + 2 * SPAWN_INTERVAL_SEC.
@@ -167,7 +194,7 @@ export class Motorcade {
       { spawnAt: now + Motorcade.SPAWN_INTERVAL_SEC * 1000,            kind: 'motorcade_limo', path: fullPath },
       { spawnAt: now + Motorcade.SPAWN_INTERVAL_SEC * 2000,            kind: 'motorcade_tail', path: fullPath }
     );
-    return true;
+    return { kind: 'started' };
   }
 
   /** Reset the event state (used on city reset / save load).  Does NOT

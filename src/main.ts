@@ -100,6 +100,145 @@ if (cheatDemandEl) {
 }
 refreshCheatsActiveLabel();
 
+// Backup & Sync — portable city codes (Alpha 4.11). Lets the player move
+// a city between devices via copy-paste of a base64-gzipped snapshot.
+// Always overwrites the active slot on import — there's no merge.
+import { exportSaveCode, importSaveCode } from './persistence/PortableSave';
+import { serialize as serializeSave } from './persistence/SaveGame';
+
+const exportBtn = document.getElementById('setting-export-city');
+const importBtn = document.getElementById('setting-import-city');
+const exportDrawer = document.getElementById('setting-export-drawer');
+const importDrawer = document.getElementById('setting-import-drawer');
+const exportCodeEl = document.getElementById('setting-export-code') as HTMLTextAreaElement | null;
+const exportSizeEl = document.getElementById('setting-export-size');
+const exportCopyBtn = document.getElementById('setting-export-copy');
+const exportCloseBtn = document.getElementById('setting-export-close');
+const importCodeEl = document.getElementById('setting-import-code') as HTMLTextAreaElement | null;
+const importApplyBtn = document.getElementById('setting-import-apply');
+const importCloseBtn = document.getElementById('setting-import-close');
+const syncStatusEl = document.getElementById('setting-sync-status');
+
+const setSyncStatus = (msg: string, kind: 'ok' | 'err' | 'info'): void => {
+  if (!syncStatusEl) return;
+  syncStatusEl.textContent = msg;
+  syncStatusEl.classList.remove('hidden', 'settings__sync-status--ok', 'settings__sync-status--err');
+  if (kind === 'ok') syncStatusEl.classList.add('settings__sync-status--ok');
+  else if (kind === 'err') syncStatusEl.classList.add('settings__sync-status--err');
+};
+const clearSyncStatus = (): void => syncStatusEl?.classList.add('hidden');
+
+// Track armed state on the danger button so the click confirms before
+// actually overwriting (matches the inline two-tap arm pattern used by
+// the Reset City button).
+let importArmed = false;
+let importDisarmTimer: number | undefined;
+const disarmImport = (): void => {
+  importArmed = false;
+  if (importApplyBtn) importApplyBtn.textContent = 'Overwrite active slot';
+  if (importDisarmTimer !== undefined) {
+    clearTimeout(importDisarmTimer);
+    importDisarmTimer = undefined;
+  }
+};
+
+exportBtn?.addEventListener('click', () => {
+  // Build a SaveData straight from live state — same shape that gets
+  // written to IDB on the autosave tick. We piggy-back on the existing
+  // serialize() so any future field additions flow through automatically.
+  const data = serializeSave(
+    game.grid, game.economy, game.council, game.milestones, game.events,
+    game.stats, game.achievements, game.bonds, game.districts
+  );
+  if (game.cityName) data.cityName = game.cityName;
+  data.cheatUnlimitedMoney = game.cheatUnlimitedMoney;
+  data.cheatUnlimitedDemand = game.cheatUnlimitedDemand;
+  exportSaveCode(data).then((code) => {
+    if (exportCodeEl) exportCodeEl.value = code;
+    if (exportSizeEl) exportSizeEl.textContent = `${(code.length / 1024).toFixed(1)} KB · ${code.length.toLocaleString()} chars`;
+    exportDrawer?.classList.remove('hidden');
+    importDrawer?.classList.add('hidden');
+    disarmImport();
+    clearSyncStatus();
+    // Auto-select the textarea so a single Cmd/Ctrl+C grabs it.
+    exportCodeEl?.focus();
+    exportCodeEl?.select();
+  }).catch((err: Error) => setSyncStatus(`Export failed: ${err.message}`, 'err'));
+});
+
+exportCopyBtn?.addEventListener('click', () => {
+  if (!exportCodeEl) return;
+  const code = exportCodeEl.value;
+  // navigator.clipboard is the modern path; fall back to execCommand for
+  // older browsers / non-secure contexts.
+  const fallback = (): void => {
+    exportCodeEl.focus();
+    exportCodeEl.select();
+    try { document.execCommand('copy'); setSyncStatus('Copied to clipboard.', 'ok'); }
+    catch { setSyncStatus('Could not copy — select and copy manually.', 'err'); }
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(code)
+      .then(() => setSyncStatus('Copied to clipboard.', 'ok'))
+      .catch(fallback);
+  } else fallback();
+});
+
+exportCloseBtn?.addEventListener('click', () => {
+  exportDrawer?.classList.add('hidden');
+  clearSyncStatus();
+});
+
+importBtn?.addEventListener('click', () => {
+  importDrawer?.classList.remove('hidden');
+  exportDrawer?.classList.add('hidden');
+  disarmImport();
+  clearSyncStatus();
+  importCodeEl?.focus();
+});
+
+importCloseBtn?.addEventListener('click', () => {
+  importDrawer?.classList.add('hidden');
+  disarmImport();
+  clearSyncStatus();
+});
+
+importCodeEl?.addEventListener('input', () => {
+  // Disarm if the player edits the code mid-confirmation — they may
+  // have been about to commit and then changed their mind.
+  if (importArmed) disarmImport();
+});
+
+importApplyBtn?.addEventListener('click', () => {
+  const raw = importCodeEl?.value ?? '';
+  if (!raw.trim()) {
+    setSyncStatus('Paste a city code first.', 'err');
+    return;
+  }
+  if (!importArmed) {
+    // First tap arms; second tap (within 5s) commits. Mirrors the
+    // Reset City "tap to confirm" flow.
+    importArmed = true;
+    if (importApplyBtn) importApplyBtn.textContent = 'Tap again to overwrite';
+    setSyncStatus('This will replace the active slot. Tap again within 5 seconds to confirm.', 'info');
+    importDisarmTimer = window.setTimeout(disarmImport, 5000);
+    return;
+  }
+  // Armed → decode + write + reload.
+  importSaveCode(raw)
+    .then(async (data) => {
+      await game.saveGame.writeRaw(data);
+      setSyncStatus('Imported. Reloading…', 'ok');
+      // Tiny delay so the player sees the success line before the page
+      // tears down.
+      window.setTimeout(() => location.reload(), 350);
+    })
+    .catch((err: Error) => {
+      setSyncStatus(err.message, 'err');
+      disarmImport();
+    });
+});
+
 // Slot picker — accessible via the 🏙 HUD pill. Picking a different slot
 // writes to localStorage and reloads so the chosen slot's save is the
 // only one in memory.

@@ -272,6 +272,30 @@ export class SaveGame {
       tx.onerror = () => reject(tx.error);
     });
   }
+
+  /**
+   * Write a raw SaveData straight to the active slot (Alpha 4.11). Used by
+   * the import-from-code flow — `serialize()` is bypassed because the data
+   * already came from somewhere else's serialize. The schema gate is
+   * checked here so a corrupt/old code can't pollute the store. The
+   * caller is expected to re-init / reload after this write so the in-
+   * memory state matches what's now persisted.
+   */
+  async writeRaw(data: SaveData): Promise<void> {
+    if (!this.db) throw new Error('Save store unavailable (private mode?)');
+    if (typeof data.schemaVersion !== 'number'
+        || data.schemaVersion < MIN_LOADABLE_SCHEMA
+        || data.schemaVersion > SCHEMA) {
+      throw new Error(`Save schema v${data.schemaVersion} is outside the loadable range (${MIN_LOADABLE_SCHEMA}..${SCHEMA}).`);
+    }
+    data.lastPlayedISO = new Date().toISOString();
+    return new Promise<void>((resolve, reject) => {
+      const tx = this.db!.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(data, this.slotKey);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
 }
 
 /**

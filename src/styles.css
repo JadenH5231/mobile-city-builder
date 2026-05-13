@@ -3371,6 +3371,69 @@ body.photo-mode .tutorial-banner {
   color: #ffd166;
 }
 .settings__cheats-active.hidden { display: none; }
+
+/* ---- Backup & sync (Alpha 4.11) ---- */
+
+.settings__sync-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.settings__sync-status {
+  margin-top: 8px;
+  font-size: 11.5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.30);
+}
+.settings__sync-status--ok { color: #6dd06a; }
+.settings__sync-status--err { color: #ff8888; }
+.settings__sync-status.hidden { display: none; }
+
+.settings__sync-drawer {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(207, 232, 214, 0.12);
+}
+.settings__sync-drawer.hidden { display: none; }
+.settings__sync-drawer-label {
+  font-size: 11.5px;
+  color: rgba(207, 232, 214, 0.85);
+  margin-bottom: 6px;
+  line-height: 1.45;
+}
+.settings__sync-code {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--pill-fg);
+  border: 1px solid rgba(207, 232, 214, 0.18);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-all;
+  resize: vertical;
+}
+.settings__sync-code:focus {
+  outline: none;
+  border-color: rgba(255, 216, 77, 0.55);
+}
+.settings__sync-drawer-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.settings__sync-size {
+  font-size: 11px;
+  color: rgba(207, 232, 214, 0.55);
+  margin-right: auto;
+}
 .settings__group-title {
   font-size: 12px;
   font-weight: 700;

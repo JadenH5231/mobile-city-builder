@@ -2,6 +2,7 @@ import { Camera } from './Camera';
 import { Input } from './Input';
 import { Renderer } from './Renderer';
 import { Grid } from '../world/Grid';
+import type { Tile } from '../world/Tile';
 import { TileInfoPanel, diagnoseTile } from '../ui/TileInfoPanel';
 import { Toolbar } from '../ui/Toolbar';
 import { Development } from '../simulation/Development';
@@ -40,6 +41,12 @@ import {
   CRASH_TREASURY_PENALTY,
   CITY_EXPANSION_BLOCK_SIZE,
   CITY_EXPANSION_COST,
+  CITY_HALL_WIDTH,
+  CITY_HALL_DEPTH,
+  PROVINCIAL_CAPITAL_WIDTH,
+  PROVINCIAL_CAPITAL_DEPTH,
+  NATIONAL_CAPITAL_WIDTH,
+  NATIONAL_CAPITAL_DEPTH,
   LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
   MAYOR_MANSION_DEPTH,
@@ -112,7 +119,10 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_clock_tower: 'Clock Tower',
   place_triumphal_arch: 'Triumphal Arch',
   place_pier: 'Pier',
-  place_mayor_mansion: 'Mayor\'s Mansion'
+  place_mayor_mansion: 'Mayor\'s Mansion',
+  place_city_hall: 'City Hall',
+  place_provincial_capital: 'Provincial Capital',
+  place_national_capital: 'National Capital'
 };
 
 /**
@@ -616,7 +626,11 @@ export class Game {
       ['place_triumphal_arch', 'triumphal_arch'],
       ['place_pier', 'pier'],
       // Mayor's Mansion (Alpha 4.2) — single-instance prestige build.
-      ['place_mayor_mansion', 'mayor_mansion']
+      ['place_mayor_mansion', 'mayor_mansion'],
+      // Civic monuments (Alpha 4.12) — single-instance per kind.
+      ['place_city_hall', 'city_hall'],
+      ['place_provincial_capital', 'provincial_capital'],
+      ['place_national_capital', 'national_capital']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -656,7 +670,9 @@ export class Game {
       'place_reflecting_pool', 'place_memorial_garden',
       'place_clock_tower', 'place_triumphal_arch', 'place_pier',
       // Mayor's Mansion (Alpha 4.2) — Capital tier unlock.
-      'place_mayor_mansion'
+      'place_mayor_mansion',
+      // Civic monuments (Alpha 4.12) — Town / Metro / Capital unlocks.
+      'place_city_hall', 'place_provincial_capital', 'place_national_capital'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -795,6 +811,26 @@ export class Game {
       const banned = !isFinite(mult);
       const cost = banned ? BUILDING_COSTS.mayor_mansion : Math.round(BUILDING_COSTS.mayor_mansion * mult);
       return { label: 'Mayor\'s Mansion', cost, banned };
+    }
+    // Civic monuments (Alpha 4.12) — three escalating one-per-city
+    // builds, each providing a 35-tile L3 service field.
+    if (tool === 'place_city_hall') {
+      const mult = this.council.costMultiplier('city_hall');
+      const banned = !isFinite(mult);
+      const cost = banned ? BUILDING_COSTS.city_hall : Math.round(BUILDING_COSTS.city_hall * mult);
+      return { label: 'City Hall', cost, banned };
+    }
+    if (tool === 'place_provincial_capital') {
+      const mult = this.council.costMultiplier('provincial_capital');
+      const banned = !isFinite(mult);
+      const cost = banned ? BUILDING_COSTS.provincial_capital : Math.round(BUILDING_COSTS.provincial_capital * mult);
+      return { label: 'Provincial Capital', cost, banned };
+    }
+    if (tool === 'place_national_capital') {
+      const mult = this.council.costMultiplier('national_capital');
+      const banned = !isFinite(mult);
+      const cost = banned ? BUILDING_COSTS.national_capital : Math.round(BUILDING_COSTS.national_capital * mult);
+      return { label: 'National Capital', cost, banned };
     }
     // Land purchase.
     if (tool === 'buy_land') {
@@ -1518,6 +1554,30 @@ export class Game {
       return;
     }
 
+    // Civic monuments (Alpha 4.12) — tap-only, single-instance per kind,
+    // each anchored at the tap (lex-smallest tile of the footprint).
+    // Same pattern as the Mansion: validate footprint + treasury, stamp
+    // the matching tile bit across every footprint tile, set the
+    // `building` value on the anchor only.
+    if (this.tool === 'place_city_hall') {
+      const placed = this.placeCivicMonument(tile.x, tile.y, 'city_hall');
+      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
+      this.strokeOrigin = null;
+      return;
+    }
+    if (this.tool === 'place_provincial_capital') {
+      const placed = this.placeCivicMonument(tile.x, tile.y, 'provincial_capital');
+      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
+      this.strokeOrigin = null;
+      return;
+    }
+    if (this.tool === 'place_national_capital') {
+      const placed = this.placeCivicMonument(tile.x, tile.y, 'national_capital');
+      if (!placed) { this.undoStack.pop(); this.strokeDidSnapshot = false; }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Place tools are tap-only (single building per tap). Skip the rubber
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
@@ -1950,6 +2010,105 @@ export class Game {
     this.services.recompute(this.grid);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.maybeOfferPhotoOp('mayor_mansion');
+    return true;
+  }
+
+  /**
+   * Civic monument placement (Alpha 4.12) — covers City Hall (5×3),
+   * Provincial Capital (6×4), National Capital (7×4). Same anchor-
+   * tile pattern as the Mayor's Mansion: lex-smallest tile gets the
+   * `building` value, every other tile in the rectangle gets the
+   * matching bit set. Single-instance per kind.
+   *
+   * Failure reasons (each surfaces a toast):
+   *   - Footprint runs off-map
+   *   - Any footprint tile is occupied / not owned / wrong terrain
+   *   - Another instance of this kind already exists in the city
+   *   - Treasury < cost (after council multiplier)
+   *   - Banned by council
+   *
+   * No road-adjacency requirement (matches the Mansion) — the player
+   * can place it deep in a planned civic plaza before they pave it.
+   */
+  private placeCivicMonument(
+    x: number, y: number,
+    kind: 'city_hall' | 'provincial_capital' | 'national_capital'
+  ): boolean {
+    // Pick footprint + tile-bit + display label per kind. The marker
+    // bit is the only thing that varies between the three placements
+    // beyond their dimensions and cost.
+    const spec = (() => {
+      switch (kind) {
+        case 'city_hall':
+          return { w: CITY_HALL_WIDTH, h: CITY_HALL_DEPTH, label: 'City Hall',
+                   read: (t: Tile) => t.cityHall,
+                   write: (t: Tile, v: boolean) => { t.cityHall = v; } };
+        case 'provincial_capital':
+          return { w: PROVINCIAL_CAPITAL_WIDTH, h: PROVINCIAL_CAPITAL_DEPTH, label: 'Provincial Capital',
+                   read: (t: Tile) => t.provincialCapital,
+                   write: (t: Tile, v: boolean) => { t.provincialCapital = v; } };
+        case 'national_capital':
+          return { w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH, label: 'National Capital',
+                   read: (t: Tile) => t.nationalCapital,
+                   write: (t: Tile, v: boolean) => { t.nationalCapital = v; } };
+      }
+    })();
+    // One-per-city sweep.
+    for (const t of this.grid.iter()) {
+      if (spec.read(t)) {
+        this.onStatusMessage?.(`Only one ${spec.label} per city`);
+        return false;
+      }
+    }
+    // Cost + council gate.
+    const baseCost = BUILDING_COSTS[kind];
+    const mult = this.council.costMultiplier(kind);
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
+    const cost = Math.round(baseCost * mult);
+    if (this.economy.treasury < cost) {
+      this.onStatusMessage?.(`Not enough money — ${spec.label} costs $${cost.toLocaleString()}`);
+      return false;
+    }
+    // Footprint validation. Every tile must be free, owned, grass, with
+    // no skyscraper / luxury / bridge state. Civic monuments live on
+    // pristine land — they're prestige showpieces.
+    const offsets: Array<[number, number]> = [];
+    for (let dy = 0; dy < spec.h; dy++) {
+      for (let dx = 0; dx < spec.w; dx++) offsets.push([dx, dy]);
+    }
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy);
+      if (!t) {
+        this.onStatusMessage?.(`${spec.label} needs a ${spec.w}×${spec.h} free area`);
+        return false;
+      }
+      if (!t.owned) {
+        this.onStatusMessage?.(`${spec.label} footprint includes unowned land`);
+        return false;
+      }
+      if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') {
+        this.onStatusMessage?.(`${spec.label} needs all ${spec.w * spec.h} tiles free`);
+        return false;
+      }
+      if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury || t.mayorMansion) {
+        this.onStatusMessage?.(`${spec.label} needs flat grass land`);
+        return false;
+      }
+    }
+    // Stamp the bits. Anchor (lex-smallest = (x, y)) carries the
+    // `building` value; the others are marked-only.
+    for (const [dx, dy] of offsets) {
+      const t = this.grid.get(x + dx, y + dy)!;
+      spec.write(t, true);
+      if (dx === 0 && dy === 0) t.building = kind;
+    }
+    this.economy.treasury -= cost;
+    this.services.recompute(this.grid);
+    this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.maybeOfferPhotoOp(kind);
     return true;
   }
 
@@ -2613,6 +2772,57 @@ export class Game {
             if (!peer || !peer.mayorMansion) continue;
             peer.mayorMansion = false;
             if (peer.building === 'mayor_mansion') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
+      }
+      // Civic monuments (Alpha 4.12) — same walk-back pattern, one
+      // branch per kind. Bulldozing any tile of the footprint clears
+      // the entire rectangle.
+      if (tile.cityHall) {
+        let ax = x, ay = y;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.cityHall) ax--;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.cityHall) ay--;
+        for (let dy = 0; dy < CITY_HALL_DEPTH; dy++) {
+          for (let dx = 0; dx < CITY_HALL_WIDTH; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.cityHall) continue;
+            peer.cityHall = false;
+            if (peer.building === 'city_hall') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
+      }
+      if (tile.provincialCapital) {
+        let ax = x, ay = y;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.provincialCapital) ax--;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.provincialCapital) ay--;
+        for (let dy = 0; dy < PROVINCIAL_CAPITAL_DEPTH; dy++) {
+          for (let dx = 0; dx < PROVINCIAL_CAPITAL_WIDTH; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.provincialCapital) continue;
+            peer.provincialCapital = false;
+            if (peer.building === 'provincial_capital') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
+      }
+      if (tile.nationalCapital) {
+        let ax = x, ay = y;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.nationalCapital) ax--;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.nationalCapital) ay--;
+        for (let dy = 0; dy < NATIONAL_CAPITAL_DEPTH; dy++) {
+          for (let dx = 0; dx < NATIONAL_CAPITAL_WIDTH; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.nationalCapital) continue;
+            peer.nationalCapital = false;
+            if (peer.building === 'national_capital') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
           }

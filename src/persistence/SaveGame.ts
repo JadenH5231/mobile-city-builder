@@ -22,18 +22,21 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 21 (Alpha 4.2 — Mayor's Mansion): persists per-tile
- * `mayorMansion` bit so the 4×2 showpiece survives a reload. The
- * `building` enum value `'mayor_mansion'` round-trips via the
- * existing per-tile `building` field. v20-and-earlier saves load
- * with `mayorMansion=false` everywhere.
+ * Schema 22 (Alpha 4.12 — Civic monuments): persists three new per-tile
+ * bits — `cityHall`, `provincialCapital`, `nationalCapital` — for the
+ * three new multi-tile civic monuments. Each follows the same anchor
+ * pattern as the Mayor's Mansion: the lex-smallest tile of the
+ * footprint carries the matching `building` value (`'city_hall'` /
+ * `'provincial_capital'` / `'national_capital'`); every other tile in
+ * the rectangle has only the matching bit set. v21-and-earlier saves
+ * load with all three flags `false`.
  *
- * Earlier: v20 beautification, v19 land ownership, v18 skyscrapers,
- * v17 districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
- * v12 bridges, v11 stats, v10 events, v9 highestPop, v8 luxury,
- * v7 elevation+bridge.
+ * Earlier: v21 mansion, v20 beautification, v19 land ownership,
+ * v18 skyscrapers, v17 districts, v16 bonds, v15 tourism, v14 patina,
+ * v13 achievements, v12 bridges, v11 stats, v10 events, v9 highestPop,
+ * v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 21;
+const SCHEMA = 22;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -93,6 +96,12 @@ export interface TileSnapshot {
    *  with `building='mayor_mansion'`, the other seven are
    *  marked-only. v20-and-earlier saves load with `false`. */
   mayorMansion?: boolean;
+  /** Civic-monument bits (Alpha 4.12 / schema 22+). Same anchor
+   *  pattern as `mayorMansion`. v21-and-earlier saves load with all
+   *  three `false`. */
+  cityHall?: boolean;
+  provincialCapital?: boolean;
+  nationalCapital?: boolean;
 }
 
 export interface SaveData {
@@ -335,7 +344,10 @@ export function serialize(
       skyscraperStage: t.skyscraperStage,
       skyscraperVariant: t.skyscraperVariant,
       owned: t.owned,
-      mayorMansion: t.mayorMansion
+      mayorMansion: t.mayorMansion,
+      cityHall: t.cityHall,
+      provincialCapital: t.provincialCapital,
+      nationalCapital: t.nationalCapital
     };
   }
   const edges: number[] = [];
@@ -484,6 +496,11 @@ export function applySave(
     // Mayor's Mansion bit (schema 21+). v20-and-earlier saves load
     // with `false` since no mayor's mansion ever existed there.
     t.mayorMansion = snap.mayorMansion ?? false;
+    // Civic-monument bits (schema 22+). v21-and-earlier saves load
+    // with all three `false` (no civic monument ever existed there).
+    t.cityHall = snap.cityHall ?? false;
+    t.provincialCapital = snap.provincialCapital ?? false;
+    t.nationalCapital = snap.nationalCapital ?? false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

@@ -2,7 +2,13 @@ import type { Grid } from '../world/Grid';
 import type { RoadGraph } from './RoadGraph';
 import type { Pathfinding } from './Pathfinding';
 import type { Vehicles } from './Vehicles';
-import { MOTORCADE_INTERVAL_MONTHS } from '../types';
+import {
+  MOTORCADE_INTERVAL_MONTHS,
+  PROVINCIAL_CAPITAL_WIDTH,
+  PROVINCIAL_CAPITAL_DEPTH,
+  NATIONAL_CAPITAL_WIDTH,
+  NATIONAL_CAPITAL_DEPTH
+} from '../types';
 
 /**
  * Result of a `Motorcade.monthlyTick` call (Alpha 4.14.2). Discriminated
@@ -133,7 +139,11 @@ export class Motorcade {
   private tryStart(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): MotorcadeTickResult {
     const capital = findCapitalAnchor(grid);
     if (!capital) return { kind: 'no_capital' };
-    const startRoad = nearestRoadTile(grid, capital.x, capital.y);
+    // Scan the WHOLE footprint perimeter for road access (Alpha
+    // 4.14.3 fix). Pre-fix only checked near the lex-smallest anchor
+    // tile, so a road touching the south face of a 7×4 National
+    // Capital was invisible to the spawn check.
+    const startRoad = nearestRoadTile(grid, capital.x, capital.y, capital.w, capital.h);
     if (!startRoad) return { kind: 'no_road_access' };
     const startIdx = startRoad.y * grid.width + startRoad.x;
 
@@ -209,14 +219,19 @@ export class Motorcade {
 // --- helpers -----------------------------------------------------------
 
 /** Find the anchor tile of any Provincial Capital or National Capital in
- *  the city. Both share the lex-smallest-tile-is-anchor pattern. Returns
- *  the first one found (the player will only have at most one of each
- *  per city anyway). National takes precedence visually but for routing
- *  the choice doesn't matter — both work. */
-function findCapitalAnchor(grid: Grid): { x: number; y: number } | null {
+ *  the city, plus the footprint dimensions so the road-access check can
+ *  scan the WHOLE perimeter (Alpha 4.14.3 fix — pre-fix only checked
+ *  near the anchor's top-left corner, which missed roads adjacent to
+ *  the south / east faces of these large 6×4 / 7×4 footprints).
+ *  Both kinds use the lex-smallest-tile-is-anchor pattern. Returns the
+ *  first one found (player has at most one of each per city). */
+function findCapitalAnchor(grid: Grid): { x: number; y: number; w: number; h: number } | null {
   for (const t of grid.iter()) {
-    if (t.building === 'national_capital' || t.building === 'provincial_capital') {
-      return { x: t.x, y: t.y };
+    if (t.building === 'national_capital') {
+      return { x: t.x, y: t.y, w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH };
+    }
+    if (t.building === 'provincial_capital') {
+      return { x: t.x, y: t.y, w: PROVINCIAL_CAPITAL_WIDTH, h: PROVINCIAL_CAPITAL_DEPTH };
     }
   }
   return null;
@@ -258,20 +273,37 @@ function farthestPointSample(
   return chosen;
 }
 
-/** Find the nearest 4-connected road tile to (x, y). Mirrors
- *  Vehicles.nearestRoadTile but exposed here (Vehicles' helper is
- *  module-private). */
-function nearestRoadTile(grid: Grid, x: number, y: number): { x: number; y: number } | null {
-  const candidates: Array<{ x: number; y: number }> = [
-    { x, y: y - 1 }, { x: x + 1, y },
-    { x, y: y + 1 }, { x: x - 1, y },
-    // Capitals are large, so check a 2-ring too.
-    { x, y: y - 2 }, { x: x + 2, y },
-    { x, y: y + 2 }, { x: x - 2, y },
-    { x: x - 1, y: y - 1 }, { x: x + 1, y: y - 1 },
-    { x: x - 1, y: y + 1 }, { x: x + 1, y: y + 1 }
-  ];
-  for (const c of candidates) {
+/** Find any road tile 4-adjacent to ANY tile of the supplied (ax, ay,
+ *  w, h) footprint (Alpha 4.14.3 fix). Pre-fix this only searched a
+ *  small ring around (ax, ay) — the anchor / top-left of the footprint
+ *  — which for a 7×4 National Capital is the back corner, far from the
+ *  road typically painted along the south face of the building. The
+ *  motorcade saw "no road access" even when a road was visibly hugging
+ *  the front of the capital. New behaviour: walk the entire perimeter
+ *  of the footprint and return the FIRST road tile we find. Order:
+ *  south face → east face → north face → west face, prioritising the
+ *  ceremonial-front-door side that players typically build to. */
+function nearestRoadTile(
+  grid: Grid, ax: number, ay: number, w: number, h: number
+): { x: number; y: number } | null {
+  // South face (most common spawn — the ceremonial front of a capital).
+  for (let dx = 0; dx < w; dx++) {
+    const c = { x: ax + dx, y: ay + h };
+    if (grid.hasRoad(c.x, c.y)) return c;
+  }
+  // East face.
+  for (let dy = 0; dy < h; dy++) {
+    const c = { x: ax + w, y: ay + dy };
+    if (grid.hasRoad(c.x, c.y)) return c;
+  }
+  // North face.
+  for (let dx = 0; dx < w; dx++) {
+    const c = { x: ax + dx, y: ay - 1 };
+    if (grid.hasRoad(c.x, c.y)) return c;
+  }
+  // West face.
+  for (let dy = 0; dy < h; dy++) {
+    const c = { x: ax - 1, y: ay + dy };
     if (grid.hasRoad(c.x, c.y)) return c;
   }
   return null;

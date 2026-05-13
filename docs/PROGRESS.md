@@ -4,6 +4,12 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.14.3 — Motorcade road-access fix (scan the WHOLE capital footprint)** — playtest report: "It says capital has no road access but there is a road right in front of it."
+  - **Root cause** — `Motorcade.nearestRoadTile` only searched a small ring (radius ~2) around the **anchor tile** (lex-smallest = top-left of the footprint). For a 7×4 National Capital that's the BACK corner of the building. The road the player painted along the visible "front" (south face, at `y + 4` from the anchor) was completely outside the search ring, so the motorcade saw "no road access" even when a road was hugging the front.
+  - **Fix** — `nearestRoadTile` now takes `(ax, ay, w, h)` and walks all four faces of the footprint perimeter in priority order: south face → east face → north face → west face (south first because the ceremonial-front-door side is where players almost always paint the approach road). `findCapitalAnchor` now also returns the footprint dimensions.
+  - **No save schema bump.** Pure detection-window fix.
+  - Bigger architectural redesign (per-block placement w/ construction sites + ghost web) is the next planned drop.
+
 - **Alpha 4.14.2 — Motorcade now monthly + diagnostic toasts when blocked** — playtest follow-up: "I haven't seen the motorcade yet. Can you make it a monthly occurrence for now so I can make sure it works?"
   - **Interval bumped** `MOTORCADE_INTERVAL_MONTHS = 6 → 1` so the convoy fires every sim month for verification. Will go back to 48 ("every 4 years") once the chain is confirmed.
   - **Targeted failure toasts.** `Motorcade.monthlyTick` now returns a discriminated result (`'started' | 'no_capital' | 'no_road_access' | 'no_avenues' | 'no_route' | 'pending'`). Game routes each to a specific status toast so the player can see WHY the motorcade isn't firing if a prereq is missing:

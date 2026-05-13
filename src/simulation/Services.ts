@@ -1,5 +1,10 @@
 import type { Grid } from '../world/Grid';
-import { POWER_PLANT_CAPACITY, SERVICE_RADIUS, WATER_TOWER_CAPACITY } from '../types';
+import {
+  CIVIC_MONUMENT_SERVICE_RADIUS,
+  POWER_PLANT_CAPACITY,
+  SERVICE_RADIUS,
+  WATER_TOWER_CAPACITY
+} from '../types';
 
 /**
  * Service-coverage sweep.
@@ -90,6 +95,44 @@ export class Services {
         if (t.zone === 'none') continue;
         if (this.cityHasPower) t.hasPower = true;
         if (this.cityHasWater) t.hasWater = true;
+      }
+    }
+
+    // Phase 4 — civic monument service field (Alpha 4.12). Every
+    // developed tile within 35 tiles of a City Hall / Provincial
+    // Capital / National Capital anchor gets power + water + park flags
+    // set unconditionally. This lets a single civic build "anchor" a
+    // dense central district — the player doesn't have to scatter
+    // utilities through downtown if they invested in a city hall.
+    // Each is single-instance, so the inner sweep cost is bounded.
+    for (const t of grid.iter()) {
+      if (t.building !== 'city_hall'
+          && t.building !== 'provincial_capital'
+          && t.building !== 'national_capital') continue;
+      this.paintCivicField(grid, t.x, t.y);
+    }
+  }
+
+  /** Apply the unconditional L3 service field (power + water + park)
+   *  around a civic monument anchor (Alpha 4.12). Radius is
+   *  CIVIC_MONUMENT_SERVICE_RADIUS in tiles. Flips ALL three flags on
+   *  every tile inside the disc — not just zoned ones — so a tile that
+   *  later develops still sees the coverage. */
+  private paintCivicField(grid: Grid, cx: number, cy: number): void {
+    const r = CIVIC_MONUMENT_SERVICE_RADIUS;
+    const r2 = r * r;
+    const minX = Math.max(0, cx - r);
+    const maxX = Math.min(grid.width - 1, cx + r);
+    const minY = Math.max(0, cy - r);
+    const maxY = Math.min(grid.height - 1, cy + r);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy > r2) continue;
+        const t = grid.get(x, y)!;
+        t.hasPower = true;
+        t.hasWater = true;
+        t.hasPark = true;
       }
     }
   }

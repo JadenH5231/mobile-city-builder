@@ -193,4 +193,19 @@ export class Tile {
    * any tile already has `mayorMansion=true`.
    */
   mayorMansion = false;
+  /**
+   * Civic-monument bits (Alpha 4.12). Same anchor pattern as
+   * mayorMansion — the lex-smallest tile of the footprint is the
+   * anchor and carries the matching `building` value (`'city_hall'`
+   * / `'provincial_capital'` / `'national_capital'`); every other
+   * tile in the rectangle has only the matching bit set with
+   * `building = 'none'`. Bulldozing any tile in the footprint walks
+   * back to the anchor and clears the entire rectangle.
+   *
+   * Each kind is single-instance per city — placement refuses if any
+   * tile already has the matching bit set.
+   */
+  cityHall = false;
+  provincialCapital = false;
+  nationalCapital = false;
 }

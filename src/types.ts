@@ -346,7 +346,24 @@ export type Building =
   // Anchor pattern follows skyscrapers: the lex-smallest tile of the
   // 8-tile footprint owns the rendered geometry; the other seven are
   // marked-only via `Tile.mayorMansion`.
-  | 'mayor_mansion';
+  | 'mayor_mansion'
+  // Civic monuments (Alpha 4.12). Single-instance, multi-tile, anchor
+  // pattern. Each provides a 35-tile L3 service field (power + water
+  // + park) for free, suppressing the need for the player to scatter
+  // utilities through the central district.
+  // - city_hall: 5×3, modular composition (central rotunda + east /
+  //   west wings + grand portico + clock cupola). Town milestone.
+  // - provincial_capital: 6×4, Queens Park (Toronto) influence —
+  //   pink-sandstone Romanesque Revival, central arched portico,
+  //   stubby copper-domed central tower over a transverse axis.
+  //   Metro milestone.
+  // - national_capital: 7×4, Centre Block (Ottawa) influence —
+  //   Gothic Revival, central tall clock tower with copper spire
+  //   (intentionally capped below skyscraper height), twin symmetric
+  //   wings, round library element behind. Capital milestone.
+  | 'city_hall'
+  | 'provincial_capital'
+  | 'national_capital';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -399,7 +416,18 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // placement in the game. 4×2 footprint, single-instance, late-game
   // prestige sink. Replaces "what to spend a fat treasury on" with a
   // concrete monumental answer.
-  mayor_mansion: 500000
+  mayor_mansion: 500000,
+  // Civic monuments (Alpha 4.12). Each is one-per-city, with a step
+  // up in cost matching the prestige tier:
+  //   - City Hall: $1.5M (Town+) — every city should be able to build
+  //     one before late-game.
+  //   - Provincial Capital: $7.5M (Metro+) — the showpiece of a major
+  //     city, replaces the role of "I have $10M what now" cleanly.
+  //   - National Capital: $20M (Capital+) — the largest single sink in
+  //     the game; designed to take a fully-developed treasury seriously.
+  city_hall: 1500000,
+  provincial_capital: 7500000,
+  national_capital: 20000000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -438,7 +466,12 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // Mayor's Mansion upkeep — equal to the most expensive ongoing line
   // in the game. Staff, gardeners, security. Cash-rich endgame
   // cities feel this on the budget panel forever.
-  mayor_mansion: 1500
+  mayor_mansion: 1500,
+  // Civic monuments (Alpha 4.12). Upkeep scales like the cost — these
+  // are real ongoing operating costs (staff, security, maintenance).
+  city_hall: 4000,
+  provincial_capital: 15000,
+  national_capital: 35000
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
@@ -627,7 +660,10 @@ export const MILESTONES: readonly Milestone[] = [
       // Architect Mode entry tier (Alpha 4.0) — cheap basics so any
       // Town+ city can plant a tree, pour a flower bed, lay a plaza.
       'terra_tree', 'terra_meadow', 'terra_smooth',
-      'place_flower_bed', 'place_plaza', 'place_pier'
+      'place_flower_bed', 'place_plaza', 'place_pier',
+      // Civic monuments (Alpha 4.12) — Town gets the entry-tier City
+      // Hall. Provincial / National capitals unlock at Metro / Capital.
+      'place_city_hall'
     ],
     rewardCash: 5000,
     rewardPC: 3,
@@ -661,7 +697,10 @@ export const MILESTONES: readonly Milestone[] = [
       'place_forestry', 'place_farm', 'place_observatory',
       // Architect Mode upper-mid tier (Alpha 4.0) — premium water
       // features unlock once the city reads as a metropolis.
-      'place_fountain', 'place_reflecting_pool', 'place_memorial_garden'
+      'place_fountain', 'place_reflecting_pool', 'place_memorial_garden',
+      // Civic monuments (Alpha 4.12) — Provincial Capital is the
+      // Metro-tier showpiece building.
+      'place_provincial_capital'
     ],
     rewardCash: 20000,
     rewardPC: 8,
@@ -682,7 +721,10 @@ export const MILESTONES: readonly Milestone[] = [
       // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2
       // showpiece, the most detailed build in the game. Only a
       // Capital deserves one.
-      'place_mayor_mansion'
+      'place_mayor_mansion',
+      // National Capital (Alpha 4.12) — apex civic build, Centre
+      // Block (Ottawa) influence, 7×4 footprint. Capital-only.
+      'place_national_capital'
     ],
     rewardCash: 50000,
     rewardPC: 15,
@@ -818,7 +860,13 @@ export type Tool =
   | 'place_pier'
   // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2 footprint
   // showpiece. Tap-only; refuses if a mayor's mansion already exists.
-  | 'place_mayor_mansion';
+  | 'place_mayor_mansion'
+  // Civic monuments (Alpha 4.12). Each is one-per-city, anchor-tile
+  // multi-tile build with a 35-tile L3 service field. Listed in the
+  // toolbar's Mon group alongside the Mansion.
+  | 'place_city_hall'
+  | 'place_provincial_capital'
+  | 'place_national_capital';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -876,7 +924,11 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_clock_tower', 'clock_tower' as const],
   ['place_triumphal_arch', 'triumphal_arch' as const],
   ['place_pier', 'pier' as const],
-  ['place_mayor_mansion', 'mayor_mansion' as const]
+  ['place_mayor_mansion', 'mayor_mansion' as const],
+  // Civic monuments (Alpha 4.12).
+  ['place_city_hall', 'city_hall' as const],
+  ['place_provincial_capital', 'provincial_capital' as const],
+  ['place_national_capital', 'national_capital' as const]
 ]);
 
 /* ---- Architect Mode terraforming costs (Alpha 4.0) -------------------- */
@@ -900,7 +952,10 @@ export const TERRAFORM_COSTS: Record<
 export const ARCHITECTURAL_BUILDINGS: ReadonlySet<Exclude<Building, 'none'>> = new Set([
   'plaza', 'fountain', 'statue', 'flower_bed', 'topiary',
   'pergola', 'reflecting_pool', 'memorial_garden',
-  'clock_tower', 'triumphal_arch', 'pier', 'mayor_mansion'
+  'clock_tower', 'triumphal_arch', 'pier', 'mayor_mansion',
+  // Civic monuments (Alpha 4.12) — they live with the Architect /
+  // Mon group as well, even though they have a real service field.
+  'city_hall', 'provincial_capital', 'national_capital'
 ] as const);
 
 /** Mayor's Mansion footprint (Alpha 4.2) — 4 wide × 2 deep. The
@@ -909,6 +964,33 @@ export const ARCHITECTURAL_BUILDINGS: ReadonlySet<Exclude<Building, 'none'>> = n
  *  true`; the anchor's `Tile.building` is `'mayor_mansion'`. */
 export const MAYOR_MANSION_WIDTH = 4;
 export const MAYOR_MANSION_DEPTH = 2;
+
+/** Civic-monument footprints (Alpha 4.12). All three follow the
+ *  anchor-tile convention used by the Mansion — lex-smallest tile
+ *  carries the `building` value, every other tile in the rectangle
+ *  has the `cityHall` / `provincialCapital` / `nationalCapital` bit
+ *  set. The bulldoze flow walks left+up to find the anchor and
+ *  clears the entire rectangle.
+ *
+ *  Sized so each is visibly bigger and grander than the one before:
+ *    - City Hall:           5 × 3 = 15 tiles  (larger than Mansion)
+ *    - Provincial Capital:  6 × 4 = 24 tiles  (Queens Park scale)
+ *    - National Capital:    7 × 4 = 28 tiles  (Centre Block scale)
+ */
+export const CITY_HALL_WIDTH = 5;
+export const CITY_HALL_DEPTH = 3;
+export const PROVINCIAL_CAPITAL_WIDTH = 6;
+export const PROVINCIAL_CAPITAL_DEPTH = 4;
+export const NATIONAL_CAPITAL_WIDTH = 7;
+export const NATIONAL_CAPITAL_DEPTH = 4;
+
+/** Tile radius around any city-hall-class building (Alpha 4.12) inside
+ *  which every developed building gets free power + water + park (i.e.
+ *  the L3-unlock service field). User spec: "every city service needed
+ *  for demand Lvl 3" within 35 blocks. Big number — these are flagship
+ *  civic builds, the player should feel them across the central
+ *  district. */
+export const CIVIC_MONUMENT_SERVICE_RADIUS = 35;
 
 /* ---- Beautification Budget (Alpha 4.0 — council-only) ----------------- */
 

@@ -48,6 +48,9 @@ const STANCE_LABEL: Record<StanceKey, string> = {
   memorial_garden: 'Memorial gardens',
   clock_tower: 'Clock towers', triumphal_arch: 'Triumphal arches',
   pier: 'Piers', mayor_mansion: "Mayor's Mansion",
+  city_hall: 'City Hall',
+  provincial_capital: 'Provincial Capital',
+  national_capital: 'National Capital',
   beautification: 'Beautification budget'
 };
 

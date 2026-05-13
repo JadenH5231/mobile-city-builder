@@ -117,6 +117,14 @@ export interface FactionStances {
    *  non-housing footprint, vanity spending, the wealthiest possible
    *  build). */
   mayor_mansion: number;
+  /** Civic monuments (Alpha 4.12). All three serve a real civic role
+   *  (35-tile L3 service field) so the stance matrix is different from
+   *  the Mansion — Yimbys / Transit / Working Families WARMER toward
+   *  them since they materially help dense central districts; Taxpayers
+   *  + Hometown still scale with the price tag and grandeur. */
+  city_hall: number;
+  provincial_capital: number;
+  national_capital: number;
   /** Council Beautification Budget stance (Alpha 4.0). Read by the
    *  council each election to pick a tier — see `Council.electBeautificationTier`.
    *  Mayor cannot influence; this is a council-only lever. */
@@ -149,6 +157,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.5, reflecting_pool: 0.6, memorial_garden: 0.7,
     clock_tower: 0.4, triumphal_arch: 0.3, pier: 0.4,
     mayor_mansion: 0.8,
+    // NIMBYs see civic monuments as prestige + property values. Scale
+    // with grandeur — National is the apex flex.
+    city_hall: 0.5, provincial_capital: 0.7, national_capital: 0.8,
     beautification: 0.7
   },
   yimbys: {
@@ -172,6 +183,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.4, reflecting_pool: -0.4, memorial_garden: -0.4,
     clock_tower: -0.3, triumphal_arch: -0.6, pier: 0.3,
     mayor_mansion: -0.9,
+    // Yimbys soften toward civic monuments because they DELIVER L3
+    // services to a 35-tile area — that's straightforwardly pro-density.
+    // Still skeptical of the National Capital's vast footprint.
+    city_hall: 0.5, provincial_capital: 0.2, national_capital: -0.3,
     beautification: 0.3
   },
   environmentalists: {
@@ -194,6 +209,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.7, reflecting_pool: 0.7, memorial_garden: 0.8,
     clock_tower: 0.0, triumphal_arch: -0.2, pier: 0.3,
     mayor_mansion: 0.2,
+    // Greenleaf likes civic builds that consolidate the L3 service
+    // field — fewer scattered power plants is environmentally better.
+    // National Capital trips the "land use" alarm slightly.
+    city_hall: 0.4, provincial_capital: 0.3, national_capital: 0.1,
     beautification: 0.6
   },
   hometown: {
@@ -216,6 +235,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.5, reflecting_pool: 0.4, memorial_garden: 0.9,
     clock_tower: 0.9, triumphal_arch: 0.8, pier: 0.6,
     mayor_mansion: 1.0,
+    // Hometown Heritage VENERATES civic architecture — these are
+    // exactly the buildings they want to see in their town. Top-tier
+    // stance across the board.
+    city_hall: 0.9, provincial_capital: 1.0, national_capital: 1.0,
     beautification: 0.7
   },
   chamber: {
@@ -238,6 +261,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.5, reflecting_pool: 0.5, memorial_garden: 0.4,
     clock_tower: 0.7, triumphal_arch: 0.6, pier: 0.7,
     mayor_mansion: 0.8,
+    // Chamber loves civic prestige — bigger = more business / tourist
+    // draw. National Capital is a chamber-of-commerce dream.
+    city_hall: 0.7, provincial_capital: 0.9, national_capital: 1.0,
     beautification: 0.9
   },
   transit: {
@@ -260,6 +286,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.6, reflecting_pool: 0.3, memorial_garden: 0.3,
     clock_tower: 0.4, triumphal_arch: 0.1, pier: 0.7,
     mayor_mansion: -0.2,
+    // Transit loves civic buildings — they're transit destinations
+    // by definition (government workers commute to them in volume).
+    city_hall: 0.6, provincial_capital: 0.7, national_capital: 0.7,
     beautification: 0.5
   },
   drivers: {
@@ -282,6 +311,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: -0.1, reflecting_pool: 0.0, memorial_garden: 0.0,
     clock_tower: 0.1, triumphal_arch: 0.1, pier: 0.0,
     mayor_mansion: 0.2,
+    // Drivers don't have strong feelings on civic buildings — slight
+    // positive on prestige, slight negative on the National Capital's
+    // mandatory pedestrian-friendly approach.
+    city_hall: 0.2, provincial_capital: 0.1, national_capital: -0.1,
     beautification: 0.0
   },
   taxpayers: {
@@ -304,6 +337,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: -0.4, reflecting_pool: -0.7, memorial_garden: -0.6,
     clock_tower: -0.7, triumphal_arch: -0.9, pier: -0.3,
     mayor_mansion: -1.0,
+    // Taxpayers HATE every civic monument — these are the largest
+    // single capital expenditures in the game. Scales with price.
+    city_hall: -0.5, provincial_capital: -0.8, national_capital: -1.0,
     beautification: -0.9
   },
   safer_streets: {
@@ -326,6 +362,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.5, reflecting_pool: 0.3, memorial_garden: 0.4,
     clock_tower: 0.4, triumphal_arch: 0.2, pier: 0.4,
     mayor_mansion: -0.3,
+    // Safer Streets warm to civic monuments because they bring civic
+    // infrastructure to the central district (more eyes-on-the-street
+    // around government). Police HQ adjacency is implied.
+    city_hall: 0.6, provincial_capital: 0.7, national_capital: 0.7,
     beautification: 0.5
   },
   working_families: {
@@ -348,6 +388,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     pergola: 0.2, reflecting_pool: -0.3, memorial_garden: -0.1,
     clock_tower: -0.2, triumphal_arch: -0.5, pier: 0.5,
     mayor_mansion: -0.8,
+    // Working Families like City Hall (services for their
+    // neighbourhood) but turn against capitals — that's money that
+    // could've been housing / schools at scale.
+    city_hall: 0.5, provincial_capital: -0.3, national_capital: -0.6,
     beautification: 0.2
   }
 };

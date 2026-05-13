@@ -29,7 +29,16 @@ import {
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
-import { buildLuxuryParts, buildMayorMansionParts, buildSkyscraperParts, buildVariantParts, getSkyscraperDesign } from './BuildingVariants';
+import {
+  buildCityHallParts,
+  buildLuxuryParts,
+  buildMayorMansionParts,
+  buildNationalCapitalParts,
+  buildProvincialCapitalParts,
+  buildSkyscraperParts,
+  buildVariantParts,
+  getSkyscraperDesign
+} from './BuildingVariants';
 import {
   DIR_OFFSETS,
   MAX_PEDESTRIANS,
@@ -2139,6 +2148,63 @@ function buildLampGlowMesh(grid: Grid, texture: import('three').Texture): Mesh |
         lamps.push({ cx: mcx + 1.65, cz: fcz + 0.5, y: baseY, r: 1.40 });
         break;
       }
+      case 'city_hall': {
+        // 5×3 footprint. Anchor at (t.x, t.y); centre at +2.5, +1.5.
+        const cxh = t.x + 2.5;
+        const czh = t.y + 1.5;
+        // Building-row halos (back row, building runs the full 5 width)
+        lamps.push({ cx: cxh - 1.85, cz: czh - 1.0, y: baseY, r: 1.50 });
+        lamps.push({ cx: cxh,        cz: czh - 1.0, y: baseY, r: 2.40 });  // dome glow
+        lamps.push({ cx: cxh + 1.85, cz: czh - 1.0, y: baseY, r: 1.50 });
+        // Plaza + fountain
+        lamps.push({ cx: cxh,        cz: czh + 0.8, y: baseY, r: 1.80 });
+        // Front lawns
+        lamps.push({ cx: cxh - 1.55, cz: czh + 1.0, y: baseY, r: 1.30 });
+        lamps.push({ cx: cxh + 1.55, cz: czh + 1.0, y: baseY, r: 1.30 });
+        break;
+      }
+      case 'provincial_capital': {
+        // 6×4 footprint. Anchor at (t.x, t.y); centre at +3, +2.
+        const cxp = t.x + 3.0;
+        const czp = t.y + 2.0;
+        // Building row (back) — wider, with central tower halo brightest
+        lamps.push({ cx: cxp - 2.50, cz: czp - 1.45, y: baseY, r: 1.70 });
+        lamps.push({ cx: cxp - 1.45, cz: czp - 1.45, y: baseY, r: 1.60 });
+        lamps.push({ cx: cxp,        cz: czp - 1.45, y: baseY, r: 2.60 });  // central tower
+        lamps.push({ cx: cxp + 1.45, cz: czp - 1.45, y: baseY, r: 1.60 });
+        lamps.push({ cx: cxp + 2.50, cz: czp - 1.45, y: baseY, r: 1.70 });
+        // Plaza + fountain
+        lamps.push({ cx: cxp,        cz: czp + 0.85, y: baseY, r: 2.00 });
+        // Flagpoles
+        lamps.push({ cx: cxp - 1.30, cz: czp + 1.60, y: baseY, r: 1.30 });
+        lamps.push({ cx: cxp,        cz: czp + 1.60, y: baseY, r: 1.30 });
+        lamps.push({ cx: cxp + 1.30, cz: czp + 1.60, y: baseY, r: 1.30 });
+        break;
+      }
+      case 'national_capital': {
+        // 7×4 footprint. Anchor at (t.x, t.y); centre at +3.5, +2.
+        const cxn = t.x + 3.5;
+        const czn = t.y + 2.0;
+        // Library round drum at the back
+        lamps.push({ cx: cxn,        cz: t.y + 0.40, y: baseY, r: 1.80 });
+        // Wing towers (the ends of the main building)
+        lamps.push({ cx: cxn - 3.05, cz: czn - 0.95, y: baseY, r: 1.80 });
+        lamps.push({ cx: cxn + 3.05, cz: czn - 0.95, y: baseY, r: 1.80 });
+        // Wings
+        lamps.push({ cx: cxn - 2.00, cz: czn - 0.95, y: baseY, r: 1.50 });
+        lamps.push({ cx: cxn + 2.00, cz: czn - 0.95, y: baseY, r: 1.50 });
+        // Peace Tower — biggest halo, anchored on the central block
+        lamps.push({ cx: cxn,        cz: czn - 0.95, y: baseY, r: 3.00 });
+        // Eternal flame
+        lamps.push({ cx: cxn,        cz: t.y + 3.20, y: baseY, r: 1.80 });
+        // Flagpole row across the front
+        lamps.push({ cx: cxn - 1.80, cz: t.y + 3.75, y: baseY, r: 1.20 });
+        lamps.push({ cx: cxn - 0.90, cz: t.y + 3.75, y: baseY, r: 1.20 });
+        lamps.push({ cx: cxn,        cz: t.y + 3.75, y: baseY, r: 1.20 });
+        lamps.push({ cx: cxn + 0.90, cz: t.y + 3.75, y: baseY, r: 1.20 });
+        lamps.push({ cx: cxn + 1.80, cz: t.y + 3.75, y: baseY, r: 1.20 });
+        break;
+      }
     }
   }
   if (lamps.length === 0) return null;
@@ -2826,6 +2892,40 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     // estate sits on the ground.
     if (t.building === 'mayor_mansion') {
       const parts = buildMayorMansionParts(t.x, t.y);
+      const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    // Civic monuments (Alpha 4.12). Same anchor-tile pattern as the
+    // Mayor's Mansion — emit the entire merged composition from the
+    // anchor tile; the other footprint tiles are skipped because their
+    // `building` is `'none'`.
+    if (t.building === 'city_hall') {
+      const parts = buildCityHallParts(t.x, t.y);
+      const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    if (t.building === 'provincial_capital') {
+      const parts = buildProvincialCapitalParts(t.x, t.y);
+      const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
+    if (t.building === 'national_capital') {
+      const parts = buildNationalCapitalParts(t.x, t.y);
       const yLift = ROAD_LIFT * 0.5 + t.elevation;
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);

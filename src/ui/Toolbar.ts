@@ -218,6 +218,27 @@ const ICON_MANSION = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
   <circle cx="12" cy="3" r="0.6" fill="currentColor"/>
 </svg>`;
+/** City Hall icon (Alpha 4.12) — domed rotunda with portico columns. */
+const ICON_CITY_HALL = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 21h18 M5 21V13 M9 21V13 M15 21V13 M19 21V13 M4 13h16 M5 13l7-5 7 5"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+  <path d="M8 8a4 4 0 0 1 8 0" stroke="currentColor" stroke-width="1.5" fill="none"/>
+  <line x1="12" y1="2" x2="12" y2="4.5" stroke="currentColor" stroke-width="1.5"/>
+</svg>`;
+/** Provincial Capital icon — central pyramidal-roofed tower with two wings. */
+const ICON_PROVINCIAL = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 21h18 M5 21V14 M10 21V11 M14 21V11 M19 21V14 M5 14l3-3v0l0 0 M19 14l-3-3 M10 11l2-3 2 3"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+  <line x1="12" y1="3" x2="12" y2="8" stroke="currentColor" stroke-width="1.5"/>
+</svg>`;
+/** National Capital icon — tall central clock tower with wings + spire. */
+const ICON_NATIONAL = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 21h18 M5 21V14 M10 21V8 M14 21V8 M19 21V14 M5 14h5 M14 14h5"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+  <path d="M10 8l2-2 2 2" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <line x1="12" y1="6" x2="12" y2="2" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="12" cy="11.5" r="1.2" stroke="currentColor" stroke-width="1.1" fill="none"/>
+</svg>`;
 
 const BUILD_ITEMS: readonly ToolbarItem[] = [
   { kind: 'tool', tool: 'pan', label: 'Pan', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -549,9 +570,15 @@ const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'place_clock_tower',     label: 'Tower',    icon: ICON_CLOCK_TOWER },
       { kind: 'tool', tool: 'place_triumphal_arch',  label: 'Arch',     icon: ICON_ARCH },
       // The Mayor's Mansion (Alpha 4.2) — single-instance 4×2
-      // showpiece. Sits at the END of the Mon group so it reads as
-      // the apex prestige build.
-      { kind: 'tool', tool: 'place_mayor_mansion',   label: 'Mansion',  icon: ICON_MANSION }
+      // showpiece. Sits in the Mon group as the original apex prestige
+      // build.
+      { kind: 'tool', tool: 'place_mayor_mansion',   label: 'Mansion',  icon: ICON_MANSION },
+      // Civic monuments (Alpha 4.12) — three escalating one-per-city
+      // builds, each providing a 35-tile L3 service field. Listed at
+      // the END of the Mon group so they read as the new apex tier.
+      { kind: 'tool', tool: 'place_city_hall',          label: 'City Hall',   icon: ICON_CITY_HALL },
+      { kind: 'tool', tool: 'place_provincial_capital', label: 'Provincial', icon: ICON_PROVINCIAL },
+      { kind: 'tool', tool: 'place_national_capital',   label: 'National',   icon: ICON_NATIONAL }
     ]
   }
 ];

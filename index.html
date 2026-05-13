@@ -212,6 +212,42 @@
         <button id="setting-reset-all" type="button" class="settings__button settings__button--danger">Reset all settings to defaults</button>
       </div>
 
+      <!-- Backup & sync (Alpha 4.11). Export the current city to a
+           portable code the player can copy onto another device, and
+           import a code into the active slot. Always overwrites the
+           current slot — there's no merge, since this is a single-
+           snapshot pipeline. -->
+      <div class="settings__group">
+        <div class="settings__group-title">Backup &amp; sync</div>
+        <div class="settings__group-sub">Move a city between devices via a copyable code. Each export is a one-way snapshot — re-export to bring later changes back the other way.</div>
+        <div class="settings__sync-actions">
+          <button id="setting-export-city" type="button" class="settings__button">Export this city</button>
+          <button id="setting-import-city" type="button" class="settings__button">Import from code</button>
+        </div>
+        <div id="setting-sync-status" class="settings__sync-status hidden"></div>
+        <!-- Export drawer — shown after Export click; readonly textarea
+             with Copy button. Hidden by default. -->
+        <div id="setting-export-drawer" class="settings__sync-drawer hidden">
+          <div class="settings__sync-drawer-label">Copy this code, then paste into Settings → Import on another device.</div>
+          <textarea id="setting-export-code" class="settings__sync-code mono" readonly rows="6" aria-label="Exported city code"></textarea>
+          <div class="settings__sync-drawer-actions">
+            <span id="setting-export-size" class="settings__sync-size mono"></span>
+            <button id="setting-export-copy" type="button" class="settings__button">Copy to clipboard</button>
+            <button id="setting-export-close" type="button" class="settings__button">Close</button>
+          </div>
+        </div>
+        <!-- Import drawer — paste a code, then Apply. Apply prompts an
+             inline confirm before overwriting the active slot. -->
+        <div id="setting-import-drawer" class="settings__sync-drawer hidden">
+          <div class="settings__sync-drawer-label">Paste a city code below. Importing OVERWRITES the active slot — export it first if you want to keep it.</div>
+          <textarea id="setting-import-code" class="settings__sync-code mono" rows="6" placeholder="Paste your city code here…" aria-label="Paste city code"></textarea>
+          <div class="settings__sync-drawer-actions">
+            <button id="setting-import-apply" type="button" class="settings__button settings__button--danger">Overwrite active slot</button>
+            <button id="setting-import-close" type="button" class="settings__button">Close</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Cheats (Alpha 4.10.1; moved from budget panel). Enabling either
            cheat disables achievements for the rest of this session.
            Existing unlocks stay, but no new ones are awarded. -->

@@ -227,6 +227,13 @@ importApplyBtn?.addEventListener('click', () => {
   // Armed → decode + write + reload.
   importSaveCode(raw)
     .then(async (data) => {
+      // Bug fix (Alpha 4.14.1): suspend autosaves BEFORE writing so a
+      // 30-second-pending autosave can't fire mid-await and overwrite
+      // our freshly-imported slot with the stale in-memory OLD city.
+      // Without this gate the import appears to succeed but the next
+      // reload reads the auto-saved-old data instead of the import,
+      // and the player loses both their changes AND the import.
+      game.suspendAutosavesForReload();
       await game.saveGame.writeRaw(data);
       setSyncStatus('Imported. Reloading…', 'ok');
       // Tiny delay so the player sees the success line before the page

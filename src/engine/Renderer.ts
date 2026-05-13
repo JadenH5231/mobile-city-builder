@@ -1135,6 +1135,95 @@ export class Renderer {
     }
   }
 
+  /**
+   * Footprint preview ghost (Alpha 4.13). Shows the player exactly which
+   * tiles a multi-tile civic monument will occupy BEFORE they commit. The
+   * mesh is a translucent rectangle covering the W×H footprint anchored at
+   * (ax, ay), plus a slightly inset outline strip so the player can see
+   * the boundary clearly.
+   *
+   * Colour swaps green/red based on `valid`: green = ready to commit,
+   * red = cannot place (off-map, occupied, can't afford, banned, etc.).
+   * Game.armMonumentPreview decides the colour and calls this.
+   *
+   * The ghost lives in worldGroup and follows the elevation passed in so
+   * the preview hugs the ground.
+   */
+  private footprintPreviewGroup: Group | null = null;
+  showFootprintPreview(ax: number, ay: number, w: number, h: number, valid: boolean, elevation: number): void {
+    this.clearFootprintPreview();
+    const colour = valid ? 0x6dd06a : 0xff6e6e;
+    const fillOpacity = valid ? 0.22 : 0.30;
+    const outlineOpacity = valid ? 0.85 : 0.95;
+    // Translucent fill covering the full W×H rectangle.
+    const fill = new BoxGeometry(w * TILE_SIZE, 0.005, h * TILE_SIZE);
+    const fillMat = new MeshBasicMaterial({
+      color: colour,
+      transparent: true,
+      opacity: fillOpacity,
+      depthWrite: false
+    });
+    const fillMesh = new Mesh(fill, fillMat);
+    fillMesh.position.set(
+      (ax + w / 2) * TILE_SIZE,
+      elevation + 0.020,
+      (ay + h / 2) * TILE_SIZE
+    );
+    // Border strips — four thin boxes around the footprint perimeter so
+    // the boundary reads clearly even at a steep camera angle.
+    const borderMat = new MeshBasicMaterial({
+      color: colour,
+      transparent: true,
+      opacity: outlineOpacity,
+      depthWrite: false
+    });
+    const bt = 0.04;   // border thickness in tile units
+    const group = new Group();
+    group.add(fillMesh);
+    // North edge
+    {
+      const g = new BoxGeometry(w * TILE_SIZE + bt, 0.008, bt);
+      const m = new Mesh(g, borderMat);
+      m.position.set((ax + w / 2) * TILE_SIZE, elevation + 0.022, ay * TILE_SIZE);
+      group.add(m);
+    }
+    // South edge
+    {
+      const g = new BoxGeometry(w * TILE_SIZE + bt, 0.008, bt);
+      const m = new Mesh(g, borderMat);
+      m.position.set((ax + w / 2) * TILE_SIZE, elevation + 0.022, (ay + h) * TILE_SIZE);
+      group.add(m);
+    }
+    // West edge
+    {
+      const g = new BoxGeometry(bt, 0.008, h * TILE_SIZE);
+      const m = new Mesh(g, borderMat);
+      m.position.set(ax * TILE_SIZE, elevation + 0.022, (ay + h / 2) * TILE_SIZE);
+      group.add(m);
+    }
+    // East edge
+    {
+      const g = new BoxGeometry(bt, 0.008, h * TILE_SIZE);
+      const m = new Mesh(g, borderMat);
+      m.position.set((ax + w) * TILE_SIZE, elevation + 0.022, (ay + h / 2) * TILE_SIZE);
+      group.add(m);
+    }
+    this.footprintPreviewGroup = group;
+    this.worldGroup.add(group);
+  }
+  clearFootprintPreview(): void {
+    if (!this.footprintPreviewGroup) return;
+    this.worldGroup.remove(this.footprintPreviewGroup);
+    for (const child of this.footprintPreviewGroup.children) {
+      const mesh = child as Mesh;
+      mesh.geometry.dispose();
+      const mat = mesh.material as MeshBasicMaterial | MeshBasicMaterial[];
+      if (Array.isArray(mat)) for (const m of mat) m.dispose();
+      else mat.dispose();
+    }
+    this.footprintPreviewGroup = null;
+  }
+
   render(camera: Camera): void {
     this.three.render(this.scene, camera.three);
   }

@@ -410,11 +410,26 @@ export class Game {
   // Persistence — auto-saves every AUTOSAVE_MS, also restores on init.
   readonly saveGame = new SaveGame();
   private autosaveAccumMs = 0;
-  /** Set true when {@link resetCity} runs, so the autosave doesn't race the
-   *  imminent location.reload() and re-write the city to IDB after we
-   *  cleared it. Also gated by a sessionStorage flag (`RESET_FLAG`) that
-   *  init() honours after the reload, in case the race wins anyway. */
+  /** Set true when {@link resetCity} runs OR when an import-from-code is
+   *  about to commit (Alpha 4.14.1). Both flows write to IDB then call
+   *  `location.reload()` after a brief delay; without this gate the
+   *  autosave timer can fire mid-window and overwrite IDB with stale
+   *  in-memory state — losing the import or the clear.
+   *
+   *  Reset additionally drops a sessionStorage flag so the post-reload
+   *  init re-clears the slot in case the race wins anyway. Import does
+   *  NOT need that fallback — the race is closed by this gate alone,
+   *  and on reload init naturally reads + applies whatever is in IDB. */
   private resetting = false;
+  /** Public API for the import-from-code flow (Alpha 4.14.1). main.ts
+   *  calls this immediately before `saveGame.writeRaw(data)` so a
+   *  pending autosave can't race the import and clobber the freshly-
+   *  written slot with stale in-memory state. The reload that follows
+   *  tears down the runtime so we never need a corresponding "resume"
+   *  call. */
+  suspendAutosavesForReload(): void {
+    this.resetting = true;
+  }
   // Undo — capped FIFO stack of full snapshots. One entry per user-initiated
   // operation (paint stroke, building placement). Tax slider tweaks aren't
   // tracked because the user can just slide back.

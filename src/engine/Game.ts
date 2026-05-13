@@ -23,6 +23,7 @@ import { Pedestrians } from '../simulation/Pedestrians';
 import { Population } from '../simulation/Population';
 import { RoadGraph } from '../simulation/RoadGraph';
 import { Buses } from '../simulation/Buses';
+import { Motorcade } from '../simulation/Motorcade';
 import { Services } from '../simulation/Services';
 import { Traffic } from '../simulation/Traffic';
 import { TrafficLights } from '../simulation/TrafficLights';
@@ -388,6 +389,9 @@ export class Game {
   private readonly walkPathfinder = new Pathfinding();
   readonly vehicles = new Vehicles();
   readonly buses = new Buses();
+  /** Motorcade event (Alpha 4.14). Fires every MOTORCADE_INTERVAL_MONTHS
+   *  when a Provincial / National Capital is placed. */
+  readonly motorcade = new Motorcade();
   readonly pedestrians = new Pedestrians();
   // Service-coverage flags get rebuilt on any building placement / removal.
   private readonly services = new Services();
@@ -1056,6 +1060,14 @@ export class Game {
           this.stats.capture(
             this.economy.monthsElapsed, this.economy, this.population, this.happiness
           );
+          // Motorcade event (Alpha 4.14). Each month, tick the
+          // countdown; on fire, the convoy is queued for spawn over
+          // the next few seconds via the per-frame motorcade.tick().
+          // No-op if the city has no Provincial / National Capital
+          // (the inner check returns false silently).
+          if (this.motorcade.monthlyTick(this.grid, this.roadGraph, this.pathfinder)) {
+            this.onStatusMessage?.('Motorcade departing the capital');
+          }
           // Achievements pass (Alpha 2.15) — runs once per month, drains
           // any newly-unlocked entries to the toast queue via onAchievementUnlocked.
           this.achievements.evaluateMonth({
@@ -1090,6 +1102,15 @@ export class Game {
           this.walkPathfinder
         );
         this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder);
+        // Tourist arrivals (Alpha 4.14) — only fire when the city is
+        // connected to the outside world (any edge road tile exists).
+        this.vehicles.spawnTouristTick(
+          SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder,
+          this.globalMarket.isConnected()
+        );
+        // Emergency dispatch (Alpha 4.14) — police + fire stations
+        // periodically send out one of their kind on a tour.
+        this.vehicles.spawnServiceTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
         this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
         this.pedestrians.spawnTick(
           SIM_STEP_MS,
@@ -1122,6 +1143,9 @@ export class Game {
       // Tick traffic-light phases at render rate so visual + sim match.
       // Scaled by simSpeed so 2× / 3× advance the lights too.
       this.trafficLights.tick(dt, this.grid, this.vehicles);
+      // Motorcade per-frame pump (Alpha 4.14) — drains its 3-vehicle
+      // spawn queue as each spawn timestamp fires.
+      this.motorcade.tick(this.grid, this.vehicles);
       this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights);
       // Drain any crashes that fired this frame: deduct treasury, hit the
       // destination tile's developmentPressure (so business growth slows
@@ -1376,6 +1400,9 @@ export class Game {
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();
+    // Motorcade event resets too — its in-flight queue references a
+    // path of road tiles that may not exist post-restore (Alpha 4.14).
+    this.motorcade.reset();
   }
 
   /**

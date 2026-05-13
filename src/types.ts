@@ -281,6 +281,27 @@ export const CITY_EXPANSION_BLOCK_SIZE = 32;
  * dropping cars. Memory: feedback_traffic_pressure (post-alpha pass 2).
  */
 export const MAX_VEHICLES = 250;
+/**
+ * Tourist vehicle cap (Alpha 4.14). Tourists arrive from the outside
+ * connection and visit landmarks / parks / civic monuments. They count
+ * SEPARATELY from MAX_VEHICLES — the player should see traffic visibly
+ * EXCEED the resident-cap when the city is connected and tourist-rich.
+ */
+export const MAX_TOURIST_VEHICLES = 50;
+/**
+ * Emergency-vehicle cap (Alpha 4.14). Patrol cars + fire trucks combined.
+ * Each station can have at most one of its kind out at a time; the cap is
+ * the upper bound across the whole city.
+ */
+export const MAX_SERVICE_VEHICLES = 20;
+/**
+ * Motorcade event interval, in sim months (Alpha 4.14). Currently 6 for
+ * playtest visibility (the user explicitly asked for a faster cadence
+ * during testing — they'll bump this back to 48 / "every 4 years"
+ * once verified). Triggers when the city has at least one Provincial
+ * Capital or National Capital placed.
+ */
+export const MOTORCADE_INTERVAL_MONTHS = 6;
 
 /** Per-instance car colours — picked at random when a car spawns. */
 export const VEHICLE_PALETTE: readonly number[] = [

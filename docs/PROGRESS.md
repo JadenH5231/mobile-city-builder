@@ -4,6 +4,15 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.19 — Animated farm tractor on large farm clusters** — player ask: "If a farm is bigger than 20 blocks total can it have a detailed tractor that drives through the fields so it looks nice and polished."
+  - **Cluster detection**: every time `drawCityBuildings` rebuilds (placement / bulldoze events), `refreshFarmClusters(grid)` flood-fills the farm tiles into 4-connected clusters. Clusters with ≥ `FARM_TRACTOR_MIN_CLUSTER` (20) tiles get a tractor; smaller ones don't. Cap of `MAX_TRACTORS = 16` concurrent tractors across the map.
+  - **Snake / boustrophedon path** — for each qualifying cluster, sorts tiles by y ascending, then within each row sorts by x with alternating direction. The result is one continuous strip the tractor traces row-by-row, like a real plow / harvester. Handles non-rectangular clusters fine (only visits actual cluster tiles).
+  - **Detailed geometry** — 12 baked parts per tractor: chassis (red body) + cabin + chrome hood + flat roof + chrome exhaust stack + 2 small front wheels + 2 big rear wheels + 2 headlights + rear hitch. The big-rear-small-front wheel proportion is the classic farm-tractor silhouette. Plus a sibling InstancedMesh for the dark-tinted cabin glass (4 windows).
+  - **Animation**: `updateTractors(dt, grid)` runs in the render loop alongside `updateCars`. Each tractor advances at `0.55 tiles/sec` along its path; position lerps between adjacent path tiles; yaw faces the path-tangent. Tractor lifts to the current tile's terrain elevation so it climbs hills.
+  - **Initial progress randomized** per cluster so tractors don't all visibly start at the same point.
+  - **No save state, no road graph interaction, no collision logic** — purely a visual decoration that turns big farms from "field of stamped trees" into "active agricultural operation."
+  - Bundle 951 KB raw / 251 KB gzipped (+3 KB raw — tractor geometry + per-frame animator).
+
 - **Alpha 4.18.1 — Scrapped: Ramp + Cloverleaf interchanges (UI removal only)** — playtest verdict: "i didn't like the merge lane or the cloverleafs, let's scrap the entire idea ocmpletely." Same surgical-removal pattern the user previously specified for big buildings: keep the underlying assets in the codebase so existing saves still work, just remove the player-facing options.
   - **Toolbar entries removed** for both `Ramp` and `Clover` from the Roads group. The two unused ICON SVGs also dropped.
   - **Milestone unlocks removed** — `place_ramp` and `place_cloverleaf` are no longer added to the City milestone's unlock list, so they can never become "available."

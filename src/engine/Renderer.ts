@@ -42,7 +42,9 @@ import {
 } from './BuildingVariants';
 import {
   DIR_OFFSETS,
+  FARM_TRACTOR_MIN_CLUSTER,
   MAX_PEDESTRIANS,
+  MAX_TRACTORS,
   MAX_VEHICLES,
   MAX_TOURIST_VEHICLES,
   MAX_SERVICE_VEHICLES,
@@ -151,6 +153,22 @@ export class Renderer {
    *  up (taller, longer) so fire trucks visibly read as trucks vs
    *  sedans. */
   private fireAccessoriesMesh!: InstancedMesh;
+  /** Farm tractor mesh (Alpha 4.19). One animated tractor per farm
+   *  cluster ≥ FARM_TRACTOR_MIN_CLUSTER tiles. Chassis + cabin +
+   *  exhaust + 4 wheels + headlights + rear hitch baked into the
+   *  body geometry. Per-instance colour tint (red default). Sibling
+   *  windows mesh for the cabin glass. Animated via
+   *  `updateTractors(dt)` along a per-cluster snake path. */
+  private tractorsMesh!: InstancedMesh;
+  private tractorWindowsMesh!: InstancedMesh;
+  /** Cluster registry for the active tractors. Rebuilt whenever
+   *  `drawCityBuildings` runs (placement / bulldoze events). Each
+   *  entry stores the sorted snake path + position accumulator so
+   *  the animation is stateful across frames. */
+  private farmClusters: Array<{
+    path: Array<{ x: number; y: number }>;
+    progress: number;   // position along path, [0, path.length)
+  }> = [];
   private busesMesh: InstancedMesh;
   private busWindowsMesh!: InstancedMesh;
   private busHeadlightsMesh!: InstancedMesh;
@@ -409,6 +427,93 @@ export class Renderer {
       this.worldGroup.add(this.fireAccessoriesMesh);
     }
 
+    // Farm tractor (Alpha 4.19). One detailed tractor per large farm
+    // cluster: chassis + cabin + roof + hood + exhaust stack + 4
+    // wheels (2 small front + 2 big rear) + headlights + rear hitch.
+    // Per-instance colour tint paints the body red by default. The
+    // local +Z is the tractor's forward direction; its yaw is set
+    // per-frame in `updateTractors` from the path-tangent vector.
+    {
+      const TRACTOR_RED = 0xffffff;       // body geometry stays white; tint applied per-instance
+      const TRACTOR_DARK = 0x2a2a2a;      // wheels, exhaust, hitch
+      const TRACTOR_HEADLIGHT = 0xfff4c0;
+      const TRACTOR_HOOD = 0xc8c8c8;      // chrome accents
+      // Chassis — main red body box. Forward face at +Z (engine side).
+      const chassis = new BoxGeometry(0.16, 0.045, 0.30);
+      chassis.translate(0, 0.075, 0);
+      // Hood — narrower lower front section (engine compartment).
+      const hood = new BoxGeometry(0.12, 0.060, 0.13);
+      hood.translate(0, 0.065, 0.115);
+      // Cabin — taller box behind the hood.
+      const cabin = new BoxGeometry(0.14, 0.085, 0.13);
+      cabin.translate(0, 0.140, -0.07);
+      // Cabin roof — slightly wider flat slab on top so the cabin reads as boxy.
+      const roof = new BoxGeometry(0.18, 0.015, 0.16);
+      roof.translate(0, 0.190, -0.07);
+      // Exhaust stack — vertical chrome pipe on the left of the hood.
+      const exhaust = new CylinderGeometry(0.014, 0.014, 0.16, 6);
+      exhaust.translate(-0.060, 0.180, 0.090);
+      // Small front wheels — left + right. Axis horizontal (rotateZ).
+      const wheelFL = new CylinderGeometry(0.040, 0.040, 0.022, 12);
+      wheelFL.rotateZ(Math.PI / 2);
+      wheelFL.translate(-0.080, 0.040, 0.110);
+      const wheelFR = new CylinderGeometry(0.040, 0.040, 0.022, 12);
+      wheelFR.rotateZ(Math.PI / 2);
+      wheelFR.translate(0.080, 0.040, 0.110);
+      // Big rear wheels — significantly larger than fronts (the
+      // classic farm-tractor silhouette).
+      const wheelRL = new CylinderGeometry(0.075, 0.075, 0.030, 14);
+      wheelRL.rotateZ(Math.PI / 2);
+      wheelRL.translate(-0.090, 0.075, -0.110);
+      const wheelRR = new CylinderGeometry(0.075, 0.075, 0.030, 14);
+      wheelRR.rotateZ(Math.PI / 2);
+      wheelRR.translate(0.090, 0.075, -0.110);
+      // Two headlights on the front face of the hood.
+      const headlightL = new BoxGeometry(0.022, 0.022, 0.008);
+      headlightL.translate(-0.040, 0.075, 0.180);
+      const headlightR = new BoxGeometry(0.022, 0.022, 0.008);
+      headlightR.translate(0.040, 0.075, 0.180);
+      // Rear hitch / 3-point linkage stub at the back.
+      const hitch = new BoxGeometry(0.045, 0.025, 0.040);
+      hitch.translate(0, 0.060, -0.170);
+      const tractorGeom = mergeGeoms(
+        [chassis, hood, cabin, roof, exhaust, wheelFL, wheelFR, wheelRL, wheelRR, headlightL, headlightR, hitch],
+        [
+          TRACTOR_RED, TRACTOR_RED, TRACTOR_RED, TRACTOR_HOOD,
+          TRACTOR_DARK,
+          TRACTOR_DARK, TRACTOR_DARK, TRACTOR_DARK, TRACTOR_DARK,
+          TRACTOR_HEADLIGHT, TRACTOR_HEADLIGHT,
+          TRACTOR_DARK
+        ]
+      );
+      // vertexColors: true so the wheel/exhaust/headlight colours come
+      // from vertex attributes; per-instance tint colours the red body.
+      const tractorMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+      this.tractorsMesh = new InstancedMesh(tractorGeom, tractorMat, MAX_TRACTORS);
+      this.tractorsMesh.count = 0;
+      this.tractorsMesh.frustumCulled = false;
+      this.worldGroup.add(this.tractorsMesh);
+      // Cabin windows — sibling mesh with dark-tint material, mirrors
+      // the body matrix per frame. Front + back + 2 sides.
+      const winFront = new BoxGeometry(0.10, 0.060, 0.005);
+      winFront.translate(0, 0.150, -0.005);
+      const winBack = new BoxGeometry(0.10, 0.060, 0.005);
+      winBack.translate(0, 0.150, -0.135);
+      const winSideL = new BoxGeometry(0.005, 0.060, 0.10);
+      winSideL.translate(-0.070, 0.150, -0.070);
+      const winSideR = new BoxGeometry(0.005, 0.060, 0.10);
+      winSideR.translate(0.070, 0.150, -0.070);
+      const winGeom = mergeGeoms(
+        [winFront, winBack, winSideL, winSideR],
+        [0xffffff, 0xffffff, 0xffffff, 0xffffff]
+      );
+      const winMat = new MeshBasicMaterial({ color: 0x1a2434 });
+      this.tractorWindowsMesh = new InstancedMesh(winGeom, winMat, MAX_TRACTORS);
+      this.tractorWindowsMesh.count = 0;
+      this.tractorWindowsMesh.frustumCulled = false;
+      this.worldGroup.add(this.tractorWindowsMesh);
+    }
+
     // Buses — bigger silhouette so they read as transit, separate from cars.
     // Bus silhouette (Alpha 2.1) — chunky body with a slight cab notch
     // and a low roofline, so it reads as a transit bus rather than a slab.
@@ -644,6 +749,105 @@ export class Renderer {
     if (built) this.cityBuildingsGroup.add(built);
     // Refresh night-lights — park lamps depend on park placements.
     this.drawNightLights(grid);
+    // Farm-tractor cluster detection (Alpha 4.19). Cheap one-pass
+    // flood-fill that finds farm clusters ≥ FARM_TRACTOR_MIN_CLUSTER
+    // tiles and stores a snake-path per cluster for the per-frame
+    // tractor animation. Re-runs on every drawCityBuildings (i.e.
+    // whenever the player places/bulldozes a farm) so the set stays
+    // in sync.
+    this.refreshFarmClusters(grid);
+  }
+
+  /** Detect large farm clusters + build the snake path for each
+   *  tractor. Called from `drawCityBuildings` whenever the city-
+   *  buildings mesh rebuilds, which is the right cadence — farm
+   *  layout only changes when the player paints / bulldozes. */
+  private refreshFarmClusters(grid: Grid): void {
+    this.farmClusters.length = 0;
+    const visited = new Set<number>();
+    for (const t of grid.iter()) {
+      if (t.building !== 'farm') continue;
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'farm', visited);
+      if (cluster.length < FARM_TRACTOR_MIN_CLUSTER) continue;
+      if (this.farmClusters.length >= MAX_TRACTORS) break;
+      // Build boustrophedon (snake) path: sort by y ascending; within
+      // each row sort by x, alternating direction so the tractor's
+      // path is one continuous strip — east on even rows, west on odd
+      // rows, with a single tile-step transition at row boundaries.
+      const byRow = new Map<number, Array<{ x: number; y: number }>>();
+      for (const tile of cluster) {
+        let row = byRow.get(tile.y);
+        if (!row) { row = []; byRow.set(tile.y, row); }
+        row.push(tile);
+      }
+      const ys = [...byRow.keys()].sort((a, b) => a - b);
+      const path: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < ys.length; i++) {
+        const y = ys[i]!;
+        const row = byRow.get(y)!.slice().sort((a, b) => a.x - b.x);
+        if (i % 2 === 1) row.reverse();
+        path.push(...row);
+      }
+      this.farmClusters.push({ path, progress: Math.random() * path.length });
+    }
+  }
+
+  /** Per-frame tractor animation (Alpha 4.19). Advances each tractor
+   *  along its cluster's snake path at TRACTOR_SPEED tiles/sec and
+   *  writes the instance matrix to `tractorsMesh` + the sibling
+   *  windows mesh. `dt` is the same render-rate delta used by the
+   *  vehicle update. */
+  updateTractors(dt: number, grid: Grid): void {
+    if (this.farmClusters.length === 0) {
+      this.tractorsMesh.count = 0;
+      this.tractorWindowsMesh.count = 0;
+      return;
+    }
+    const TRACTOR_SPEED = 0.55;    // tiles per real-time second
+    const obj = this.tmpObj;
+    const c = this.tmpColor;
+    c.setHex(0xc04030);   // body-paint red — applied per-instance below
+    for (let i = 0; i < this.farmClusters.length; i++) {
+      const cl = this.farmClusters[i]!;
+      const N = cl.path.length;
+      if (N < 2) continue;
+      // Advance along path.
+      cl.progress = (cl.progress + dt * TRACTOR_SPEED) % N;
+      const idx = Math.floor(cl.progress);
+      const subT = cl.progress - idx;
+      const a = cl.path[idx]!;
+      const b = cl.path[(idx + 1) % N]!;
+      const ax = a.x + 0.5;
+      const az = a.y + 0.5;
+      const bx = b.x + 0.5;
+      const bz = b.y + 0.5;
+      // Position in world coords.
+      const wx = (ax + (bx - ax) * subT) * TILE_SIZE;
+      const wz = (az + (bz - az) * subT) * TILE_SIZE;
+      // Height — lift to terrain elevation of the current tile.
+      const aTile = grid.get(a.x, a.y);
+      const elev = aTile?.elevation ?? 0;
+      const wy = elev + 0.018;
+      obj.position.set(wx, wy, wz);
+      // Yaw — face the direction of motion. atan2(x, z) so +Z is yaw=0.
+      const dxSeg = bx - ax;
+      const dzSeg = bz - az;
+      if (dxSeg !== 0 || dzSeg !== 0) {
+        obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
+      }
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      this.tractorsMesh.setMatrixAt(i, obj.matrix);
+      this.tractorWindowsMesh.setMatrixAt(i, obj.matrix);
+      this.tractorsMesh.setColorAt(i, c);
+    }
+    this.tractorsMesh.count = this.farmClusters.length;
+    this.tractorWindowsMesh.count = this.farmClusters.length;
+    this.tractorsMesh.instanceMatrix.needsUpdate = true;
+    this.tractorWindowsMesh.instanceMatrix.needsUpdate = true;
+    if (this.tractorsMesh.instanceColor) this.tractorsMesh.instanceColor.needsUpdate = true;
   }
 
   /** Districts overlay (Alpha 2.22). One translucent quad per tile that

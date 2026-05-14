@@ -730,12 +730,9 @@ export const MILESTONES: readonly Milestone[] = [
     popThreshold: 1000,
     unlocks: [
       'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
-      // Highway interchange ramps (Alpha 4.16) — unlocked alongside
-      // highways since that's when they become useful.
-      'place_ramp',
-      // Cloverleaf interchange (Alpha 4.17) — same milestone, same
-      // reason (only useful once highways exist).
-      'place_cloverleaf',
+      // (Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1
+      //  — kept in code for backwards-compat with existing saves but
+      //  no longer unlockable.)
       // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
       // city before they make sense.
       'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',

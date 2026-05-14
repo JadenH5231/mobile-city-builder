@@ -4,6 +4,13 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.18.1 — Scrapped: Ramp + Cloverleaf interchanges (UI removal only)** — playtest verdict: "i didn't like the merge lane or the cloverleafs, let's scrap the entire idea ocmpletely." Same surgical-removal pattern the user previously specified for big buildings: keep the underlying assets in the codebase so existing saves still work, just remove the player-facing options.
+  - **Toolbar entries removed** for both `Ramp` and `Clover` from the Roads group. The two unused ICON SVGs also dropped.
+  - **Milestone unlocks removed** — `place_ramp` and `place_cloverleaf` are no longer added to the City milestone's unlock list, so they can never become "available."
+  - **Everything else kept intact**: Tool union entries, dispatch code in `Game.handlePaintStart`, `Game.placeRamp` / `reserveMonumentFootprint('cloverleaf')`, the renderer's ramp visual + cloverleaf geometry, faction stances, save schema fields. This means **anyone with an existing save that has built ramps or cloverleaves will still see them rendered correctly** and can still bulldoze them — they just can't make new ones. No save migration needed.
+  - The Faction Detail panel still lists "Highway ramps" and "Cloverleaf interchanges" stance rows because the stances are still real for any built instances.
+  - Bundle 948 KB raw / 250 KB gzipped (~1 KB saved from the dropped icon SVGs).
+
 - **Alpha 4.18 — Level 4 / Max density tier (bridges L3 → skyscrapers)** — user spec: "A Level 4 density. It needs to bridge the gap between skyscrapers and Level 3 density so the height difference is not so stark as density drops from skyscrapers." This is the second attempt at this tier — Alpha 3.2.5 shipped a similar feature but was reverted after a freeze caused by two specific bugs (documented in CLAUDE.md). Both addressed at the start of this PR.
   - **New `'max'` tier in `ZoneTier`** with `cap = 4` and 4 new tools: `residential_max` / `commercial_max` / `industrial_max` / `mixed_max`. Listed in each zone group's toolbar between "High" and "Sky" with a new ICON_TIER_MAX (rect with two horizontal divider lines, suggesting a stacked mid-rise mass).
   - **Unlocks at Metropolis** (the natural next step after City unlocks both L3 and skyscrapers).

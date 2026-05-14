@@ -193,20 +193,31 @@ export const BUILDING_DIMS: ReadonlyArray<{ readonly w: number; readonly h: numb
   { w: 0.80, h: 1.50 }
 ];
 
-export const MAX_DENSITY = 3;
+/**
+ * Maximum density tier (Alpha 4.18). Was 3 (low/med/high) since launch;
+ * bumped to 4 to bridge the visual gap between L3 and skyscrapers — L3
+ * tops out at ~3-4 storeys, skyscrapers jump to ~10-15 storeys, leaving
+ * a stark height drop wherever skyscrapers ended. L4 fills it with
+ * mid-rise (~6-9 storey) buildings: brownstones, mid-rise offices,
+ * podium-style mixed-use. Indices 0..4 in capacity arrays.
+ */
+export const MAX_DENSITY = 4;
 
 /**
  * Residents per residential tile by density tier. Index 0 is unused
  * (no building yet). Roughly exponential — matches how a low-poly cluster
- * of houses → townhouses → apartment block escalates capacity in a city sim.
+ * of houses → townhouses → apartment block → mid-rise escalates
+ * capacity in a city sim. L4 (Alpha 4.18) sits between L3 (apartment
+ * block) and skyscraper density.
  */
-export const RESIDENT_CAPACITY: readonly number[] = [0, 4, 16, 64];
+export const RESIDENT_CAPACITY: readonly number[] = [0, 4, 16, 64, 160];
 
 /** Jobs per commercial tile by density tier. */
-export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48];
+export const COMMERCIAL_JOBS: readonly number[] = [0, 3, 12, 48, 120];
 
-/** Jobs per industrial tile by density tier. */
-export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
+/** Jobs per industrial tile by density tier. L4 industrial = larger
+ *  multi-bay processing facility, not a skyscraper-tall factory. */
+export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80, 180];
 
 /**
  * Mixed-use (Alpha 2.0) — same building footprint, but each tile
@@ -214,8 +225,8 @@ export const INDUSTRIAL_JOBS: readonly number[] = [0, 5, 20, 80];
  * for each axis so a mixed-use block is denser than a single-use block of
  * the same density tier overall but doesn't double-count.
  */
-export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32];
-export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24];
+export const MIXED_RESIDENT_CAPACITY: readonly number[] = [0, 2, 8, 32, 80];
+export const MIXED_COMMERCIAL_JOBS: readonly number[] = [0, 2, 6, 24, 60];
 
 /**
  * Luxury low-density residential (Alpha 2.5). One luxury home spans a
@@ -748,7 +759,11 @@ export const MILESTONES: readonly Milestone[] = [
       'place_fountain', 'place_reflecting_pool', 'place_memorial_garden',
       // Civic monuments (Alpha 4.12) — Provincial Capital is the
       // Metro-tier showpiece building.
-      'place_provincial_capital'
+      'place_provincial_capital',
+      // Level 4 / "Max" density (Alpha 4.18) — bridges L3 → skyscraper.
+      // Unlocks at Metro since City already unlocks both L3 + skyscrapers,
+      // and Metro is the natural next density progression.
+      'residential_max', 'commercial_max', 'industrial_max', 'mixed_max'
     ],
     rewardCash: 20000,
     rewardPC: 8,
@@ -809,16 +824,19 @@ export const STARTING_TOOLS: ReadonlySet<Tool> = new Set([
  * - `low` (cap 1): tile stays at L1 detached/single-storey buildings forever.
  * - `medium` (cap 2): tile may grow to L2; L3 is locked.
  * - `high` (cap 3): tile may grow to L3 if power+water+park coverage allows.
+ * - `max` (cap 4, Alpha 4.18): tile may grow to L4 mid-rise (~6-9
+ *   storeys), bridging the visual gap between L3 and skyscrapers.
  *
- * Zone density is a separate axis from Zone (R/C/I). All three zones support
- * all three tiers.
+ * Zone density is a separate axis from Zone (R/C/I/MU). All four zones
+ * support all four tiers.
  */
-export type ZoneTier = 'low' | 'medium' | 'high';
+export type ZoneTier = 'low' | 'medium' | 'high' | 'max';
 
-export const ZONE_TIER_CAP: Record<ZoneTier, 1 | 2 | 3> = {
+export const ZONE_TIER_CAP: Record<ZoneTier, 1 | 2 | 3 | 4> = {
   low: 1,
   medium: 2,
-  high: 3
+  high: 3,
+  max: 4
 };
 
 /**
@@ -854,6 +872,13 @@ export type Tool =
   | 'mixed_low'
   | 'mixed_medium'
   | 'mixed_high'
+  // Level 4 / "Max" density (Alpha 4.18). Mid-rise tier sitting between
+  // L3 and skyscrapers — bridges the visual gap from ~3-4 storey L3 to
+  // ~10-15 storey skyscrapers with ~6-9 storey buildings.
+  | 'residential_max'
+  | 'commercial_max'
+  | 'industrial_max'
+  | 'mixed_max'
   | 'place_power'
   | 'place_water'
   | 'place_park'
@@ -940,7 +965,12 @@ export const ZONE_TOOL_INFO: ReadonlyMap<Tool, { zone: Exclude<Zone, 'none'>; ti
   ['industrial_high',    { zone: 'industrial' as const,  tier: 'high' as const }],
   ['mixed_low',          { zone: 'mixed' as const,       tier: 'low' as const }],
   ['mixed_medium',       { zone: 'mixed' as const,       tier: 'medium' as const }],
-  ['mixed_high',         { zone: 'mixed' as const,       tier: 'high' as const }]
+  ['mixed_high',         { zone: 'mixed' as const,       tier: 'high' as const }],
+  // Level 4 / "Max" density tier (Alpha 4.18) — mid-rise, ~6-9 storeys.
+  ['residential_max',    { zone: 'residential' as const, tier: 'max' as const }],
+  ['commercial_max',     { zone: 'commercial' as const,  tier: 'max' as const }],
+  ['industrial_max',     { zone: 'industrial' as const,  tier: 'max' as const }],
+  ['mixed_max',          { zone: 'mixed' as const,       tier: 'max' as const }]
 ]);
 
 /** Tools that paint a road, mapped to their road tier. */

@@ -499,7 +499,9 @@ export class Achievements {
       if (t.zone !== 'none') {
         zonedTiles++;
         if (t.density > 0) developedBuildings++;
-        if (t.density === 3) l3Buildings++;
+        // L3+ counter (Alpha 4.18 widens from `=== 3` to `>= 3` so L4
+        // mid-rises also count toward the high-density achievement).
+        if (t.density >= 3) l3Buildings++;
         if (t.zone === 'mixed') muTiles++;
         if (t.hasPower && t.hasWater && t.hasPark) fullyServicedTiles++;
       }

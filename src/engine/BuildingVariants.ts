@@ -125,7 +125,7 @@ export function buildVariantParts(
   happiness = 0.5, yawOverride?: number
 ): VariantPart[] {
   if (zone === 'none' || density <= 0) return [];
-  const variants = VARIANTS[zone]?.[density as 1 | 2 | 3];
+  const variants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
   if (!variants || variants.length === 0) return [];
   // Deterministic variant pick — same tile always renders the same variant.
   const variantIdx = pickVariant(tileX, tileY, variants.length);
@@ -1138,7 +1138,7 @@ function emitTowerFacade(
  * around each block; heights match BUILDING_DIMS gradient (0.4 / 0.8 / 1.5).
  */
 
-type VariantTable = Record<Exclude<Zone, 'none'>, Record<1 | 2 | 3, Spec[]>>;
+type VariantTable = Record<Exclude<Zone, 'none'>, Record<1 | 2 | 3 | 4, Spec[]>>;
 
 const VARIANTS: VariantTable = {
   // ---- Residential -------------------------------------------------------
@@ -1312,6 +1312,55 @@ const VARIANTS: VariantTable = {
       {
         body: { w: 0.55, h: 1.55, d: 0.55, color: 0x9a6a3a },
         decorations: [{ kind: 'antenna', h: 0.32, color: 0x222222 }]
+      }
+    ],
+    // ---- L4 / Max density (Alpha 4.18) ----
+    // Mid-rise bridges between L3 (~3-4 storey apartment blocks) and
+    // skyscrapers (~10-15 storeys). L4 R = ~6-9 storey buildings:
+    // brownstones + mid-rise apartment buildings + co-ops.
+    4: [
+      // 7-storey brownstone block — warm brick body, stone-trim base,
+      // low parapet, set of vertical sash windows implied by tower
+      // setback. Heights ~2.5 = 7-8 storeys.
+      {
+        body: { w: 0.85, h: 2.40, d: 0.85, color: 0x9c5a3a },
+        decorations: [
+          // Slim parapet/cornice band
+          { kind: 'tower', w: 0.92, d: 0.92, h: 0.10, color: 0x6e3e1d, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 8-storey 5-over-1 — wider podium (commercial ground floor) +
+      // stacked residential above. Cream walls, brick podium.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0x8a4a3a },  // brick podium
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 2.20, color: 0xeed5b8, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 6-storey co-op — uniform tan facade, slight setback, no antenna.
+      {
+        body: { w: 0.80, h: 2.10, d: 0.80, color: 0xc4ad7a },
+        decorations: [
+          { kind: 'tower', w: 0.55, d: 0.55, h: 0.30, color: 0xa68b58, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 9-storey deco mid-rise — cream walls + maroon trim + decorative crown.
+      {
+        body: { w: 0.75, h: 2.60, d: 0.75, color: 0xeede9c },
+        decorations: [
+          { kind: 'tower', w: 0.60, d: 0.60, h: 0.25, color: 0x6e2a3a, roofKind: 'pyramid', roofHeight: 0.12, roofColor: 0x4a1a26 }
+        ]
+      },
+      // 7-storey grey concrete — minimalist, slight setback, no decorations.
+      {
+        body: { w: 0.85, h: 2.30, d: 0.70, color: 0x9aa1a8 }
+      },
+      // 8-storey blue-glass mid-rise — teal walls + bright parapet.
+      {
+        body: { w: 0.70, h: 2.40, d: 0.70, color: 0x4a6a8a },
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 0.08, color: 0xeee5cc, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
       }
     ]
   },
@@ -1498,6 +1547,54 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.45, d: 0.45, h: 0.85, color: 0x5a7290, roofKind: 'pyramid', roofHeight: 0.30, roofColor: 0x2c3a4e }
         ]
+      }
+    ],
+    // ---- L4 / Max density (Alpha 4.18) ----
+    // Mid-rise commercial: 6-9 storey office buildings + boutique
+    // hotels + larger retail towers. Bridges 3-4 storey L3 retail and
+    // skyscrapers. Wider footprints than residential L4 — commercial
+    // mid-rise tends to mass out the lot more than residential.
+    4: [
+      // 8-storey corporate office — light grey curtain wall + crown band.
+      {
+        body: { w: 0.85, h: 2.40, d: 0.85, color: 0xa6b0bc },
+        decorations: [
+          { kind: 'tower', w: 0.92, d: 0.92, h: 0.10, color: 0x4a607c, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 7-storey boutique hotel — warm beige + dark cornice + ground sign.
+      {
+        body: { w: 0.85, h: 2.20, d: 0.80, color: 0xd6c8a8 },
+        decorations: [
+          { kind: 'tower', w: 0.92, d: 0.85, h: 0.08, color: 0x3a3026, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'sign', side: 'S', w: 0.34, h: 0.10, y: 0.32, color: 0xc8a040 }
+        ]
+      },
+      // 9-storey deco bank — dark blue stone + recessed setback tower.
+      {
+        body: { w: 0.80, h: 1.20, d: 0.80, color: 0x2c3e5a },
+        decorations: [
+          { kind: 'tower', w: 0.55, d: 0.55, h: 1.40, color: 0x3a5076, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 6-storey retail-over-office — bright signage band on ground floor.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0xeee5cc },  // ground retail
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.80, h: 1.70, color: 0xa6b0bc, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'sign', side: 'S', w: 0.50, h: 0.18, y: 0.18, color: 0xd03a3a }
+        ]
+      },
+      // 7-storey terra-cotta tower — warm orange-brown with thick parapet.
+      {
+        body: { w: 0.75, h: 2.30, d: 0.75, color: 0xc06030 },
+        decorations: [
+          { kind: 'tower', w: 0.82, d: 0.82, h: 0.10, color: 0x6a3018, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // 8-storey black-and-glass — sleek minimalist mid-rise.
+      {
+        body: { w: 0.75, h: 2.50, d: 0.75, color: 0x2a2c34 }
       }
     ]
   },
@@ -1699,6 +1796,76 @@ const VARIANTS: VariantTable = {
           { kind: 'tank',  dx:  0.30, dz:  0.22, r: 0.12, h: 0.65, color: 0x9a7860 }
         ]
       }
+    ],
+    // ---- L4 / Max density (Alpha 4.18) ----
+    // Heavy-industrial mid-rise — multi-storey processing facilities,
+    // mega-warehouses with rooftop equipment. Industrial doesn't go
+    // skyscraper-tall in real cities, so L4 caps at ~5 storeys but
+    // gets WIDER + more stacks/tanks on top.
+    4: [
+      // 5-storey processing plant — wide gunmetal slab + 4 tall stacks.
+      {
+        body: { w: 0.95, h: 1.50, d: 0.85, color: 0x4a4844 },
+        decorations: [
+          { kind: 'stack', dx: -0.32, dz: -0.28, h: 1.60, color: 0x1c1a16 },
+          { kind: 'stack', dx:  0.32, dz: -0.28, h: 1.40, color: 0x1c1a16 },
+          { kind: 'stack', dx: -0.10, dz:  0.30, h: 1.20, color: 0x1c1a16 },
+          { kind: 'stack', dx:  0.20, dz:  0.30, h: 1.05, color: 0x1c1a16 }
+        ]
+      },
+      // Mega-refinery — wide white tank farm with central stack.
+      {
+        body: { w: 0.50, h: 1.20, d: 0.40, color: 0xc8c4be },
+        decorations: [
+          { kind: 'tank', dx: -0.32, dz:  0.30, r: 0.14, h: 1.40, color: 0xece4cf },
+          { kind: 'tank', dx:  0.32, dz:  0.30, r: 0.14, h: 1.40, color: 0xece4cf },
+          { kind: 'tank', dx: -0.32, dz: -0.28, r: 0.14, h: 1.20, color: 0xece4cf },
+          { kind: 'tank', dx:  0.32, dz: -0.28, r: 0.14, h: 1.20, color: 0xece4cf },
+          { kind: 'stack', dx: 0, dz: -0.32, h: 2.20, color: 0x444840 }
+        ]
+      },
+      // Steel works mega-hall — rust-red mass + 5 dense stacks.
+      {
+        body: { w: 0.95, h: 1.30, d: 0.85, color: 0x6e3024 },
+        decorations: [
+          { kind: 'stack', dx: -0.36, dz: -0.20, h: 1.95, color: 0x2a1612 },
+          { kind: 'stack', dx: -0.18, dz: -0.20, h: 1.65, color: 0x2a1612 },
+          { kind: 'stack', dx:  0.00, dz: -0.20, h: 1.85, color: 0x2a1612 },
+          { kind: 'stack', dx:  0.18, dz: -0.20, h: 1.55, color: 0x2a1612 },
+          { kind: 'stack', dx:  0.36, dz: -0.20, h: 1.75, color: 0x2a1612 }
+        ]
+      },
+      // Multi-bay logistics warehouse — long flat low-grey + heavy crane.
+      {
+        body: { w: 0.95, h: 0.95, d: 0.95, color: 0x7c8088 },
+        decorations: [
+          { kind: 'crane', dx: -0.25, dz: -0.15, h: 1.55, color: 0xeec453 },
+          { kind: 'crane', dx:  0.25, dz:  0.15, h: 1.55, color: 0xeec453 },
+          { kind: 'sign', side: 'S', w: 0.50, h: 0.16, y: 0.65, color: 0xece4cf }
+        ]
+      },
+      // Heavy-machinery yard — slate slab + 3 cranes + admin tower.
+      {
+        body: { w: 0.85, h: 0.85, d: 0.85, color: 0x3e424a },
+        decorations: [
+          { kind: 'crane', dx: -0.30, dz:  0.10, h: 1.70, color: 0xb84a30 },
+          { kind: 'crane', dx:  0.30, dz: -0.10, h: 1.55, color: 0xb84a30 },
+          { kind: 'crane', dx:  0.00, dz:  0.30, h: 1.40, color: 0xb84a30 },
+          { kind: 'tower', w: 0.32, d: 0.32, h: 0.55, color: 0x7a8088, roofKind: 'flat', roofHeight: 0, roofColor: 0 }
+        ]
+      },
+      // Petrochemical mega-complex — white admin + dense tank cluster + 2 stacks.
+      {
+        body: { w: 0.55, h: 1.10, d: 0.55, color: 0xc8c4be },
+        decorations: [
+          { kind: 'tank', dx: -0.32, dz:  0.32, r: 0.13, h: 1.50, color: 0xece4cf },
+          { kind: 'tank', dx:  0.32, dz:  0.32, r: 0.13, h: 1.50, color: 0xece4cf },
+          { kind: 'tank', dx: -0.32, dz: -0.32, r: 0.13, h: 1.30, color: 0xece4cf },
+          { kind: 'tank', dx:  0.32, dz: -0.32, r: 0.13, h: 1.30, color: 0xece4cf },
+          { kind: 'stack', dx: -0.05, dz: -0.36, h: 2.10, color: 0x444840 },
+          { kind: 'stack', dx:  0.20, dz: -0.36, h: 1.80, color: 0x444840 }
+        ]
+      }
     ]
   },
   // ---- Mixed-use --------------------------------------------------------
@@ -1892,6 +2059,62 @@ const VARIANTS: VariantTable = {
         decorations: [
           { kind: 'tower', w: 0.28, d: 0.40, h: 1.45, color: 0x5e6878, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
           { kind: 'antenna', h: 0.18, color: 0x444444 }
+        ]
+      }
+    ],
+    // ---- L4 / Max density (Alpha 4.18) ----
+    // Mid-rise mixed-use — proper podium-and-tower designs in the 6-9
+    // storey range. The classic "5-over-1" type architecture: ground-
+    // floor retail, 5-7 storeys of residential above. Bridges L3
+    // (small podium-tower) and skyscraper-tier (full skyscraper).
+    4: [
+      // 8-storey podium-tower — bright retail base + warm-stone tower above.
+      {
+        body: { w: 0.85, h: 0.42, d: 0.85, color: 0xece4cf },   // ground retail
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 2.10, color: 0xc4a87a, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'awning', side: 'S', width: 0.50, depth: 0.10, color: 0xc06030 },
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.20, color: 0xeec453 }
+        ]
+      },
+      // 7-storey brick-podium tower — red brick ground + concrete tower.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0x8a3a2a },   // brick podium
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 1.95, color: 0xc8c4be, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.18, color: 0xece4cf }
+        ]
+      },
+      // 9-storey live/work — dark brick body + retail awning + tall slim crown.
+      {
+        body: { w: 0.85, h: 2.20, d: 0.80, color: 0x6a3024 },
+        decorations: [
+          { kind: 'tower', w: 0.55, d: 0.55, h: 0.45, color: 0x4a1c14, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'awning', side: 'S', width: 0.55, depth: 0.12, color: 0x14181c }
+        ]
+      },
+      // 8-storey teal-glass podium — modern coastal city feel.
+      {
+        body: { w: 0.85, h: 0.40, d: 0.85, color: 0xece4cf },
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 2.20, color: 0x4a8a86, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'sign', side: 'S', w: 0.34, h: 0.08, y: 0.22, color: 0x2c4060 }
+        ]
+      },
+      // 7-storey deco — cream walls + ochre crown band + small pediment.
+      {
+        body: { w: 0.85, h: 2.30, d: 0.80, color: 0xeede9c },
+        decorations: [
+          { kind: 'tower', w: 0.62, d: 0.62, h: 0.20, color: 0xc8a040, roofKind: 'pyramid', roofHeight: 0.10, roofColor: 0x6e5020 },
+          { kind: 'awning', side: 'S', width: 0.40, depth: 0.10, color: 0x6e5020 }
+        ]
+      },
+      // 9-storey black-stone-podium tower — sleek minimalist mid-rise.
+      {
+        body: { w: 0.85, h: 0.45, d: 0.85, color: 0x1a1d24 },
+        decorations: [
+          { kind: 'tower', w: 0.78, d: 0.78, h: 2.30, color: 0xa6b0bc, roofKind: 'flat', roofHeight: 0, roofColor: 0 },
+          { kind: 'sign', side: 'S', w: 0.40, h: 0.10, y: 0.22, color: 0xeec453 }
         ]
       }
     ]

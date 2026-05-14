@@ -4,6 +4,21 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.18 — Level 4 / Max density tier (bridges L3 → skyscrapers)** — user spec: "A Level 4 density. It needs to bridge the gap between skyscrapers and Level 3 density so the height difference is not so stark as density drops from skyscrapers." This is the second attempt at this tier — Alpha 3.2.5 shipped a similar feature but was reverted after a freeze caused by two specific bugs (documented in CLAUDE.md). Both addressed at the start of this PR.
+  - **New `'max'` tier in `ZoneTier`** with `cap = 4` and 4 new tools: `residential_max` / `commercial_max` / `industrial_max` / `mixed_max`. Listed in each zone group's toolbar between "High" and "Sky" with a new ICON_TIER_MAX (rect with two horizontal divider lines, suggesting a stacked mid-rise mass).
+  - **Unlocks at Metropolis** (the natural next step after City unlocks both L3 and skyscrapers).
+  - **12 new building variants** (R/C/I/MU × 3 visual variants per zone): mid-rise apartments, brownstones, 5-over-1s, mid-rise offices, boutique hotels, multi-bay industrial processing facilities, podium-tower mixed-use. Heights range 2.1-2.6 — squarely between L3 (~1.5-2.1) and the skyscraper baseline (~3+).
+  - **Capacity arrays** widened from `[0,4,16,64]` to `[0,4,16,64,160]` for residents, `[0,3,12,48]→[0,3,12,48,120]` for commercial jobs, etc. L4 capacity ≈ 2.5× L3, matching the visual mass step.
+  - **Promotion threshold for L3→L4 = 5.0** (much higher than the 2.5 for L2→L3) so L4 only emerges in genuinely high-demand areas.
+  - **Faction stances** added: `r_max` / `c_max` / `i_max` / `mu_max` rows for **all 10 factions**, more polarized than their L3 values (NIMBYs/Hometown -1.0 max-everything; Yimbys/Transit/Chamber +1.0 on the zones they like). Surfaced in the Faction Detail panel as "Residential (max)" etc.
+  - **Bugs from the prior attempt fixed upfront:**
+    - `applyZoneStroke` had `cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high'` in TWO sites — `cap === 4` would falsely resolve to `'high'`. Both updated to `cap === 1 ? 'low' : cap === 2 ? 'medium' : cap === 3 ? 'high' : 'max'`.
+    - `Council.canChangeZone` constructs `${prefix}_${tier}` stance keys; with all 10 factions now having `r_max` / `c_max` / `i_max` / `mu_max`, no more undefined-stance NaN propagation. (`Council.canChangeZone` itself didn't need touching — the upstream fixes are sufficient.)
+    - Also widened: `Tile.zoneCap` / `Grid.setZone` / `TileInfo.zoneCap` / `BulldozedSnapshot.zoneCap` / `strokeZones` all extended to `0|1|2|3|4`. `MAX_DENSITY` constant changed from 3 to 4 (Development uses it as the upper bound).
+    - `Achievements.l3Buildings` / `Happiness.density3Tiles` / `Happiness.zonedHigh` / `Economy.wealthSurtax` / `Renderer.isPremiumRes` all widened from `=== 3` to `>= 3` so L4 tiles count toward existing L3 logic where appropriate.
+  - **Save schema 25 → 26.** The on-disk format is unchanged (`zoneCap` and `density` were already serialized as plain numbers); the schema bump just signals the new value range. v25-and-earlier saves load fine — they never have density=4 tiles.
+  - Bundle 949 KB raw / 250 KB gzipped (+6 KB raw — the 12 new variants + ICON_TIER_MAX + the 4×10 stance rows).
+
 - **Alpha 4.17 — Cloverleaf interchanges (per-block prefab) + cleaner single-tile ramp visual** — playtest spec: "I don't like how the merge lanes work, they look ugly. The merge lanes should look like real interchanges. Is there a way you can do that construction placement method like you do for big buildings to build more intricate and beautiful road designs for things like clovers?"
   - **New Cloverleaf tool** in the Roads group. 5×5 prefab (25 blocks) built per-block via the same construction system as the big civic monuments — extending the Alpha 4.15 infrastructure to support a 5th kind. ~$2K per block, $50K total.
   - **Layout**: two crossing highways (N-S in centre column, E-W in centre row, bridged at the centre) + 4 curved loop ramps in each quadrant + 4 grass infields with ornamental trees. The 4 cardinal endpoints are highway road tiles the player connects their existing highways to.

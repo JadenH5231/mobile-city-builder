@@ -189,10 +189,15 @@ function buildStats(grid: Grid, economy: Economy, population: Population, traffi
       else if (t.zone === 'mixed') s.muTiles++;
       if (t.zoneCap === 1) s.zonedLow++;
       else if (t.zoneCap === 2) s.zonedMed++;
-      else if (t.zoneCap === 3) s.zonedHigh++;
+      // L4 (Alpha 4.18) is even more "high-density" than L3, so it
+      // counts toward zonedHigh + density3Tiles for faction-mood
+      // purposes (avoids needing parallel zonedMax / density4Tiles
+      // counters). Factions that hated zonedHigh (NIMBYs/Hometown)
+      // hate zonedMax even more — handled in their compute functions.
+      else if (t.zoneCap >= 3) s.zonedHigh++;
       if (t.density === 1) s.density1Tiles++;
       else if (t.density === 2) s.density2Tiles++;
-      else if (t.density === 3) s.density3Tiles++;
+      else if (t.density >= 3) s.density3Tiles++;
       if (t.hasPower && t.hasWater && t.hasPark) s.servicesFullyCoveredTiles++;
     }
     if (t.building === 'park') s.parks++;

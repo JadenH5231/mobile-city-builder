@@ -138,6 +138,18 @@ export class Renderer {
   private carWindowsMesh!: InstancedMesh;
   private carHeadlightsMesh!: InstancedMesh;
   private carTaillightsMesh!: InstancedMesh;
+  /** Police-car accessory overlay (Alpha 4.15.2). Light bar + black
+   *  side stripe baked in. Only police-kind cars (patrol, motorcade
+   *  lead/tail) get an instance — the mesh's `count` is set per-frame
+   *  to match. Vertex-coloured so the bar/blue-dome/red-dome render
+   *  in their fixed colours regardless of body tint. */
+  private policeAccessoriesMesh!: InstancedMesh;
+  /** Fire-truck accessory overlay (Alpha 4.15.2). Yellow ladder running
+   *  lengthwise on top + red light bar in front. Only `fire_response`
+   *  cars get an instance. Plus the per-instance body matrix is scaled
+   *  up (taller, longer) so fire trucks visibly read as trucks vs
+   *  sedans. */
+  private fireAccessoriesMesh!: InstancedMesh;
   private busesMesh: InstancedMesh;
   private busWindowsMesh!: InstancedMesh;
   private busHeadlightsMesh!: InstancedMesh;
@@ -279,6 +291,122 @@ export class Renderer {
     this.carTaillightsMesh.count = 0;
     this.carTaillightsMesh.frustumCulled = false;
     this.worldGroup.add(this.carTaillightsMesh);
+
+    // Police-car accessory overlay (Alpha 4.15.2). Cabin top is at
+    // y ≈ 0.14 (cabin body 0.07 thick centred at y = 0.105). The light
+    // bar sits on top — black base + flanking blue (left) + red (right)
+    // dome lights so the car reads instantly as a police cruiser. Plus
+    // a thin black side stripe along each flank for the "Crown Vic"
+    // silhouette.
+    {
+      const POLICE_BAR = 0x101418;
+      const POLICE_BLUE = 0x2c6df0;
+      const POLICE_RED = 0xe22d2d;
+      const POLICE_STRIPE = 0x0a1014;
+      // Light-bar base — flat dark slab spanning the cabin width.
+      const barBase = new BoxGeometry(0.13, 0.020, 0.060);
+      barBase.translate(0, 0.155, -0.020);
+      // Blue dome light (left side of bar).
+      const blueDome = new BoxGeometry(0.045, 0.030, 0.040);
+      blueDome.translate(-0.035, 0.180, -0.020);
+      // Red dome light (right side of bar).
+      const redDome = new BoxGeometry(0.045, 0.030, 0.040);
+      redDome.translate(0.035, 0.180, -0.020);
+      // Centre divider so the colours read as distinct domes, not one bar.
+      const barCentre = new BoxGeometry(0.012, 0.030, 0.040);
+      barCentre.translate(0, 0.180, -0.020);
+      // Side stripes — thin black box just below the windows on each
+      // flank, classic police cruiser visual.
+      const stripeL = new BoxGeometry(0.005, 0.015, 0.30);
+      stripeL.translate(-0.103, 0.080, 0);
+      const stripeR = new BoxGeometry(0.005, 0.015, 0.30);
+      stripeR.translate(0.103, 0.080, 0);
+      // Front + rear black bumper trim for extra silhouette read.
+      const bumperF = new BoxGeometry(0.20, 0.018, 0.020);
+      bumperF.translate(0, 0.018, 0.170);
+      const bumperR = new BoxGeometry(0.20, 0.018, 0.020);
+      bumperR.translate(0, 0.018, -0.170);
+      const policeGeom = mergeGeoms(
+        [barBase, blueDome, redDome, barCentre, stripeL, stripeR, bumperF, bumperR],
+        [POLICE_BAR, POLICE_BLUE, POLICE_RED, POLICE_BAR, POLICE_STRIPE, POLICE_STRIPE, POLICE_STRIPE, POLICE_STRIPE]
+      );
+      // vertexColors true so the bar/blue/red colours come from the
+      // baked-in vertex attributes; no per-instance tint applied.
+      const policeMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+      // Cap = max patrol cars (60% of MAX_SERVICE_VEHICLES) + 2 motorcade
+      // escorts. Round generously to handle worst-case spawn timing.
+      const POLICE_CAPACITY = MAX_SERVICE_VEHICLES + 4;
+      this.policeAccessoriesMesh = new InstancedMesh(policeGeom, policeMat, POLICE_CAPACITY);
+      this.policeAccessoriesMesh.count = 0;
+      this.policeAccessoriesMesh.frustumCulled = false;
+      this.worldGroup.add(this.policeAccessoriesMesh);
+    }
+
+    // Fire-truck accessory overlay (Alpha 4.15.2). Yellow ladder running
+    // lengthwise on top of the cabin + red light bar in front + chrome
+    // grille bumper. Plus the per-instance body matrix is scaled UP for
+    // fire instances so the truck visibly reads as a truck, not a sedan
+    // — see updateCars below. The accessory mesh inherits the same
+    // matrix so the ladder + bar scale with the body.
+    {
+      const FIRE_LADDER = 0xe9c84a;       // golden yellow extension ladder
+      const FIRE_LADDER_RAIL = 0xb8964a;  // darker rail tone for contrast
+      const FIRE_LIGHT_RED = 0xff4040;    // bright red light bar
+      const FIRE_CHROME = 0xc8c8d0;       // chrome grille / bumper
+      const FIRE_WHITE = 0xf0eeea;        // white side stripe
+      // Ladder — long thin box with a row of perpendicular rungs.
+      const ladderRailL = new BoxGeometry(0.014, 0.014, 0.42);
+      ladderRailL.translate(-0.035, 0.180, 0);
+      const ladderRailR = new BoxGeometry(0.014, 0.014, 0.42);
+      ladderRailR.translate(0.035, 0.180, 0);
+      // 6 rungs across the ladder length.
+      const rungs: BoxGeometry[] = [];
+      for (let i = 0; i < 6; i++) {
+        const rung = new BoxGeometry(0.075, 0.008, 0.012);
+        rung.translate(0, 0.180, -0.18 + i * 0.072);
+        rungs.push(rung);
+      }
+      // Light bar on top, in front of the ladder.
+      const fireBar = new BoxGeometry(0.10, 0.020, 0.045);
+      fireBar.translate(0, 0.155, 0.10);
+      const fireDomeL = new BoxGeometry(0.030, 0.025, 0.030);
+      fireDomeL.translate(-0.030, 0.180, 0.10);
+      const fireDomeR = new BoxGeometry(0.030, 0.025, 0.030);
+      fireDomeR.translate(0.030, 0.180, 0.10);
+      // White side stripes (classic fire truck reflective stripes).
+      const fireStripeL = new BoxGeometry(0.005, 0.020, 0.32);
+      fireStripeL.translate(-0.103, 0.060, 0);
+      const fireStripeR = new BoxGeometry(0.005, 0.020, 0.32);
+      fireStripeR.translate(0.103, 0.060, 0);
+      // Chrome front grille / bumper.
+      const grille = new BoxGeometry(0.18, 0.030, 0.012);
+      grille.translate(0, 0.045, 0.175);
+      const bumper = new BoxGeometry(0.22, 0.020, 0.025);
+      bumper.translate(0, 0.020, 0.170);
+      // (Tank removed — was clipping with the ladder above the rear
+      // deck. The ladder + light bar + grille + reflective stripes
+      // already read clearly as a fire truck.)
+      const allGeoms: BufferGeometry[] = [
+        ladderRailL, ladderRailR, ...rungs,
+        fireBar, fireDomeL, fireDomeR,
+        fireStripeL, fireStripeR,
+        grille, bumper
+      ];
+      const allColors: number[] = [
+        FIRE_LADDER, FIRE_LADDER, ...rungs.map(() => FIRE_LADDER_RAIL),
+        FIRE_LIGHT_RED, FIRE_LIGHT_RED, FIRE_LIGHT_RED,
+        FIRE_WHITE, FIRE_WHITE,
+        FIRE_CHROME, FIRE_CHROME
+      ];
+      const fireGeom = mergeGeoms(allGeoms, allColors);
+      const fireMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+      // Cap = max fire trucks (40% of MAX_SERVICE_VEHICLES). Round generously.
+      const FIRE_CAPACITY = MAX_SERVICE_VEHICLES;
+      this.fireAccessoriesMesh = new InstancedMesh(fireGeom, fireMat, FIRE_CAPACITY);
+      this.fireAccessoriesMesh.count = 0;
+      this.fireAccessoriesMesh.frustumCulled = false;
+      this.worldGroup.add(this.fireAccessoriesMesh);
+    }
 
     // Buses — bigger silhouette so they read as transit, separate from cars.
     // Bus silhouette (Alpha 2.1) — chunky body with a slight cab notch
@@ -826,6 +954,11 @@ export class Renderer {
     const obj = this.tmpObj;
     const c = this.tmpColor;
     const gridWidth = grid.width;
+    // Per-frame counters for the per-kind accessory overlays (Alpha
+    // 4.15.2). Each overlay's `count` is set to its tally so unused
+    // instance slots aren't drawn.
+    let policeIdx = 0;
+    let fireIdx = 0;
     for (let i = 0; i < vehicles.cars.length; i++) {
       const car = vehicles.cars[i]!;
       const a = car.pathTiles[car.segmentIdx]!;
@@ -862,11 +995,15 @@ export class Renderer {
       );
       // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
       obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
-      // Per-kind scale (Alpha 4.14). Motorcade limousine gets a 1.6×
-      // length so it visually reads as a stretched limo. Other kinds
-      // use the default unit scale.
+      // Per-kind scale (Alpha 4.14, expanded 4.15.2):
+      //  - motorcade_limo → 1.6× length (stretched limousine)
+      //  - fire_response → 1.10× wide × 1.50× tall × 1.40× long (truck)
+      // Everything else uses unit scale. The accessory mesh inherits
+      // the same matrix so police lights / fire ladder scale with the
+      // body and stay attached.
       const kind = car.kind ?? 'resident';
       if (kind === 'motorcade_limo') obj.scale.set(1, 1, 1.6);
+      else if (kind === 'fire_response') obj.scale.set(1.10, 1.50, 1.40);
       else obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.carsMesh.setMatrixAt(i, obj.matrix);
@@ -876,11 +1013,29 @@ export class Renderer {
       this.carTaillightsMesh.setMatrixAt(i, obj.matrix);
       c.setHex(car.color);
       this.carsMesh.setColorAt(i, c);
+      // Police accessory overlay (Alpha 4.15.2). Patrol cars dispatched
+      // from police stations + the two motorcade escorts get a light
+      // bar + side stripes + bumper trim. The mesh's `count` is set
+      // below to the running tally `policeIdx`.
+      if (kind === 'patrol' || kind === 'motorcade_lead' || kind === 'motorcade_tail') {
+        this.policeAccessoriesMesh.setMatrixAt(policeIdx, obj.matrix);
+        policeIdx++;
+      }
+      // Fire-truck accessory overlay (Alpha 4.15.2). Fire-response cars
+      // get a yellow ladder + red light bar + chrome grille + tank.
+      // The body matrix is already scaled up so the truck reads as
+      // bigger than a sedan.
+      if (kind === 'fire_response') {
+        this.fireAccessoriesMesh.setMatrixAt(fireIdx, obj.matrix);
+        fireIdx++;
+      }
     }
     this.carsMesh.count = vehicles.cars.length;
     this.carWindowsMesh.count = vehicles.cars.length;
     this.carHeadlightsMesh.count = vehicles.cars.length;
     this.carTaillightsMesh.count = vehicles.cars.length;
+    this.policeAccessoriesMesh.count = policeIdx;
+    this.fireAccessoriesMesh.count = fireIdx;
     if (vehicles.cars.length > 0) {
       this.carsMesh.instanceMatrix.needsUpdate = true;
       if (this.carsMesh.instanceColor) this.carsMesh.instanceColor.needsUpdate = true;
@@ -888,6 +1043,8 @@ export class Renderer {
       this.carHeadlightsMesh.instanceMatrix.needsUpdate = true;
       this.carTaillightsMesh.instanceMatrix.needsUpdate = true;
     }
+    if (policeIdx > 0) this.policeAccessoriesMesh.instanceMatrix.needsUpdate = true;
+    if (fireIdx > 0) this.fireAccessoriesMesh.instanceMatrix.needsUpdate = true;
   }
 
   /**

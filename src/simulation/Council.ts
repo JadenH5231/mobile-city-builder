@@ -71,6 +71,12 @@ export interface FactionStances {
    *  slightly (encourages driving), NIMBYs hate (more cars near
    *  residential). */
   ramp: number;
+  /** Cloverleaf interchange (Alpha 4.17). Multi-tile prefab — bigger
+   *  visual + cost than a single-tile ramp. Same political shape but
+   *  more polarized: Drivers absolutely love it (proper freeway exit),
+   *  Greenleaf / NIMBYs / Hometown hate it more (huge footprint of
+   *  car-centric infrastructure). */
+  cloverleaf: number;
   /** Forestry industry (Alpha 2.7). Doesn't drain forest resources, but
    *  industrial-flavoured visuals + lumber-truck haul; environmentalists
    *  hate, chamber/working-families love. Hometown likes it (logging is
@@ -155,8 +161,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: -0.7, water_tower: 0.0, park: 0.6,
     bus_stop: -0.3, bus_depot: -0.5, stop_sign: 0.4,
     // NIMBYs hate ramps — exit ramps mean more cars cutting through the
-    // neighbourhood, more noise, more pollution.
-    ramp: -0.6,
+    // neighbourhood, more noise, more pollution. Cloverleaf is much
+    // worse — a 5×5 freeway interchange right there.
+    ramp: -0.6, cloverleaf: -0.9,
     forestry: -0.4,
     farm: -0.2,
     school: 0.3, hospital: 0.4, fire_station: 0.5, police_station: 0.7,
@@ -181,7 +188,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: 0.0, water_tower: 0.2, park: 0.3,
     bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2,
     // YIMBYs are mildly anti-ramp — every ramp encourages car commuting.
-    ramp: -0.3,
+    // Cloverleaf is worse: 5×5 of land that could've been housing.
+    ramp: -0.3, cloverleaf: -0.6,
     forestry: 0.0,
     farm: -0.1,
     school: 0.5, hospital: 0.5, fire_station: 0.3, police_station: 0.0,
@@ -210,8 +218,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: -0.9, water_tower: 0.2, park: 1.0,
     bus_stop: 0.8, bus_depot: 0.8, stop_sign: 0.1,
     // Greenleaf hates ramps — more highway = more emissions, more cars
-    // moving fast through the city.
-    ramp: -0.5,
+    // moving fast through the city. Cloverleaf is the apex offender:
+    // huge paved footprint, encourages high-speed driving culture.
+    ramp: -0.5, cloverleaf: -0.9,
     forestry: -0.7,
     farm: 0.4,
     school: 0.4, hospital: 0.5, fire_station: 0.2, police_station: -0.1,
@@ -239,8 +248,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: -0.4, water_tower: 0.0, park: 0.5,
     bus_stop: -0.2, bus_depot: -0.3, stop_sign: 0.2,
     // Hometown Heritage hates ramps — they're modern highway
-    // infrastructure that erodes the small-town feel.
-    ramp: -0.4,
+    // infrastructure that erodes the small-town feel. Cloverleaf is
+    // the worst — pure suburban-sprawl architecture.
+    ramp: -0.4, cloverleaf: -0.8,
     forestry: 0.6,
     farm: 0.8,
     school: 0.4, hospital: 0.5, fire_station: 0.7, police_station: 0.6,
@@ -268,8 +278,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: 0.4, water_tower: 0.3, park: 0.1,
     bus_stop: 0.1, bus_depot: 0.2, stop_sign: -0.1,
     // Chamber loves ramps — easier highway access pulls in customers +
-    // freight from out of town.
-    ramp: 0.6,
+    // freight from out of town. Cloverleaf is the dream: a real
+    // freeway interchange screams "regional commerce hub."
+    ramp: 0.6, cloverleaf: 0.9,
     forestry: 0.7,
     farm: 0.6,
     school: 0.3, hospital: 0.4, fire_station: 0.4, police_station: 0.5,
@@ -296,8 +307,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: -0.3, water_tower: 0.1, park: 0.4,
     bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3,
     // Transit dislikes ramps — every ramp validates "highways for cars"
-    // as the city's primary mode of travel.
-    ramp: -0.4,
+    // as the city's primary mode of travel. Cloverleaf is the worst.
+    ramp: -0.4, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.1,
     school: 0.4, hospital: 0.4, fire_station: 0.3, police_station: 0.1,
@@ -324,8 +335,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: 0.1, water_tower: 0.0, park: 0.0,
     bus_stop: -0.7, bus_depot: -0.8, stop_sign: -0.4,
     // Drivers LOVE ramps — easy on/off the highway, smooth merges
-    // mean less time sitting at red lights.
-    ramp: 1.0,
+    // mean less time sitting at red lights. Cloverleaf is the apex —
+    // proper freeway interchange, full speed both directions.
+    ramp: 1.0, cloverleaf: 1.0,
     forestry: 0.2,
     farm: 0.3,
     school: 0.2, hospital: 0.4, fire_station: 0.5, police_station: 0.6,
@@ -352,8 +364,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     r_lux: 0.7,
     power_plant: -0.4, water_tower: -0.2, park: -0.2,
     bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2,
-    // Taxpayers grudgingly approve — modest cost, real utility.
-    ramp: 0.2,
+    // Taxpayers grudgingly approve ramp; cloverleaf is a $50K splurge
+    // they'd rather skip — real utility but not THAT much real utility.
+    ramp: 0.2, cloverleaf: -0.4,
     forestry: 0.5,
     farm: 0.4,
     school: 0.1, hospital: -0.1, fire_station: 0.3, police_station: 0.3,
@@ -380,8 +393,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: -0.3, water_tower: 0.4, park: 0.7,
     bus_stop: 0.3, bus_depot: 0.3, stop_sign: 1.0,
     // Safer Streets dislikes ramps — fast highway merges = more
-    // accident risk than controlled intersections.
-    ramp: -0.5,
+    // accident risk than controlled intersections. Cloverleaf is even
+    // worse: full freeway speeds + complex weaving zones.
+    ramp: -0.5, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.2,
     school: 0.6, hospital: 0.7, fire_station: 0.9, police_station: 0.7,
@@ -409,8 +423,8 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     power_plant: 0.2, water_tower: 0.3, park: 0.4,
     bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3,
     // Working Families likes ramps — easier highway = easier commute
-    // to out-of-town jobs.
-    ramp: 0.3,
+    // to out-of-town jobs. Cloverleaf is a real commute upgrade.
+    ramp: 0.3, cloverleaf: 0.5,
     forestry: 0.6,
     farm: 0.7,
     school: 0.8, hospital: 0.8, fire_station: 0.5, police_station: 0.4,

@@ -49,6 +49,8 @@ import {
   PROVINCIAL_CAPITAL_DEPTH,
   NATIONAL_CAPITAL_WIDTH,
   NATIONAL_CAPITAL_DEPTH,
+  CLOVERLEAF_WIDTH,
+  CLOVERLEAF_DEPTH,
   LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
   MAYOR_MANSION_DEPTH,
@@ -88,6 +90,12 @@ const UNDO_STACK_LIMIT = 20;
  *  loading any stray autosave that won the race. */
 const RESET_FLAG = 'city-builder-just-reset';
 
+/** Per-block multi-tile build kinds (Alpha 4.15 + 4.17). All four civic
+ *  monuments PLUS the Alpha 4.17 cloverleaf interchange are built using
+ *  the same per-block reservation + payment system. The renderer handles
+ *  each kind's geometry separately. */
+type BigBuildKind = 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf';
+
 /** Human-readable labels for the cost-pill display (Alpha 4.5). Falls
  *  back to the Building key when missing. */
 const TOOL_LABEL: Partial<Record<Tool, string>> = {
@@ -95,6 +103,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   road_avenue: 'Avenue',
   road_highway: 'Highway',
   place_ramp: 'Highway Ramp',
+  place_cloverleaf: 'Cloverleaf',
   place_path: 'Walking Path',
   place_power: 'Power Plant',
   place_water: 'Water Tower',
@@ -314,7 +323,7 @@ export class Game {
    *   5. Change tool / pan / undo / re-init → cancel.
    */
   private pendingMonument: {
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital';
+    kind: BigBuildKind;
     x: number;
     y: number;
     expiresAt: number;
@@ -677,7 +686,8 @@ export class Game {
       // Civic monuments (Alpha 4.12) — single-instance per kind.
       ['place_city_hall', 'city_hall'],
       ['place_provincial_capital', 'provincial_capital'],
-      ['place_national_capital', 'national_capital']
+      ['place_national_capital', 'national_capital'],
+      ['place_cloverleaf', 'cloverleaf']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -719,7 +729,9 @@ export class Game {
       // Mayor's Mansion (Alpha 4.2) — Capital tier unlock.
       'place_mayor_mansion',
       // Civic monuments (Alpha 4.12) — Town / Metro / Capital unlocks.
-      'place_city_hall', 'place_provincial_capital', 'place_national_capital'
+      'place_city_hall', 'place_provincial_capital', 'place_national_capital',
+      // Cloverleaf interchange (Alpha 4.17) — City milestone, alongside highways.
+      'place_cloverleaf'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -889,6 +901,12 @@ export class Game {
       const banned = !isFinite(mult);
       const cost = banned ? monumentBlockCost('national_capital') : Math.round(monumentBlockCost('national_capital') * mult);
       return { label: 'National Capital (block)', cost, banned };
+    }
+    if (tool === 'place_cloverleaf') {
+      const mult = this.council.costMultiplier('cloverleaf');
+      const banned = !isFinite(mult);
+      const cost = banned ? monumentBlockCost('cloverleaf') : Math.round(monumentBlockCost('cloverleaf') * mult);
+      return { label: 'Cloverleaf (block)', cost, banned };
     }
     // Land purchase.
     if (tool === 'buy_land') {
@@ -1661,12 +1679,14 @@ export class Game {
     if (this.tool === 'place_mayor_mansion'
         || this.tool === 'place_city_hall'
         || this.tool === 'place_provincial_capital'
-        || this.tool === 'place_national_capital') {
-      const kind =
+        || this.tool === 'place_national_capital'
+        || this.tool === 'place_cloverleaf') {
+      const kind: BigBuildKind =
         this.tool === 'place_mayor_mansion'      ? 'mayor_mansion' :
         this.tool === 'place_city_hall'          ? 'city_hall' :
         this.tool === 'place_provincial_capital' ? 'provincial_capital' :
-                                                    'national_capital';
+        this.tool === 'place_national_capital'   ? 'national_capital' :
+                                                    'cloverleaf';
       // Per-block placement (Alpha 4.15). If the player taps an
       // existing reservation's unpaid tile, this is a single-tap
       // installment payment. Otherwise it's a first-block placement
@@ -2104,7 +2124,7 @@ export class Game {
    * the bulldoze walk-back. Single source of truth.
    */
   private monumentFootprint(
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+    kind: BigBuildKind
   ): { w: number; h: number; label: string; cost: number } {
     switch (kind) {
       case 'mayor_mansion':
@@ -2119,6 +2139,9 @@ export class Game {
       case 'national_capital':
         return { w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH,
                  label: 'National Capital', cost: BUILDING_COSTS.national_capital };
+      case 'cloverleaf':
+        return { w: CLOVERLEAF_WIDTH, h: CLOVERLEAF_DEPTH,
+                 label: 'Cloverleaf', cost: BUILDING_COSTS.cloverleaf };
     }
   }
 
@@ -2131,21 +2154,25 @@ export class Game {
    * are checked separately at pay time.
    */
   private canPlaceMonumentFootprint(
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    kind: BigBuildKind,
     x: number, y: number
   ): boolean {
     const fp = this.monumentFootprint(kind);
     // One-per-city: a quick existence sweep on the matching tile bit.
-    const occupiedBit: (t: Tile) => boolean =
-      kind === 'mayor_mansion'      ? (t) => t.mayorMansion :
-      kind === 'city_hall'          ? (t) => t.cityHall :
-      kind === 'provincial_capital' ? (t) => t.provincialCapital :
-                                       (t) => t.nationalCapital;
-    for (const t of this.grid.iter()) {
-      if (occupiedBit(t)) return false;
+    // Cloverleaf is multi-instance — the player can build many across
+    // the city, so skip the one-per-city check for that kind.
+    if (kind !== 'cloverleaf') {
+      const occupiedBit: (t: Tile) => boolean =
+        kind === 'mayor_mansion'      ? (t) => t.mayorMansion :
+        kind === 'city_hall'          ? (t) => t.cityHall :
+        kind === 'provincial_capital' ? (t) => t.provincialCapital :
+                                         (t) => t.nationalCapital;
+      for (const t of this.grid.iter()) {
+        if (occupiedBit(t)) return false;
+      }
     }
-    // Cost + council gate. Per-block (Alpha 4.15) — only need to afford
-    // the FIRST installment to start the reservation.
+    // Cost + council gate. Per-block — only need to afford the FIRST
+    // installment to start the reservation.
     const mult = this.council.costMultiplier(kind);
     if (!isFinite(mult)) return false;
     const blockCost = Math.round(monumentBlockCost(kind) * mult);
@@ -2158,7 +2185,7 @@ export class Game {
         if (!t.owned) return false;
         if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') return false;
         if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury || t.mayorMansion) return false;
-        if (t.cityHall || t.provincialCapital || t.nationalCapital) return false;
+        if (t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf) return false;
       }
     }
     return true;
@@ -2169,13 +2196,14 @@ export class Game {
    *  paying an installment vs trying to start a fresh reservation. */
   private tileBelongsToKind(
     t: Tile,
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+    kind: BigBuildKind
   ): boolean {
     switch (kind) {
       case 'mayor_mansion':      return t.mayorMansion;
       case 'city_hall':          return t.cityHall;
       case 'provincial_capital': return t.provincialCapital;
       case 'national_capital':   return t.nationalCapital;
+      case 'cloverleaf':         return t.cloverleaf;
     }
   }
 
@@ -2189,7 +2217,7 @@ export class Game {
    * caller can keep the undo snapshot); false on arm-only or invalid.
    */
   private armOrConfirmMonument(
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    kind: BigBuildKind,
     x: number, y: number
   ): boolean {
     const fp = this.monumentFootprint(kind);
@@ -2201,7 +2229,9 @@ export class Game {
         && this.pendingMonument.y === y) {
       this.clearMonumentPreview();
       if (kind === 'mayor_mansion') return this.placeMayorMansion(x, y);
-      return this.placeCivicMonument(x, y, kind);
+      // All other kinds (civic monuments + cloverleaf) go through the
+      // unified per-block reservation entry point.
+      return this.reserveMonumentFootprint(x, y, kind);
     }
     // First tap (or different tile) → arm preview ghost. Show even if
     // invalid (red ghost) so the player understands why it can't go here.
@@ -2277,7 +2307,7 @@ export class Game {
    *  are paid via `payNextMonumentBlock`. */
   private reserveMonumentFootprint(
     x: number, y: number,
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+    kind: BigBuildKind
   ): boolean {
     const fp = this.monumentFootprint(kind);
     // Pick the tile-bit accessor based on kind.
@@ -2285,19 +2315,25 @@ export class Game {
       if (kind === 'mayor_mansion') t.mayorMansion = v;
       else if (kind === 'city_hall') t.cityHall = v;
       else if (kind === 'provincial_capital') t.provincialCapital = v;
-      else t.nationalCapital = v;
+      else if (kind === 'national_capital') t.nationalCapital = v;
+      else t.cloverleaf = v;
     };
     const readKindBit = (t: Tile): boolean => {
       if (kind === 'mayor_mansion') return t.mayorMansion;
       if (kind === 'city_hall') return t.cityHall;
       if (kind === 'provincial_capital') return t.provincialCapital;
-      return t.nationalCapital;
+      if (kind === 'national_capital') return t.nationalCapital;
+      return t.cloverleaf;
     };
-    // One-per-city sweep.
-    for (const t of this.grid.iter()) {
-      if (readKindBit(t)) {
-        this.onStatusMessage?.(`Only one ${fp.label} per city`);
-        return false;
+    // One-per-city sweep — but cloverleaves are MULTI-instance (the
+    // player may want one at every major intersection), so skip the
+    // existence check for that kind.
+    if (kind !== 'cloverleaf') {
+      for (const t of this.grid.iter()) {
+        if (readKindBit(t)) {
+          this.onStatusMessage?.(`Only one ${fp.label} per city`);
+          return false;
+        }
       }
     }
     // Cost + council gate. Per-block (Alpha 4.15) — first installment only.
@@ -2332,7 +2368,7 @@ export class Game {
         return false;
       }
       if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury
-          || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital) {
+          || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf) {
         this.onStatusMessage?.(`${fp.label} needs flat grass land`);
         return false;
       }
@@ -2366,7 +2402,7 @@ export class Game {
    * the merged finished geometry on the next draw.
    */
   private payNextMonumentBlock(
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital',
+    kind: BigBuildKind,
     x: number, y: number
   ): boolean {
     const tile = this.grid.get(x, y);
@@ -2401,6 +2437,13 @@ export class Game {
       // All blocks paid → flip the anchor's `building` to the kind so the
       // renderer dispatches the merged finished geometry on next draw.
       anchor.building = kind;
+      // Cloverleaf-specific completion: populate the road graph + mark
+      // all tiles as ramps so cars route through smoothly (Alpha 4.17).
+      // The interchange becomes a real road network with the 4 cardinal
+      // edges as highway endpoints the player connects their highways to.
+      if (kind === 'cloverleaf') {
+        this.finalizeCloverleaf(anchor.x, anchor.y);
+      }
       this.services.recompute(this.grid);
       this.maybeOfferPhotoOp(kind);
       this.onStatusMessage?.(`${fp.label} complete! 🎉`);
@@ -2408,8 +2451,90 @@ export class Game {
       this.onStatusMessage?.(`${fp.label} · ${paidCount} of ${totalCount} blocks placed`);
     }
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.renderer.drawRoads(this.grid);
     this.refreshMonumentGhostWeb();
     return true;
+  }
+
+  /**
+   * Cloverleaf interchange completion (Alpha 4.17). Once all 25 blocks are
+   * paid, the anchor's `building` is set to `'cloverleaf'` and this method
+   * runs to populate the road graph so cars can route through. The
+   * cloverleaf layout (5×5 with anchor at top-left = (ax, ay)):
+   *
+   *   . . H . .         column 2 + row 2 = highway through-lanes
+   *   . r H r .         r = loop ramp tiles
+   *   H H X H H         X = center crossover (bridged)
+   *   . r H r .
+   *   . . H . .
+   *
+   * 4 cardinal endpoints (top-row col 2, bottom-row col 2, left-col row 2,
+   * right-col row 2) are the connection points the player connects their
+   * existing highways to. Every road tile in the cloverleaf gets
+   * `ramp = true` so cars skip stops + collision rolls through the
+   * whole interchange.
+   */
+  private finalizeCloverleaf(ax: number, ay: number): void {
+    // Layout: which (dx, dy) offsets become roads, and at what tier.
+    // The center column (dx=2) and center row (dy=2) are highway through-
+    // lanes; the inner ring around the center is loop ramps; the corners
+    // and quadrant centers stay grass infield (no road bit set).
+    const ROAD_OFFSETS: Array<{ dx: number; dy: number; tier: 'highway' | 'avenue' }> = [
+      // Highway through-lanes (column 2 + row 2)
+      { dx: 2, dy: 0, tier: 'highway' }, { dx: 2, dy: 1, tier: 'highway' },
+      { dx: 2, dy: 2, tier: 'highway' },   // center crossover
+      { dx: 2, dy: 3, tier: 'highway' }, { dx: 2, dy: 4, tier: 'highway' },
+      { dx: 0, dy: 2, tier: 'highway' }, { dx: 1, dy: 2, tier: 'highway' },
+      { dx: 3, dy: 2, tier: 'highway' }, { dx: 4, dy: 2, tier: 'highway' },
+      // Loop ramps — the 4 tiles touching the center diagonally
+      { dx: 1, dy: 1, tier: 'avenue' }, { dx: 3, dy: 1, tier: 'avenue' },
+      { dx: 1, dy: 3, tier: 'avenue' }, { dx: 3, dy: 3, tier: 'avenue' },
+    ];
+    // Step 1: lay road tiles + ramp bits.
+    for (const { dx, dy, tier } of ROAD_OFFSETS) {
+      const tx = ax + dx;
+      const ty = ay + dy;
+      const t = this.grid.get(tx, ty);
+      if (!t) continue;
+      // setRoad clears the cloverleaf bit (it's in the not-road branch),
+      // so we need to RE-set it after. Same for bigBuildBlockPaid + the
+      // anchor's building value if this is the anchor.
+      const wasAnchor = (dx === 0 && dy === 0);
+      const wasPaid = t.bigBuildBlockPaid;
+      this.grid.setRoad(tx, ty, true, tier);
+      // setRoad clears highway dir; for our through-lanes set a sensible
+      // default (column 2 = N→S = dir 4, row 2 = E→W = dir 6). Loop
+      // tiles use the avenue tier (no highway dir).
+      if (tier === 'highway') {
+        if (dx === 2 && dy !== 2) this.grid.setHighwayDir(tx, ty, 4);
+        else if (dy === 2 && dx !== 2) this.grid.setHighwayDir(tx, ty, 6);
+        // Center crossover: arbitrarily use N→S
+        else this.grid.setHighwayDir(tx, ty, 4);
+      }
+      t.cloverleaf = true;     // re-set the marker bit
+      t.ramp = true;           // smooth merge behaviour through the whole interchange
+      t.bigBuildBlockPaid = wasPaid;
+      if (wasAnchor) t.building = 'cloverleaf';
+    }
+    // Step 2: add internal road edges connecting adjacent road tiles
+    // (4-connected — keeps routing simple). The road graph rebuilder
+    // discovers these on its next pass; we just lay the edges now.
+    for (let i = 0; i < ROAD_OFFSETS.length; i++) {
+      const a = ROAD_OFFSETS[i]!;
+      for (let j = i + 1; j < ROAD_OFFSETS.length; j++) {
+        const b = ROAD_OFFSETS[j]!;
+        const adj = (Math.abs(a.dx - b.dx) + Math.abs(a.dy - b.dy)) === 1;
+        if (!adj) continue;
+        this.grid.setRoadEdge(ax + a.dx, ay + a.dy, ax + b.dx, ay + b.dy, true,
+                              // Use the lower-tier of the two for the edge
+                              (a.tier === 'highway' && b.tier === 'highway') ? 'highway' : 'avenue');
+      }
+    }
+    // Step 3: rebuild the road graph + path graph + traffic-light
+    // controller so the new edges + tiles are picked up next sim tick.
+    this.roadGraph.rebuild(this.grid);
+    this.pathGraph.rebuild(this.grid);
+    this.trafficLights.rebuild(this.grid);
   }
 
   /** If the active tool is a big-building tool, redraw the ghost web so
@@ -2423,6 +2548,7 @@ export class Game {
         case 'place_city_hall':          return 'city_hall' as const;
         case 'place_provincial_capital': return 'provincial_capital' as const;
         case 'place_national_capital':   return 'national_capital' as const;
+        case 'place_cloverleaf':         return 'cloverleaf' as const;
         default: return null;
       }
     })();
@@ -2433,19 +2559,9 @@ export class Game {
     this.renderer.showMonumentGhostWeb(this.grid, kindFromTool);
   }
 
-  /**
-   * Civic monument FIRST-BLOCK placement (Alpha 4.12; per-block in 4.15).
-   * Delegates to `reserveMonumentFootprint` which handles all the
-   * one-per-city / footprint / treasury checks + reservation. The
-   * anchor's `building` value flips to `kind` only after the player
-   * has paid for every footprint block via `payNextMonumentBlock`.
-   */
-  private placeCivicMonument(
-    x: number, y: number,
-    kind: 'city_hall' | 'provincial_capital' | 'national_capital'
-  ): boolean {
-    return this.reserveMonumentFootprint(x, y, kind);
-  }
+  // (placeCivicMonument wrapper deleted in Alpha 4.17 — its single caller
+  //  `armOrConfirmMonument` now invokes `reserveMonumentFootprint` directly
+  //  for all kinds including the new cloverleaf.)
 
   /**
    * Luxury-paint pre-check: is `(x,y)` a tile that could become half of a
@@ -3162,6 +3278,39 @@ export class Game {
             peer.nationalCapital = false;
             peer.bigBuildBlockPaid = false;
             if (peer.building === 'national_capital') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
+      }
+      // Cloverleaf interchange (Alpha 4.17). Same walk-back-to-anchor
+      // pattern. Bulldozing any of the 25 footprint tiles tears down
+      // the entire interchange. Road tiles + edges in the footprint
+      // are also cleared (setRoad clears the per-tile bits but the
+      // edges need an explicit pass since they're stored in the grid's
+      // edge-graph, not on the tiles).
+      if (tile.cloverleaf) {
+        let ax = x, ay = y;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.cloverleaf) ax--;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.cloverleaf) ay--;
+        for (let dy = 0; dy < CLOVERLEAF_DEPTH; dy++) {
+          for (let dx = 0; dx < CLOVERLEAF_WIDTH; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.cloverleaf) continue;
+            // Tear down road state on this tile if it became a road
+            // during finalizeCloverleaf.
+            if (peer.road) {
+              for (const ek of this.grid.incidentRoadEdges(peer.x, peer.y)) {
+                this.grid.setRoadEdgeByKey(ek, false);
+              }
+              this.grid.setRoad(peer.x, peer.y, false);
+              roadsChanged = true;
+            }
+            peer.cloverleaf = false;
+            peer.ramp = false;
+            peer.bigBuildBlockPaid = false;
+            if (peer.building === 'cloverleaf') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
           }

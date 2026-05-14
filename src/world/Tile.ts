@@ -239,4 +239,21 @@ export class Tile {
    * buildings stay completed across the upgrade.
    */
   bigBuildBlockPaid = false;
+  /**
+   * Cloverleaf interchange bit (Alpha 4.17). When true, this tile is part
+   * of a 5×5 cloverleaf prefab — a multi-tile interchange built via the
+   * per-block placement system (extension of the bigBuild infrastructure
+   * from Alpha 4.15). The lex-smallest tile of the 25-tile footprint
+   * is the anchor, carrying `building = 'cloverleaf'` once all blocks
+   * are paid; until then the anchor's `building` is `'none'` and the
+   * renderer dispatches per-tile construction sites for paid blocks +
+   * ghost web for unpaid blocks (matches monument flow).
+   *
+   * On completion the cloverleaf becomes a fully-functional interchange:
+   * 4 cardinal endpoint tiles are highway road tiles the player
+   * connects their roads to, internal loop tiles act as smooth-merge
+   * ramps, and the remaining tiles render as grass infield + bridge
+   * supports.
+   */
+  cloverleaf = false;
 }

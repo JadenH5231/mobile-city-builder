@@ -22,18 +22,18 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 24 (Alpha 4.16 — Highway interchange ramps): adds `ramp` per
- * tile for the new highway-to-local/avenue merge ramps. v23-and-earlier
- * saves load with the bit defaulted to `false` everywhere (no ramps
- * existed pre-4.16).
+ * Schema 25 (Alpha 4.17 — Cloverleaf interchanges): adds `cloverleaf`
+ * per tile for the new 5×5 cloverleaf prefab interchange built via the
+ * per-block placement system. v24-and-earlier saves load with the bit
+ * defaulted to `false` everywhere (no cloverleaves existed pre-4.17).
  *
- * Earlier: v23 per-block big-build, v22 civic monuments, v21 mansion,
- * v20 beautification, v19 land ownership, v18 skyscrapers, v17
- * districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
+ * Earlier: v24 ramps, v23 per-block big-build, v22 civic monuments,
+ * v21 mansion, v20 beautification, v19 land ownership, v18 skyscrapers,
+ * v17 districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
  * v12 bridges, v11 stats, v10 events, v9 highestPop, v8 luxury,
  * v7 elevation+bridge.
  */
-const SCHEMA = 24;
+const SCHEMA = 25;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -108,6 +108,9 @@ export interface TileSnapshot {
   /** Highway interchange ramp bit (Alpha 4.16 / schema 24+). v23-and-
    *  earlier saves load with `false` (no ramps existed pre-4.16). */
   ramp?: boolean;
+  /** Cloverleaf interchange bit (Alpha 4.17 / schema 25+). v24-and-
+   *  earlier saves load with `false` (no cloverleaves existed pre-4.17). */
+  cloverleaf?: boolean;
 }
 
 export interface SaveData {
@@ -355,7 +358,8 @@ export function serialize(
       provincialCapital: t.provincialCapital,
       nationalCapital: t.nationalCapital,
       bigBuildBlockPaid: t.bigBuildBlockPaid,
-      ramp: t.ramp
+      ramp: t.ramp,
+      cloverleaf: t.cloverleaf
     };
   }
   const edges: number[] = [];
@@ -521,6 +525,8 @@ export function applySave(
     // Highway interchange ramp bit (schema 24+). v23-and-earlier saves
     // load with `false` since no ramps existed before Alpha 4.16.
     t.ramp = snap.ramp ?? false;
+    // Cloverleaf bit (schema 25+). v24-and-earlier load with `false`.
+    t.cloverleaf = snap.cloverleaf ?? false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

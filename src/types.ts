@@ -315,6 +315,20 @@ export const MAX_TOURIST_VEHICLES = 50;
  */
 export const MAX_SERVICE_VEHICLES = 20;
 /**
+ * Farm tractor visual polish (Alpha 4.19). A contiguous cluster of this
+ * many farm tiles or more gets ONE animated tractor that drives a
+ * boustrophedon (snake) path across the cluster — looks like plowing /
+ * harvesting. Pure visual decoration; no save state, no road graph
+ * interaction. Cluster < 20 tiles → no tractor (saves render budget
+ * + small farms wouldn't realistically have one).
+ */
+export const FARM_TRACTOR_MIN_CLUSTER = 20;
+/** Max tractors rendered concurrently. Each tractor is ~14 baked
+ *  parts in the body InstancedMesh; cap keeps the per-frame matrix
+ *  writes bounded on a map with many large farms. */
+export const MAX_TRACTORS = 16;
+
+/**
  * Motorcade event interval, in sim months. Production cadence: every
  * 48 months = once every 4 years (Alpha 4.15.3 — confirmed working
  * after the 4.15.1 deadlock fix and the 4.15.2 visual rework, so

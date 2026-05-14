@@ -1238,6 +1238,10 @@ export class Game {
       this.renderer.updateFerries(this.ferries, this.grid);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
+      // Farm tractor animation (Alpha 4.19). One tractor per large
+      // farm cluster, animated along a boustrophedon path through
+      // the cluster's tiles. Pure visual; no sim/road interaction.
+      this.renderer.updateTractors(dt, this.grid);
       // Heatmap rebuild is the most expensive optional layer (full road
       // mesh rebuild). Throttle to 5 Hz when visible — the EMA only moves
       // that fast anyway. Memory: feedback_traffic_pressure (heatmap must

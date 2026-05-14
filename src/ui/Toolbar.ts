@@ -105,6 +105,14 @@ const ICON_TIER_HIGH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <rect x="4" y="4" width="16" height="16" stroke="currentColor"
         stroke-width="1.8" fill="none"/>
 </svg>`;
+/** Tier-Max icon (Alpha 4.18) — bigger filled rect with a horizontal
+ *  divider line, suggesting a mid-rise mass divided into floors. */
+const ICON_TIER_MAX = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="3" y="2" width="18" height="20" stroke="currentColor"
+        stroke-width="2" fill="none"/>
+  <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="3" y1="15" x2="21" y2="15" stroke="currentColor" stroke-width="1.4"/>
+</svg>`;
 const ICON_TIER_LUX = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <rect x="3" y="14" width="6" height="6" stroke="currentColor"
         stroke-width="1.8" fill="none"/>
@@ -295,6 +303,8 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'residential_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'residential_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'residential_high',   label: 'High', icon: ICON_TIER_HIGH },
+      // Level 4 / Max density (Alpha 4.18). Sits between High and Sky.
+      { kind: 'tool', tool: 'residential_max',    label: 'Max',  icon: ICON_TIER_MAX },
       { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX },
       { kind: 'tool', tool: 'residential_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
@@ -309,6 +319,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'commercial_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'commercial_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'commercial_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'commercial_max',    label: 'Max',  icon: ICON_TIER_MAX },
       { kind: 'tool', tool: 'commercial_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },
@@ -321,7 +332,8 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     members: [
       { kind: 'tool', tool: 'industrial_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'industrial_medium', label: 'Med',  icon: ICON_TIER_MED },
-      { kind: 'tool', tool: 'industrial_high',   label: 'High', icon: ICON_TIER_HIGH }
+      { kind: 'tool', tool: 'industrial_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'industrial_max',    label: 'Max',  icon: ICON_TIER_MAX }
     ]
   },
   {
@@ -334,6 +346,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'mixed_low',    label: 'Low',  icon: ICON_TIER_LOW },
       { kind: 'tool', tool: 'mixed_medium', label: 'Med',  icon: ICON_TIER_MED },
       { kind: 'tool', tool: 'mixed_high',   label: 'High', icon: ICON_TIER_HIGH },
+      { kind: 'tool', tool: 'mixed_max',    label: 'Max',  icon: ICON_TIER_MAX },
       { kind: 'tool', tool: 'mixed_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },

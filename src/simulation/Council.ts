@@ -46,14 +46,17 @@ export interface FactionStances {
   road_local: number;
   road_avenue: number;
   road_highway: number;
-  // Residential / Commercial / Industrial × Low / Medium / High.
-  r_low: number;     r_medium: number;  r_high: number;
-  c_low: number;     c_medium: number;  c_high: number;
-  i_low: number;     i_medium: number;  i_high: number;
+  // Residential / Commercial / Industrial × Low / Medium / High / Max.
+  // Max (Alpha 4.18) is the new mid-rise tier between L3 and skyscrapers.
+  // Each row's Max value is more polarized than its High value: factions
+  // that liked High love Max, factions that hated High hate Max more.
+  r_low: number;     r_medium: number;  r_high: number;  r_max: number;
+  c_low: number;     c_medium: number;  c_high: number;  c_max: number;
+  i_low: number;     i_medium: number;  i_high: number;  i_max: number;
   /** Mixed-use (Alpha 2.0). Each tile is half-residents, half-commercial,
    *  so stances usually average their R and C rows but with a thumb on the
    *  scale for factions that love (or hate) walkable density specifically. */
-  mu_low: number;    mu_medium: number; mu_high: number;
+  mu_low: number;    mu_medium: number; mu_high: number; mu_max: number;
   /** Luxury low-density residential (Alpha 2.5). 2-tile pair. NIMBYs and
    *  hometown love it (rich, low-density, screens out density), taxpayers
    *  like the revenue, working-families and yimbys hate it (replaces
@@ -153,10 +156,10 @@ export type StanceKey = keyof FactionStances;
 export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   nimbys: {
     road_local: 0.0, road_avenue: -0.3, road_highway: -0.7,
-    r_low: 0.4, r_medium: -0.5, r_high: -1.0,
-    c_low: -0.4, c_medium: -0.6, c_high: -0.8,
-    i_low: -0.7, i_medium: -0.9, i_high: -1.0,
-    mu_low: 0.0, mu_medium: -0.3, mu_high: -0.7,
+    r_low: 0.4, r_medium: -0.5, r_high: -1.0, r_max: -1.0,
+    c_low: -0.4, c_medium: -0.6, c_high: -0.8, c_max: -1.0,
+    i_low: -0.7, i_medium: -0.9, i_high: -1.0, i_max: -1.0,
+    mu_low: 0.0, mu_medium: -0.3, mu_high: -0.7, mu_max: -0.9,
     r_lux: 0.9,
     power_plant: -0.7, water_tower: 0.0, park: 0.6,
     bus_stop: -0.3, bus_depot: -0.5, stop_sign: 0.4,
@@ -180,10 +183,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   yimbys: {
     road_local: -0.1, road_avenue: 0.3, road_highway: 0.0,
-    r_low: -0.5, r_medium: 0.4, r_high: 0.8,
-    c_low: 0.0, c_medium: 0.4, c_high: 0.7,
-    i_low: 0.0, i_medium: 0.2, i_high: 0.3,
-    mu_low: 0.2, mu_medium: 0.6, mu_high: 0.9,
+    r_low: -0.5, r_medium: 0.4, r_high: 0.8, r_max: 1.0,
+    c_low: 0.0, c_medium: 0.4, c_high: 0.7, c_max: 0.9,
+    i_low: 0.0, i_medium: 0.2, i_high: 0.3, i_max: 0.4,
+    mu_low: 0.2, mu_medium: 0.6, mu_high: 0.9, mu_max: 1.0,
     r_lux: -0.8,
     power_plant: 0.0, water_tower: 0.2, park: 0.3,
     bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2,
@@ -210,10 +213,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   environmentalists: {
     road_local: -0.2, road_avenue: -0.4, road_highway: -0.8,
-    r_low: 0.0, r_medium: 0.0, r_high: 0.1,
-    c_low: 0.0, c_medium: 0.0, c_high: 0.0,
-    i_low: -0.5, i_medium: -0.7, i_high: -1.0,
-    mu_low: 0.1, mu_medium: 0.3, mu_high: 0.4,
+    r_low: 0.0, r_medium: 0.0, r_high: 0.1, r_max: 0.2,
+    c_low: 0.0, c_medium: 0.0, c_high: 0.0, c_max: 0.0,
+    i_low: -0.5, i_medium: -0.7, i_high: -1.0, i_max: -1.0,
+    mu_low: 0.1, mu_medium: 0.3, mu_high: 0.4, mu_max: 0.5,
     r_lux: -0.3,
     power_plant: -0.9, water_tower: 0.2, park: 1.0,
     bus_stop: 0.8, bus_depot: 0.8, stop_sign: 0.1,
@@ -240,10 +243,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   hometown: {
     road_local: 0.1, road_avenue: -0.3, road_highway: -0.6,
-    r_low: 0.4, r_medium: -0.2, r_high: -0.9,
-    c_low: 0.2, c_medium: -0.3, c_high: -0.7,
-    i_low: -0.3, i_medium: -0.5, i_high: -0.8,
-    mu_low: 0.0, mu_medium: -0.4, mu_high: -0.8,
+    r_low: 0.4, r_medium: -0.2, r_high: -0.9, r_max: -1.0,
+    c_low: 0.2, c_medium: -0.3, c_high: -0.7, c_max: -0.9,
+    i_low: -0.3, i_medium: -0.5, i_high: -0.8, i_max: -0.9,
+    mu_low: 0.0, mu_medium: -0.4, mu_high: -0.8, mu_max: -1.0,
     r_lux: 0.6,
     power_plant: -0.4, water_tower: 0.0, park: 0.5,
     bus_stop: -0.2, bus_depot: -0.3, stop_sign: 0.2,
@@ -270,10 +273,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   chamber: {
     road_local: 0.1, road_avenue: 0.3, road_highway: 0.4,
-    r_low: 0.0, r_medium: 0.2, r_high: 0.3,
-    c_low: 0.5, c_medium: 0.7, c_high: 0.9,
-    i_low: 0.6, i_medium: 0.7, i_high: 0.8,
-    mu_low: 0.2, mu_medium: 0.5, mu_high: 0.7,
+    r_low: 0.0, r_medium: 0.2, r_high: 0.3, r_max: 0.4,
+    c_low: 0.5, c_medium: 0.7, c_high: 0.9, c_max: 1.0,
+    i_low: 0.6, i_medium: 0.7, i_high: 0.8, i_max: 0.9,
+    mu_low: 0.2, mu_medium: 0.5, mu_high: 0.7, mu_max: 0.9,
     r_lux: 0.4,
     power_plant: 0.4, water_tower: 0.3, park: 0.1,
     bus_stop: 0.1, bus_depot: 0.2, stop_sign: -0.1,
@@ -299,10 +302,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   transit: {
     road_local: -0.1, road_avenue: 0.3, road_highway: -0.5,
-    r_low: -0.2, r_medium: 0.4, r_high: 0.6,
-    c_low: 0.0, c_medium: 0.3, c_high: 0.5,
-    i_low: 0.0, i_medium: 0.0, i_high: 0.0,
-    mu_low: 0.3, mu_medium: 0.6, mu_high: 0.8,
+    r_low: -0.2, r_medium: 0.4, r_high: 0.6, r_max: 0.8,
+    c_low: 0.0, c_medium: 0.3, c_high: 0.5, c_max: 0.7,
+    i_low: 0.0, i_medium: 0.0, i_high: 0.0, i_max: 0.0,
+    mu_low: 0.3, mu_medium: 0.6, mu_high: 0.8, mu_max: 1.0,
     r_lux: -0.5,
     power_plant: -0.3, water_tower: 0.1, park: 0.4,
     bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3,
@@ -327,10 +330,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   drivers: {
     road_local: 0.5, road_avenue: 0.8, road_highway: 1.0,
-    r_low: 0.0, r_medium: 0.0, r_high: -0.1,
-    c_low: 0.3, c_medium: 0.4, c_high: 0.4,
-    i_low: 0.2, i_medium: 0.2, i_high: 0.2,
-    mu_low: 0.0, mu_medium: -0.1, mu_high: -0.2,
+    r_low: 0.0, r_medium: 0.0, r_high: -0.1, r_max: -0.2,
+    c_low: 0.3, c_medium: 0.4, c_high: 0.4, c_max: 0.4,
+    i_low: 0.2, i_medium: 0.2, i_high: 0.2, i_max: 0.2,
+    mu_low: 0.0, mu_medium: -0.1, mu_high: -0.2, mu_max: -0.3,
     r_lux: 0.3,
     power_plant: 0.1, water_tower: 0.0, park: 0.0,
     bus_stop: -0.7, bus_depot: -0.8, stop_sign: -0.4,
@@ -357,10 +360,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   taxpayers: {
     road_local: -0.2, road_avenue: -0.3, road_highway: -0.5,
-    r_low: 0.2, r_medium: 0.3, r_high: 0.4,
-    c_low: 0.4, c_medium: 0.5, c_high: 0.5,
-    i_low: 0.4, i_medium: 0.4, i_high: 0.5,
-    mu_low: 0.3, mu_medium: 0.4, mu_high: 0.4,
+    r_low: 0.2, r_medium: 0.3, r_high: 0.4, r_max: 0.5,
+    c_low: 0.4, c_medium: 0.5, c_high: 0.5, c_max: 0.6,
+    i_low: 0.4, i_medium: 0.4, i_high: 0.5, i_max: 0.6,
+    mu_low: 0.3, mu_medium: 0.4, mu_high: 0.4, mu_max: 0.5,
     r_lux: 0.7,
     power_plant: -0.4, water_tower: -0.2, park: -0.2,
     bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2,
@@ -385,10 +388,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   safer_streets: {
     road_local: 0.1, road_avenue: 0.0, road_highway: -0.4,
-    r_low: 0.2, r_medium: 0.2, r_high: 0.2,
-    c_low: 0.2, c_medium: 0.2, c_high: 0.2,
-    i_low: -0.2, i_medium: -0.3, i_high: -0.4,
-    mu_low: 0.2, mu_medium: 0.3, mu_high: 0.3,
+    r_low: 0.2, r_medium: 0.2, r_high: 0.2, r_max: 0.2,
+    c_low: 0.2, c_medium: 0.2, c_high: 0.2, c_max: 0.2,
+    i_low: -0.2, i_medium: -0.3, i_high: -0.4, i_max: -0.5,
+    mu_low: 0.2, mu_medium: 0.3, mu_high: 0.3, mu_max: 0.4,
     r_lux: 0.2,
     power_plant: -0.3, water_tower: 0.4, park: 0.7,
     bus_stop: 0.3, bus_depot: 0.3, stop_sign: 1.0,
@@ -415,10 +418,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
   },
   working_families: {
     road_local: 0.1, road_avenue: 0.2, road_highway: 0.1,
-    r_low: 0.4, r_medium: 0.5, r_high: 0.4,
-    c_low: 0.5, c_medium: 0.6, c_high: 0.5,
-    i_low: 0.7, i_medium: 0.7, i_high: 0.6,
-    mu_low: 0.4, mu_medium: 0.5, mu_high: 0.4,
+    r_low: 0.4, r_medium: 0.5, r_high: 0.4, r_max: 0.3,
+    c_low: 0.5, c_medium: 0.6, c_high: 0.5, c_max: 0.4,
+    i_low: 0.7, i_medium: 0.7, i_high: 0.6, i_max: 0.5,
+    mu_low: 0.4, mu_medium: 0.5, mu_high: 0.4, mu_max: 0.3,
     r_lux: -0.6,
     power_plant: 0.2, water_tower: 0.3, park: 0.4,
     bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3,

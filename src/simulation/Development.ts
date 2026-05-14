@@ -11,8 +11,12 @@ const BASE_RATE = 0.06;
  * feedback_density_curve.
  */
 const L0_FLOOR = 0.3;
-/** Pressure required to promote from L0→L1, L1→L2, L2→L3 respectively. */
-const PROMOTION_THRESHOLDS: readonly number[] = [0.4, 0.7, 2.5];
+/** Pressure required to promote from L0→L1, L1→L2, L2→L3, L3→L4
+ *  (Alpha 4.18). The L3→L4 threshold is much higher (5.0) so L4
+ *  mid-rises only emerge in genuinely high-demand areas — they're
+ *  expensive to fit in the streetscape and shouldn't appear on every
+ *  high-zoned tile. */
+const PROMOTION_THRESHOLDS: readonly number[] = [0.4, 0.7, 2.5, 5.0];
 /** Services-allowed cap when power+water+park aren't all present. L3 is the
  *  service-gated payoff *if the player also zoned for high density*. */
 const SERVICES_CAP_WITHOUT_PARK = 2;

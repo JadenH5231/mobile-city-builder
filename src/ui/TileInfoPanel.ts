@@ -20,7 +20,7 @@ export interface TileInfo {
   stopSign: boolean;
   trafficLight: boolean;
   zone: Zone;
-  zoneCap: 0 | 1 | 2 | 3;
+  zoneCap: 0 | 1 | 2 | 3 | 4;
   density: number;
   /** Building age in months (Alpha 2.16). 0 means brand new or unbuilt. */
   ageMonths: number;
@@ -160,7 +160,7 @@ function headlineFor(info: TileInfo): string {
   if (info.zone !== 'none') {
     const tierLabel =
       info.luxury ? 'luxury' :
-      info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'medium' : info.zoneCap === 3 ? 'high' : '';
+      info.zoneCap === 1 ? 'low' : info.zoneCap === 2 ? 'medium' : info.zoneCap === 3 ? 'high' : info.zoneCap === 4 ? 'max' : '';
     const zoneLabel = tierLabel ? `${zoneShortName(info.zone)} ${tierLabel}` : zoneShortName(info.zone);
     return info.density > 0 ? `${zoneLabel} L${info.density} · ${info.terrain}` : `${zoneLabel} · ${info.terrain}`;
   }

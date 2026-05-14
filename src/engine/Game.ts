@@ -281,7 +281,7 @@ export class Game {
   /** Road tool: tile indices flipped from road=false to road=true. */
   private readonly strokeStubs = new Set<number>();
   /** Zone tool: per-tile snapshot of original (zone, cap) for revert. */
-  private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 }>();
+  private readonly strokeZones = new Map<number, { zone: Zone; cap: 0 | 1 | 2 | 3 | 4 }>();
   /** Path tool: tile indices flipped from path=false to path=true this stroke. */
   private readonly strokePaths = new Set<number>();
   /** Bulldoze tool: per-tile snapshot of all destroyed state for revert. */
@@ -650,6 +650,12 @@ export class Game {
       ['mixed_low', 'mu_low'],
       ['mixed_medium', 'mu_medium'],
       ['mixed_high', 'mu_high'],
+      // Level 4 / Max density (Alpha 4.18). Each maps to its r_max /
+      // c_max / i_max / mu_max stance row added in this release.
+      ['residential_max', 'r_max'],
+      ['commercial_max', 'c_max'],
+      ['industrial_max', 'i_max'],
+      ['mixed_max', 'mu_max'],
       ['place_power', 'power_plant'],
       ['place_water', 'water_tower'],
       ['place_park', 'park'],
@@ -710,6 +716,8 @@ export class Game {
       'commercial_low', 'commercial_medium', 'commercial_high',
       'industrial_low', 'industrial_medium', 'industrial_high',
       'mixed_low', 'mixed_medium', 'mixed_high',
+      // Level 4 / Max density tools (Alpha 4.18). Unlocked at Metro.
+      'residential_max', 'commercial_max', 'industrial_max', 'mixed_max',
       'place_power', 'place_water', 'place_park',
       'place_forestry', 'place_farm',
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
@@ -2949,10 +2957,11 @@ export class Game {
 
   // --- Zone tool stroke ---------------------------------------------------
 
+  // applyZoneStroke widened to 1|2|3|4 in Alpha 4.18 for the Max tier.
   private applyZoneStroke(
     path: { x: number; y: number }[],
     zone: Exclude<Zone, 'none'>,
-    cap: 1 | 2 | 3
+    cap: 1 | 2 | 3 | 4
   ): void {
     const desired = new Set<number>();
     for (const p of path) desired.add(this.tileIndex(p.x, p.y));
@@ -2962,7 +2971,7 @@ export class Game {
     // Council zoning-change gate: re-zoning an already-zoned tile to a
     // different zone-or-tier needs ≥2 councillors with non-negative stance.
     // Painting fresh grass is always allowed. Pre-compute once per stroke.
-    const tier: ZoneTier = cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high';
+    const tier: ZoneTier = cap === 1 ? 'low' : cap === 2 ? 'medium' : cap === 3 ? 'high' : 'max';
     const changeAllowed = this.council.canChangeZone(zone, tier);
 
     // Revert tiles whose zone we changed in earlier moves but that no longer
@@ -3008,7 +3017,7 @@ export class Game {
         : zone === 'commercial' ? 'Commercial'
         : zone === 'industrial' ? 'Industrial'
         : 'Mixed-use';
-      const tierName = cap === 1 ? 'low' : cap === 2 ? 'medium' : 'high';
+      const tierName = cap === 1 ? 'low' : cap === 2 ? 'medium' : cap === 3 ? 'high' : 'max';
       this.onStatusMessage?.(
         `Council blocked re-zoning to ${zoneName} ${tierName} — needs ≥ 2 councillor approvals.`
       );
@@ -3365,8 +3374,8 @@ interface BulldozedSnapshot {
   stopSign: boolean;
   trafficLight: boolean;
   zone: Zone;
-  /** Player-set density cap (0..3) at bulldoze time. Restored alongside zone. */
-  zoneCap: 0 | 1 | 2 | 3;
+  /** Player-set density cap (0..4) at bulldoze time. Restored alongside zone. */
+  zoneCap: 0 | 1 | 2 | 3 | 4;
   /** Density at bulldoze time — restored verbatim if the rubber band retreats. */
   density: number;
   developmentPressure: number;

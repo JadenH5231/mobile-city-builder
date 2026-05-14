@@ -22,18 +22,20 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 25 (Alpha 4.17 — Cloverleaf interchanges): adds `cloverleaf`
- * per tile for the new 5×5 cloverleaf prefab interchange built via the
- * per-block placement system. v24-and-earlier saves load with the bit
- * defaulted to `false` everywhere (no cloverleaves existed pre-4.17).
+ * Schema 26 (Alpha 4.18 — Level 4 / Max density tier): widens
+ * `zoneCap` and `density` to allow value 4 for the new mid-rise tier
+ * bridging L3 and skyscrapers. The on-disk format is unchanged (both
+ * fields were already serialized as plain numbers); the schema bump
+ * just signals the new value range. v25-and-earlier saves load fine —
+ * they never have density=4 or zoneCap=4 tiles.
  *
- * Earlier: v24 ramps, v23 per-block big-build, v22 civic monuments,
- * v21 mansion, v20 beautification, v19 land ownership, v18 skyscrapers,
- * v17 districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
- * v12 bridges, v11 stats, v10 events, v9 highestPop, v8 luxury,
- * v7 elevation+bridge.
+ * Earlier: v25 cloverleaves, v24 ramps, v23 per-block big-build,
+ * v22 civic monuments, v21 mansion, v20 beautification, v19 land
+ * ownership, v18 skyscrapers, v17 districts, v16 bonds, v15 tourism,
+ * v14 patina, v13 achievements, v12 bridges, v11 stats, v10 events,
+ * v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 25;
+const SCHEMA = 26;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -64,7 +66,7 @@ export interface TileSnapshot {
   bridge?: boolean;
   zone: Zone;
   /** Player-set density cap (0..3). 0 means unzoned. Schema 3+. */
-  zoneCap?: 0 | 1 | 2 | 3;
+  zoneCap?: 0 | 1 | 2 | 3 | 4;
   /** Luxury low-density bit. Schema 8+. */
   luxury?: boolean;
   density: number;

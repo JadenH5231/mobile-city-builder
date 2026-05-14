@@ -208,8 +208,11 @@ export class Economy {
     if (this.wealthSurtax > 0) {
       for (const t of grid.iter()) {
         if (t.density === 0) continue;
-        if (t.zone === 'residential' && (t.density === 3 || t.luxury)) surtaxResidents += residentsForTile(t);
-        else if (t.zone === 'commercial' && t.density === 3) surtaxCJobs += commercialJobsForTile(t);
+        // Wealth surtax applies to L3+ residents/jobs (Alpha 4.18 widens
+        // from `=== 3` to `>= 3` so L4 is also captured — L4 residents
+        // / jobs are even higher density and should also be taxed).
+        if (t.zone === 'residential' && (t.density >= 3 || t.luxury)) surtaxResidents += residentsForTile(t);
+        else if (t.zone === 'commercial' && t.density >= 3) surtaxCJobs += commercialJobsForTile(t);
       }
     }
     const hospitalBonus =

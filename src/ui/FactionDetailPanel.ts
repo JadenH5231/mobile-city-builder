@@ -30,10 +30,10 @@ import type { Population } from '../simulation/Population';
  *  of cryptic snake-cased identifiers like `mu_high` or `r_lux`. */
 const STANCE_LABEL: Record<StanceKey, string> = {
   road_local: 'Local roads', road_avenue: 'Avenues', road_highway: 'Highways',
-  r_low: 'Residential (low)',  r_medium: 'Residential (medium)',  r_high: 'Residential (high)',
-  c_low: 'Commercial (low)',   c_medium: 'Commercial (medium)',   c_high: 'Commercial (high)',
-  i_low: 'Industrial (low)',   i_medium: 'Industrial (medium)',   i_high: 'Industrial (high)',
-  mu_low: 'Mixed-use (low)',   mu_medium: 'Mixed-use (medium)',   mu_high: 'Mixed-use (high)',
+  r_low: 'Residential (low)',  r_medium: 'Residential (medium)',  r_high: 'Residential (high)', r_max: 'Residential (max)',
+  c_low: 'Commercial (low)',   c_medium: 'Commercial (medium)',   c_high: 'Commercial (high)', c_max: 'Commercial (max)',
+  i_low: 'Industrial (low)',   i_medium: 'Industrial (medium)',   i_high: 'Industrial (high)', i_max: 'Industrial (max)',
+  mu_low: 'Mixed-use (low)',   mu_medium: 'Mixed-use (medium)',   mu_high: 'Mixed-use (high)', mu_max: 'Mixed-use (max)',
   r_lux: 'Luxury homes',
   power_plant: 'Power plants', water_tower: 'Water towers', park: 'Parks',
   bus_stop: 'Bus stops', bus_depot: 'Bus depots', stop_sign: 'Stop signs',

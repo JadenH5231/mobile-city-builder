@@ -5145,7 +5145,8 @@ function buildBeautificationMesh(
     // upgrades only at grand+ tier (residential streetscape flair is
     // a higher-tier amenity).
     const isCommercial = t.zone === 'commercial' || t.zone === 'mixed';
-    const isPremiumRes = t.zone === 'residential' && (t.density === 3 || t.luxury);
+    // Premium residential includes L3, L4 (Alpha 4.18), and luxury.
+    const isPremiumRes = t.zone === 'residential' && (t.density >= 3 || t.luxury);
     if (!isCommercial && !(isPremiumRes && tierLevel >= 3)) continue;
 
     const cx = (t.x + 0.5) * TILE_SIZE;

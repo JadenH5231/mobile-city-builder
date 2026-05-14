@@ -45,25 +45,9 @@ const ICON_HIGHWAY = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="2" stroke-linecap="round"
         stroke-linejoin="round" fill="none"/>
 </svg>`;
-/** Highway ramp icon (Alpha 4.16) — a curving merge line connecting a
- *  thick highway lane (left) to a thinner local road (right). The
- *  curve reads as "merge" / "exit ramp". */
-const ICON_RAMP = `<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M3 6l4 0M3 18l4 0" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-  <path d="M7 6q6 0 8 6t6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <path d="M7 18q6 0 8 -6t6 -6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.55"/>
-</svg>`;
-/** Cloverleaf interchange icon (Alpha 4.17) — 4 small loops in each
- *  quadrant + crossing horizontal & vertical lines for the through
- *  highways. Reads at a glance as a cloverleaf. */
-const ICON_CLOVERLEAF = `<svg viewBox="0 0 24 24" aria-hidden="true">
-  <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
-  <circle cx="17" cy="7" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
-  <circle cx="7" cy="17" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
-  <circle cx="17" cy="17" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
-</svg>`;
+// (ICON_RAMP + ICON_CLOVERLEAF removed in Alpha 4.18.1 with their
+//  toolbar entries — kept the underlying Tools / dispatch / renderer
+//  for backwards-compat but the SVGs are unused.)
 const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -282,14 +266,12 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'road_local',   label: 'Local',   icon: ICON_LOCAL },
       { kind: 'tool', tool: 'road_avenue',  label: 'Avenue',  icon: ICON_AVENUE },
       { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY },
-      // Highway interchange ramp (Alpha 4.16). Tap on a road tile that
-      // bridges a highway and a local/avenue — turns the tile into a
-      // smooth merge so cars flow seamlessly between tiers.
-      { kind: 'tool', tool: 'place_ramp',   label: 'Ramp',    icon: ICON_RAMP },
-      // Cloverleaf interchange (Alpha 4.17) — 5×5 prefab built per-block
-      // via the same construction system as big civic builds. Beautiful
-      // curved highway loops in each quadrant + bridge over.
-      { kind: 'tool', tool: 'place_cloverleaf', label: 'Clover', icon: ICON_CLOVERLEAF },
+      // Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1 per
+      // playtest feedback ("didn't like the merge lane or the
+      // cloverleafs"). The Tools, dispatch, faction stances, and
+      // renderer code are intentionally LEFT IN PLACE so existing
+      // saves with ramp / cloverleaf tiles still display correctly —
+      // the player can bulldoze them but can't make new ones.
       { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH }
     ]
   },

@@ -6237,6 +6237,93 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
+  // Highway interchange ramps (Alpha 4.16). Render a clear "merge" visual
+  // on every road tile flagged `ramp = true`: a yellow merge stripe across
+  // the surface + 4 white chevrons pointing into the merge + a small
+  // shoulder marker on each side that links to a highway neighbour. The
+  // result reads instantly as "this is a smooth on/off ramp" so the
+  // player can see at a glance which tiles bridge highway and local/
+  // avenue tiers.
+  const RAMP_YELLOW = 0xf3c648;     // bright merge-stripe yellow
+  const RAMP_CHEVRON = 0xf6f0e0;    // bright white chevrons
+  const RAMP_SHOULDER = 0xf07a3a;   // hi-vis orange shoulder dots
+  for (const t of grid.iter()) {
+    if (!t.road || !t.ramp) continue;
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+    const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
+    const yLift = tileY + 0.006;
+    const halfRoad = ROAD_TIER[t.roadType].width / 2;
+    // Yellow merge stripe — wide diagonal slash across the tile so it
+    // reads as "merge zone" regardless of orientation.
+    const stripe = new BoxGeometry(halfRoad * 1.7, 0.005, 0.06);
+    stripe.rotateY(Math.PI / 4);
+    stripe.translate(cx, yLift, cz);
+    stops.push(stripe);
+    stopColours.push(RAMP_YELLOW);
+    // 4 white chevrons forming an arrow pattern — two upper and two lower.
+    // Each chevron is a short angled segment; together they read as ">>".
+    for (const sgn of [-1, 1] as const) {
+      // Upper-row chevron (rotated +45°)
+      const cUp = new BoxGeometry(0.08, 0.005, 0.022);
+      cUp.rotateY(Math.PI / 4);
+      cUp.translate(cx + sgn * 0.10, yLift + 0.001, cz - 0.10);
+      stops.push(cUp);
+      stopColours.push(RAMP_CHEVRON);
+      // Lower-row chevron (rotated -45°)
+      const cDn = new BoxGeometry(0.08, 0.005, 0.022);
+      cDn.rotateY(-Math.PI / 4);
+      cDn.translate(cx + sgn * 0.10, yLift + 0.001, cz + 0.10);
+      stops.push(cDn);
+      stopColours.push(RAMP_CHEVRON);
+    }
+    // Shoulder dot pointing toward each highway neighbour — subtle orange
+    // marker reading as "highway access on this side". Placed at the edge
+    // of the road tile facing the highway.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const n = grid.get(t.x + dx, t.y + dz);
+      if (!n || !n.road || n.roadType !== 'highway') continue;
+      const dot = new BoxGeometry(0.06, 0.020, 0.06);
+      dot.translate(cx + dx * (halfRoad - 0.04), yLift + 0.012, cz + dz * (halfRoad - 0.04));
+      stops.push(dot);
+      stopColours.push(RAMP_SHOULDER);
+    }
+    // Small "EXIT" sign post on the shoulder facing the strongest highway
+    // neighbour direction — a thin white post with a green-rectangle
+    // signboard on top. Reads as a freeway exit sign at any zoom.
+    let highwaySide: [number, number] | null = null;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const n = grid.get(t.x + dx, t.y + dz);
+      if (n && n.road && n.roadType === 'highway') {
+        // Sign goes on the OPPOSITE side from the highway (i.e. the
+        // shoulder facing the local road, where you'd see the exit
+        // sign as you approach).
+        highwaySide = [-dx, -dz];
+        break;
+      }
+    }
+    if (highwaySide) {
+      const [sx, sz] = highwaySide;
+      const px = cx + sx * (halfRoad + 0.04);
+      const pz = cz + sz * (halfRoad + 0.04);
+      // Post
+      const post = new CylinderGeometry(0.012, 0.012, 0.18, 6);
+      post.translate(px, yLift + 0.090, pz);
+      stops.push(post);
+      stopColours.push(0x808080);
+      // Signboard — small green rectangle facing the road (its long
+      // axis perpendicular to (sx, sz)).
+      const sign = new BoxGeometry(
+        Math.abs(sz) > 0 ? 0.14 : 0.025,
+        0.06,
+        Math.abs(sz) > 0 ? 0.025 : 0.14
+      );
+      sign.translate(px, yLift + 0.20, pz);
+      stops.push(sign);
+      stopColours.push(0x2f7a3a);   // freeway-sign green
+    }
+  }
+
   if (arrows.length === 0 && stops.length === 0 && lights.length === 0 && pillars.length === 0) return null;
   const group = new Group();
   if (arrows.length > 0) {

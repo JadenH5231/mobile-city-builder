@@ -867,10 +867,12 @@ export class Vehicles {
         // Intersection collision check. Stop signs and traffic lights both
         // suppress the roll: a stop sign forces a yielding handshake on the
         // previous segment, a traffic light controls the conflict via phase.
-        // Authority vehicles also skip the roll (Alpha 4.14) — emergency
-        // and motorcade traffic shouldn't get into ambient collisions.
+        // Authority vehicles also skip the roll (Alpha 4.14). Highway
+        // interchange ramps skip too (Alpha 4.16) — ramps are smooth
+        // merges, not crossings, so the player doesn't get punished
+        // with collisions every time a car uses an exit.
         const isIntersection = grid.incidentRoadEdgeCount(arrivedX, arrivedY) >= 3;
-        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !authority) {
+        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !arrivedTile.ramp && !authority) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {

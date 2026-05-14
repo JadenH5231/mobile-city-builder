@@ -209,6 +209,19 @@ export class Tile {
   provincialCapital = false;
   nationalCapital = false;
   /**
+   * Highway interchange ramp bit (Alpha 4.16). When true, this tile is
+   * a highway-to-local/avenue merge ramp:
+   *  - Renders with merge chevrons + yellow stripes + EXIT signage so
+   *    the player visually identifies it as an interchange.
+   *  - Cars passing through skip stop signs and intersection collision
+   *    rolls — it's a smooth merge, not a crossing — letting traffic
+   *    flow seamlessly between highway and local/avenue tiers.
+   * Set by placing the Ramp tool on a road tile that's 4-adjacent to
+   * a highway AND a non-highway road (or is itself one of those, with
+   * the other tier within reach). Cleared on bulldoze.
+   */
+  ramp = false;
+  /**
    * Per-block placement bit (Alpha 4.15). When a big civic build (Mayor's
    * Mansion / City Hall / Provincial / National Capital) is placed via
    * the per-block flow, all footprint tiles get the matching kind-bit

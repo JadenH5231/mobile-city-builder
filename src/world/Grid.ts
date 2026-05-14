@@ -271,6 +271,7 @@ export class Grid {
       t.stopSign = false;
       t.trafficLight = false;
       t.busStop = false;
+      t.ramp = false;   // Alpha 4.16 — ramp bit is a road attachment
       return true;
     }
   }

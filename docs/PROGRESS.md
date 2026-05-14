@@ -4,6 +4,19 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.20 — Building glow halos at night (subtle, complements streetlights)** — player ask: "night time has to be a bit more vibrant than just the streets and the parks. Skyscrapers emit some light. Max, Lvl 3 and Lvl 2 buildings should emit a small amount of tasteful light that would be typical of a real city. This light should compliment street and park lighting, not compete with it."
+  - **New `buildBuildingGlowMesh`** + new cream-white radial-gradient texture (`makeBuildingGlowTexture`). Distinct from the existing yellow `lampGlowTexture` so building light reads as **interior-incandescent spillover** rather than another sodium-vapor street pool.
+  - **Per-density halo size** at the base of each developed L2+ residential / commercial / mixed-use tile:
+    - **L2 (medium)**: 0.55 tile radius — single-window-spill faint
+    - **L3 (high)**: 0.75 — apartment-block flood
+    - **L4 (max)**: 0.95 — mid-rise wider spill
+    - **Skyscraper**: 1.20 — single bigger halo per anchor covers the whole 2×2 footprint
+  - **Industrial deliberately skipped** — factories don't have residential / office windows lit at night.
+  - **Subtler than streetlamps** by design. Per-frame opacity multiplier is **×0.50** (vs streetlamps' ×0.75 and lit-windows' ×0.85), so the cream-white pools layer underneath the brighter yellow streetlamp pools instead of washing them out.
+  - **Same gating** as the existing nightlights system — fully transparent during day, fades in through dusk, full at deep night. Reuses the day/night phase already driving the rest of the night overlays.
+  - **Rebuilds with `drawNightLights`** so it tracks live with placement / bulldoze / density-promotion events.
+  - Bundle 953 KB raw / 251 KB gzipped (+2 KB raw).
+
 - **Alpha 4.19 — Animated farm tractor on large farm clusters** — player ask: "If a farm is bigger than 20 blocks total can it have a detailed tractor that drives through the fields so it looks nice and polished."
   - **Cluster detection**: every time `drawCityBuildings` rebuilds (placement / bulldoze events), `refreshFarmClusters(grid)` flood-fills the farm tiles into 4-connected clusters. Clusters with ≥ `FARM_TRACTOR_MIN_CLUSTER` (20) tiles get a tractor; smaller ones don't. Cap of `MAX_TRACTORS = 16` concurrent tractors across the map.
   - **Snake / boustrophedon path** — for each qualifying cluster, sorts tiles by y ascending, then within each row sorts by x with alternating direction. The result is one continuous strip the tractor traces row-by-row, like a real plow / harvester. Handles non-rectangular clusters fine (only visits actual cluster tiles).

@@ -4293,3 +4293,216 @@ export function buildNationalCapitalParts(ax: number, ay: number): VariantPart[]
 
   return out;
 }
+
+/* ============================================================================
+ * Cloverleaf Interchange (Alpha 4.17)
+ *
+ * 5 × 5 prefab interchange — two crossing roads with curved loop ramps in
+ * each of the 4 quadrants. Footprint anchored at (ax, ay) (lex-smallest
+ * tile). Layout sketch:
+ *
+ *   . . H . .         row 0: highway endpoint (north)
+ *   . r H r .         row 1: loop ramps + highway through
+ *   H H X H H         row 2: highway crossover (E-W endpoints + bridge centre)
+ *   . r H r .         row 3: loop ramps + highway through
+ *   . . H . .         row 4: highway endpoint (south)
+ *
+ * Where:
+ *   H = highway pavement (smooth grey asphalt + yellow centre stripes)
+ *   X = bridge centre (highway over highway, bridge supports beneath)
+ *   r = loop ramp pavement + curved white-stripe lane markings
+ *   . = grass infield (manicured medians inside each loop)
+ *
+ * The 4 loop ramps are visualized as 270° arcs of short straight road
+ * segments. Each loop has ~12 segments tracing a circular path inside its
+ * quadrant — the segmented arc reads as a smooth curve at the city's
+ * usual zoom range.
+ *
+ * Built per-block via the existing big-build infrastructure (Alpha 4.15).
+ * On completion, Game.finalizeCloverleaf populates the road graph so cars
+ * can route through; this geometry is purely the visual.
+ * ========================================================================= */
+
+// Palette — cloverleaf-specific tones.
+const CL_ASPHALT = 0x383c45;          // main highway pavement
+const CL_ASPHALT_DARK = 0x2a2e36;     // ramp pavement (slightly darker)
+const CL_YELLOW = 0xf3c648;           // highway centre stripe
+const CL_WHITE = 0xf2efe5;            // ramp / lane markings
+const CL_INFIELD = 0x2f6a2d;          // grass median inside each loop
+const CL_INFIELD_DARK = 0x1f4d1d;     // darker green for variation
+const CL_BRIDGE_RAIL = 0x9a9a9a;      // concrete bridge rail
+const CL_BRIDGE_PIER = 0x7a7e84;      // bridge support pier
+const CL_LIGHT_POST = 0x1c232b;       // dark wrought-iron lampposts
+const CL_LIGHT_BULB = 0xfff2b8;       // warm bulb tone
+
+/** Y-lift constant — keep cloverleaf surface slightly above road
+ *  surface so it visually overlaps player-built road tiles cleanly. */
+const CL_SURFACE_Y = 0.025;
+const CL_BRIDGE_Y = 0.22;             // matches BRIDGE_LIFT in Renderer
+
+export function buildCloverleafParts(ax: number, ay: number): VariantPart[] {
+  const out: VariantPart[] = [];
+  // Footprint centre.
+  const cx = ax + 2.5;
+  const cz = ay + 2.5;
+
+  // ===== ESTATE PAD =====
+  // Subtle dark pad covering the entire 5×5 footprint so the cloverleaf
+  // visually reads as one continuous structure.
+  const estatePad = new BoxGeometry(4.95, 0.020, 4.95);
+  estatePad.translate(cx, 0.010, cz);
+  out.push({ geom: estatePad, color: CL_INFIELD_DARK });
+
+  // ===== GRASS INFIELDS — 4 quadrants =====
+  // Each quadrant is a 2×2 area inside the cloverleaf with a loop ramp
+  // wrapping around it. The infield is a green pad with a darker centre
+  // so it reads as manicured median.
+  for (const [qx, qz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]] as Array<[number, number]>) {
+    const infield = new BoxGeometry(1.55, 0.018, 1.55);
+    infield.translate(cx + qx, 0.020, cz + qz);
+    out.push({ geom: infield, color: CL_INFIELD });
+    // Centre darker patch
+    const centre = new BoxGeometry(0.85, 0.022, 0.85);
+    centre.translate(cx + qx, 0.022, cz + qz);
+    out.push({ geom: centre, color: CL_INFIELD_DARK });
+    // Single small tree in each quadrant for visual interest
+    const trunk = new CylinderGeometry(0.06, 0.07, 0.32, 6);
+    trunk.translate(cx + qx, 0.18, cz + qz);
+    out.push({ geom: trunk, color: 0x6e3e1d });
+    const foliage = new ConeGeometry(0.30, 0.65, 8);
+    foliage.translate(cx + qx, 0.65, cz + qz);
+    out.push({ geom: foliage, color: 0x2f6a2d });
+  }
+
+  // ===== HIGHWAY THROUGH-LANES — N-S (column 2) =====
+  // Wide grey asphalt strip running the full 5-tile length of the
+  // cloverleaf in the centre column. Yellow double-centre stripe.
+  const nsHwyLength = 5.0;
+  const nsHwyWidth = 0.85;
+  const nsHwy = new BoxGeometry(nsHwyWidth, 0.020, nsHwyLength);
+  nsHwy.translate(cx, CL_SURFACE_Y, cz);
+  out.push({ geom: nsHwy, color: CL_ASPHALT });
+  // Yellow centre stripe (double-yellow for highway)
+  const nsStripeL = new BoxGeometry(0.030, 0.005, nsHwyLength * 0.95);
+  nsStripeL.translate(cx - 0.045, CL_SURFACE_Y + 0.012, cz);
+  out.push({ geom: nsStripeL, color: CL_YELLOW });
+  const nsStripeR = new BoxGeometry(0.030, 0.005, nsHwyLength * 0.95);
+  nsStripeR.translate(cx + 0.045, CL_SURFACE_Y + 0.012, cz);
+  out.push({ geom: nsStripeR, color: CL_YELLOW });
+  // White shoulder stripes
+  for (const dx of [-(nsHwyWidth / 2 - 0.020), (nsHwyWidth / 2 - 0.020)]) {
+    const shoulder = new BoxGeometry(0.020, 0.005, nsHwyLength * 0.95);
+    shoulder.translate(cx + dx, CL_SURFACE_Y + 0.012, cz);
+    out.push({ geom: shoulder, color: CL_WHITE });
+  }
+
+  // ===== HIGHWAY THROUGH-LANES — E-W (row 2), bridged over the N-S =====
+  // Same geometry but rotated, lifted to BRIDGE_Y so it crosses over
+  // the N-S highway at the centre.
+  const ewHwy = new BoxGeometry(nsHwyLength, 0.020, nsHwyWidth);
+  ewHwy.translate(cx, CL_BRIDGE_Y, cz);
+  out.push({ geom: ewHwy, color: CL_ASPHALT });
+  const ewStripeT = new BoxGeometry(nsHwyLength * 0.95, 0.005, 0.030);
+  ewStripeT.translate(cx, CL_BRIDGE_Y + 0.012, cz - 0.045);
+  out.push({ geom: ewStripeT, color: CL_YELLOW });
+  const ewStripeB = new BoxGeometry(nsHwyLength * 0.95, 0.005, 0.030);
+  ewStripeB.translate(cx, CL_BRIDGE_Y + 0.012, cz + 0.045);
+  out.push({ geom: ewStripeB, color: CL_YELLOW });
+  for (const dz of [-(nsHwyWidth / 2 - 0.020), (nsHwyWidth / 2 - 0.020)]) {
+    const shoulder = new BoxGeometry(nsHwyLength * 0.95, 0.005, 0.020);
+    shoulder.translate(cx, CL_BRIDGE_Y + 0.012, cz + dz);
+    out.push({ geom: shoulder, color: CL_WHITE });
+  }
+
+  // ===== BRIDGE RAILS =====
+  // Concrete parapet rails along both edges of the upper E-W highway,
+  // running the full bridge length. Reads as a real overpass.
+  for (const dz of [-(nsHwyWidth / 2 + 0.020), (nsHwyWidth / 2 + 0.020)]) {
+    const rail = new BoxGeometry(nsHwyLength * 0.92, 0.10, 0.040);
+    rail.translate(cx, CL_BRIDGE_Y + 0.075, cz + dz);
+    out.push({ geom: rail, color: CL_BRIDGE_RAIL });
+  }
+
+  // ===== BRIDGE PIERS =====
+  // 4 stout concrete columns supporting the upper E-W highway over the
+  // intersection where it crosses the N-S highway. Placed just outside
+  // the N-S highway's edges so they're visually inboard but don't
+  // overlap the N-S surface.
+  for (const [px, pz] of [[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]] as Array<[number, number]>) {
+    const pier = new BoxGeometry(0.10, CL_BRIDGE_Y - CL_SURFACE_Y, 0.10);
+    pier.translate(cx + px, CL_SURFACE_Y + (CL_BRIDGE_Y - CL_SURFACE_Y) / 2, cz + pz);
+    out.push({ geom: pier, color: CL_BRIDGE_PIER });
+  }
+
+  // ===== LOOP RAMPS — 4 quadrants =====
+  // Each loop is a 270° arc traced by ~12 short box segments. The loop
+  // sits inside a 2×2 quadrant area, with radius ~1.3 from quadrant
+  // centre. The arc starts at the highway-on side, sweeps around the
+  // grass infield, and ends at the highway-off side.
+  //
+  // Quadrants (offsets from cx,cz to quadrant centre):
+  //  NW: (-1.5, -1.5)  // catches N→W and E→S traffic
+  //  NE: ( 1.5, -1.5)  // catches N→E and W→S traffic
+  //  SW: (-1.5,  1.5)
+  //  SE: ( 1.5,  1.5)
+  for (const [qcx, qcz, startAngleDeg, endAngleDeg] of [
+    [-1.5, -1.5, 0, 270],     // NW — from E side sweeping clockwise
+    [1.5, -1.5, 90, 360],     // NE
+    [-1.5, 1.5, -90, 180],    // SW
+    [1.5, 1.5, 180, 450],     // SE
+  ] as Array<[number, number, number, number]>) {
+    const radius = 1.05;
+    const segments = 12;
+    const arcWidth = 0.25;     // ramp width
+    for (let s = 0; s < segments; s++) {
+      // Interpolate angle along the arc
+      const t = s / segments;
+      const tNext = (s + 1) / segments;
+      const angle = (startAngleDeg + t * (endAngleDeg - startAngleDeg)) * Math.PI / 180;
+      const angleNext = (startAngleDeg + tNext * (endAngleDeg - startAngleDeg)) * Math.PI / 180;
+      const midAngle = (angle + angleNext) / 2;
+      // Mid point of the segment
+      const mx = qcx + Math.cos(midAngle) * radius;
+      const mz = qcz + Math.sin(midAngle) * radius;
+      // Segment length = chord between angle and angleNext
+      const segLen = 2 * radius * Math.sin((angleNext - angle) / 2) + 0.02;
+      // Tangent direction perpendicular to radius — segment box rotates
+      // so its long axis points along the tangent.
+      const tangentAngle = midAngle + Math.PI / 2;
+      const seg = new BoxGeometry(segLen, 0.020, arcWidth);
+      seg.rotateY(tangentAngle);
+      seg.translate(cx + mx, CL_SURFACE_Y, cz + mz);
+      out.push({ geom: seg, color: CL_ASPHALT_DARK });
+      // White shoulder stripe on the OUTER edge of the curve (radial-out)
+      const stripeOffsetR = radius + arcWidth / 2 - 0.020;
+      const sx = qcx + Math.cos(midAngle) * stripeOffsetR;
+      const sz = qcz + Math.sin(midAngle) * stripeOffsetR;
+      const stripe = new BoxGeometry(segLen * 0.85, 0.005, 0.020);
+      stripe.rotateY(tangentAngle);
+      stripe.translate(cx + sx, CL_SURFACE_Y + 0.013, cz + sz);
+      out.push({ geom: stripe, color: CL_WHITE });
+    }
+  }
+
+  // ===== LAMPPOSTS — 4 along the highway shoulders =====
+  // Tall lampposts at the perimeter shoulders so the interchange reads
+  // as lit/active even at day. Two on each long axis (N-S + E-W).
+  for (const [px, pz] of [
+    [-(nsHwyWidth / 2 + 0.10), -2.20], [(nsHwyWidth / 2 + 0.10), -2.20],
+    [-(nsHwyWidth / 2 + 0.10), 2.20], [(nsHwyWidth / 2 + 0.10), 2.20],
+    [-2.20, -(nsHwyWidth / 2 + 0.10)], [-2.20, (nsHwyWidth / 2 + 0.10)],
+    [2.20, -(nsHwyWidth / 2 + 0.10)], [2.20, (nsHwyWidth / 2 + 0.10)],
+  ] as Array<[number, number]>) {
+    const post = new CylinderGeometry(0.020, 0.025, 0.55, 6);
+    post.translate(cx + px, CL_SURFACE_Y + 0.275, cz + pz);
+    out.push({ geom: post, color: CL_LIGHT_POST });
+    const housing = new BoxGeometry(0.08, 0.06, 0.08);
+    housing.translate(cx + px, CL_SURFACE_Y + 0.58, cz + pz);
+    out.push({ geom: housing, color: CL_LIGHT_POST });
+    const bulb = new IcosahedronGeometry(0.038, 1);
+    bulb.translate(cx + px, CL_SURFACE_Y + 0.58, cz + pz);
+    out.push({ geom: bulb, color: CL_LIGHT_BULB });
+  }
+
+  return out;
+}

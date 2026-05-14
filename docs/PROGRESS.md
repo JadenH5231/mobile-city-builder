@@ -4,6 +4,20 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.17 — Cloverleaf interchanges (per-block prefab) + cleaner single-tile ramp visual** — playtest spec: "I don't like how the merge lanes work, they look ugly. The merge lanes should look like real interchanges. Is there a way you can do that construction placement method like you do for big buildings to build more intricate and beautiful road designs for things like clovers?"
+  - **New Cloverleaf tool** in the Roads group. 5×5 prefab (25 blocks) built per-block via the same construction system as the big civic monuments — extending the Alpha 4.15 infrastructure to support a 5th kind. ~$2K per block, $50K total.
+  - **Layout**: two crossing highways (N-S in centre column, E-W in centre row, bridged at the centre) + 4 curved loop ramps in each quadrant + 4 grass infields with ornamental trees. The 4 cardinal endpoints are highway road tiles the player connects their existing highways to.
+  - **Curved loop visual**: each loop is a 270° arc traced by 12 short box segments along a circular path of radius ~1 tile, with white shoulder stripes following the curve. The segmented arcs read as smooth curves at typical zoom.
+  - **Bridge with concrete piers**: the upper E-W highway is lifted to BRIDGE_LIFT (= 0.22) over the lower N-S, supported by 4 stout concrete piers + parapet rails along both edges. Cars on the upper deck visually pass over cars on the lower deck.
+  - **Real road network on completion**: `Game.finalizeCloverleaf` runs after the last block is paid — populates the road graph by calling `setRoad` on each road-bearing tile in the cloverleaf, sets highway directions on the through-lanes, adds internal road edges between adjacent road tiles, and marks every tile as `ramp = true` so cars skip stops + collisions through the whole interchange. The 4 cardinal endpoints are highway tier so the player connects their existing highways there.
+  - **Multi-instance**: unlike the civic monuments, cloverleaves are NOT one-per-city. Players can place several across a sprawling highway network.
+  - **Construction sites + ghost web**: paid-but-incomplete tiles render the standard Alpha 4.15 construction site (scaffolding + crane); unpaid reserved tiles render the standard gold ghost outline when the Cloverleaf tool is active. Same per-block UX as big buildings.
+  - **8 lampposts** along the highway shoulders + ornamental tree per quadrant + dark estate pad — the whole composition reads as monumental civic infrastructure.
+  - **Cleaner single-tile Ramp visual** (replaces the noisy chevron + orange-dot decals from Alpha 4.16): now a clean dark-asphalt shoulder extension toward the highway side + two parallel white merge stripes perpendicular to the merge direction + a real exit sign (post + green signboard with white text bar). Reads as actual highway design, not ground decals.
+  - **Faction stances** added (`cloverleaf` row for all 10 factions, more polarized than the single-tile ramp). Drivers +1.0 / Chamber +0.9 (apex), NIMBYs -0.9 / Greenleaf -0.9 (apex offender). Surfaced in the Faction Detail panel as "Cloverleaf interchanges".
+  - **Save schema 24 → 25**: new per-tile `cloverleaf` bit. v24-and-earlier saves load with `false` everywhere. Bulldozing any cloverleaf tile tears down the whole 5×5 footprint AND clears the internal road graph state.
+  - Bundle 943 KB raw / 249 KB gzipped (+8 KB raw — cloverleaf geometry + per-block extension).
+
 - **Alpha 4.16 — Highway interchange ramps** — user spec: "give interchanges. Make it easy and intuitive to make exits and entrances for highways that can flow into local roads/avenues seamlessly."
   - **New Ramp tool** in the Roads group (next to Highway). Tap any road tile that's adjacent to BOTH a highway and a non-highway road (or is itself one tier with the other adjacent), and the tile becomes an interchange ramp. Single-tap, $1,500 per ramp tile.
   - **Validation toasts** keep placement intuitive: "Ramps go on existing road tiles" / "Ramps need a highway AND a local/avenue road adjacent" — the player can't mis-place.

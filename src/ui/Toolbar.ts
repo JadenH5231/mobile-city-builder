@@ -53,6 +53,17 @@ const ICON_RAMP = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M7 6q6 0 8 6t6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
   <path d="M7 18q6 0 8 -6t6 -6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.55"/>
 </svg>`;
+/** Cloverleaf interchange icon (Alpha 4.17) — 4 small loops in each
+ *  quadrant + crossing horizontal & vertical lines for the through
+ *  highways. Reads at a glance as a cloverleaf. */
+const ICON_CLOVERLEAF = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="17" cy="7" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="7" cy="17" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="17" cy="17" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/>
+</svg>`;
 const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -267,6 +278,10 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       // bridges a highway and a local/avenue — turns the tile into a
       // smooth merge so cars flow seamlessly between tiers.
       { kind: 'tool', tool: 'place_ramp',   label: 'Ramp',    icon: ICON_RAMP },
+      // Cloverleaf interchange (Alpha 4.17) — 5×5 prefab built per-block
+      // via the same construction system as big civic builds. Beautiful
+      // curved highway loops in each quadrant + bridge over.
+      { kind: 'tool', tool: 'place_cloverleaf', label: 'Clover', icon: ICON_CLOVERLEAF },
       { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH }
     ]
   },

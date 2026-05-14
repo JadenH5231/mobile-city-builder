@@ -393,7 +393,13 @@ export type Building =
   //   wings, round library element behind. Capital milestone.
   | 'city_hall'
   | 'provincial_capital'
-  | 'national_capital';
+  | 'national_capital'
+  // Cloverleaf interchange (Alpha 4.17). 5×5 prefab built via the per-
+  // block placement system, same anchor pattern as the civic monuments.
+  // The anchor's `building` value flips to `'cloverleaf'` only when all
+  // 25 footprint blocks are paid; until then the anchor stays
+  // `'none'` and per-tile construction sites render on paid blocks.
+  | 'cloverleaf';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -457,7 +463,10 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   //     the game; designed to take a fully-developed treasury seriously.
   city_hall: 1500000,
   provincial_capital: 7500000,
-  national_capital: 20000000
+  national_capital: 20000000,
+  // Cloverleaf interchange (Alpha 4.17) — 5×5 prefab placed via per-
+  // block construction. Total ~$50K spread across 25 blocks ≈ $2K/block.
+  cloverleaf: 50000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -501,7 +510,10 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // are real ongoing operating costs (staff, security, maintenance).
   city_hall: 4000,
   provincial_capital: 15000,
-  national_capital: 35000
+  national_capital: 35000,
+  // Cloverleaf upkeep — meaningful but not punishing. Multi-acre
+  // pavement + medians + lighting. Equivalent to a small landmark.
+  cloverleaf: 200
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
@@ -710,6 +722,9 @@ export const MILESTONES: readonly Milestone[] = [
       // Highway interchange ramps (Alpha 4.16) — unlocked alongside
       // highways since that's when they become useful.
       'place_ramp',
+      // Cloverleaf interchange (Alpha 4.17) — same milestone, same
+      // reason (only useful once highways exist).
+      'place_cloverleaf',
       // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
       // city before they make sense.
       'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
@@ -903,7 +918,11 @@ export type Tool =
   // toolbar's Mon group alongside the Mansion.
   | 'place_city_hall'
   | 'place_provincial_capital'
-  | 'place_national_capital';
+  | 'place_national_capital'
+  // Cloverleaf interchange (Alpha 4.17). 5×5 prefab built per-block,
+  // beautiful curved highway loops + grass infields + bridge over.
+  // Lives in the Roads group (it's road infrastructure, not a building).
+  | 'place_cloverleaf';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -965,7 +984,9 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   // Civic monuments (Alpha 4.12).
   ['place_city_hall', 'city_hall' as const],
   ['place_provincial_capital', 'provincial_capital' as const],
-  ['place_national_capital', 'national_capital' as const]
+  ['place_national_capital', 'national_capital' as const],
+  // Cloverleaf interchange (Alpha 4.17). Per-block flow.
+  ['place_cloverleaf', 'cloverleaf' as const]
 ]);
 
 /* ---- Architect Mode terraforming costs (Alpha 4.0) -------------------- */
@@ -1020,6 +1041,11 @@ export const PROVINCIAL_CAPITAL_WIDTH = 6;
 export const PROVINCIAL_CAPITAL_DEPTH = 4;
 export const NATIONAL_CAPITAL_WIDTH = 7;
 export const NATIONAL_CAPITAL_DEPTH = 4;
+/** Cloverleaf interchange footprint (Alpha 4.17) — 5×5 = 25 tiles.
+ *  Built via the same per-block placement system as the civic
+ *  monuments. Anchor is the lex-smallest tile (top-left). */
+export const CLOVERLEAF_WIDTH = 5;
+export const CLOVERLEAF_DEPTH = 5;
 
 /** Tile radius around any city-hall-class building (Alpha 4.12) inside
  *  which every developed building gets free power + water + park (i.e.
@@ -1036,7 +1062,7 @@ export const CIVIC_MONUMENT_SERVICE_RADIUS = 35;
  *  player can spread the spend across many sim months, paying for
  *  one block at a time as they earn the money. */
 export function monumentBlockCost(
-  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
 ): number {
   const dims = (() => {
     switch (kind) {
@@ -1044,6 +1070,7 @@ export function monumentBlockCost(
       case 'city_hall':          return CITY_HALL_WIDTH * CITY_HALL_DEPTH;
       case 'provincial_capital': return PROVINCIAL_CAPITAL_WIDTH * PROVINCIAL_CAPITAL_DEPTH;
       case 'national_capital':   return NATIONAL_CAPITAL_WIDTH * NATIONAL_CAPITAL_DEPTH;
+      case 'cloverleaf':         return CLOVERLEAF_WIDTH * CLOVERLEAF_DEPTH;
     }
   })();
   return Math.ceil(BUILDING_COSTS[kind] / dims);

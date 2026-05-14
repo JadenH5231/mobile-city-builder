@@ -31,6 +31,7 @@ import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
 import {
   buildCityHallParts,
+  buildCloverleafParts,
   buildLuxuryParts,
   buildMayorMansionParts,
   buildNationalCapitalParts,
@@ -1405,7 +1406,7 @@ export class Renderer {
   private ghostWebGroup: Group | null = null;
   showMonumentGhostWeb(
     grid: Grid,
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
   ): void {
     this.clearMonumentGhostWeb();
     const group = new Group();
@@ -2168,13 +2169,14 @@ function isSkyscraperAnchor(grid: Grid, x: number, y: number): boolean {
  *  the per-block construction-site pass to walk back to the anchor. */
 function readKind(
   t: import('../world/Tile').Tile,
-  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital'
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
 ): boolean {
   switch (kind) {
     case 'mayor_mansion':      return t.mayorMansion;
     case 'city_hall':          return t.cityHall;
     case 'provincial_capital': return t.provincialCapital;
     case 'national_capital':   return t.nationalCapital;
+    case 'cloverleaf':         return t.cloverleaf;
   }
 }
 
@@ -3336,6 +3338,23 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       }
       continue;
     }
+    // Cloverleaf interchange (Alpha 4.17) — same anchor-tile dispatch
+    // pattern. Anchor's `building` is `'cloverleaf'` once all 25 blocks
+    // are paid; the geometry includes the highway through-lanes,
+    // bridge, loop ramps, infields, and lampposts. The OTHER 24
+    // footprint tiles render nothing here (their per-tile road
+    // visual is handled by drawRoads since they're real road tiles
+    // after finalizeCloverleaf).
+    if (t.building === 'cloverleaf') {
+      const parts = buildCloverleafParts(t.x, t.y);
+      const yLift = t.elevation;   // cloverleaf parts have their own y; just lift for terrain
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(p.color);
+      }
+      continue;
+    }
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
     // Service buildings (Alpha 4.3) — asymmetric kinds (school clock-
@@ -3391,16 +3410,17 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
   // the ghost-web overlay separately (Renderer.showMonumentGhostWeb).
   for (const t of grid.iter()) {
     if (!t.bigBuildBlockPaid) continue;
-    const isReserved = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital;
+    const isReserved = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf;
     if (!isReserved) continue;
     // Is this footprint COMPLETE? We detect by finding the anchor (lex-
     // smallest of the kind-bit set) and checking its `building` value.
     // If the anchor is promoted, the merged finished geometry already
     // covered this tile — skip.
-    const kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' =
+    const kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' =
       t.mayorMansion ? 'mayor_mansion' :
       t.cityHall ? 'city_hall' :
-      t.provincialCapital ? 'provincial_capital' : 'national_capital';
+      t.provincialCapital ? 'provincial_capital' :
+      t.nationalCapital ? 'national_capital' : 'cloverleaf';
     // Cheap "is the building complete" check: scan north + west from this
     // tile for the anchor; if anchor.building === kind we're complete.
     let ax = t.x, ay = t.y;
@@ -6237,90 +6257,96 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
-  // Highway interchange ramps (Alpha 4.16). Render a clear "merge" visual
-  // on every road tile flagged `ramp = true`: a yellow merge stripe across
-  // the surface + 4 white chevrons pointing into the merge + a small
-  // shoulder marker on each side that links to a highway neighbour. The
-  // result reads instantly as "this is a smooth on/off ramp" so the
-  // player can see at a glance which tiles bridge highway and local/
-  // avenue tiers.
-  const RAMP_YELLOW = 0xf3c648;     // bright merge-stripe yellow
-  const RAMP_CHEVRON = 0xf6f0e0;    // bright white chevrons
-  const RAMP_SHOULDER = 0xf07a3a;   // hi-vis orange shoulder dots
+  // Highway interchange ramps (Alpha 4.16, cleaner visual in 4.17). For
+  // each ramp tile, render a clean visual that reads as "merge lane":
+  //  - Subtle dark-asphalt extension along the highway shoulder.
+  //  - Two clean parallel white merge stripes converging across the tile.
+  //  - A real exit sign on the shoulder facing the local road (post +
+  //    green signboard with white EXIT text bar).
+  // Cleaner than the original chevron-clutter — same spatial information
+  // but reads as actual highway design rather than ground decals.
+  const RAMP_ASPHALT_DARK = 0x2a2e36;
+  const RAMP_WHITE = 0xf2efe5;
+  const RAMP_SIGN_GREEN = 0x2f7a3a;
+  const RAMP_POST = 0x9ea4b0;
   for (const t of grid.iter()) {
     if (!t.road || !t.ramp) continue;
     const cx = (t.x + 0.5) * TILE_SIZE;
     const cz = (t.y + 0.5) * TILE_SIZE;
     const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
-    const yLift = tileY + 0.006;
+    const yLift = tileY + 0.005;
     const halfRoad = ROAD_TIER[t.roadType].width / 2;
-    // Yellow merge stripe — wide diagonal slash across the tile so it
-    // reads as "merge zone" regardless of orientation.
-    const stripe = new BoxGeometry(halfRoad * 1.7, 0.005, 0.06);
-    stripe.rotateY(Math.PI / 4);
-    stripe.translate(cx, yLift, cz);
-    stops.push(stripe);
-    stopColours.push(RAMP_YELLOW);
-    // 4 white chevrons forming an arrow pattern — two upper and two lower.
-    // Each chevron is a short angled segment; together they read as ">>".
-    for (const sgn of [-1, 1] as const) {
-      // Upper-row chevron (rotated +45°)
-      const cUp = new BoxGeometry(0.08, 0.005, 0.022);
-      cUp.rotateY(Math.PI / 4);
-      cUp.translate(cx + sgn * 0.10, yLift + 0.001, cz - 0.10);
-      stops.push(cUp);
-      stopColours.push(RAMP_CHEVRON);
-      // Lower-row chevron (rotated -45°)
-      const cDn = new BoxGeometry(0.08, 0.005, 0.022);
-      cDn.rotateY(-Math.PI / 4);
-      cDn.translate(cx + sgn * 0.10, yLift + 0.001, cz + 0.10);
-      stops.push(cDn);
-      stopColours.push(RAMP_CHEVRON);
-    }
-    // Shoulder dot pointing toward each highway neighbour — subtle orange
-    // marker reading as "highway access on this side". Placed at the edge
-    // of the road tile facing the highway.
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const n = grid.get(t.x + dx, t.y + dz);
-      if (!n || !n.road || n.roadType !== 'highway') continue;
-      const dot = new BoxGeometry(0.06, 0.020, 0.06);
-      dot.translate(cx + dx * (halfRoad - 0.04), yLift + 0.012, cz + dz * (halfRoad - 0.04));
-      stops.push(dot);
-      stopColours.push(RAMP_SHOULDER);
-    }
-    // Small "EXIT" sign post on the shoulder facing the strongest highway
-    // neighbour direction — a thin white post with a green-rectangle
-    // signboard on top. Reads as a freeway exit sign at any zoom.
-    let highwaySide: [number, number] | null = null;
+    // Find the highway side (which neighbour is the highway). The exit
+    // sign goes on the OPPOSITE shoulder; the merge stripes orient
+    // perpendicular to the merge direction.
+    let highwayDx = 0, highwayDz = 0;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const n = grid.get(t.x + dx, t.y + dz);
       if (n && n.road && n.roadType === 'highway') {
-        // Sign goes on the OPPOSITE side from the highway (i.e. the
-        // shoulder facing the local road, where you'd see the exit
-        // sign as you approach).
-        highwaySide = [-dx, -dz];
+        highwayDx = dx; highwayDz = dz;
         break;
       }
     }
-    if (highwaySide) {
-      const [sx, sz] = highwaySide;
-      const px = cx + sx * (halfRoad + 0.04);
-      const pz = cz + sz * (halfRoad + 0.04);
-      // Post
-      const post = new CylinderGeometry(0.012, 0.012, 0.18, 6);
-      post.translate(px, yLift + 0.090, pz);
-      stops.push(post);
-      stopColours.push(0x808080);
-      // Signboard — small green rectangle facing the road (its long
-      // axis perpendicular to (sx, sz)).
-      const sign = new BoxGeometry(
-        Math.abs(sz) > 0 ? 0.14 : 0.025,
-        0.06,
-        Math.abs(sz) > 0 ? 0.025 : 0.14
+    // Asphalt shoulder extension toward the highway side — fills the
+    // visual gap between the ramp tile and the highway tile so they
+    // read as one continuous surface, not two separate roads meeting.
+    if (highwayDx !== 0 || highwayDz !== 0) {
+      const shoulder = new BoxGeometry(
+        Math.abs(highwayDz) > 0 ? halfRoad * 1.4 : 0.18,
+        0.012,
+        Math.abs(highwayDz) > 0 ? 0.18 : halfRoad * 1.4
       );
-      sign.translate(px, yLift + 0.20, pz);
+      shoulder.translate(
+        cx + highwayDx * (halfRoad + 0.05),
+        yLift,
+        cz + highwayDz * (halfRoad + 0.05)
+      );
+      stops.push(shoulder);
+      stopColours.push(RAMP_ASPHALT_DARK);
+    }
+    // Two parallel white merge stripes oriented PERPENDICULAR to the
+    // merge direction. They visually communicate "lane being added/
+    // removed" in a way drivers know at a glance.
+    if (highwayDx !== 0 || highwayDz !== 0) {
+      const isHorizontalMerge = Math.abs(highwayDx) > 0;
+      for (const offset of [-0.10, 0.10]) {
+        const stripe = new BoxGeometry(
+          isHorizontalMerge ? 0.20 : 0.020,
+          0.005,
+          isHorizontalMerge ? 0.020 : 0.20
+        );
+        stripe.translate(
+          cx + (isHorizontalMerge ? 0 : offset),
+          yLift + 0.008,
+          cz + (isHorizontalMerge ? offset : 0)
+        );
+        stops.push(stripe);
+        stopColours.push(RAMP_WHITE);
+      }
+    }
+    // Exit sign post on the shoulder facing the local road (away from
+    // highway). Same as before but slightly polished — taller post,
+    // larger signboard, white text-bar across.
+    if (highwayDx !== 0 || highwayDz !== 0) {
+      const sx = -highwayDx, sz = -highwayDz;
+      const px = cx + sx * (halfRoad + 0.06);
+      const pz = cz + sz * (halfRoad + 0.06);
+      const post = new CylinderGeometry(0.014, 0.014, 0.22, 6);
+      post.translate(px, yLift + 0.110, pz);
+      stops.push(post);
+      stopColours.push(RAMP_POST);
+      // Larger green signboard
+      const signW = Math.abs(sz) > 0 ? 0.18 : 0.025;
+      const signD = Math.abs(sz) > 0 ? 0.025 : 0.18;
+      const sign = new BoxGeometry(signW, 0.07, signD);
+      sign.translate(px, yLift + 0.245, pz);
       stops.push(sign);
-      stopColours.push(0x2f7a3a);   // freeway-sign green
+      stopColours.push(RAMP_SIGN_GREEN);
+      // White stripe across the sign reading as "EXIT" text bar
+      const textBar = new BoxGeometry(signW * 0.75, 0.008, signD * 0.75);
+      textBar.translate(px, yLift + 0.245, pz);
+      stops.push(textBar);
+      stopColours.push(RAMP_WHITE);
     }
   }
 

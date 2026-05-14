@@ -22,20 +22,18 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 23 (Alpha 4.15 — Per-block big-building placement): adds
- * `bigBuildBlockPaid` per tile so the four large civic builds (Mayor's
- * Mansion + City Hall + Provincial Capital + National Capital) can
- * persist mid-construction. Pre-4.15 these were all-or-nothing
- * placements. v22-and-earlier saves load with `bigBuildBlockPaid = true`
- * on every tile that has a kind-bit set, so previously-completed
- * buildings remain completed across the upgrade.
+ * Schema 24 (Alpha 4.16 — Highway interchange ramps): adds `ramp` per
+ * tile for the new highway-to-local/avenue merge ramps. v23-and-earlier
+ * saves load with the bit defaulted to `false` everywhere (no ramps
+ * existed pre-4.16).
  *
- * Earlier: v22 civic monuments, v21 mansion, v20 beautification,
- * v19 land ownership, v18 skyscrapers, v17 districts, v16 bonds,
- * v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
- * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v23 per-block big-build, v22 civic monuments, v21 mansion,
+ * v20 beautification, v19 land ownership, v18 skyscrapers, v17
+ * districts, v16 bonds, v15 tourism, v14 patina, v13 achievements,
+ * v12 bridges, v11 stats, v10 events, v9 highestPop, v8 luxury,
+ * v7 elevation+bridge.
  */
-const SCHEMA = 23;
+const SCHEMA = 24;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -107,6 +105,9 @@ export interface TileSnapshot {
    *  that has a kind-bit set, so previously-complete buildings
    *  remain complete. */
   bigBuildBlockPaid?: boolean;
+  /** Highway interchange ramp bit (Alpha 4.16 / schema 24+). v23-and-
+   *  earlier saves load with `false` (no ramps existed pre-4.16). */
+  ramp?: boolean;
 }
 
 export interface SaveData {
@@ -353,7 +354,8 @@ export function serialize(
       cityHall: t.cityHall,
       provincialCapital: t.provincialCapital,
       nationalCapital: t.nationalCapital,
-      bigBuildBlockPaid: t.bigBuildBlockPaid
+      bigBuildBlockPaid: t.bigBuildBlockPaid,
+      ramp: t.ramp
     };
   }
   const edges: number[] = [];
@@ -516,6 +518,9 @@ export function applySave(
     } else {
       t.bigBuildBlockPaid = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital;
     }
+    // Highway interchange ramp bit (schema 24+). v23-and-earlier saves
+    // load with `false` since no ramps existed before Alpha 4.16.
+    t.ramp = snap.ramp ?? false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

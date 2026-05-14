@@ -4,6 +4,20 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.16 — Highway interchange ramps** — user spec: "give interchanges. Make it easy and intuitive to make exits and entrances for highways that can flow into local roads/avenues seamlessly."
+  - **New Ramp tool** in the Roads group (next to Highway). Tap any road tile that's adjacent to BOTH a highway and a non-highway road (or is itself one tier with the other adjacent), and the tile becomes an interchange ramp. Single-tap, $1,500 per ramp tile.
+  - **Validation toasts** keep placement intuitive: "Ramps go on existing road tiles" / "Ramps need a highway AND a local/avenue road adjacent" — the player can't mis-place.
+  - **Smooth-merge behaviour**: cars passing through a ramp tile **skip stop signs and intersection collision rolls** entirely. Stop signs / traffic lights on the same tile are mutually exclusive (placing a ramp clears them) — a ramp is a merge, not a controlled crossing.
+  - **Distinctive visual** so the player sees ramps at a glance:
+    - **Yellow merge stripe** painted diagonally across the surface
+    - **4 white chevrons** in a `>>` pattern reading as "merge / exit"
+    - **Hi-vis orange shoulder dots** at the edge facing each highway neighbour
+    - **Small green freeway-style EXIT sign** on the shoulder facing the local road (post + green signboard, classic interstate look)
+  - **Faction stances**: Drivers love (+1.0 — easy on/off), Chamber loves (+0.6 — freight access), Working Families likes (+0.3 — easier commute). NIMBYs hate (-0.6 — more cars in their neighbourhood), Transit / Greenleaf / Safer Streets / Hometown all dislike. Taxpayers grudgingly approve (+0.2). Surfaced in the Faction Detail panel as "Highway ramps".
+  - **Unlocks at the City milestone** alongside highways themselves — they're useless before the player has highways anyway.
+  - **Save schema 23 → 24**: new per-tile `ramp` bit. v23-and-earlier saves load with `ramp = false` everywhere. Bulldozing a road tile clears the bit alongside stop sign / traffic light / bus stop.
+  - Bundle 936 KB raw / 247 KB gzipped (+2 KB raw).
+
 - **Alpha 4.15.3 — Motorcade returns to production cadence (every 4 years)** — `MOTORCADE_INTERVAL_MONTHS: 1 → 48`. The user verified the convoy + escorts + pull-over + visuals all work after 4.15.1 (deadlock fix) and 4.15.2 (police-car / fire-truck visual rework), so the motorcade is back to the original spec'd cadence: once every 4 sim years for any city with a Provincial or National Capital. One-line change.
 
 - **Alpha 4.15.2 — Police cars + fire trucks finally LOOK like police cars + fire trucks** — playtest report: "the police cars escorting the vehicle don't look like police cars, they should have blue and red lights on the top and look distinctly like police cars. Same with fire trucks but as fire trucks. High detail. Police cars from station are same as ones that flank motorcade."

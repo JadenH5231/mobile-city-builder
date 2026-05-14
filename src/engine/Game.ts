@@ -60,6 +60,7 @@ import {
   ROAD_TIER,
   ROAD_TOOLS,
   SERVICE_RADIUS,
+  RAMP_COST,
   STOP_SIGN_COST,
   TERRAFORM_COSTS,
   TILE_SIZE,
@@ -93,6 +94,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   road_local: 'Local Road',
   road_avenue: 'Avenue',
   road_highway: 'Highway',
+  place_ramp: 'Highway Ramp',
   place_path: 'Walking Path',
   place_power: 'Power Plant',
   place_water: 'Water Tower',
@@ -651,6 +653,7 @@ export class Game {
       ['place_bus_stop', 'bus_stop'],
       ['place_bus_depot', 'bus_depot'],
       ['place_stop_sign', 'stop_sign'],
+      ['place_ramp', 'ramp'],
       ['place_museum', 'museum'],
       ['place_stadium', 'stadium'],
       ['place_observatory', 'observatory'],
@@ -701,7 +704,7 @@ export class Game {
       'place_forestry', 'place_farm',
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
-      'place_stop_sign', 'place_traffic_light',
+      'place_stop_sign', 'place_traffic_light', 'place_ramp',
       'place_museum', 'place_stadium', 'place_observatory',
       'place_ferry_dock', 'place_subway_entrance',
       'paint_district', 'erase_district',
@@ -851,6 +854,9 @@ export class Game {
     }
     if (tool === 'place_traffic_light') {
       return { label: 'Traffic Light', cost: TRAFFIC_LIGHT_COST, banned: false };
+    }
+    if (tool === 'place_ramp') {
+      return { label: 'Highway Ramp', cost: RAMP_COST, banned: false };
     }
     // Skyscrapers — fixed cost per zone variant.
     if (tool === 'residential_skyscraper') return { label: 'R Skyscraper', cost: SKYSCRAPER_COST.residential, banned: false };
@@ -1573,6 +1579,19 @@ export class Game {
       return;
     }
 
+    // Highway interchange ramp (Alpha 4.16) — tap-only attachment
+    // marking a road tile as a smooth merge between a highway and a
+    // non-highway road. See `placeRamp` for the validation rules.
+    if (this.tool === 'place_ramp') {
+      const placed = this.placeRamp(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Bus stop — if the target tile is a non-highway road, attach the stop
     // to the road's sidewalk (Alpha 2.0). Otherwise fall through to the
     // standalone-building path below for backwards-compat with old saves.
@@ -1877,6 +1896,64 @@ export class Game {
     this.economy.treasury -= TRAFFIC_LIGHT_COST;
     this.renderer.drawRoads(this.grid);
     this.trafficLights.rebuild(this.grid);
+    return true;
+  }
+
+  /**
+   * Highway interchange ramp placement (Alpha 4.16). Marks a road tile
+   * as a smooth merge between a highway and a non-highway (local /
+   * avenue) road. Cars passing through skip stop signs + intersection
+   * collision rolls — the ramp is treated as a merge point, not a
+   * crossing — so traffic flows seamlessly between tiers.
+   *
+   * Validation rules (designed for "easy and intuitive"):
+   *  - Tile must be an existing road tile (any tier).
+   *  - Tile must be 4-adjacent to AT LEAST ONE highway road tile AND
+   *    AT LEAST ONE non-highway road tile (or BE one of those tiers
+   *    itself, with the other tier 4-adjacent). Otherwise "ramp"
+   *    doesn't connect anything meaningful.
+   *  - No stop sign / traffic light on the same tile (mutually
+   *    exclusive — ramps are smooth merges, not controlled
+   *    intersections).
+   *
+   * Cleared on bulldoze with the rest of the road state.
+   */
+  private placeRamp(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t) return false;
+    if (!t.road) {
+      this.onStatusMessage?.('Ramps go on existing road tiles');
+      return false;
+    }
+    if (t.ramp) return false;   // already a ramp; idempotent
+    // Validate the tile bridges a highway and a non-highway tier.
+    const isThisHighway = t.roadType === 'highway';
+    let touchesHighway = isThisHighway;
+    let touchesNonHighway = !isThisHighway;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+      const n = this.grid.get(x + dx, y + dy);
+      if (!n || !n.road) continue;
+      if (n.roadType === 'highway') touchesHighway = true;
+      else touchesNonHighway = true;
+    }
+    if (!touchesHighway || !touchesNonHighway) {
+      this.onStatusMessage?.('Ramps need a highway AND a local/avenue road adjacent');
+      return false;
+    }
+    if (this.economy.treasury < RAMP_COST && !this.cheatUnlimitedMoney) {
+      this.onStatusMessage?.(`Not enough money — Ramp costs $${RAMP_COST.toLocaleString()}`);
+      return false;
+    }
+    // Stamp the bit + clear any control devices on the same tile.
+    t.ramp = true;
+    if (t.stopSign) this.grid.setStopSign(x, y, false);
+    if (t.trafficLight) {
+      this.grid.setTrafficLight(x, y, false);
+      this.trafficLights.rebuild(this.grid);
+    }
+    this.economy.treasury -= RAMP_COST;
+    this.renderer.drawRoads(this.grid);
+    this.onStatusMessage?.('Interchange ramp placed — smooth merge');
     return true;
   }
 

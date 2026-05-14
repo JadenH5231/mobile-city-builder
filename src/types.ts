@@ -131,6 +131,15 @@ export const STOP_SIGN_PAUSE_SEC = 0.4;
 export const TRAFFIC_LIGHT_COST = 1500;
 
 /**
+ * Highway interchange ramp cost (Alpha 4.16). Placed on a road tile
+ * that's between a highway and a non-highway road tile, marking that
+ * tile as a smooth merge point — cars passing through skip stop signs
+ * + intersection collision rolls. Cheap so the player paints them
+ * freely wherever they want highway exits / entrances.
+ */
+export const RAMP_COST = 1500;
+
+/**
  * Per-other-car probability of a collision when arriving at an uncontrolled
  * intersection (3+ road edges, no stop sign). Capped so a single jammed tile
  * doesn't pulverise an entire stream of cars in seconds.
@@ -698,6 +707,9 @@ export const MILESTONES: readonly Milestone[] = [
     popThreshold: 1000,
     unlocks: [
       'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
+      // Highway interchange ramps (Alpha 4.16) — unlocked alongside
+      // highways since that's when they become useful.
+      'place_ramp',
       // Skyscrapers (Alpha 3.1.2). Unlocked at City — they need a real
       // city before they make sense.
       'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
@@ -840,6 +852,10 @@ export type Tool =
   | 'place_bus_depot'
   | 'place_stop_sign'
   | 'place_traffic_light'
+  // Highway interchange ramp (Alpha 4.16). Tap-only road-tile attachment;
+  // marks the tile as a smooth merge between a highway and a non-highway
+  // road. Visual + behavioural change — see RAMP_COST.
+  | 'place_ramp'
   | 'place_museum'
   | 'place_stadium'
   | 'place_observatory'

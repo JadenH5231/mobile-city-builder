@@ -45,6 +45,14 @@ const ICON_HIGHWAY = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="2" stroke-linecap="round"
         stroke-linejoin="round" fill="none"/>
 </svg>`;
+/** Highway ramp icon (Alpha 4.16) — a curving merge line connecting a
+ *  thick highway lane (left) to a thinner local road (right). The
+ *  curve reads as "merge" / "exit ramp". */
+const ICON_RAMP = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3 6l4 0M3 18l4 0" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M7 6q6 0 8 6t6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M7 18q6 0 8 -6t6 -6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.55"/>
+</svg>`;
 const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -255,6 +263,10 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'road_local',   label: 'Local',   icon: ICON_LOCAL },
       { kind: 'tool', tool: 'road_avenue',  label: 'Avenue',  icon: ICON_AVENUE },
       { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY },
+      // Highway interchange ramp (Alpha 4.16). Tap on a road tile that
+      // bridges a highway and a local/avenue — turns the tile into a
+      // smooth merge so cars flow seamlessly between tiers.
+      { kind: 'tool', tool: 'place_ramp',   label: 'Ramp',    icon: ICON_RAMP },
       { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH }
     ]
   },

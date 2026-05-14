@@ -1779,12 +1779,13 @@ export class Renderer {
     }
     if (this.buildingGlowMesh) {
       const mat = this.buildingGlowMesh.material as MeshBasicMaterial;
-      // Building glow is even more subtle than lampGlow (Alpha 4.20).
-      // ×0.50 multiplier ensures the cream-white pools complement
-      // rather than compete with the yellow streetlamp pools (×0.75)
-      // — together they layer like real city lighting rather than
-      // washing out into one bright mass.
-      mat.opacity = nightOpacity * 0.50;
+      // Building glow opacity bumped 4.20.1 (0.50 → 0.85). Original was
+      // pitched as "subtle complement" but came out invisible. Still
+      // sits below lit-window (×0.85) and lamp glow (×0.75) once you
+      // factor in the additive-blending — at deep night the cream
+      // tone now visibly tints the ground around dense blocks without
+      // overpowering the warmer yellow streetlamp pools.
+      mat.opacity = nightOpacity * 0.85;
       this.buildingGlowMesh.visible = nightOpacity > 0.01;
     }
   }
@@ -2678,10 +2679,14 @@ function makeBuildingGlowTexture(): import('three').Texture {
   // sodium-vapor yellow so it reads as "interior incandescent" — the
   // kind of warm-but-not-orange light you actually see spilling out of
   // apartment windows at night.
-  grad.addColorStop(0, 'rgba(255, 248, 218, 0.42)');
-  grad.addColorStop(0.30, 'rgba(255, 240, 210, 0.22)');
-  grad.addColorStop(0.65, 'rgba(248, 232, 200, 0.06)');
-  grad.addColorStop(1, 'rgba(248, 232, 200, 0.0)');
+  // Bumped peaks 4.20.1: original 0.42 / 0.22 / 0.06 was too subtle to
+  // notice against deep night sky + lamp glow already on screen. Brighter
+  // centre + slower falloff so the spill actually reads beyond the
+  // building's silhouette.
+  grad.addColorStop(0, 'rgba(255, 246, 210, 0.78)');
+  grad.addColorStop(0.30, 'rgba(255, 238, 200, 0.45)');
+  grad.addColorStop(0.65, 'rgba(248, 230, 195, 0.18)');
+  grad.addColorStop(1, 'rgba(248, 230, 195, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
   const tex = new CanvasTexture(canvas);
@@ -2734,14 +2739,19 @@ function buildBuildingGlowMesh(grid: Grid, texture: import('three').Texture): Me
       handled.add(idx + 1);
       handled.add(idx + grid.width);
       handled.add(idx + grid.width + 1);
-      halos.push({ cx: cx + 0.5, cz: cz + 0.5, y: baseY, r: 1.20 });
+      halos.push({ cx: cx + 0.5, cz: cz + 0.5, y: baseY, r: 2.80 });
       continue;
     }
-    // Regular density-tiered halo. L2 = small, L3 = medium, L4 = larger.
+    // Regular density-tiered halo. Bumped 4.20.1 from (0.55/0.75/0.95)
+    // because the original radii barely cleared the building footprint
+    // — the centre of every halo was hidden by its own building from a
+    // 3/4 camera angle, leaving only a thin invisible ring on the
+    // sidewalk. New radii spill ~1 tile beyond the footprint so the
+    // light reads as actual window-spill onto the surrounding ground.
     let r: number;
-    if (t.density >= 4) r = 0.95;
-    else if (t.density === 3) r = 0.75;
-    else r = 0.55;  // density === 2
+    if (t.density >= 4) r = 2.00;
+    else if (t.density === 3) r = 1.60;
+    else r = 1.20;  // density === 2
     halos.push({ cx, cz, y: baseY, r });
   }
   if (halos.length === 0) return null;

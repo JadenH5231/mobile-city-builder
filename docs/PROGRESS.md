@@ -4,6 +4,14 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.15.1 — Fix: motorcade pull-over deadlock (cars never resumed)** — playtest report: "The cars need to go back to the road driving after the motorcade passes. This broke the game."
+  - **Two compounding bugs** that together left ambient cars frozen forever after a motorcade:
+    1. **Pull-over → yielding leak.** When a car's `pauseRemaining` (from the motorcade's per-frame pull-over refresh) drained to 0, it unconditionally entered the FIFO yielding state — which was originally designed only for stop-sign cars parked at intersection boundaries. Pull-over cars are paused MID-SEGMENT, not at any intersection, so the yielding logic had nothing meaningful to release them on.
+    2. **Motorcade leader-gap deadlock.** The motorcade's pull-over freezes the car directly in front of it on the same road segment. The leader-gap clamp then prevented the motorcade from advancing past, but the motorcade continued refreshing the paused car's pause every frame → infinite deadlock. Motorcade never reached its destination → never despawned → cars never recovered.
+  - **Fix 1**: When a car's pause drains, only enter yielding mode if `segmentT === STOP_PRE_T` (i.e. parked at the stop-sign boundary). Otherwise just resume driving normally on the next tick. Pull-over cars now correctly fall through to motion when the pause ends.
+  - **Fix 2**: Authority cars (motorcade + emergency) now bypass paused/yielding cars in BOTH the leader-gap pre-pass and the spillback check. Police, fire trucks, and motorcade vehicles drive past frozen traffic instead of queueing behind it. Without the deadlock, the motorcade reaches its destination and despawns normally; pause refreshes stop firing; ambient cars drain their pause and resume.
+  - No save schema bump. Pure per-tick behaviour fix.
+
 - **Alpha 4.15 — Per-block placement for big civic builds (with construction sites + ghost web)** — user spec following the 4.14.3 road-access fix: "Make every big building require individual block placements... Break the cost down to its by-block cost... When the user places the first block the game should check if the rest of the building can be put. The game should also show a web of where to put the rest of the blocks." This is the big architectural pivot away from all-at-once monument placement.
   - **New per-block placement flow** for **Mayor's Mansion (8 blocks), City Hall (15), Provincial Capital (24), National Capital (28)**.
     - First tap → two-tap arm/confirm preview from Alpha 4.13 still applies. The "armed" position locks in the footprint anchor (top-left).

@@ -598,9 +598,21 @@ export class Vehicles {
     }
 
     // Per-segment leader pre-pass — used to keep cars from visually overlapping.
+    // Authority cars (motorcade + emergency) bypass paused/yielding cars
+    // (Alpha 4.15.1 fix) so they can drive past pulled-over traffic.
+    // Without this, the motorcade would freeze the car directly in front
+    // of it, then leader-gap would block the motorcade from advancing
+    // past — and because the motorcade keeps refreshing the paused car's
+    // pause every tick, the deadlock is permanent. The user's report:
+    // "cars don't go back to driving after the motorcade passes" was
+    // exactly this loop.
     const leaderT: number[] = new Array(this.cars.length);
     for (let i = 0; i < this.cars.length; i++) {
       const me = this.cars[i]!;
+      const myKind = me.kind ?? 'resident';
+      const meIsAuthority =
+        myKind === 'patrol' || myKind === 'fire_response' ||
+        myKind === 'motorcade_lead' || myKind === 'motorcade_limo' || myKind === 'motorcade_tail';
       const myA = me.pathTiles[me.segmentIdx]!;
       const myB = me.pathTiles[me.segmentIdx + 1]!;
       let best = Infinity;
@@ -609,6 +621,8 @@ export class Vehicles {
         const other = this.cars[j]!;
         if (other.pathTiles[other.segmentIdx] !== myA) continue;
         if (other.pathTiles[other.segmentIdx + 1] !== myB) continue;
+        // Authority skips frozen cars — flashers / sirens, they push past.
+        if (meIsAuthority && (other.pauseRemaining > 0 || other.yielding)) continue;
         const aheadT =
           other.segmentT > me.segmentT ||
           (other.segmentT === me.segmentT && j < i)
@@ -643,8 +657,24 @@ export class Vehicles {
       if (car.pauseRemaining > 0) {
         car.pauseRemaining = Math.max(0, car.pauseRemaining - dt);
         if (car.pauseRemaining > 0) continue;
-        car.yielding = true;
-        car.yieldSince = now;
+        // After the pause drains, decide: enter yielding mode (stop-sign
+        // case — parked at the intersection boundary, waiting for cross-
+        // traffic), OR just resume driving (pull-over case — frozen
+        // mid-segment by a passing motorcade, no intersection involved).
+        // The discriminator is segmentT: stop-sign cars park at exactly
+        // STOP_PRE_T (= 0.5), pull-over cars are at whatever position
+        // they happened to be when the motorcade arrived.
+        // Bug fix (Alpha 4.15.1): pre-fix, ALL paused cars dropped into
+        // yielding mode after a pull-over, then waited for FIFO release
+        // that may never come — leaving cars stuck on the side of the
+        // road forever after the motorcade moved on.
+        const atStopBoundary = Math.abs(car.segmentT - STOP_PRE_T) < 1e-3;
+        if (atStopBoundary) {
+          car.yielding = true;
+          car.yieldSince = now;
+        }
+        // Else: pull-over case → fall through to advance normally on the
+        // next iteration (this tick's `continue`-less path resumes).
       }
 
       // Stage 2: yielding. Block until the intersection ahead is empty AND
@@ -764,12 +794,19 @@ export class Vehicles {
         const newFromIdx = car.pathTiles[car.segmentIdx + 1];
         const newToIdx = car.pathTiles[car.segmentIdx + 2];
         if (newFromIdx !== undefined && newToIdx !== undefined) {
+          // Authority cars (motorcade + emergency) bypass spillback from
+          // paused/yielding traffic too (Alpha 4.15.1 fix). Same reason
+          // as the leader-gap exclusion above — without this they get
+          // stuck at segmentT=1 of the current segment if the next
+          // segment is jammed with pulled-over cars, contributing to
+          // the same deadlock the leader-gap fix addresses.
           let minNextT = Infinity;
           for (let j = 0; j < this.cars.length; j++) {
             if (j === i) continue;
             const other = this.cars[j]!;
             if (other.pathTiles[other.segmentIdx] !== newFromIdx) continue;
             if (other.pathTiles[other.segmentIdx + 1] !== newToIdx) continue;
+            if (authority && (other.pauseRemaining > 0 || other.yielding)) continue;
             if (other.segmentT < minNextT) minNextT = other.segmentT;
           }
           if (minNextT < MIN_CAR_GAP) {

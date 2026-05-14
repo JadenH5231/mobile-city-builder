@@ -4,6 +4,13 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.20.1 — Building glow halos: visibility tune-up** — playtest verdict on 4.20: "I didn't see a difference." The original radii were too small and the opacity too conservative — most of every halo was hidden by its own building from a 3/4 camera angle, and what spilled out was barely above the night-sky baseline.
+  - **Halo radii bumped ~2×**: L2 0.55→1.20, L3 0.75→1.60, L4 0.95→2.00, Skyscraper 1.20→2.80. Now spills ~1 tile beyond the building footprint so the cream wash actually lands on the surrounding sidewalk / road / neighbouring lots instead of being eclipsed by the building it's lighting.
+  - **Texture peak alpha**: centre 0.42→0.78, mid 0.22→0.45, outer 0.06→0.18. Steeper centre + slower outer falloff so even a single halo reads as a soft pool, not a faint smudge.
+  - **Opacity multiplier**: ×0.50 → ×0.85 at deep night. Still sits below lit-windows (×0.85) and around lamp-glow (×0.75), but additive blending compounds it visibly with both layers now.
+  - Together: a dense L3/L4/skyscraper block now visibly glows from below at night the way real downtowns do, while a single L2 cottage still reads as one quiet pool.
+  - No save schema change. Bundle 953 KB raw / 251 KB gzipped (unchanged from 4.20 — pure constant tuning).
+
 - **Alpha 4.20 — Building glow halos at night (subtle, complements streetlights)** — player ask: "night time has to be a bit more vibrant than just the streets and the parks. Skyscrapers emit some light. Max, Lvl 3 and Lvl 2 buildings should emit a small amount of tasteful light that would be typical of a real city. This light should compliment street and park lighting, not compete with it."
   - **New `buildBuildingGlowMesh`** + new cream-white radial-gradient texture (`makeBuildingGlowTexture`). Distinct from the existing yellow `lampGlowTexture` so building light reads as **interior-incandescent spillover** rather than another sodium-vapor street pool.
   - **Per-density halo size** at the base of each developed L2+ residential / commercial / mixed-use tile:

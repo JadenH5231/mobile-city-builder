@@ -4,6 +4,15 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.22.1 — Highways are collision-free (no random crash rolls anywhere highway touches)** — playtest verdict on 4.22 dual carriageway: "The highway system makes it hard to remember what direction everything is going and what direction you painted it. Make it so that the highways just automatically filter it so that there are no collisions one way or another. If a car is going in the opposite direction the other cars know not to take that lane and pick the other lane. This makes it so I dont have to plan so hard to get highways to work."
+  - **Diagnosis**: routing was already correct — `RoadGraph.canTraverseHighway` enforces highway one-way per tile, so a car going east never routes through a westbound highway lane. With the dual carriageway from 4.22, every highway has both directions available, so the right lane is always picked. The actual user pain was the **intersection collision rolls**: any 3+ way intersection without a stop sign / traffic light / ramp / authority car triggers `crashesThisFrame.push(...)` rolls. Highway intersections fired these rolls just like local ones — every time a highway crossed another road, the player got punished with random crashes. Felt like a planning trap and discouraged building any highways at all.
+  - **Fix**: collision rolls now skip:
+    - Tiles where `roadType === 'highway'` (the highway side of any intersection)
+    - Tiles 4-adjacent to a highway (the LOCAL side of a highway-meets-local intersection — covers the other half of the experience)
+  - **Net effect**: highways and any intersection that touches a highway are completely collision-free. Cars on adjacent opposing-direction highway tiles don't crash because they're physically parallel (one-way enforcement keeps them on their own lane). The player can build highways however they want without paying a crash tax.
+  - **What's preserved**: pure local-road intersections (no highway nearby) still trigger collision rolls. Stop signs and traffic lights still suppress rolls everywhere. Authority cars still pass through.
+  - No save schema change. Pure simulation behaviour fix.
+
 - **Alpha 4.21.1 — Rotate works on invalid spots too** — playtest report: "when its in a spot you can't place it in it doesn't rotate." Bug: `armOrConfirmMonument` cleared `pendingMonument` to null when the first tap landed on an invalid spot, so the floating Rotate button was never shown — player had to tap somewhere VALID first, rotate to find the orientation they wanted, then tap their actual target spot. With the fix, the player can tap their target spot first, then rotate the previewed footprint freely until they find an orientation that fits, then commit.
   - **Fix**: in `armOrConfirmMonument`, ARM the preview even when the placement is invalid. Status toast updated to `"City Hall won't fit at this orientation — ↻ to rotate or tap elsewhere"` so the player knows what to do. The second-tap commit path already re-validates and will surface a clear toast if the player tries to confirm an invalid orientation.
 

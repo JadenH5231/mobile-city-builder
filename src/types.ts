@@ -27,8 +27,16 @@ export const ZONE_LIFT = 0.005;
  *
  * - **local**: 2-lane bidirectional. The default tier; cheapest maintenance.
  * - **avenue**: 4-lane bidirectional. Wider, faster, higher capacity.
- * - **highway**: 2-lane one-way. Fastest tier when free-flowing; restricted
- *   direction means painting matters and on/off ramps need real planning.
+ * - **highway**: 2-lane one-way per tile. Fastest tier when free-flowing.
+ *   **Auto-paints as a dual carriageway** (Alpha 4.22) — every highway
+ *   stroke creates BOTH a forward lane (the painted path) AND a parallel
+ *   reverse-direction lane one tile perpendicular (right of stroke
+ *   direction by default; falls back to left if the right side runs
+ *   off-map). The result is a real divided highway with two lanes
+ *   going opposite ways. Each lane is still mechanically a one-way
+ *   highway tile — `highwayDir` is set per tile to the local flow
+ *   direction. Maintenance doubles naturally because there are two
+ *   tiles per stroke step.
  *
  * Per-tile `roadType` lives on `Tile`. Edges between adjacent road tiles are
  * still stored as undirected pairs in `Grid.roadEdges`; direction comes from

@@ -2848,6 +2848,56 @@ export class Game {
 
   // --- Road tool stroke ---------------------------------------------------
 
+  /**
+   * Compute the parallel reverse-direction lane for a highway stroke
+   * (Alpha 4.22). Returns the original path tiles shifted by one tile
+   * perpendicular to the OVERALL stroke direction (start → end), then
+   * REVERSED so segment directions are opposite the original.
+   *
+   * Perpendicular preference: RIGHT of the stroke direction (matches
+   * right-hand traffic conventions — when driving east, the parallel
+   * westbound lane is to the south). If the right side runs off-map
+   * for ANY tile in the path, falls back to the LEFT side. If both
+   * fail, returns an empty array (no parallel painted; player gets a
+   * one-lane highway that still works as a normal one-way highway).
+   *
+   * Parallel tiles that overlap existing roads upgrade to highway tier
+   * in the normal paint pass (paint always wins). Parallel tiles on
+   * water become bridges automatically via Grid.setRoad.
+   */
+  private computeHighwayParallelPath(
+    path: { x: number; y: number }[]
+  ): { x: number; y: number }[] {
+    if (path.length < 2) return [];
+    const start = path[0]!;
+    const end = path[path.length - 1]!;
+    const overallDx = Math.sign(end.x - start.x);
+    const overallDy = Math.sign(end.y - start.y);
+    if (overallDx === 0 && overallDy === 0) return [];
+    // Right perpendicular of (dx, dy) is (-dy, dx) in the (+x east,
+    // +y south) coordinate system used by tile coords. Driving east
+    // (1, 0) → right is south (0, 1). Driving north (0, -1) → right
+    // is east (1, 0). Diagonals get diagonal perpendiculars.
+    const tryOffset = (
+      px: number, py: number
+    ): { x: number; y: number }[] => {
+      const out: { x: number; y: number }[] = [];
+      for (const p of path) {
+        const t = this.grid.get(p.x + px, p.y + py);
+        if (!t) return [];   // off-map; this side doesn't fit
+        out.push({ x: p.x + px, y: p.y + py });
+      }
+      // Reverse so the parallel's segment directions are OPPOSITE the
+      // original — second-pass dirBetween will compute the reverse dir
+      // on each tile naturally.
+      return out.reverse();
+    };
+    const right = tryOffset(-overallDy, overallDx);
+    if (right.length >= 2) return right;
+    const left = tryOffset(overallDy, -overallDx);
+    return left;
+  }
+
   private applyRoadStroke(path: { x: number; y: number }[], tier: RoadType): void {
     // Bridge Mode (Alpha 2.12): paint on the upper layer instead.
     if (this.bridgeMode) {
@@ -2860,26 +2910,43 @@ export class Game {
     // can imprint it after edges are placed. Map<tileIdx, dirIndex>.
     const desiredDirs = tier === 'highway' ? new Map<number, number>() : null;
 
-    if (path.length === 1) {
-      desiredStubs.add(this.tileIndex(path[0]!.x, path[0]!.y));
-    } else {
-      for (let i = 0; i < path.length - 1; i++) {
-        const a = path[i]!;
-        const b = path[i + 1]!;
-        desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
-        if (desiredDirs) {
-          // Flow direction = "from a toward b" — applies to tile a.
-          const d = dirBetween(a.x, a.y, b.x, b.y);
-          if (d !== -1) desiredDirs.set(this.tileIndex(a.x, a.y), d);
+    // Highways auto-paint a parallel reverse-direction lane (Alpha 4.22)
+    // — the user's ask: "have highways automatically paint two roads,
+    // one going in one direction one going the other". The original
+    // stroke is the FORWARD lane; the parallel stroke is one tile
+    // perpendicular (right of stroke direction by default; falls back
+    // to left if the right side runs off the map) and REVERSED so the
+    // flow direction is opposite. Both lanes go through the same
+    // edge/stub/dir sets so the existing paint logic handles them in
+    // one pass — no double-render, no double-rebuild.
+    const allPaths: Array<{ x: number; y: number }[]> = [path];
+    if (tier === 'highway' && path.length >= 2) {
+      const parallel = this.computeHighwayParallelPath(path);
+      if (parallel.length >= 2) allPaths.push(parallel);
+    }
+
+    for (const pth of allPaths) {
+      if (pth.length === 1) {
+        desiredStubs.add(this.tileIndex(pth[0]!.x, pth[0]!.y));
+      } else {
+        for (let i = 0; i < pth.length - 1; i++) {
+          const a = pth[i]!;
+          const b = pth[i + 1]!;
+          desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
+          if (desiredDirs) {
+            // Flow direction = "from a toward b" — applies to tile a.
+            const d = dirBetween(a.x, a.y, b.x, b.y);
+            if (d !== -1) desiredDirs.set(this.tileIndex(a.x, a.y), d);
+          }
         }
-      }
-      // Last tile inherits the previous segment's direction (no outgoing edge
-      // in this stroke; cars passing through just continue in the same flow).
-      if (desiredDirs && path.length >= 2) {
-        const a = path[path.length - 2]!;
-        const b = path[path.length - 1]!;
-        const d = dirBetween(a.x, a.y, b.x, b.y);
-        if (d !== -1) desiredDirs.set(this.tileIndex(b.x, b.y), d);
+        // Last tile inherits the previous segment's direction (no outgoing edge
+        // in this stroke; cars passing through just continue in the same flow).
+        if (desiredDirs && pth.length >= 2) {
+          const a = pth[pth.length - 2]!;
+          const b = pth[pth.length - 1]!;
+          const d = dirBetween(a.x, a.y, b.x, b.y);
+          if (d !== -1) desiredDirs.set(this.tileIndex(b.x, b.y), d);
+        }
       }
     }
 

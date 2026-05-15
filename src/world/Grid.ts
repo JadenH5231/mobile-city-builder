@@ -197,14 +197,22 @@ export class Grid {
    *  Allocates `width × height` blank Tile instances at default state;
    *  the SaveGame.applySave loop will overwrite each one's fields with
    *  the saved data. Edges are NOT preserved here — applySave reloads
-   *  them from the snapshot. */
+   *  them from the snapshot.
+   *
+   *  Bounds-checked (Beta 1.0.7) — clamps to [8, 512] on each axis so a
+   *  malicious portable city code with `width: 100000` can't OOM the
+   *  recipient's browser by allocating billions of Tile instances. The
+   *  largest legitimate map (Large preset) is 256×256, so 512 leaves
+   *  headroom for grid-expansion players who've grown the map. */
   resizeForLoad(width: number, height: number): void {
-    this.width = width;
-    this.height = height;
-    this.tiles = new Array<Tile>(width * height);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        this.tiles[y * width + x] = new Tile(x, y);
+    const safeW = Math.max(8, Math.min(512, Math.floor(Number(width) || 0)));
+    const safeH = Math.max(8, Math.min(512, Math.floor(Number(height) || 0)));
+    this.width = safeW;
+    this.height = safeH;
+    this.tiles = new Array<Tile>(safeW * safeH);
+    for (let y = 0; y < safeH; y++) {
+      for (let x = 0; x < safeW; x++) {
+        this.tiles[y * safeW + x] = new Tile(x, y);
       }
     }
     this.roadEdges.clear();

@@ -6,6 +6,8 @@ dist
 .env*
 # Track the template — only the real keys (.env / .env.local) stay local.
 !.env.example
+# Personal business plan — local-only, never committed.
+business-plan.html
 .idea
 .vscode
 # Per-machine Claude Code state — settings, worktrees, transcripts.

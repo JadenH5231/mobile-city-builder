@@ -88,6 +88,15 @@
         <!-- Settings entry (Alpha 4.8). Opens the modal below. -->
         <button id="hud-settings" type="button" class="pill action" aria-label="Open settings">⚙ Settings</button>
       </div>
+      <!-- Account group (Alpha 4.25). Hidden when cloud (Supabase) isn't
+           configured for this build. Shows "Sign in" when signed-out,
+           "alice@…" + "Sign out" when signed-in. -->
+      <div id="hud-account-group" class="hud-more-popover__group hidden">
+        <div class="hud-more-popover__group-label">Account</div>
+        <button id="hud-signin" type="button" class="pill action" aria-label="Sign in to sync cities">👤 Sign in</button>
+        <span id="hud-account-name" class="pill" style="display:none"></span>
+        <button id="hud-signout" type="button" class="pill action" style="display:none" aria-label="Sign out">Sign out</button>
+      </div>
     </div>
 
     <!-- Faction Detail modal (Alpha 4.9). Opened from a leader row in
@@ -668,6 +677,62 @@
       <span class="rotate-monument-btn__label">Rotate</span>
     </button>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
+
+    <!-- Auth modal (Alpha 4.25). Hidden until a sign-in/up flow is opened
+         from the More menu. Supports email + password and magic-link
+         (passwordless). All UI is vanilla DOM to match the rest of the
+         project's no-framework rule. -->
+    <div id="auth-modal" class="auth-modal hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div class="auth-modal__backdrop" data-auth-close></div>
+      <div class="auth-modal__panel">
+        <button type="button" class="auth-modal__close" data-auth-close aria-label="Close">✕</button>
+        <h2 id="auth-modal-title" class="auth-modal__title">Sign in to your account</h2>
+        <p class="auth-modal__subtitle">Save your cities to your account so they're available on every device.</p>
+
+        <div class="auth-modal__tabs" role="tablist">
+          <button type="button" class="auth-modal__tab is-active" data-auth-tab="signin" role="tab">Sign in</button>
+          <button type="button" class="auth-modal__tab" data-auth-tab="signup" role="tab">Create account</button>
+          <button type="button" class="auth-modal__tab" data-auth-tab="magic" role="tab">Email link</button>
+        </div>
+
+        <form id="auth-form-signin" class="auth-modal__form is-active" data-auth-pane="signin">
+          <label class="auth-modal__field">
+            <span>Email</span>
+            <input type="email" name="email" autocomplete="email" required />
+          </label>
+          <label class="auth-modal__field">
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="current-password" required minlength="6" />
+          </label>
+          <button type="submit" class="auth-modal__submit">Sign in</button>
+        </form>
+
+        <form id="auth-form-signup" class="auth-modal__form" data-auth-pane="signup">
+          <label class="auth-modal__field">
+            <span>Email</span>
+            <input type="email" name="email" autocomplete="email" required />
+          </label>
+          <label class="auth-modal__field">
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="new-password" required minlength="6" />
+          </label>
+          <button type="submit" class="auth-modal__submit">Create account</button>
+          <p class="auth-modal__hint">A confirmation email will be sent. Click the link to verify, then come back here to sign in.</p>
+        </form>
+
+        <form id="auth-form-magic" class="auth-modal__form" data-auth-pane="magic">
+          <label class="auth-modal__field">
+            <span>Email</span>
+            <input type="email" name="email" autocomplete="email" required />
+          </label>
+          <button type="submit" class="auth-modal__submit">Email me a sign-in link</button>
+          <p class="auth-modal__hint">No password needed — we'll email you a one-tap link to sign in.</p>
+        </form>
+
+        <div id="auth-modal-status" class="auth-modal__status" aria-live="polite"></div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

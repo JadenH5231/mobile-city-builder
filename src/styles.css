@@ -167,6 +167,148 @@ body {
   color: rgba(207, 232, 214, 0.5);
 }
 
+/* Auth modal (Alpha 4.25). Centred dialog with backdrop, three tabbed
+   forms for sign-in / sign-up / magic link. Vanilla DOM to match the
+   no-framework rule. */
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.auth-modal.hidden { display: none; }
+.auth-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+.auth-modal__panel {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #1c1f25;
+  color: #e8eaee;
+  border-radius: 14px;
+  padding: 22px 22px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.auth-modal__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c0c4cc;
+  font-size: 16px;
+  cursor: pointer;
+}
+.auth-modal__close:hover { background: rgba(255, 255, 255, 0.12); }
+.auth-modal__title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.auth-modal__subtitle {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #9ba0a8;
+  line-height: 1.4;
+}
+.auth-modal__tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+.auth-modal__tab {
+  flex: 1;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #b0b4bc;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.auth-modal__tab.is-active {
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+.auth-modal__form {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+.auth-modal__form.is-active { display: flex; }
+.auth-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auth-modal__field span {
+  font-size: 12px;
+  color: #9ba0a8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.auth-modal__field input {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  font-size: 15px;
+  font-family: inherit;
+}
+.auth-modal__field input:focus {
+  outline: none;
+  border-color: #ff8030;
+  background: rgba(255, 255, 255, 0.07);
+}
+.auth-modal__submit {
+  margin-top: 4px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #ff8030;
+  color: #1c1300;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.auth-modal__submit:hover { background: #ff8d40; }
+.auth-modal__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.auth-modal__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #9ba0a8;
+  line-height: 1.4;
+}
+.auth-modal__status {
+  margin-top: 12px;
+  min-height: 18px;
+  font-size: 13px;
+  color: #9ba0a8;
+}
+.auth-modal__status.is-error { color: #ff6e6e; }
+.auth-modal__status.is-success { color: #6dd06a; }
+
 /* Floating Rotate button (Alpha 4.21). Sits just above the toolbar
    centred horizontally; visible only when a big civic build is armed
    for placement. The placement-ghost preview re-renders each tap. */

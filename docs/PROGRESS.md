@@ -4,6 +4,29 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Alpha 4.25 — Beta launch prep: optional Supabase cloud saves + auth modal** — user direction: "I would like a way for a user to sign up and have an account so city import/export is more for sharing than it is saving the world." Adds Supabase-backed cloud saves + sign-in/sign-up flow, **fully opt-in at the build level** — without `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`, the auth pill is hidden and saves stay 100% IndexedDB local (existing behaviour preserved for forks).
+  - **New `src/auth/` module**:
+    - `SupabaseClient.ts` — single-instance `getSupabase()` reading `import.meta.env.VITE_SUPABASE_*`. Returns `null` when unset (no warning — local-only is a fully-supported state).
+    - `AuthState.ts` — `initAuth()` restores any persisted session before `Game.init`, `onAuthChange()` lets UI subscribe to sign-in / sign-out / token refresh, `isSignedIn()` for sync checks.
+    - `CloudSaveStore.ts` — Postgres-backed save store mirroring SaveGame's slice (load / save / writeRaw / loadSummary / clear / useSlot). Saves stored gzipped in a `bytea` column; PostgREST hex round-trip handled inline.
+  - **`SaveGame.ts` fans out to cloud automatically** when `cloud.available()` (signed-in + Supabase configured):
+    - `load()`: cloud first, fall back to local. Cloud loads also mirror back to local IndexedDB for offline cache.
+    - `save()`: writes local AND fires-and-forgets to cloud (won't block autosave on network).
+    - `writeRaw()` (city-code import): writes local + cloud so an imported city is bound to the user's account.
+    - `clear()`: wipes both.
+    - `loadSummary()`: cloud first.
+  - **New `src/ui/AuthModal.ts`** — vanilla DOM modal with three tabs:
+    - **Sign in**: email + password
+    - **Create account**: email + password + email verification
+    - **Email link**: passwordless magic-link (one-tap from inbox, no password to remember)
+    - Status pane shows live error / success messages from Supabase
+  - **More-menu Account group** (hidden when cloud isn't configured) — `👤 Sign in` pill opens the modal; signed-in state shows the user's email + a `Sign out` pill.
+  - **GitHub Actions deploy workflow** updated to inject the two env vars from repo secrets at build time. If unset, the production build runs in local-only mode (zero downside).
+  - **`docs/CLOUD_SETUP.md`** — 10-minute step-by-step: create Supabase project → run SQL schema → grab API keys → drop into `.env.local` + GitHub secrets → ship.
+  - **Cost trajectory**: $0/month on Supabase free tier (50K MAU / 500 MB) → $25/mo Pro at 50K-100K MAU. Each save row is ~25-90 KB compressed; 500 MB ≈ 1.6K-6.6K active 3-slot users.
+  - **Unchanged for normal play**: portable city codes still exist (now positioned as **sharing**, not backup, since cloud handles backup automatically). Local IndexedDB remains the offline cache. Existing saves untouched. Save schema v27.
+  - Bundle 977 KB raw / ~256 KB gzipped (+10 KB raw — Supabase JS SDK).
+
 - **Alpha 4.23 — Skyscraper construction stages look like a real construction site** — player ask: "Can you make skyscraper construction phases look a little more interesting and like a building being constructed?" Old stages were just a scaling-up box + 1-2 cranes; the new stages each tell a different story:
   - **Stage 0 — Site Prep**: excavated foundation pit + plywood formwork around the perimeter + on-site construction trailer (white box with windows + door panel) + lumber stack with strap bands + rebar bundle + concrete mixer (drum on a chassis with a yellow stripe ring) + dirt-spoil pile cone + a half-erected starter crane (lattice mast only, no jib yet). Reads as "first week on site."
   - **Stage 1 — Lower Floors**: poured concrete foundation slab + 3 stacked floor plates with darker shadow gaps between them + 4 concrete corner columns extending above the latest floor + 3 rebar bundles sticking out the top (anticipating the next pour) + construction hoist (lattice tower with cab parked partway up) on the east face + one full-height tower crane with operator cab + counterweight + cable + hook + lumber stack on the ground. Reads as "the building's getting started."

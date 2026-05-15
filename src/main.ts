@@ -4,7 +4,7 @@ import { Settings, bindSettingsPanel, DIFFICULTY_EFFECTS } from './ui/SettingsPa
 import { FactionDetailPanel } from './ui/FactionDetailPanel';
 import { MAP_SIZES } from './types';
 import { formatCurrency } from './ui/BudgetPanel';
-import { initAuth, onAuthChange, onPasswordRecovery } from './auth/AuthState';
+import { initAuth, onAuthChange } from './auth/AuthState';
 import { isCloudEnabled, getSupabase } from './auth/SupabaseClient';
 import { AuthModal } from './ui/AuthModal';
 import './styles.css';
@@ -984,14 +984,6 @@ if (isCloudEnabled()) {
     window.setTimeout(() => location.reload(), 350);
   };
   signinBtn?.addEventListener('click', () => authModal.open('signin'));
-
-  // Password-recovery hook (Beta 1.0.8). When the user clicks the
-  // recovery link in their email, the SDK puts them in a temporary
-  // recovery session and fires this event. Pop the modal in
-  // newpassword mode so they can set a new password without a fight.
-  onPasswordRecovery(() => {
-    authModal.open('newpassword');
-  });
   signoutBtn?.addEventListener('click', async () => {
     const supa = getSupabase();
     if (!supa) return;

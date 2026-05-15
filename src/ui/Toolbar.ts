@@ -48,6 +48,13 @@ const ICON_HIGHWAY = `<svg viewBox="0 0 24 24" aria-hidden="true">
 // (ICON_RAMP + ICON_CLOVERLEAF removed in Alpha 4.18.1 with their
 //  toolbar entries — kept the underlying Tools / dispatch / renderer
 //  for backwards-compat but the SVGs are unused.)
+// Highway flip tool (Beta 1.1.0) — circular double-arrow icon
+// suggesting "swap direction".
+const ICON_HIGHWAY_FLIP = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M7 7l3-3-3-3M7 4h7a4 4 0 014 4v2M17 17l-3 3 3 3M17 20h-7a4 4 0 01-4-4v-2"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" fill="none" transform="translate(0,-2)"/>
+</svg>`;
 const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -266,6 +273,11 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'road_local',   label: 'Local',   icon: ICON_LOCAL },
       { kind: 'tool', tool: 'road_avenue',  label: 'Avenue',  icon: ICON_AVENUE },
       { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY },
+      // Highway flip tool (Beta 1.1.0). Single-tap any highway tile —
+      // the entire connected highway component flips direction in one
+      // motion (every tile's `highwayDir` reversed). Lets the player
+      // explicitly control which way each highway flows.
+      { kind: 'tool', tool: 'highway_flip', label: 'Flip',    icon: ICON_HIGHWAY_FLIP },
       // Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1 per
       // playtest feedback ("didn't like the merge lane or the
       // cloverleafs"). The Tools, dispatch, faction stances, and

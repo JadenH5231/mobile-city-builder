@@ -123,8 +123,10 @@ const TREE_TRUNK = 0x6e3e1d;
 const TREE_LEAF = 0x2f6a2d;
 /** Subtle dark green shadow disc under each tree (Alpha 2.6). */
 const TREE_SHADOW = 0x2a3a22;
-// Highway direction arrows removed in Alpha 4.22.2 — direction is dynamic.
-// HIGHWAY_ARROW_COLOR / makeArrowGeom dropped together.
+// Highway direction arrows restored in Beta 1.1.0 — directions are
+// player-set (paint-time imprint + flip tool) so the arrows are
+// stable + meaningful again.
+const HIGHWAY_ARROW_COLOR = 0xf2cd5c;
 const STOP_SIGN_COLOR = 0xc83838;
 const STOP_SIGN_TEXT = 0xffffff;
 
@@ -6197,13 +6199,21 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     // Bridge tiles override elevation: their deck floats over water at
     // BRIDGE_LIFT regardless of the (negative) underlying elevation.
     const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
-    // Highway direction arrows removed in Alpha 4.22.2 — direction is
-    // now dynamic (set by the first car on each lane, reset when the
-    // lane empties), so a baked-mesh arrow would show stale data and
-    // mislead the player. The whole point of the dynamic-direction
-    // model is that the player doesn't need to think about which way
-    // they painted the highway. The cars themselves visually convey
-    // direction.
+    // Highway direction arrows restored (Beta 1.1.0). Direction is now
+    // player-set: paint-time imprint sets the initial direction, and
+    // the `highway_flip` tool can toggle a whole connected line.
+    // Bidirectional tiles (`highwayDir === -1`) skip the arrow.
+    if (t.roadType === 'highway' && t.highwayDir >= 0 && t.highwayDir < 8) {
+      const cx = (t.x + 0.5) * TILE_SIZE;
+      const cz = (t.y + 0.5) * TILE_SIZE;
+      const offset = DIR_OFFSETS[t.highwayDir]!;
+      const arrow = makeArrowGeom(0.18, 0.22);
+      const yaw = Math.atan2(offset[0], offset[1]);
+      arrow.rotateY(yaw);
+      arrow.translate(cx, tileY + 0.003, cz);
+      arrows.push(arrow);
+      arrowColours.push(HIGHWAY_ARROW_COLOR);
+    }
     if (t.stopSign) {
       // Place one small stop sign per road approach, on the right shoulder
       // of incoming traffic — i.e. where a real stop sign goes (driver's
@@ -6921,4 +6931,17 @@ function pushQuad(
   indices[ii + 3] = v;     indices[ii + 4] = v + 3; indices[ii + 5] = v + 2;
 }
 
-// makeArrowGeom removed in Alpha 4.22.2 alongside highway direction arrows.
+// Restored Beta 1.1.0. Flat triangle pointing +Z (rotated by the caller
+// to match the highway's flow direction).
+function makeArrowGeom(width: number, length: number): BufferGeometry {
+  const positions = new Float32Array([
+    -width / 2, 0, -length / 2,
+     width / 2, 0, -length / 2,
+              0, 0,  length / 2
+  ]);
+  const indices = new Uint32Array([0, 2, 1]);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(positions, 3));
+  g.setIndex(new BufferAttribute(indices, 1));
+  return g;
+}

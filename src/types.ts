@@ -923,6 +923,12 @@ export type Tool =
   | 'road_local'
   | 'road_avenue'
   | 'road_highway'
+  // Highway flip tool (Beta 1.1.0). Single-tap a highway tile → flood-
+  // fill the connected highway component → reverse every tile's
+  // direction. Lets the player explicitly control which way each
+  // highway flows: paint sets the initial direction; tap-to-flip
+  // toggles the whole connected line. No drag behaviour.
+  | 'highway_flip'
   | 'place_path'
   | 'bulldoze'
   | 'residential_low'

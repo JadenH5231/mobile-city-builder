@@ -1011,6 +1011,34 @@ if (isCloudEnabled()) {
       }
     }
   });
+
+  // Auto-open the auth modal on first load when not signed in (Beta 1.0).
+  // Player ask: "I would like the login to pop up to come up if the user
+  // is not logged in so they know to log in." Tracked once via
+  // localStorage so we don't re-prompt every refresh after the user has
+  // already chosen "skip for now." First-launch prompt fires after a
+  // small delay so it doesn't shove in front of the city-loading splash.
+  const AUTH_PROMPTED_KEY = 'mqcity-auth-prompted';
+  const alreadyPrompted = (() => {
+    try { return localStorage.getItem(AUTH_PROMPTED_KEY) === '1'; } catch { return false; }
+  })();
+  // Recompute signed-in state at the moment we'd auto-open. The auth
+  // session is restored asynchronously inside initAuth() so a fresh
+  // device may not yet know the user has a saved session at this point;
+  // a small delay covers that.
+  setTimeout(() => {
+    const supa = getSupabase();
+    if (!supa) return;
+    if (alreadyPrompted) return;
+    if (!authModal) return;
+    // Re-check via the live session (in case onAuthChange hasn't fired
+    // yet for a freshly-loaded session).
+    void supa.auth.getSession().then(({ data }) => {
+      if (data.session) return; // already signed in
+      authModal.open('signin');
+      try { localStorage.setItem(AUTH_PROMPTED_KEY, '1'); } catch { /* private mode */ }
+    });
+  }, 800);
 }
 
 // Expose for ad-hoc debugging from the device's remote inspector.

@@ -44,17 +44,36 @@ their own rows.
 
 ## 3. Configure auth providers
 
-Go to **Authentication → Providers**. The defaults already enable
-**email** (with optional confirmation). For the beta:
+Go to **Authentication → Providers**.
 
+### Email (always enabled)
 - Leave **Email** enabled.
 - Decide on email confirmation: ON = users must click an emailed link
   before signing in (better for spam-prevention); OFF = sign-up signs
-  them in immediately (better for fast playtest). Toggle this in
+  them in immediately (better for fast playtest). Toggle in
   **Authentication → Providers → Email → Confirm email**.
 
-If you want Google sign-in later, enable it under the same panel and
-follow Supabase's wizard. Not required for v1.
+### Google (optional, ~5 minutes)
+The auth modal shows a "Continue with Google" button by default — to
+make it actually work:
+
+1. **Authentication → Providers → Google → Enable**.
+2. Follow Supabase's in-page wizard:
+   - Open Google Cloud Console → APIs & Services → Credentials → Create OAuth Client ID
+   - Application type: **Web application**
+   - Authorized redirect URI: copy from Supabase's Google config page (looks like `https://<your-project>.supabase.co/auth/v1/callback`)
+   - Copy the **Client ID** and **Client secret** back into Supabase
+3. Save. Test by clicking the Google button in the auth modal.
+
+### Apple (optional, requires Apple Developer account)
+The "Continue with Apple" button is wired up but only works after:
+
+1. You have an active Apple Developer account ($99/year).
+2. **Authentication → Providers → Apple → Enable**.
+3. Follow Supabase's wizard (Services ID, Sign-in Key, etc.).
+
+Without Apple Developer setup, the button will show an error toast
+when clicked — that's fine, you can ship without it and add later.
 
 ## 4. Get your project's URL + anon key
 

@@ -17,7 +17,10 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./mansion-icon.svg" />
     <link rel="apple-touch-icon" href="./mansion-icon.svg" />
-    <title>City Builder — prototype</title>
+    <title>MQ City Builder — Beta 1.0</title>
+    <meta name="apple-mobile-web-app-title" content="MQ City Builder" />
+    <meta name="application-name" content="MQ City Builder" />
+    <meta name="description" content="MQ City Builder — premium mobile-first low-poly 3D city builder. Single-purchase, no microtransactions, no timers." />
   </head>
   <body>
     <div id="app"></div>
@@ -686,8 +689,33 @@
       <div class="auth-modal__backdrop" data-auth-close></div>
       <div class="auth-modal__panel">
         <button type="button" class="auth-modal__close" data-auth-close aria-label="Close">✕</button>
-        <h2 id="auth-modal-title" class="auth-modal__title">Sign in to your account</h2>
-        <p class="auth-modal__subtitle">Save your cities to your account so they're available on every device.</p>
+        <h2 id="auth-modal-title" class="auth-modal__title">Welcome to MQ City Builder</h2>
+        <p class="auth-modal__subtitle">Sign in so your cities are saved to your account and available on every device.</p>
+
+        <!-- OAuth providers (Beta 1.0). One tap to sign in via Google or
+             Apple - no password to remember. Both buttons are always
+             visible; if a provider isn't enabled in the Supabase
+             dashboard, clicking will surface an error in the status
+             pane. -->
+        <div class="auth-modal__oauth">
+          <button type="button" class="auth-modal__oauth-btn auth-modal__oauth-btn--google" data-auth-oauth="google" aria-label="Continue with Google">
+            <svg class="auth-modal__oauth-icon" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.08-1.79 2.72v2.26h2.9c1.7-1.56 2.69-3.87 2.69-6.62z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.46-.81 5.95-2.18l-2.9-2.26c-.81.54-1.83.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A8.99 8.99 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.96 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.96a8.99 8.99 0 0 0 0 8.07l3-2.33z"/>
+              <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.94 8.94 0 0 0 9 0 8.99 8.99 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+          <button type="button" class="auth-modal__oauth-btn auth-modal__oauth-btn--apple" data-auth-oauth="apple" aria-label="Continue with Apple">
+            <svg class="auth-modal__oauth-icon" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="currentColor" d="M14.04 9.6c0-2.41 1.97-3.57 2.06-3.62-1.13-1.65-2.88-1.87-3.5-1.9-1.49-.15-2.91.88-3.67.88s-1.93-.85-3.18-.83C4.16 4.16 2.66 5.1 1.84 6.55c-1.74 3.02-.45 7.49 1.25 9.94.83 1.2 1.81 2.55 3.1 2.5 1.25-.05 1.72-.81 3.23-.81s1.93.81 3.24.78c1.34-.02 2.18-1.22 3-2.43.95-1.39 1.34-2.74 1.36-2.81-.03-.01-2.6-1-2.62-3.97zM11.62 2.5c.66-.81 1.11-1.93.99-3.05-.95.04-2.12.64-2.81 1.44-.61.71-1.16 1.86-1.02 2.96 1.07.08 2.17-.54 2.84-1.35z"/>
+            </svg>
+            <span>Continue with Apple</span>
+          </button>
+        </div>
+
+        <div class="auth-modal__divider"><span>or with email</span></div>
 
         <div class="auth-modal__tabs" role="tablist">
           <button type="button" class="auth-modal__tab is-active" data-auth-tab="signin" role="tab">Sign in</button>
@@ -730,6 +758,13 @@
         </form>
 
         <div id="auth-modal-status" class="auth-modal__status" aria-live="polite"></div>
+
+        <!-- Skip option for users who want to play without an account.
+             Their game still saves locally via IndexedDB; they can sign
+             in later from the More menu and their first cloud save
+             starts then. The auto-open-once flag is set in localStorage
+             so we don't re-prompt every refresh. -->
+        <button type="button" class="auth-modal__skip" data-auth-close>Skip for now — play without saving to the cloud</button>
       </div>
     </div>
 

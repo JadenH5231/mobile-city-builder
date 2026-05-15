@@ -55,6 +55,13 @@ const ICON_HIGHWAY_FLIP = `<svg viewBox="0 0 24 24" aria-hidden="true">
         stroke="currentColor" stroke-width="2" stroke-linecap="round"
         stroke-linejoin="round" fill="none" transform="translate(0,-2)"/>
 </svg>`;
+// One-way highway (Beta 1.1.1) — single line + arrow tip suggesting
+// "single lane, one direction" vs the dual-rail Highway icon.
+const ICON_HIGHWAY_ONEWAY = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 21V5M12 5l-4 4M12 5l4 4"
+        stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+</svg>`;
 const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M5 20c2-3 0-5 2-8s5-2 6-5 0-4 2-5"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
@@ -273,6 +280,11 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'road_local',   label: 'Local',   icon: ICON_LOCAL },
       { kind: 'tool', tool: 'road_avenue',  label: 'Avenue',  icon: ICON_AVENUE },
       { kind: 'tool', tool: 'road_highway', label: 'Highway', icon: ICON_HIGHWAY },
+      // One-way highway (Beta 1.1.1). Single-lane variant of Highway —
+      // skips the dual-carriageway auto-paint so the player can build
+      // a one-way road on its own (ramps, exits, slip lanes). Use the
+      // Flip tool to reverse direction afterwards.
+      { kind: 'tool', tool: 'road_highway_oneway', label: '1-Way', icon: ICON_HIGHWAY_ONEWAY },
       // Highway flip tool (Beta 1.1.0). Single-tap any highway tile —
       // the entire connected highway component flips direction in one
       // motion (every tile's `highwayDir` reversed). Lets the player

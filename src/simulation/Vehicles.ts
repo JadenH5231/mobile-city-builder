@@ -17,6 +17,7 @@ import {
   ROAD_TIER,
   STOP_SIGN_PAUSE_SEC,
   VEHICLE_PALETTE,
+  dirBetween,
   type Building,
   type RoadType
 } from '../types';
@@ -287,6 +288,10 @@ export class Vehicles {
       };
       this.cars.push(car);
       this.incrementLoad(grid, car.loadedTile);
+      // Dynamic highway-direction claim (Alpha 4.22.2): if the entered
+      // tile is a highway, lock its direction to the spawn motion until
+      // the lane clears.
+      this.claimHighwayDir(grid, path[0]!, path[1]!);
     }
   }
 
@@ -377,6 +382,10 @@ export class Vehicles {
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
+    // Dynamic highway-direction claim (Alpha 4.22.2): if the entered
+    // tile is a highway, lock its direction to the spawn motion until
+    // the lane clears.
+    this.claimHighwayDir(grid, path[0]!, path[1]!);
   }
 
   /**
@@ -438,6 +447,10 @@ export class Vehicles {
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
+    // Dynamic highway-direction claim (Alpha 4.22.2): if the entered
+    // tile is a highway, lock its direction to the spawn motion until
+    // the lane clears.
+    this.claimHighwayDir(grid, path[0]!, path[1]!);
   }
 
   /**
@@ -509,6 +522,10 @@ export class Vehicles {
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
+    // Dynamic highway-direction claim (Alpha 4.22.2): if the entered
+    // tile is a highway, lock its direction to the spawn motion until
+    // the lane clears.
+    this.claimHighwayDir(grid, path[0]!, path[1]!);
   }
 
   /**
@@ -540,6 +557,10 @@ export class Vehicles {
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
+    // Dynamic highway-direction claim (Alpha 4.22.2): if the entered
+    // tile is a highway, lock its direction to the spawn motion until
+    // the lane clears.
+    this.claimHighwayDir(grid, path[0]!, path[1]!);
   }
 
   /**
@@ -914,9 +935,15 @@ export class Vehicles {
         // Normal load transition: leave the arrived tile, count toward next.
         const newTarget = car.pathTiles[car.segmentIdx + 1];
         if (newTarget !== undefined) {
-          this.decrementLoad(grid, car.loadedTile);
+          const oldTile = car.loadedTile;
+          this.decrementLoad(grid, oldTile);
           car.loadedTile = newTarget;
           this.incrementLoad(grid, car.loadedTile);
+          // Dynamic highway-direction claim (Alpha 4.22.2): the car is
+          // moving from oldTile to newTarget; claim newTarget for that
+          // direction so opposing-direction cars route to the parallel
+          // lane (or unclaimed alternate).
+          this.claimHighwayDir(grid, oldTile, newTarget);
         }
       }
       if (despawned) continue;
@@ -941,7 +968,35 @@ export class Vehicles {
     const x = idx % grid.width;
     const y = (idx - x) / grid.width;
     const t = grid.get(x, y);
-    if (t && t.trafficLoad > 0) t.trafficLoad--;
+    if (!t) return;
+    if (t.trafficLoad > 0) t.trafficLoad--;
+    // Highway lane direction is dynamic (Alpha 4.22.2): when the last
+    // car leaves a highway tile, the lane resets to "unclaimed" so the
+    // next car can claim either direction. This is the "highways
+    // figure out direction by themselves" model — empty lanes are
+    // bidirectional, busy lanes carry whatever direction the cars on
+    // them happen to be travelling.
+    if (t.roadType === 'highway' && t.trafficLoad === 0 && t.highwayDir !== -1) {
+      t.highwayDir = -1;
+    }
+  }
+  /** Claim highway direction on `toIdx` based on the car's motion from
+   *  `fromIdx` (Alpha 4.22.2). Called whenever a car enters a tile
+   *  (spawn or mid-trip transition). For non-highway tiles, no-op.
+   *  Last writer wins — if cars come from both directions in the same
+   *  tick, the second to enter overwrites the direction. In practice
+   *  the routing-layer one-way enforcement keeps opposing cars on
+   *  separate parallel tiles, so this rarely matters. */
+  private claimHighwayDir(grid: Grid, fromIdx: number, toIdx: number): void {
+    if (fromIdx === toIdx) return;
+    const tx = toIdx % grid.width;
+    const ty = (toIdx - tx) / grid.width;
+    const t = grid.get(tx, ty);
+    if (!t || t.roadType !== 'highway') return;
+    const fx = fromIdx % grid.width;
+    const fy = (fromIdx - fx) / grid.width;
+    const dir = dirBetween(fx, fy, tx, ty);
+    if (dir !== -1) t.highwayDir = dir;
   }
 }
 

@@ -466,7 +466,12 @@ export function applySave(
     t.terrain = snap.terrain;
     t.road = snap.road;
     t.roadType = snap.roadType ?? 'local';
-    t.highwayDir = snap.highwayDir ?? -1;
+    // Highway direction is now dynamic (Alpha 4.22.2): cars claim the
+    // lane direction at runtime, and the lane resets to -1 when empty.
+    // Clear all saved highway directions on load so the new behaviour
+    // takes effect immediately on every existing city — players don't
+    // have to repaint their highways to benefit.
+    t.highwayDir = (snap.roadType === 'highway') ? -1 : (snap.highwayDir ?? -1);
     t.stopSign = snap.stopSign ?? false;
     // Traffic light is schema 6+. Older saves had no lights. Defensive
     // mutex: if both bits ever appear true (corrupt save), prefer the

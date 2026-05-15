@@ -80,16 +80,19 @@ export class RoadGraph {
  * Is traversal `from → to` allowed under highway one-way rules?
  *
  * - If neither endpoint is a highway: always.
- * - If `from` is a highway: its `highwayDir` must point toward `to` (i.e.
- *   the offset matches the flow).
- * - If `to` is a highway: its `highwayDir` must point AWAY from `from`
- *   along the same offset (i.e. the car arrives at `to` in `to`'s flow
- *   direction, not against it).
+ * - If a highway tile has `highwayDir === -1` (Alpha 4.22.2): the lane
+ *   is UNCLAIMED — bidirectional, allow either direction. The first
+ *   car to enter the tile claims it via dynamic direction in
+ *   `Vehicles.update`. When the last car leaves (trafficLoad → 0)
+ *   the tile resets to -1 and is bidirectional again. This is the
+ *   "highways figure out direction by themselves" model the user
+ *   asked for: paint highways without thinking about direction;
+ *   first cars to drive each lane set it.
+ * - Otherwise (claimed): the highway endpoint's `highwayDir` must
+ *   match the from→to offset (one-way per claim).
  *
- * In a typical highway both endpoints share the same direction, so a
- * forward edge is allowed and the reverse is not. At a boundary with a
- * local road, only the highway tile's direction is checked → cars enter
- * and exit in the natural direction.
+ * At a boundary with a local road, only the highway tile's direction
+ * is checked → cars enter and exit in the highway's claimed direction.
  */
 function canTraverse(
   grid: Grid,
@@ -101,7 +104,7 @@ function canTraverse(
   const from = grid.get(fromX, fromY);
   const to = grid.get(toX, toY);
   if (!from || !to) return false;
-  if (from.roadType === 'highway' && from.highwayDir !== offset) return false;
-  if (to.roadType === 'highway' && to.highwayDir !== offset) return false;
+  if (from.roadType === 'highway' && from.highwayDir !== -1 && from.highwayDir !== offset) return false;
+  if (to.roadType === 'highway' && to.highwayDir !== -1 && to.highwayDir !== offset) return false;
   return true;
 }

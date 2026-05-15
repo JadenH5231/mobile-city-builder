@@ -246,6 +246,7 @@ body {
   background: rgba(255, 255, 255, 0.10);
   color: #ffffff;
 }
+.auth-modal__tab.hidden { display: none; }
 .auth-modal__form {
   display: none;
   flex-direction: column;

@@ -1987,22 +1987,33 @@ export class Game {
       this.onStatusMessage?.('Tap a highway tile to flip its direction');
       return false;
     }
-    // Flood-fill the connected highway component (4-adjacent).
+    // Flood-fill the connected highway component via ROAD-GRAPH EDGES
+    // (Beta 1.1.1) — not 4-adjacency. Two parallel lanes from a dual
+    // carriageway stroke are physically adjacent but have NO edge
+    // between them (each stroke is its own chain), so this flood fill
+    // correctly treats them as independent components → flipping one
+    // lane doesn't touch the parallel reverse-direction lane.
     const visited = new Set<number>();
     const queue: Array<{ x: number; y: number }> = [{ x, y }];
     const startIdx = this.tileIndex(x, y);
     visited.add(startIdx);
     while (queue.length > 0) {
       const cur = queue.shift()!;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = cur.x + dx;
-        const ny = cur.y + dy;
-        const idx = this.tileIndex(nx, ny);
-        if (visited.has(idx)) continue;
-        const nt = this.grid.get(nx, ny);
-        if (!nt || !nt.road || nt.roadType !== 'highway') continue;
-        visited.add(idx);
-        queue.push({ x: nx, y: ny });
+      // 8-direction scan — but only follow edges that ACTUALLY EXIST
+      // in the road graph (not just physical adjacency).
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = cur.x + dx;
+          const ny = cur.y + dy;
+          if (!this.grid.hasRoadEdge(cur.x, cur.y, nx, ny)) continue;
+          const idx = this.tileIndex(nx, ny);
+          if (visited.has(idx)) continue;
+          const nt = this.grid.get(nx, ny);
+          if (!nt || nt.roadType !== 'highway') continue;
+          visited.add(idx);
+          queue.push({ x: nx, y: ny });
+        }
       }
     }
     // Reverse direction on every tile in the component. -1 (unset) tiles
@@ -2993,8 +3004,12 @@ export class Game {
     // flow direction is opposite. Both lanes go through the same
     // edge/stub/dir sets so the existing paint logic handles them in
     // one pass — no double-render, no double-rebuild.
+    //
+    // Beta 1.1.1: one-way highway tool (`road_highway_oneway`) skips
+    // the parallel — paints a single one-way lane only. Same `highway`
+    // tier, same direction-flip tool, just no auto-pair.
     const allPaths: Array<{ x: number; y: number }[]> = [path];
-    if (tier === 'highway' && path.length >= 2) {
+    if (this.tool === 'road_highway' && path.length >= 2) {
       const parallel = this.computeHighwayParallelPath(path);
       if (parallel.length >= 2) allPaths.push(parallel);
     }

@@ -923,11 +923,18 @@ export type Tool =
   | 'road_local'
   | 'road_avenue'
   | 'road_highway'
+  // One-way highway tool (Beta 1.1.1). Same tier (`highway`) but
+  // skips the dual-carriageway auto-paint — paints a single one-way
+  // lane in the stroke direction. Used when the player wants
+  // independent control over each direction of traffic flow (e.g. a
+  // ramp, a slip lane, an exit-only). Direction set at paint time
+  // from the stroke; flip with the highway_flip tool.
+  | 'road_highway_oneway'
   // Highway flip tool (Beta 1.1.0). Single-tap a highway tile → flood-
-  // fill the connected highway component → reverse every tile's
-  // direction. Lets the player explicitly control which way each
-  // highway flows: paint sets the initial direction; tap-to-flip
-  // toggles the whole connected line. No drag behaviour.
+  // fill the connected highway component (via road-graph edges, NOT
+  // 4-adjacency — so two parallel one-way lanes are independent) →
+  // reverse every tile's direction. Lets the player explicitly
+  // control which way each highway flows.
   | 'highway_flip'
   | 'place_path'
   | 'bulldoze'
@@ -1049,7 +1056,11 @@ export const ZONE_TOOL_INFO: ReadonlyMap<Tool, { zone: Exclude<Zone, 'none'>; ti
 export const ROAD_TOOLS: ReadonlyMap<Tool, RoadType> = new Map([
   ['road_local', 'local' as const],
   ['road_avenue', 'avenue' as const],
-  ['road_highway', 'highway' as const]
+  ['road_highway', 'highway' as const],
+  // One-way highway (Beta 1.1.1) — same `highway` tier as the dual
+  // tool. The applyRoadStroke check uses the Tool, not the tier, to
+  // decide whether to auto-paint the parallel reverse-direction lane.
+  ['road_highway_oneway', 'highway' as const]
 ]);
 
 /** Maps a place-tool to the Building kind it places. */

@@ -2,7 +2,7 @@
 
 Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. **Optional** Supabase cloud-saves for cross-device sync (see [`docs/CLOUD_SETUP.md`](docs/CLOUD_SETUP.md)) — without it, runs entirely in the browser as before.
 
-**Status: Beta 1.0** — live at https://JadenH5231.github.io/mobile-city-builder/. Save schema v27. Bundle ~980 KB raw / ~256 KB gzipped.
+**Status: Beta 1.0** — live at https://mqcity.app. Save schema v27. Bundle ~980 KB raw / ~256 KB gzipped.
 
 ## Alpha 4.x highlights
 

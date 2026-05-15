@@ -69,6 +69,7 @@ import {
   TRAFFIC_LIGHT_COST,
   ZONE_TIER_CAP,
   ZONE_TOOL_INFO,
+  dirBetween,
   rotatedFootprint,
   type BigBuildRotation,
   type Building,
@@ -1614,6 +1615,20 @@ export class Game {
       return;
     }
 
+    // Highway flip (Beta 1.1.0) — tap-only on a highway tile. Flood-
+    // fills the connected highway component and reverses every tile's
+    // direction in one motion. Drag is treated as a single tap on the
+    // origin tile.
+    if (this.tool === 'highway_flip') {
+      const flipped = this.flipHighwayDirection(tile.x, tile.y);
+      if (!flipped) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     // Highway interchange ramp (Alpha 4.16) — tap-only attachment
     // marking a road tile as a smooth merge between a highway and a
     // non-highway road. See `placeRamp` for the validation rules.
@@ -1955,6 +1970,64 @@ export class Game {
    *
    * Cleared on bulldoze with the rest of the road state.
    */
+  /**
+   * Highway flip tool (Beta 1.1.0). Tap any highway tile → flood-fill
+   * the connected highway component (4-adjacent, highway tiles only)
+   * → reverse every tile's `highwayDir`. The cardinal directions in
+   * `Dir` enum pair as opposites (0↔4 = N↔S, 2↔6 = E↔W, etc.) so a
+   * single `(d + 4) % 8` flips an axis-aligned direction; the same
+   * formula reverses diagonals too.
+   *
+   * Returns true iff at least one tile was flipped (so a no-op tap on
+   * a non-highway tile pops the undo snapshot the caller pushed).
+   */
+  private flipHighwayDirection(x: number, y: number): boolean {
+    const startTile = this.grid.get(x, y);
+    if (!startTile || !startTile.road || startTile.roadType !== 'highway') {
+      this.onStatusMessage?.('Tap a highway tile to flip its direction');
+      return false;
+    }
+    // Flood-fill the connected highway component (4-adjacent).
+    const visited = new Set<number>();
+    const queue: Array<{ x: number; y: number }> = [{ x, y }];
+    const startIdx = this.tileIndex(x, y);
+    visited.add(startIdx);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        const idx = this.tileIndex(nx, ny);
+        if (visited.has(idx)) continue;
+        const nt = this.grid.get(nx, ny);
+        if (!nt || !nt.road || nt.roadType !== 'highway') continue;
+        visited.add(idx);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    // Reverse direction on every tile in the component. -1 (unset) tiles
+    // stay unset — flipping nothing is a sensible no-op.
+    let flippedCount = 0;
+    for (const idx of visited) {
+      const tx = idx % this.grid.width;
+      const ty = (idx - tx) / this.grid.width;
+      const t = this.grid.get(tx, ty)!;
+      if (t.highwayDir < 0 || t.highwayDir > 7) continue;
+      this.grid.setHighwayDir(tx, ty, (t.highwayDir + 4) % 8);
+      flippedCount++;
+    }
+    if (flippedCount === 0) {
+      this.onStatusMessage?.('No flow direction set on this highway yet');
+      return false;
+    }
+    // Rebuild road graph (one-way semantics depend on direction) +
+    // redraw arrows so the new direction shows immediately.
+    this.roadGraph.rebuild(this.grid);
+    this.renderer.drawRoads(this.grid);
+    this.onStatusMessage?.(`Flipped ${flippedCount} highway ${flippedCount === 1 ? 'tile' : 'tiles'}`);
+    return true;
+  }
+
   private placeRamp(x: number, y: number): boolean {
     const t = this.grid.get(x, y);
     if (!t) return false;
@@ -2904,12 +2977,12 @@ export class Game {
     }
     const desiredEdges = new Set<number>();
     const desiredStubs = new Set<number>();
-    // Highway flow direction is no longer set at paint time (Alpha 4.22.2).
-    // Cars dynamically claim direction on tile entry via `Vehicles.update`;
-    // unclaimed (`highwayDir === -1`) tiles are treated as bidirectional
-    // by `RoadGraph.canTraverse`. Painting a highway stroke just lays the
-    // road tiles — the player doesn't have to think about which way they
-    // painted. The `desiredDirs` map and its imprint loop are removed.
+    // Highway flow direction is restored to paint-time imprint
+    // (Beta 1.1.0 — partial revert of 4.22.2's dynamic experiment).
+    // Each highway tile gets a direction from the stroke direction
+    // when painted; the player can flip the whole connected highway
+    // via the new `highway_flip` tool. Map<tileIdx, dirIndex>.
+    const desiredDirs = tier === 'highway' ? new Map<number, number>() : null;
 
     // Highways auto-paint a parallel reverse-direction lane (Alpha 4.22)
     // — the user's ask: "have highways automatically paint two roads,
@@ -2934,6 +3007,19 @@ export class Game {
           const a = pth[i]!;
           const b = pth[i + 1]!;
           desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
+          if (desiredDirs) {
+            // Flow direction = "from a toward b" — applies to tile a.
+            const d = dirBetween(a.x, a.y, b.x, b.y);
+            if (d !== -1) desiredDirs.set(this.tileIndex(a.x, a.y), d);
+          }
+        }
+        // Last tile inherits the previous segment's direction so cars
+        // entering from outside the stroke continue in the same flow.
+        if (desiredDirs && pth.length >= 2) {
+          const a = pth[pth.length - 2]!;
+          const b = pth[pth.length - 1]!;
+          const d = dirBetween(a.x, a.y, b.x, b.y);
+          if (d !== -1) desiredDirs.set(this.tileIndex(b.x, b.y), d);
         }
       }
     }
@@ -2989,8 +3075,15 @@ export class Game {
       }
     }
 
-    // Highway flow direction imprint loop removed in Alpha 4.22.2 —
-    // direction is now dynamic per `Vehicles.claimHighwayDir`.
+    // Highway flow direction imprint (Beta 1.1.0). Per-tile dirs were
+    // computed from the stroke direction above; write them through to
+    // the grid so cars + the renderer arrows pick up the new flow.
+    if (desiredDirs) {
+      for (const [tileIdx, dir] of desiredDirs) {
+        const { x, y } = this.unpackTile(tileIdx);
+        if (this.grid.setHighwayDir(x, y, dir)) roadsChanged = true;
+      }
+    }
 
     // Forest clearing — every tile that's now a road but was forest gets
     // paved over. Track each cleared tile so a stroke retreat can grow the

@@ -716,57 +716,81 @@ placeNear(96, 80, 'bus_depot');
 // generic museum/stadium isn't the actual landmark, leave the landmark spots
 // blank.
 
-// ---------- Landmark "blank tiles" -------------------------------------
-// These are tiles where a real Toronto landmark would be but the game has
-// no specific model. They're left as plain grass tiles (already are, so
-// no-op needed) — distinct from surrounding development. Documented here
-// so the next pass knows where the placeholders are.
-
-const blankLandmarks = [
-  { name: 'CN Tower',           x: 56, y: 99 },
-  { name: 'Rogers Centre',      x: 54, y: 100 },
-  { name: 'Scotiabank Arena',   x: 58, y: 100 },
-  { name: 'Union Station',      x: 60, y: 100 },
-  { name: 'Casa Loma',          x: 50, y: 70 },
-  { name: 'Royal Ontario Museum', x: 62, y: 76 },
-  { name: 'Art Gallery of Ontario', x: 56, y: 92 },
-  { name: 'Distillery District', x: 76, y: 102 },
-  { name: 'Toronto Pearson Airport', x: 18, y: 42 },
-];
-for (const lm of blankLandmarks) {
-  // Clear the tile to grass with nothing on it (in case zone fill caught it).
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const t = get(lm.x + dx, lm.y + dy);
-      if (!t) continue;
-      // Don't wipe the landmark spot if it's a road — keep the access road.
-      if (t.road) continue;
-      if (t.skyscraper || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital) continue;
-      // Clear the zone + density so the spot reads as empty.
-      t.zone = 'none';
-      t.zoneCap = 0;
-      t.density = 0;
-      t.developedAt = 0;
-      t.building = 'none';
-      t.terrain = 'grass';
+// ---------- Toronto landmark Easter eggs (Alpha 4.24) ------------------
+// Each landmark is a Building kind that exists ONLY for this preset —
+// not in the toolbar, not in BUILDING_COSTS, not in faction stances.
+// The renderer's cityBuildingParts switch dispatches geometry from
+// src/engine/TorontoLandmarks.ts. Source-divers find these as the
+// hint that the Toronto preset is the easter egg.
+function stampLandmarkExact(x, y, kind) {
+  const t = get(x, y);
+  if (!t) return false;
+  if (t.road) return false;
+  if (t.skyscraper || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital) return false;
+  // Force the tile to grass (in case zone fill or forest got there).
+  if (t.terrain !== 'grass') t.terrain = 'grass';
+  t.zone = 'none';
+  t.zoneCap = 0;
+  t.density = 0;
+  t.developedAt = 0;
+  t.building = kind;
+  return true;
+}
+function stampLandmark(x, y, kind) {
+  if (stampLandmarkExact(x, y, kind)) return true;
+  // If the spot is unusable (road/conflict), back off to a clear neighbour
+  // within 2 tiles so the landmark still appears near where it should.
+  for (let r = 1; r <= 2; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        if (stampLandmarkExact(x + dx, y + dy, kind)) return true;
+      }
     }
   }
+  return false;
 }
 
-// Pearson Airport — bigger blank zone (long runways).
+// Iconic landmarks — coordinates roughly match each landmark's real-
+// world position relative to the rest of the city.
+const lmCN     = stampLandmark(56, 99, 'cn_tower');
+const lmRogers = stampLandmark(53, 100, 'rogers_centre');
+const lmACC    = stampLandmark(58, 100, 'scotiabank_arena');
+const lmUnion  = stampLandmark(61, 100, 'union_station');
+const lmCasa   = stampLandmark(50, 67, 'casa_loma');
+const lmROM    = stampLandmark(62, 76, 'royal_ontario_museum');
+const lmAGO    = stampLandmark(56, 92, 'art_gallery_ontario');
+const lmDist   = stampLandmark(76, 102, 'distillery_district');
+
+// Pearson Airport — terminal + runways.
+const lmTerm   = stampLandmark(18, 44, 'pearson_terminal');
+// Two runway strips (north and south of the terminal). 18 tiles each
+// running E-W. Runway tiles look like asphalt with white centerline
+// dashes when stamped in a row.
+function stampRunway(x0, y, length) {
+  for (let i = 0; i < length; i++) {
+    stampLandmark(x0 + i, y, 'runway');
+  }
+}
+stampRunway(8, 38, 18);   // North runway
+stampRunway(8, 50, 18);   // South runway
+
+// Pearson — clear everything ELSE inside the airport rect (no zones
+// inside the apron, but keep the terminal + runways).
 for (let y = 38; y <= 52; y++) {
   for (let x = 8; x <= 28; x++) {
     const t = get(x, y);
     if (!t) continue;
     if (t.road) continue;
-    // Strip everything else — runways are open paved space.
+    if (t.building !== 'none') continue;   // keep landmarks
     t.zone = 'none';
     t.zoneCap = 0;
     t.density = 0;
     t.developedAt = 0;
-    t.building = 'none';
   }
 }
+
+console.error(`[gen] landmarks: CN=${lmCN ? 'OK' : 'FAIL'}, Rogers=${lmRogers ? 'OK' : 'FAIL'}, ACC=${lmACC ? 'OK' : 'FAIL'}, Union=${lmUnion ? 'OK' : 'FAIL'}, Casa=${lmCasa ? 'OK' : 'FAIL'}, ROM=${lmROM ? 'OK' : 'FAIL'}, AGO=${lmAGO ? 'OK' : 'FAIL'}, Dist=${lmDist ? 'OK' : 'FAIL'}, Pearson=${lmTerm ? 'OK' : 'FAIL'}`);
 
 // ---------- Build edge list -------------------------------------------
 

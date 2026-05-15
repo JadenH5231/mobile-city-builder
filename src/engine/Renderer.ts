@@ -42,6 +42,18 @@ import {
   type VariantPart
 } from './BuildingVariants';
 import {
+  buildCNTowerParts,
+  buildRogersCentreParts,
+  buildScotiabankArenaParts,
+  buildUnionStationParts,
+  buildCasaLomaParts,
+  buildROMParts,
+  buildAGOParts,
+  buildDistilleryParts,
+  buildPearsonTerminalParts,
+  buildRunwayParts
+} from './TorontoLandmarks';
+import {
   DIR_OFFSETS,
   FARM_TRACTOR_MIN_CLUSTER,
   MAX_PEDESTRIANS,
@@ -5337,6 +5349,20 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => box(0.60, 0.018, 0.018), color: 0x9a8a72, dx: 0, dy: 0.24, dz: 0.36 }
       ];
     }
+    // ===== Toronto landmark Easter eggs (Alpha 4.24) =====
+    // Not exposed to the toolbar — only painted by the Toronto preset
+    // generator (scripts/generate-toronto.mjs). Each delegates to its
+    // builder in TorontoLandmarks.ts.
+    case 'cn_tower':              return buildCNTowerParts();
+    case 'rogers_centre':         return buildRogersCentreParts();
+    case 'scotiabank_arena':      return buildScotiabankArenaParts();
+    case 'union_station':         return buildUnionStationParts();
+    case 'casa_loma':             return buildCasaLomaParts();
+    case 'royal_ontario_museum':  return buildROMParts();
+    case 'art_gallery_ontario':   return buildAGOParts();
+    case 'distillery_district':   return buildDistilleryParts();
+    case 'pearson_terminal':      return buildPearsonTerminalParts();
+    case 'runway':                return buildRunwayParts();
     default:
       return [];
   }

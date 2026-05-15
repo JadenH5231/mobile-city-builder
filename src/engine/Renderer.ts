@@ -133,6 +133,11 @@ export class Renderer {
   private ambientLight!: AmbientLight;
   private hemisphereLight!: HemisphereLight;
   private sunLight!: DirectionalLight;
+  /** Moon directional light (Alpha 4.20.2). Activates at night so building
+   *  faces have shading contrast even when the sun is below the horizon —
+   *  without it, hemisphere + ambient give uniform fill and the city looks
+   *  flat. Cool blue-white tint, opposite the sun's azimuth. */
+  private moonLight!: DirectionalLight;
   private carsMesh: InstancedMesh;
   /** Vehicle window/light overlays (Alpha 4.4). Sibling InstancedMeshes
    *  that mirror their parent's per-instance matrix every frame —
@@ -216,6 +221,14 @@ export class Renderer {
     this.sunLight = new DirectionalLight(0xffffff, 0.85);
     this.sunLight.position.set(40, 80, 30);
     this.scene.add(this.sunLight);
+    // Moon directional (Alpha 4.20.2). Cool blue-white, dim. Position is
+    // updated in applyTimeOfDay to mirror the sun (so when sun is below
+    // horizon, moon is above). Intensity also driven there — 0 by day,
+    // ~0.55 by deep night. Restores the directional shading contrast on
+    // building faces that the dim sunLight loses at night.
+    this.moonLight = new DirectionalLight(0xa8b8e8, 0);
+    this.moonLight.position.set(-40, -80, -30);
+    this.scene.add(this.moonLight);
 
     // Selection square — a wireframe plane that we move to the picked tile.
     const sel = new Mesh(
@@ -1741,6 +1754,15 @@ export class Renderer {
     this.sunLight.intensity = 0.18 + dayMix * 0.85;
     this.ambientLight.intensity = 0.20 + dayMix * 0.45;
     this.hemisphereLight.intensity = 0.20 + dayMix * 0.40;
+    // Moon directional (Alpha 4.20.2): mirrors the sun's azimuth so when
+    // the sun dips below the horizon the moon rises opposite. Position
+    // it at (-sunX, |sunY| + offset, -sunZ) so it always casts from
+    // above-and-opposite. Intensity ramps in proportional to night
+    // darkness — the moon is invisible at noon and full-strength at
+    // midnight. Cool blue-white tint stays constant.
+    this.moonLight.position.set(-sunX, Math.max(40, -sunY + 60), -sunZ);
+    const nightMix = Math.max(0, Math.min(1, 1 - dayMix * 1.8));
+    this.moonLight.intensity = nightMix * 0.55;
     // Hemisphere sky/ground tint: shift cooler at night.
     if (dayMix < 0.05) {
       this.hemisphereLight.color.setHex(0x303860);
@@ -1778,15 +1800,44 @@ export class Renderer {
       this.litWindowsMesh.visible = nightOpacity > 0.01;
     }
     if (this.buildingGlowMesh) {
+      // Disabled in Alpha 4.20.2 — playtest verdict on 4.20/4.20.1: "i
+      // dont want ground light I want lighting on the buildings". Mesh
+      // is still built (cheap; one quad per L2+ tile) but gated to zero
+      // opacity / hidden so the ground stays clean. The "buildings feel
+      // lit" goal is now met by per-mesh emissive (below) + the new
+      // moonLight directional, not by ground halos. Mesh kept around so
+      // we can re-enable the ground spill cheaply if it ever fits.
       const mat = this.buildingGlowMesh.material as MeshBasicMaterial;
-      // Building glow opacity bumped 4.20.1 (0.50 → 0.85). Original was
-      // pitched as "subtle complement" but came out invisible. Still
-      // sits below lit-window (×0.85) and lamp glow (×0.75) once you
-      // factor in the additive-blending — at deep night the cream
-      // tone now visibly tints the ground around dense blocks without
-      // overpowering the warmer yellow streetlamp pools.
-      mat.opacity = nightOpacity * 0.85;
-      this.buildingGlowMesh.visible = nightOpacity > 0.01;
+      mat.opacity = 0;
+      this.buildingGlowMesh.visible = false;
+    }
+    // Building emissive (Alpha 4.20.2). At night, ramp the warm-cream
+    // emissive on the three building meshes so each face appears
+    // lit-from-within. Combined with the new moonLight giving back
+    // face-to-face shading contrast, this is the depth + vibrancy the
+    // user asked for ("I want lighting on the buildings"). Capped at
+    // 0.32 so the buildings glow without washing out their underlying
+    // zone colours — moonlight + emissive together still preserve the
+    // distinct red/blue/green palettes per zone.
+    const buildingEmissive = nightOpacity * 0.32;
+    if (this.buildingsMesh) {
+      const mat = this.buildingsMesh.material as MeshLambertMaterial;
+      mat.emissiveIntensity = buildingEmissive;
+    }
+    if (this.skyscrapersMesh) {
+      const mat = this.skyscrapersMesh.material as MeshLambertMaterial;
+      mat.emissiveIntensity = buildingEmissive;
+    }
+    // cityBuildingsGroup contains the city-services mesh (services +
+    // landmarks + capitals + mansion). Walk children to find the merged
+    // mesh and update its emissive too.
+    for (const child of this.cityBuildingsGroup.children) {
+      if (child instanceof Mesh) {
+        const mat = child.material as MeshLambertMaterial;
+        if (mat && 'emissiveIntensity' in mat) {
+          mat.emissiveIntensity = buildingEmissive;
+        }
+      }
     }
   }
 
@@ -2132,7 +2183,15 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
   }
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
-  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  // Emissive cream tint stays at 0 intensity by default; applyTimeOfDay
+  // ramps emissiveIntensity at night so buildings appear lit from
+  // within instead of going to flat dim silhouettes (Alpha 4.20.2).
+  const mat = new MeshLambertMaterial({
+    vertexColors: true,
+    flatShading: true,
+    emissive: 0xffd8a8,
+    emissiveIntensity: 0
+  });
   return new Mesh(merged, mat);
 }
 
@@ -2165,7 +2224,12 @@ function buildSkyscrapersMesh(grid: Grid): Mesh | null {
     vertexColors: true,
     flatShading: true,
     transparent: true,
-    opacity: 1.0
+    opacity: 1.0,
+    // Same night-emissive treatment as buildingsMesh (Alpha 4.20.2) so
+    // skyscraper faces glow with interior light at night instead of
+    // turning into pitch-black silhouettes against the sky gradient.
+    emissive: 0xffd8a8,
+    emissiveIntensity: 0
   });
   return new Mesh(merged, mat);
 }
@@ -3817,7 +3881,16 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
 
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
-  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  // Same night-emissive treatment as buildingsMesh / skyscrapersMesh
+  // (Alpha 4.20.2). Service buildings (museums, hospitals, fire stations,
+  // landmarks, the Mayor's Mansion + capitals…) all glow with interior
+  // light at night so the civic skyline reads as alive instead of dark.
+  const mat = new MeshLambertMaterial({
+    vertexColors: true,
+    flatShading: true,
+    emissive: 0xffd8a8,
+    emissiveIntensity: 0
+  });
   return new Mesh(merged, mat);
 }
 

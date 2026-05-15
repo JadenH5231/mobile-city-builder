@@ -6417,6 +6417,22 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
   // water surface up to the bridge deck, on either side of the road
   // perpendicular axis. Determines axis from the dominant incident-edge
   // direction so pillars stand sensibly under E-W or N-S spans alike.
+  // Bridges (Beta 1.1.3 visual rework). Per-tile geometry:
+  //   - Concrete deck slab hanging under the asphalt road quad
+  //   - 2 stout concrete pillars dropping below the water surface,
+  //     with a footing block at the waterline + a capital cap where
+  //     they meet the deck
+  //   - Concrete parapet walls along both shoulders, with a darker
+  //     top-cap rail
+  //   - Optional jersey-style sloped kerb between road + parapet
+  //
+  // Color palette (warm concrete, matches the lampposts + civic monuments):
+  const PILLAR_CONCRETE = 0x9a948a;
+  const PILLAR_DARK = 0x6e6a64;
+  const DECK_CONCRETE = 0xb0aa9c;
+  const PARAPET_CONCRETE = 0xc0baad;
+  const PARAPET_CAP = 0x787268;
+  const KERB = 0x9a948a;
   const pillars: BufferGeometry[] = [];
   const pillarColours: number[] = [];
   for (const t of grid.iter()) {
@@ -6438,55 +6454,99 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
     const tierProps = ROAD_TIER[t.roadType];
     const half = tierProps.width / 2;
-    const pillarH = BRIDGE_LIFT + 0.10; // span from below water to deck
-    // Pillar ascends from y = -0.10 (below water) up to BRIDGE_LIFT.
-    const pillarYBase = -0.10;
-    const pillarOffset = half + 0.04;
-    const offsets: Array<[number, number]> = horizontal
+
+    // --- Concrete deck slab under the asphalt --------------------------
+    // Slightly wider than the road, hangs visually under the road quad.
+    // Span the full tile length so adjacent bridge tiles' decks meet.
+    const deckSpan = TILE_SIZE * 1.0;
+    const deckThick = 0.06;
+    const deckOverhang = 0.06;
+    const deckW = (half * 2) + deckOverhang * 2;
+    const deckBoxX = horizontal ? deckSpan : deckW;
+    const deckBoxZ = horizontal ? deckW : deckSpan;
+    const deck = new BoxGeometry(deckBoxX, deckThick, deckBoxZ);
+    deck.translate(cx, BRIDGE_LIFT - deckThick / 2 - 0.005, cz);
+    pillars.push(deck);
+    pillarColours.push(DECK_CONCRETE);
+
+    // --- 2 stout concrete pillars (perpendicular to the bridge axis) ---
+    // Drop from BRIDGE_LIFT down to y=-0.30 (well below water surface).
+    const pillarTopY = BRIDGE_LIFT - deckThick;        // capital sits just under deck
+    const pillarBottomY = -0.30;
+    const pillarH = pillarTopY - pillarBottomY;
+    const pillarW = 0.13;
+    const pillarOffset = half + 0.02;
+    const pOffsets: Array<[number, number]> = horizontal
       ? [[0, -pillarOffset], [0, pillarOffset]]
       : [[-pillarOffset, 0], [pillarOffset, 0]];
-    for (const [ox, oz] of offsets) {
-      const pillar = new BoxGeometry(0.05, pillarH, 0.05);
-      pillar.translate(cx + ox, pillarYBase + pillarH / 2, cz + oz);
-      pillars.push(pillar);
-      pillarColours.push(0x6e6e6e);
+    for (const [ox, oz] of pOffsets) {
+      // Main column.
+      const col = new BoxGeometry(pillarW, pillarH, pillarW);
+      col.translate(cx + ox, pillarBottomY + pillarH / 2, cz + oz);
+      pillars.push(col);
+      pillarColours.push(PILLAR_CONCRETE);
+      // Capital cap at the top — slightly wider so it visually "supports"
+      // the deck like a real concrete pier head.
+      const cap = new BoxGeometry(pillarW + 0.04, 0.05, pillarW + 0.04);
+      cap.translate(cx + ox, pillarTopY - 0.025, cz + oz);
+      pillars.push(cap);
+      pillarColours.push(PILLAR_DARK);
+      // Footing block at the water line — wider square base above the
+      // submerged column for the "pier rises out of the water" read.
+      const footing = new BoxGeometry(pillarW + 0.08, 0.06, pillarW + 0.08);
+      footing.translate(cx + ox, -0.04, cz + oz);
+      pillars.push(footing);
+      pillarColours.push(PILLAR_DARK);
     }
 
-    // Bridge railings (Alpha 2.6 visual pass) — slim parapet rails along
-    // both shoulders + a thin "deck stripe" down the median so the deck
-    // doesn't read as a flat slab. Rails span the full tile length on the
-    // bridge's long axis.
-    const railH = 0.08;
-    const railThick = 0.03;
-    const railSpan = TILE_SIZE * 0.95;
+    // --- Concrete parapet walls along both shoulders -------------------
+    // Thicker than the previous thin rails, with a darker cap on top.
+    const parapetH = 0.13;
+    const parapetThick = 0.06;
+    const parapetSpan = TILE_SIZE * 1.0;
     if (horizontal) {
-      // Rails run east-west, sit on north and south shoulders.
-      const railNorth = new BoxGeometry(railSpan, railH, railThick);
-      railNorth.translate(cx, BRIDGE_LIFT + railH / 2, cz - half - railThick / 2);
-      pillars.push(railNorth);
-      pillarColours.push(0xb6a98a);
-      const railSouth = new BoxGeometry(railSpan, railH, railThick);
-      railSouth.translate(cx, BRIDGE_LIFT + railH / 2, cz + half + railThick / 2);
-      pillars.push(railSouth);
-      pillarColours.push(0xb6a98a);
-      // Median stripe on the deck — slim raised pad so the deck reads.
-      const stripe = new BoxGeometry(railSpan, 0.012, 0.04);
-      stripe.translate(cx, BRIDGE_LIFT + 0.006, cz);
-      pillars.push(stripe);
-      pillarColours.push(0xe8d96a);
+      // North + south shoulders.
+      for (const sign of [-1, 1] as const) {
+        const wallZ = cz + sign * (half + parapetThick / 2 + 0.005);
+        const wall = new BoxGeometry(parapetSpan, parapetH, parapetThick);
+        wall.translate(cx, BRIDGE_LIFT + parapetH / 2, wallZ);
+        pillars.push(wall);
+        pillarColours.push(PARAPET_CONCRETE);
+        // Top cap rail — slightly wider, darker grey.
+        const cap = new BoxGeometry(parapetSpan, 0.022, parapetThick + 0.018);
+        cap.translate(cx, BRIDGE_LIFT + parapetH + 0.011, wallZ);
+        pillars.push(cap);
+        pillarColours.push(PARAPET_CAP);
+      }
+      // Slim concrete kerbs between road surface and parapet (read as
+      // the curb separating the lane from the barrier wall).
+      for (const sign of [-1, 1] as const) {
+        const kerbZ = cz + sign * (half - 0.018);
+        const kerb = new BoxGeometry(parapetSpan, 0.025, 0.035);
+        kerb.translate(cx, BRIDGE_LIFT + 0.012, kerbZ);
+        pillars.push(kerb);
+        pillarColours.push(KERB);
+      }
     } else {
-      const railWest = new BoxGeometry(railThick, railH, railSpan);
-      railWest.translate(cx - half - railThick / 2, BRIDGE_LIFT + railH / 2, cz);
-      pillars.push(railWest);
-      pillarColours.push(0xb6a98a);
-      const railEast = new BoxGeometry(railThick, railH, railSpan);
-      railEast.translate(cx + half + railThick / 2, BRIDGE_LIFT + railH / 2, cz);
-      pillars.push(railEast);
-      pillarColours.push(0xb6a98a);
-      const stripe = new BoxGeometry(0.04, 0.012, railSpan);
-      stripe.translate(cx, BRIDGE_LIFT + 0.006, cz);
-      pillars.push(stripe);
-      pillarColours.push(0xe8d96a);
+      // West + east shoulders.
+      for (const sign of [-1, 1] as const) {
+        const wallX = cx + sign * (half + parapetThick / 2 + 0.005);
+        const wall = new BoxGeometry(parapetThick, parapetH, parapetSpan);
+        wall.translate(wallX, BRIDGE_LIFT + parapetH / 2, cz);
+        pillars.push(wall);
+        pillarColours.push(PARAPET_CONCRETE);
+        const cap = new BoxGeometry(parapetThick + 0.018, 0.022, parapetSpan);
+        cap.translate(wallX, BRIDGE_LIFT + parapetH + 0.011, cz);
+        pillars.push(cap);
+        pillarColours.push(PARAPET_CAP);
+      }
+      for (const sign of [-1, 1] as const) {
+        const kerbX = cx + sign * (half - 0.018);
+        const kerb = new BoxGeometry(0.035, 0.025, parapetSpan);
+        kerb.translate(kerbX, BRIDGE_LIFT + 0.012, cz);
+        pillars.push(kerb);
+        pillarColours.push(KERB);
+      }
     }
   }
 

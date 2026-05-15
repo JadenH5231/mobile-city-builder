@@ -722,7 +722,11 @@
         <div class="auth-modal__tabs" role="tablist">
           <button type="button" class="auth-modal__tab is-active" data-auth-tab="signin" role="tab">Sign in</button>
           <button type="button" class="auth-modal__tab" data-auth-tab="signup" role="tab">Create account</button>
-          <button type="button" class="auth-modal__tab" data-auth-tab="magic" role="tab">Email link</button>
+          <!-- Magic link tab hidden in Beta 1.0.3 — passwordless sign-in
+               inherently requires a 6-digit code from email; the player
+               wanted "no codes". Email + password covers everything.
+               Re-enable: remove the `hidden` class. -->
+          <button type="button" class="auth-modal__tab hidden" data-auth-tab="magic" role="tab">Email link</button>
         </div>
 
         <form id="auth-form-signin" class="auth-modal__form is-active" data-auth-pane="signin">
@@ -747,7 +751,6 @@
             <input type="password" name="password" autocomplete="new-password" required minlength="6" />
           </label>
           <button type="submit" class="auth-modal__submit">Create account</button>
-          <p class="auth-modal__hint">A confirmation email will be sent. Click the link to verify, then come back here to sign in.</p>
         </form>
 
         <form id="auth-form-magic" class="auth-modal__form" data-auth-pane="magic">

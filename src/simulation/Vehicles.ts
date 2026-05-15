@@ -871,8 +871,31 @@ export class Vehicles {
         // interchange ramps skip too (Alpha 4.16) — ramps are smooth
         // merges, not crossings, so the player doesn't get punished
         // with collisions every time a car uses an exit.
+        //
+        // Highways skip the roll too (Alpha 4.22.1) — playtest report:
+        // "If a car is going in the opposite direction the other cars
+        // know not to take that lane and pick the other lane. This
+        // makes it so I dont have to plan so hard to get highways to
+        // work." Highways are physically-separated, one-way-per-tile,
+        // typically dual-carriageway infrastructure (Alpha 4.22), so
+        // cars on adjacent opposing-direction tiles aren't actually
+        // crossing paths — they're parallel. Random crash rolls at
+        // highway intersections felt like a planning trap and
+        // discouraged players from building any highways at all.
         const isIntersection = grid.incidentRoadEdgeCount(arrivedX, arrivedY) >= 3;
-        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !arrivedTile.ramp && !authority) {
+        const isHighway = arrivedTile.roadType === 'highway';
+        // Also skip collision when the intersection TOUCHES a highway
+        // (Alpha 4.22.1) — covers the local-road side of a
+        // highway-meets-local intersection. Without this, the user
+        // would still get crashes whenever a local street crossed a
+        // highway, which doesn't match the "highways just work" goal.
+        const touchesHighway = !isHighway && (
+          (grid.get(arrivedX + 1, arrivedY)?.roadType === 'highway') ||
+          (grid.get(arrivedX - 1, arrivedY)?.roadType === 'highway') ||
+          (grid.get(arrivedX, arrivedY + 1)?.roadType === 'highway') ||
+          (grid.get(arrivedX, arrivedY - 1)?.roadType === 'highway')
+        );
+        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !arrivedTile.ramp && !isHighway && !touchesHighway && !authority) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {

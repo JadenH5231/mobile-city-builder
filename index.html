@@ -652,6 +652,21 @@
       </div>
       <button type="button" id="milestone-banner-close" class="milestone-banner__close" aria-label="Dismiss">✕</button>
     </div>
+    <!-- Floating Rotate button (Alpha 4.21). Visible only while a big civic
+         build is armed (preview ghost showing). Cycles the footprint
+         rotation 0 → 90° → 180° → 270° → 0; the preview re-renders each
+         tap. Keyboard shortcut: R key. Sits just above the toolbar so
+         it's reachable one-handed on a phone. -->
+    <button
+      type="button"
+      id="rotate-monument-btn"
+      class="rotate-monument-btn hidden"
+      aria-label="Rotate building footprint"
+      title="Rotate footprint (R)"
+    >
+      <span class="rotate-monument-btn__icon" aria-hidden="true">↻</span>
+      <span class="rotate-monument-btn__label">Rotate</span>
+    </button>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
     <script type="module" src="/src/main.ts"></script>
   </body>

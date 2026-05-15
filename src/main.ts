@@ -493,6 +493,37 @@ if (statusToast && statusText) {
   };
 }
 
+// Floating Rotate button (Alpha 4.21). Visible only while a big civic
+// build is armed (preview ghost is showing). Tap → cycle the footprint
+// rotation 0 → 1 → 2 → 3 → 0 and re-render the preview. R key works on
+// desktop. The Game fires onPendingMonumentChange whenever the armed
+// state changes — we show/hide the button accordingly.
+const rotateMonumentBtn = document.getElementById('rotate-monument-btn');
+if (rotateMonumentBtn) {
+  rotateMonumentBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    game.cyclePendingRotation();
+  });
+}
+game.onPendingMonumentChange = (state) => {
+  if (!rotateMonumentBtn) return;
+  if (state) rotateMonumentBtn.classList.remove('hidden');
+  else rotateMonumentBtn.classList.add('hidden');
+};
+window.addEventListener('keydown', (e) => {
+  // R = rotate the armed monument. Skip when typing in an input
+  // (e.g. city name field on the budget panel) so the player can
+  // type "r" without triggering a rotation.
+  if (e.repeat) return;
+  const target = e.target as HTMLElement | null;
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+  if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    game.cyclePendingRotation();
+  }
+});
+
 // Random / crisis events modal (Alpha 2.9). Game queues events;
 // EventModal handles display, severity styling, queue ordering, and
 // calls back into Game.resolveEventChoice for choice-events.

@@ -38,7 +38,8 @@ import {
   buildProvincialCapitalParts,
   buildSkyscraperParts,
   buildVariantParts,
-  getSkyscraperDesign
+  getSkyscraperDesign,
+  type VariantPart
 } from './BuildingVariants';
 import {
   DIR_OFFSETS,
@@ -48,6 +49,14 @@ import {
   MAX_VEHICLES,
   MAX_TOURIST_VEHICLES,
   MAX_SERVICE_VEHICLES,
+  MAYOR_MANSION_WIDTH,
+  MAYOR_MANSION_DEPTH,
+  CITY_HALL_WIDTH,
+  CITY_HALL_DEPTH,
+  PROVINCIAL_CAPITAL_WIDTH,
+  PROVINCIAL_CAPITAL_DEPTH,
+  NATIONAL_CAPITAL_WIDTH,
+  NATIONAL_CAPITAL_DEPTH,
   PATH_COLOR,
   PATH_LIFT,
   PATH_WIDTH,
@@ -60,6 +69,8 @@ import {
   TILE_SIZE,
   ZONE_COLORS,
   ZONE_LIFT,
+  rotatedFootprint,
+  type BigBuildRotation,
   type TerrainType,
   type Zone
 } from '../types';
@@ -2157,6 +2168,45 @@ function patinaFactor(ageMonths: number): number {
   return 1.0 - (1.0 - FLOOR) * (ageMonths / RAMP_MONTHS);
 }
 
+/**
+ * Rotate a list of big-build parts in place around the rotated footprint
+ * center (Alpha 4.21). Builders emit parts positioned in world coords
+ * for rotation 0 (anchor at (ax, ay), footprint extends right+down by
+ * (nativeW, nativeH)). To support rotated placements without rewriting
+ * each builder's hundred-line layout code, we apply a single after-the-
+ * fact transform per part:
+ *
+ *   1. Translate by `(-ax - nativeW/2, 0, -ay - nativeH/2)` — moves the
+ *      native footprint center to the origin.
+ *   2. RotateY by `-rot * π/2` (negative = CW from above in Three.js's
+ *      right-handed system).
+ *   3. Translate by `(ax + worldW/2, 0, ay + worldH/2)` — moves the
+ *      rotated geometry into its world-space position. The anchor
+ *      stays at (ax, ay); the footprint extends right+down by the
+ *      ROTATED dimensions (worldW, worldH = swapped for odd rotations).
+ *
+ * Rotation 0 is a no-op early-return — no allocation, no transform.
+ */
+function rotateBigBuildPartsInPlace(
+  parts: VariantPart[],
+  rot: BigBuildRotation,
+  ax: number, ay: number,
+  nativeW: number, nativeH: number
+): void {
+  if (rot === 0) return;
+  const cxN = (ax + nativeW * 0.5) * TILE_SIZE;
+  const czN = (ay + nativeH * 0.5) * TILE_SIZE;
+  const { w: worldW, h: worldH } = rotatedFootprint(nativeW, nativeH, rot);
+  const cxR = (ax + worldW * 0.5) * TILE_SIZE;
+  const czR = (ay + worldH * 0.5) * TILE_SIZE;
+  const angle = -rot * Math.PI * 0.5;
+  for (const p of parts) {
+    p.geom.translate(-cxN, 0, -czN);
+    p.geom.rotateY(angle);
+    p.geom.translate(cxR, 0, czR);
+  }
+}
+
 /** Multiply each RGB channel of a packed 0xRRGGBB by `factor`, return a new
  *  packed colour. Channels are clamped at 0; factor < 1 darkens. */
 function darkenHex(hex: number, factor: number): number {
@@ -3501,6 +3551,10 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     if (t.building === 'mayor_mansion') {
       const parts = buildMayorMansionParts(t.x, t.y);
       const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      // Apply per-anchor rotation (Alpha 4.21). Rotates each part's
+      // geometry around the rotated footprint center so the whole
+      // composition turns as a rigid body.
+      rotateBigBuildPartsInPlace(parts, t.bigBuildRotation, t.x, t.y, MAYOR_MANSION_WIDTH, MAYOR_MANSION_DEPTH);
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
@@ -3515,6 +3569,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     if (t.building === 'city_hall') {
       const parts = buildCityHallParts(t.x, t.y);
       const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      rotateBigBuildPartsInPlace(parts, t.bigBuildRotation, t.x, t.y, CITY_HALL_WIDTH, CITY_HALL_DEPTH);
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
@@ -3525,6 +3580,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     if (t.building === 'provincial_capital') {
       const parts = buildProvincialCapitalParts(t.x, t.y);
       const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      rotateBigBuildPartsInPlace(parts, t.bigBuildRotation, t.x, t.y, PROVINCIAL_CAPITAL_WIDTH, PROVINCIAL_CAPITAL_DEPTH);
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
@@ -3535,6 +3591,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
     if (t.building === 'national_capital') {
       const parts = buildNationalCapitalParts(t.x, t.y);
       const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      rotateBigBuildPartsInPlace(parts, t.bigBuildRotation, t.x, t.y, NATIONAL_CAPITAL_WIDTH, NATIONAL_CAPITAL_DEPTH);
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);

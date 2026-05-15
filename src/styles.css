@@ -167,6 +167,54 @@ body {
   color: rgba(207, 232, 214, 0.5);
 }
 
+/* Floating Rotate button (Alpha 4.21). Sits just above the toolbar
+   centred horizontally; visible only when a big civic build is armed
+   for placement. The placement-ghost preview re-renders each tap. */
+.rotate-monument-btn {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 84px);
+  transform: translateX(-50%);
+  z-index: 16;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 24px;
+  background: rgba(255, 178, 64, 0.95);
+  color: #1c1300;
+  font: 600 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32),
+              0 2px 4px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 80ms ease, background 120ms ease;
+}
+.rotate-monument-btn:active {
+  transform: translateX(-50%) scale(0.96);
+  background: rgba(255, 168, 40, 0.98);
+}
+.rotate-monument-btn.hidden { display: none; }
+.rotate-monument-btn__icon {
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  /* Subtle continuous spin hint so the player notices the button */
+  animation: rotate-monument-icon-pulse 2.4s ease-in-out infinite;
+}
+.rotate-monument-btn__label {
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 13px;
+}
+@keyframes rotate-monument-icon-pulse {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(90deg); }
+}
+
 /* Bottom toolbar — always visible. Two sections (Alpha 2.7.3): a pinned
    cluster on the left (Pan + Bulldoze, never scrolls) and a horizontally
    scrollable strip on the right with everything else. */

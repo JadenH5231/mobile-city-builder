@@ -1117,6 +1117,24 @@ export function monumentBlockCost(
   return Math.ceil(BUILDING_COSTS[kind] / dims);
 }
 
+/** Big-build rotation index (Alpha 4.21). Number of 90° clockwise turns
+ *  applied to the footprint around its center. For odd values the
+ *  world-space dimensions swap (a 4×2 footprint at rot 1 becomes 2×4).
+ *  The anchor (lex-smallest tile of the world-space rectangle) stays
+ *  the same regardless of rotation. */
+export type BigBuildRotation = 0 | 1 | 2 | 3;
+
+/** Compute the world-space footprint dimensions of a big build given
+ *  its native (rot=0) dimensions and a rotation. Used everywhere the
+ *  game iterates the rectangle: validation, placement, perimeter
+ *  scans for road access, footprint preview ghost. */
+export function rotatedFootprint(
+  nativeW: number, nativeH: number, rot: BigBuildRotation
+): { w: number; h: number } {
+  if (rot === 1 || rot === 3) return { w: nativeH, h: nativeW };
+  return { w: nativeW, h: nativeH };
+}
+
 /* ---- Beautification Budget (Alpha 4.0 — council-only) ----------------- */
 
 /**

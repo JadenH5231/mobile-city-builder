@@ -692,12 +692,14 @@
         <h2 id="auth-modal-title" class="auth-modal__title">Welcome to MQ City Builder</h2>
         <p class="auth-modal__subtitle">Sign in so your cities are saved to your account and available on every device.</p>
 
-        <!-- OAuth providers (Beta 1.0). One tap to sign in via Google or
-             Apple - no password to remember. Both buttons are always
-             visible; if a provider isn't enabled in the Supabase
-             dashboard, clicking will surface an error in the status
-             pane. -->
-        <div class="auth-modal__oauth">
+        <!-- OAuth providers (Beta 1.0) — TEMPORARILY HIDDEN (Beta 1.0.1).
+             Google + Apple buttons are wired up but the providers aren't
+             enabled in the Supabase dashboard yet, so tapping surfaced
+             "Unsupported provider" errors. Email + magic-link cover the
+             beta. To re-enable: remove the `hidden` class from the .auth-
+             modal__oauth + .auth-modal__divider blocks below, and follow
+             docs/CLOUD_SETUP.md to wire up the provider in Supabase. -->
+        <div class="auth-modal__oauth hidden">
           <button type="button" class="auth-modal__oauth-btn auth-modal__oauth-btn--google" data-auth-oauth="google" aria-label="Continue with Google">
             <svg class="auth-modal__oauth-icon" viewBox="0 0 18 18" aria-hidden="true">
               <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.08-1.79 2.72v2.26h2.9c1.7-1.56 2.69-3.87 2.69-6.62z"/>
@@ -715,7 +717,7 @@
           </button>
         </div>
 
-        <div class="auth-modal__divider"><span>or with email</span></div>
+        <div class="auth-modal__divider hidden"><span>or with email</span></div>
 
         <div class="auth-modal__tabs" role="tablist">
           <button type="button" class="auth-modal__tab is-active" data-auth-tab="signin" role="tab">Sign in</button>

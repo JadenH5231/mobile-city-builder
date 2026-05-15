@@ -309,13 +309,17 @@ body {
 .auth-modal__status.is-error { color: #ff6e6e; }
 .auth-modal__status.is-success { color: #6dd06a; }
 
-/* OAuth provider buttons (Beta 1.0) */
+/* OAuth provider buttons (Beta 1.0). The `.hidden` rule keeps the
+   OAuth section + divider out of the DOM render until the providers
+   are actually configured in Supabase (see index.html comment). */
 .auth-modal__oauth {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
 }
+.auth-modal__oauth.hidden { display: none; }
+.auth-modal__divider.hidden { display: none; }
 .auth-modal__oauth-btn {
   display: flex;
   align-items: center;

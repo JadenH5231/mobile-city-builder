@@ -531,7 +531,14 @@ export function applySave(
     // v7 saves with rolling hills load flat too. Switch back when the
     // generator flag flips.
     t.elevation = isFlatTerrain() ? 0 : (snap.elevation ?? 0);
-    t.bridge = snap.bridge ?? false;
+    // Bridge bit migration (Beta 1.1.3). Pre-fix, Grid.setRoad didn't
+    // clear t.bridge on road removal, so any tile that ever held a
+    // bridge stayed `bridge=true` forever even after the road was
+    // bulldozed — leaving the tile permanently un-zoneable and un-
+    // terraformable. Defensively reconcile on load: if the saved tile
+    // has bridge=true but no road, clear it so the player can build /
+    // terraform on it again.
+    t.bridge = (snap.bridge ?? false) && (snap.road ?? false);
     t.zone = snap.zone;
     // zoneCap is schema 3+. v2 saves get the implicit "high" cap (3) for
     // any zoned tile, mirroring pre-1.1 behaviour where services alone

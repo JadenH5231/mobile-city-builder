@@ -280,6 +280,14 @@ export class Grid {
       t.trafficLight = false;
       t.busStop = false;
       t.ramp = false;   // Alpha 4.16 — ramp bit is a road attachment
+      // Bridge bit (Beta 1.1.3 fix). Pre-fix this stayed `true` after a
+      // bridge was bulldozed, which made the tile permanently un-zoneable
+      // / un-terraformable / un-monumentable (every placement check
+      // includes `if (t.bridge) return false`). Player report:
+      // "When a bridge is made it's hard to change the ground afterneath
+      // even after demoing it." Clearing on road removal restores the
+      // tile to a plain water tile that the player can fill / re-pave.
+      t.bridge = false;
       return true;
     }
   }

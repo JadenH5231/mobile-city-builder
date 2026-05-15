@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MQ City Builder — Business Plan to $75K CAD/yr</title>
+  <style>
+    :root {
+      --ink: #1c1f25;
+      --ink-soft: #4a4f58;
+      --ink-faint: #8a8f98;
+      --paper: #f8f7f3;
+      --line: #e8e4d8;
+      --orange: #ff8030;
+      --orange-deep: #d6651b;
+      --green: #3a8a5a;
+      --red: #c84830;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      padding: 32px 20px 80px;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 18px;
+      margin-bottom: 28px;
+    }
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--orange-deep);
+      margin: 0 0 6px;
+      font-weight: 700;
+    }
+    h1 {
+      font-size: 32px;
+      line-height: 1.15;
+      margin: 0 0 4px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .sub {
+      color: var(--ink-faint);
+      font-size: 14px;
+      margin: 0;
+    }
+    h2 {
+      margin: 36px 0 10px;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+    h3 {
+      margin: 16px 0 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    p { margin: 8px 0; color: var(--ink-soft); }
+    ul, ol { margin: 8px 0 14px; padding-left: 22px; color: var(--ink-soft); }
+    li { margin: 3px 0; }
+    strong { color: var(--ink); }
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin: 14px 0;
+    }
+    @media (max-width: 600px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .card .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+      margin: 0 0 4px;
+    }
+    .card .value {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+    .card .note {
+      font-size: 12px;
+      color: var(--ink-faint);
+      margin: 4px 0 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      font-weight: 700;
+      color: var(--ink);
+      background: rgba(255, 128, 48, 0.06);
+    }
+    td { color: var(--ink-soft); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .recommended {
+      background: rgba(58, 138, 90, 0.08);
+      font-weight: 600;
+    }
+    .recommended td { color: var(--ink); }
+    .timeline {
+      position: relative;
+      margin: 14px 0;
+      padding-left: 26px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: var(--line);
+    }
+    .phase {
+      position: relative;
+      padding: 6px 0 12px;
+    }
+    .phase::before {
+      content: "";
+      position: absolute;
+      left: -22px;
+      top: 11px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--orange);
+      border: 2px solid var(--paper);
+    }
+    .phase h3 { margin: 0 0 4px; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 14px; }
+    .phase .when {
+      font-size: 12px;
+      color: var(--ink-faint);
+      font-weight: 600;
+      margin: 0 0 4px;
+    }
+    .phase ul { margin: 4px 0 0; }
+    .badge {
+      display: inline-block;
+      background: var(--orange);
+      color: #1c1300;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .risk {
+      background: rgba(200, 72, 48, 0.05);
+      border-left: 3px solid var(--red);
+      padding: 8px 12px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+      font-size: 14px;
+    }
+    .risk strong { color: var(--red); }
+    .actions {
+      background: white;
+      border: 1px solid var(--orange);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 14px 0;
+    }
+    .actions h3 {
+      margin: 0 0 8px;
+      color: var(--orange-deep);
+    }
+    .actions ol { margin: 0; padding-left: 18px; }
+    .actions li { color: var(--ink); margin: 6px 0; }
+    .footer-note {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--ink-faint);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">MQ City Builder · Business plan v1</p>
+    <h1>Path to $75,000 CAD per year</h1>
+    <p class="sub">Solo-developer indie game. Honest math, three phases, ~12-18 months to target run-rate.</p>
+  </header>
+
+  <h2>The headline numbers</h2>
+  <div class="cards">
+    <div class="card">
+      <p class="label">Annual target</p>
+      <p class="value">$75,000<span style="font-size:14px;color:var(--ink-faint)"> CAD</span></p>
+      <p class="note">~$55,000 USD / ~£40,000 GBP</p>
+    </div>
+    <div class="card">
+      <p class="label">Per-month target</p>
+      <p class="value">$6,250<span style="font-size:14px;color:var(--ink-faint)"> CAD</span></p>
+      <p class="note">After platform fees + tax</p>
+    </div>
+    <div class="card">
+      <p class="label">Sales needed (Steam)</p>
+      <p class="value">~6,000</p>
+      <p class="note">@ $19.99 CAD list, ~70% net</p>
+    </div>
+  </div>
+
+  <h2>Recommended monetization model</h2>
+  <p><strong>Single-purchase premium game on Steam, with a free in-browser demo at mqcity.app.</strong> The game's existing "no microtransactions, no timers, no energy" design philosophy aligns perfectly with how Steam city-builder players want to buy. Web demo is the marketing funnel; Steam is the revenue funnel.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Year 1 estimate</th>
+        <th class="num">% of $75K</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="recommended">
+        <td><strong>Steam premium ($19.99 CAD)</strong></td>
+        <td>~5,000 sales × $14 net = $70K</td>
+        <td class="num"><strong>93%</strong></td>
+      </tr>
+      <tr>
+        <td>Patreon / Ko-fi (avg 30 supporters @ $7/mo)</td>
+        <td>~$2,500</td>
+        <td class="num">3%</td>
+      </tr>
+      <tr>
+        <td>itch.io pay-what-you-want (suggested $10)</td>
+        <td>~$2,500</td>
+        <td class="num">3%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Why not microtransactions / IAPs?</h3>
+  <p>You already decided against them in the project's anti-goals. Sticking with single-purchase is the right call commercially too: city-builder players strongly prefer it, the discoverability story on Steam is much cleaner, and you avoid building/maintaining an IAP backend. The few city-builders that have tried freemium (Cities: Skylines mobile, etc.) get savaged in reviews for it.</p>
+
+  <h3>Why not subscription?</h3>
+  <p>Same reasons. Plus subscriptions need ongoing content delivery (battle passes, new biomes monthly, etc.) — that's a content treadmill that turns your hobby into a full-time content job.</p>
+
+  <h2>Roadmap to revenue</h2>
+  <div class="timeline">
+    <div class="phase">
+      <p class="when">Now → +3 months</p>
+      <h3>Phase 1: Polish + community seed</h3>
+      <ul>
+        <li>Keep shipping weekly. Aim for Beta 1.5 = "feature-complete" baseline.</li>
+        <li>Stand up <strong>r/MQCityBuilder</strong> subreddit + a public Discord. Both free, both critical for word-of-mouth.</li>
+        <li>Post weekly devlogs to <strong>r/gamedev</strong> Screenshot Saturday and <strong>r/citybuilders</strong>. These threads regularly hit 10K+ views and cost zero.</li>
+        <li>Record short (15-30s) gameplay clips for <strong>TikTok / YouTube Shorts / Twitter</strong>. City builders are very visual and naturally clip well — drone-pan over your downtown, time-lapse a city growth, a skyscraper construction sequence.</li>
+        <li>Solicit <strong>50-100 beta testers</strong> through these channels. They'll find bugs AND become your first reviewers + word-of-mouth.</li>
+        <li><strong>Cost: $0.</strong> Time: ~10 hrs/week on top of game dev.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <p class="when">+3 → +6 months</p>
+      <h3>Phase 2: Steam Coming Soon page</h3>
+      <ul>
+        <li>Pay the one-time <strong>Steamworks fee: $100 USD</strong> (~$140 CAD). This unlocks the storefront.</li>
+        <li>Submit a <strong>Coming Soon page</strong>: short trailer (~60s), screenshots, store description. Coming Soon goes live before the game does.</li>
+        <li><strong>Goal: 7,000+ wishlists</strong> before launch. Industry rule of thumb: ~5-10% of wishlists convert to sales in launch week. 7K wishlists = ~500 launch-week sales = a top-50 indie launch.</li>
+        <li>How to get to 7K wishlists: keep the devlog cadence + the social clips, get featured by 1-2 indie game YouTubers (reach out directly with a free key — 50% will play it).</li>
+        <li>Steam <strong>Next Fest demo event</strong> (every ~3 months) — submit your web build as a downloadable demo. Fest visibility usually adds 1-3K wishlists per participation.</li>
+        <li><strong>Cost: ~$140 CAD</strong> + ~5-10 hrs trailer editing.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <p class="when">+6 → +12 months</p>
+      <h3>Phase 3: Steam launch at $19.99 CAD</h3>
+      <ul>
+        <li>Launch at <strong>$19.99 CAD</strong> ($14.99 USD) — sweet spot for indie city-builders. Cheaper feels like shovelware; more expensive needs production budget.</li>
+        <li>Standard launch discount: <strong>10% off launch week</strong>. Bumps conversion ~30%.</li>
+        <li>Steam takes <strong>30%</strong>. Net per sale: ~$14 CAD.</li>
+        <li>Year 1 sales target: <strong>5,000-7,000 copies</strong>. This is achievable with ~7K wishlists going in + steady post-launch content updates + 1-2 mid-year Steam sale events.</li>
+        <li>Content updates every 4-6 weeks for the first year — each update brings press attention + a small spike in sales (the "sale + new content" boost).</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <p class="when">+12 → +18 months</p>
+      <h3>Phase 4: Mobile ports + content packs</h3>
+      <ul>
+        <li>The game is already mobile-first. Wrap it as a native app via <strong>Capacitor</strong> (~1 week of work).</li>
+        <li><strong>iOS App Store: $4.99-9.99 USD</strong>. Apple takes 15% (small business program). Mobile is a much smaller share for premium games (~10% of Steam revenue typically) but it's gravy on top.</li>
+        <li><strong>Google Play: $4.99-9.99 USD</strong>. Lower revenue per install but bigger volume. Google takes 15%.</li>
+        <li>Optional: <strong>cosmetic-only DLC</strong> (e.g. "Cyberpunk District Pack" with new building variants). Only if it never affects gameplay — pure visual flair. Adds ~10% to lifetime revenue without violating the no-microtransactions feel.</li>
+        <li>This phase is the difference between $75K and $120K+. Focus on Steam first; mobile is the multiplier.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Marketing tactics that actually work for solo indies</h2>
+  <ol>
+    <li><strong>Devlog YouTube channel.</strong> Even ~500 subscribers becomes a self-renewing wishlist generator. 10-15 min videos walking through one feature each. Camera-off voiceover is fine — your face is not the product.</li>
+    <li><strong>Twitter/X presence.</strong> Daily-ish posting with screenshots/clips. Use <strong>#screenshotsaturday</strong>, <strong>#gamedev</strong>, <strong>#indiedev</strong>, <strong>#citybuilder</strong>. The screenshot-saturday hashtag is genuinely effective for indie reach.</li>
+    <li><strong>Reach out to indie YouTubers.</strong> Channels with 50K-500K subs often play indie city-builders for content. <strong>Real Civil Engineer</strong>, <strong>RTGame</strong>, <strong>Biffa</strong> et al. Send a short personal email + free key + one-line pitch + a 30s gameplay GIF. ~5% reply rate is normal; one big channel covering you = ~2K wishlists overnight.</li>
+    <li><strong>Reddit AMAs.</strong> r/IndieDev, r/CityBuilders, r/IndieGaming all run weekly indie showcase threads. Free, recurring, organic.</li>
+    <li><strong>Localization.</strong> Adding Spanish, German, French, Russian, Simplified Chinese to your store page typically adds 30-50% to sales (not just from those regions — players see "translated to my language" as a quality signal). Use a service like <strong>LocalizeDirect</strong>; budget ~$500 CAD for a small game.</li>
+  </ol>
+
+  <h2>What this plan deliberately doesn't do</h2>
+  <ul>
+    <li><strong>No paid advertising.</strong> Indie game ad spend is a money fire. ROAS is ~0.3 for unknowns. Save the cash.</li>
+    <li><strong>No publisher.</strong> Publishers take 30-50% in exchange for marketing. For a game at this scope you're probably better off self-publishing — Steam Direct ($100 USD) is the only fee.</li>
+    <li><strong>No early-access pricing tricks.</strong> Launch at full price; discount via Steam sales when participation comes up automatically.</li>
+    <li><strong>No NFT / blockchain anything.</strong> Negative review-bombing is guaranteed.</li>
+  </ul>
+
+  <h2>Risks (in order of impact)</h2>
+  <div class="risk"><strong>Wishlist undershoot.</strong> If you reach Steam launch with under ~3K wishlists, conversion is sparse and the game can flounder. <em>Mitigation:</em> don't rush the launch date. Phase 1+2 timelines are fluid — extend if needed.</div>
+  <div class="risk"><strong>Discovery is brutal.</strong> Steam adds ~50 indie games per day. Without YouTuber pickups OR a Steam Next Fest hit, you're invisible. <em>Mitigation:</em> the Phase 2 outreach + clip-creation work is non-negotiable. Block 5 hrs/week for it.</div>
+  <div class="risk"><strong>Bug-storm at launch.</strong> Mass refund requests within Steam's 2-hour / 14-day window. <em>Mitigation:</em> 50+ beta testers in Phase 1, and don't launch until a beta cohort plays for ~5 hrs without a serious crash.</div>
+  <div class="risk"><strong>Burn out.</strong> Solo dev + community management + marketing is genuinely a full-time-and-a-half load. <em>Mitigation:</em> use post-launch revenue to hire piecemeal contractors (community manager $500/mo, localization, art polish) once revenue exists. Don't try to scale before that.</div>
+
+  <h2>Where you are right now (Beta 1.1.2)</h2>
+  <ul>
+    <li><strong>Game:</strong> ~95% feature-complete by my read. The simulation is rich, the polish is real, the loop is fun. Mostly bugfixes + balance from here to a public launch.</li>
+    <li><strong>Tech:</strong> Web-deployed, cloud saves, auth, custom domain, HTTPS, PWA-installable. All the production infrastructure is already done — uncommon for indies at this stage.</li>
+    <li><strong>Brand:</strong> Named (MQ City Builder), domain (mqcity.app), basic identity. No logo treatment yet, no trailer, no Steam page. Prioritize these in Phase 2.</li>
+    <li><strong>Community:</strong> ~zero today. <strong>This is the single biggest gap to revenue.</strong> Phase 1's "stand up subreddit + Discord" is the highest-impact next move you can make.</li>
+  </ul>
+
+  <div class="actions">
+    <h3>Next 7 days</h3>
+    <ol>
+      <li>Stand up <strong>r/MQCityBuilder</strong> + a Discord server with a public invite link. Add both to the auth modal as friendly text.</li>
+      <li>Add a <strong>"Get involved"</strong> button to the More menu linking to both.</li>
+      <li>Record one 30-second screen capture of city growth, cut to music, post to TikTok + Twitter.</li>
+      <li>Write the first <strong>r/gamedev Screenshot Saturday</strong> post for next Saturday.</li>
+      <li>Decide on a <strong>launch month</strong> (~6 months from now) and put it on the calendar — it forces all the Phase 2 work.</li>
+    </ol>
+  </div>
+
+  <p class="footer-note">This plan assumes you keep your current shipping cadence and don't quit your day job until Phase 3 starts paying. Indie game revenue is bursty — launch month is often 30-50% of year-1 income — so even a successful $75K year usually means a few thousand-dollar months and one or two five-figure ones, not a steady $6,250/mo. Plan your cash accordingly.</p>
+</main>
+</body>
+</html>

@@ -163,11 +163,13 @@ export class AuthModal {
       this.onSuccess?.();
       setTimeout(() => this.close(), 600);
     } else {
-      // Email confirmation required → switch to the verify-code pane
-      // (Beta 1.0.2). The code is in the email Supabase just sent.
-      this.pendingEmail = email;
-      this.pendingFlow = 'signup';
-      this.showVerifyPane(email, `We sent a 6-digit code to ${email}. Enter it below to finish creating your account.`);
+      // Email confirmation required → tell the user to check their
+      // inbox for the link (Beta 1.0.5). Clicking the link opens
+      // mqcity.app in a new tab with the auth token in the URL;
+      // Supabase's detectSessionInUrl picks it up automatically and
+      // signs the user in there. (No verify-code pane on this branch
+      // since the link flow is fully self-contained.)
+      this.setStatus(`Check ${email} for a confirmation link from MQ City Builder. Tap the link to finish signing up — it'll open in a new tab.`, 'success');
     }
   }
 

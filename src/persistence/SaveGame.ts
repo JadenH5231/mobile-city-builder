@@ -9,6 +9,7 @@ import type { Bonds, BondsSnapshot } from '../simulation/Bonds';
 import type { Districts, DistrictsSnapshot } from '../simulation/Districts';
 import type { Building, RoadType, TerrainType, Zone } from '../types';
 import { isFlatTerrain } from '../world/TerrainGenerator';
+import { CloudSaveStore } from '../auth/CloudSaveStore';
 
 const DB_NAME = 'city-builder';
 const DB_VERSION = 1;
@@ -200,10 +201,16 @@ export class SaveGame {
   /** Active slot for read/write operations. Set via `useSlot`; defaults to
    *  `main` so existing single-slot save flow keeps working unchanged. */
   private slotKey: string = DEFAULT_SLOT_KEY;
+  /** Cloud save store (Alpha 4.25). Mirrors writes to Supabase when the
+   *  user is signed in; loads pull from cloud first, fall back to local.
+   *  When Supabase isn't configured OR the user isn't signed in, this
+   *  is a no-op and SaveGame behaves exactly as it did pre-cloud. */
+  private cloud = new CloudSaveStore();
 
   /** Switch to a specific slot. Subsequent load/save/clear target it. */
   useSlot(slotKey: string): void {
     this.slotKey = slotKey;
+    this.cloud.useSlot(slotKey);
   }
   currentSlot(): string {
     return this.slotKey;
@@ -225,6 +232,25 @@ export class SaveGame {
   }
 
   async load(): Promise<SaveData | undefined> {
+    // Cloud-first when signed in (Alpha 4.25): the user's source of
+    // truth is their account, not the device. If cloud has data, use
+    // it AND mirror to local IndexedDB so subsequent loads + offline
+    // play stay fast. If cloud has nothing for this slot, fall back to
+    // whatever's in local — could be a fresh device or pre-signin save.
+    if (this.cloud.available()) {
+      const fromCloud = await this.cloud.load();
+      if (fromCloud
+          && fromCloud.schemaVersion >= MIN_LOADABLE_SCHEMA
+          && fromCloud.schemaVersion <= SCHEMA) {
+        // Mirror to local cache (fire-and-forget — load shouldn't block on it).
+        this.writeRawLocal(fromCloud).catch(() => {});
+        return fromCloud;
+      }
+    }
+    return this.loadLocal();
+  }
+
+  private async loadLocal(): Promise<SaveData | undefined> {
     if (!this.db) return undefined;
     return new Promise<SaveData | undefined>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readonly');
@@ -244,8 +270,13 @@ export class SaveGame {
   }
 
   /** Read just the slot summary fields. Used by the slot picker to render
-   *  the city name + pop + treasury without loading the full grid. */
+   *  the city name + pop + treasury without loading the full grid.
+   *  Cloud-first when signed in (Alpha 4.25). */
   async loadSummary(slotKey: string): Promise<SlotSummary | undefined> {
+    if (this.cloud.available()) {
+      const fromCloud = await this.cloud.loadSummary(slotKey);
+      if (fromCloud) return fromCloud;
+    }
     if (!this.db) return undefined;
     return new Promise<SlotSummary | undefined>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readonly');
@@ -271,7 +302,6 @@ export class SaveGame {
   }
 
   async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }): Promise<void> {
-    if (!this.db) return;
     const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds, districts);
     if (cityName !== undefined) data.cityName = cityName;
     if (cheats) {
@@ -279,6 +309,11 @@ export class SaveGame {
       data.cheatUnlimitedDemand = cheats.unlimitedDemand;
     }
     data.lastPlayedISO = new Date().toISOString();
+    // Fire-and-forget cloud push (Alpha 4.25). Any network/auth error is
+    // logged inside CloudSaveStore; we don't want a flaky connection to
+    // break the local autosave path.
+    if (this.cloud.available()) void this.cloud.save(data);
+    if (!this.db) return;
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, this.slotKey);
@@ -288,6 +323,9 @@ export class SaveGame {
   }
 
   async clear(): Promise<void> {
+    // Clear cloud too (Alpha 4.25) so a Reset City wipes the user's
+    // account-level save, not just their local cache.
+    if (this.cloud.available()) void this.cloud.clear();
     if (!this.db) return;
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
@@ -306,13 +344,23 @@ export class SaveGame {
    * memory state matches what's now persisted.
    */
   async writeRaw(data: SaveData): Promise<void> {
-    if (!this.db) throw new Error('Save store unavailable (private mode?)');
     if (typeof data.schemaVersion !== 'number'
         || data.schemaVersion < MIN_LOADABLE_SCHEMA
         || data.schemaVersion > SCHEMA) {
       throw new Error(`Save schema v${data.schemaVersion} is outside the loadable range (${MIN_LOADABLE_SCHEMA}..${SCHEMA}).`);
     }
     data.lastPlayedISO = new Date().toISOString();
+    // Mirror the imported save to the cloud too (Alpha 4.25) so an
+    // imported city is bound to the user's account, not just the local
+    // device. Fire-and-forget — local write is what blocks the reload.
+    if (this.cloud.available()) void this.cloud.writeRaw(data);
+    return this.writeRawLocal(data);
+  }
+
+  /** Local-only writeRaw — no cloud mirror. Used by the cloud→local
+   *  cache pipeline in `load()` so we don't loop. */
+  private async writeRawLocal(data: SaveData): Promise<void> {
+    if (!this.db) throw new Error('Save store unavailable (private mode?)');
     return new Promise<void>((resolve, reject) => {
       const tx = this.db!.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).put(data, this.slotKey);

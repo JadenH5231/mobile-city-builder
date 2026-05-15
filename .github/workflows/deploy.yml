@@ -27,7 +27,16 @@ jobs:
       # `--base` aligns asset URLs with the Pages subpath the repo lives under
       # (https://<user>.github.io/<repo>/). Falls back to '/' for forks that
       # set up a custom domain.
+      #
+      # Supabase env vars (Alpha 4.25) — Vite inlines `VITE_*` at build
+      # time. Set these in repo Settings → Secrets and variables → Actions.
+      # If unset, the deployed build runs in local-only mode (no auth
+      # modal, no cloud saves) and everything still works. See
+      # docs/CLOUD_SETUP.md for the 10-minute Supabase setup.
       - run: npm run build -- --base=/${{ github.event.repository.name }}/
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

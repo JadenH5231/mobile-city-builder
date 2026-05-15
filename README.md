@@ -1,6 +1,6 @@
 # City Builder — prototype
 
-Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. No backend; runs entirely in the browser.
+Premium mobile-first low-poly 3D city builder. Three.js + TypeScript + Vite. **Optional** Supabase cloud-saves for cross-device sync (see [`docs/CLOUD_SETUP.md`](docs/CLOUD_SETUP.md)) — without it, runs entirely in the browser as before.
 
 **Status: Alpha 4.4** — live at https://JadenH5231.github.io/mobile-city-builder/. Save schema v21. Bundle 858 KB raw / 227 KB gzipped.
 

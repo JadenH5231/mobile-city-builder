@@ -4,7 +4,16 @@ import { Settings, bindSettingsPanel, DIFFICULTY_EFFECTS } from './ui/SettingsPa
 import { FactionDetailPanel } from './ui/FactionDetailPanel';
 import { MAP_SIZES } from './types';
 import { formatCurrency } from './ui/BudgetPanel';
+import { initAuth, onAuthChange } from './auth/AuthState';
+import { isCloudEnabled, getSupabase } from './auth/SupabaseClient';
+import { AuthModal } from './ui/AuthModal';
 import './styles.css';
+
+// Auth init (Alpha 4.25). Restores any persisted session BEFORE Game.init
+// so the first saveGame.load() inside Game.init can pull from the cloud
+// when a user is already signed in. No-op when Supabase isn't configured
+// (the auth pill stays hidden, save flow falls back to IndexedDB only).
+await initAuth();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('Missing #app element');
@@ -955,6 +964,52 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       // it just won't be installable / offline-capable.
       console.warn('Service worker registration failed:', err);
     });
+  });
+}
+
+// ---- Auth UI wiring (Alpha 4.25) -------------------------------------
+// Show the Account group in the More-menu only if Supabase is configured
+// for this build. Wire the modal trigger + sign-out button + reactive
+// pill labels via onAuthChange.
+if (isCloudEnabled()) {
+  const authGroup = document.getElementById('hud-account-group');
+  const signinBtn = document.getElementById('hud-signin');
+  const signoutBtn = document.getElementById('hud-signout');
+  const nameEl = document.getElementById('hud-account-name');
+  authGroup?.classList.remove('hidden');
+
+  const authModal = new AuthModal();
+  authModal.onSuccess = () => {
+    // Reload so Game.init reads the cloud save for the active slot.
+    window.setTimeout(() => location.reload(), 350);
+  };
+  signinBtn?.addEventListener('click', () => authModal.open('signin'));
+  signoutBtn?.addEventListener('click', async () => {
+    const supa = getSupabase();
+    if (!supa) return;
+    await supa.auth.signOut();
+    // Reload so the local-only path takes over cleanly.
+    location.reload();
+  });
+
+  // Reactive pill state — show "Sign in" or "alice@…" based on auth.
+  onAuthChange((snap) => {
+    const user = snap.user;
+    if (signinBtn && signoutBtn && nameEl) {
+      if (user) {
+        signinBtn.style.display = 'none';
+        signoutBtn.style.display = '';
+        nameEl.style.display = '';
+        // Truncate long emails so the pill doesn't overflow on phones.
+        const label = user.email ?? user.id.slice(0, 8);
+        nameEl.textContent = label.length > 24 ? label.slice(0, 22) + '…' : label;
+      } else {
+        signinBtn.style.display = '';
+        signoutBtn.style.display = 'none';
+        nameEl.style.display = 'none';
+        nameEl.textContent = '';
+      }
+    }
   });
 }
 

@@ -4,6 +4,8 @@ dist
 *.log
 .vite
 .env*
+# Track the template — only the real keys (.env / .env.local) stay local.
+!.env.example
 .idea
 .vscode
 # Per-machine Claude Code state — settings, worktrees, transcripts.

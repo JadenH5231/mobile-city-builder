@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MQ City Builder — Publisher Pitch</title>
+  <meta name="description" content="MQ City Builder — a premium mobile-first city sim with the depth of a desktop builder. Beta live now. Looking for a mobile publishing partner." />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="./mansion-icon.svg" />
+  <style>
+    :root {
+      --bg: #0e1014;
+      --bg-card: #181b21;
+      --bg-elev: #1f232a;
+      --line: #2a2e36;
+      --ink: #f3efe6;
+      --ink-soft: #b8b4ab;
+      --ink-faint: #6a6f78;
+      --orange: #ff8030;
+      --orange-deep: #d6651b;
+      --green: #6dd06a;
+      --blue: #6a9ad8;
+      --gold: #eec453;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--orange); text-decoration: none; }
+    a:hover { color: #ffa860; }
+
+    /* ---- Layout ----------------------------------------------------- */
+    section {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 56px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    section:last-of-type { border-bottom: none; }
+    @media (max-width: 720px) { section { padding: 40px 18px; } }
+
+    /* ---- Hero ------------------------------------------------------- */
+    .hero {
+      background:
+        radial-gradient(circle at 80% 20%, rgba(255, 128, 48, 0.10), transparent 40%),
+        radial-gradient(circle at 15% 70%, rgba(106, 154, 216, 0.08), transparent 40%),
+        var(--bg);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-inner {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 80px 24px 64px;
+    }
+    .hero__eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin: 0 0 12px;
+      font-weight: 700;
+    }
+    .hero__title {
+      font-size: clamp(36px, 6vw, 56px);
+      line-height: 1.05;
+      margin: 0 0 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      max-width: 16ch;
+    }
+    .hero__title em {
+      font-style: normal;
+      color: var(--orange);
+    }
+    .hero__sub {
+      font-size: clamp(16px, 2.2vw, 20px);
+      color: var(--ink-soft);
+      max-width: 60ch;
+      margin: 0 0 36px;
+      line-height: 1.5;
+    }
+    .hero__ctas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 14px 22px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      transition: transform 80ms ease, background 120ms ease;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    .btn--primary {
+      background: var(--orange);
+      color: #1c1300;
+    }
+    .btn--primary:hover {
+      background: #ffa860;
+      color: #1c1300;
+    }
+    .btn--ghost {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .btn--ghost:hover {
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+    .hero__pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 11px;
+      border-radius: 100px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--ink-soft);
+      font-weight: 500;
+    }
+    .pill__dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 7px;
+      background: var(--green);
+    }
+
+    /* ---- Sections --------------------------------------------------- */
+    h2 {
+      font-size: clamp(24px, 3.5vw, 32px);
+      margin: 0 0 8px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    h2 + .section-lede {
+      color: var(--ink-soft);
+      font-size: 17px;
+      margin: 0 0 28px;
+      max-width: 60ch;
+      line-height: 1.5;
+    }
+    h3 {
+      font-size: 17px;
+      margin: 0 0 6px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    /* ---- Stats strip ----------------------------------------------- */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 16px;
+    }
+    .stat__num {
+      font-size: 28px;
+      font-weight: 800;
+      margin: 0 0 2px;
+      letter-spacing: -0.01em;
+      color: var(--orange);
+    }
+    .stat__label {
+      font-size: 12px;
+      color: var(--ink-faint);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    /* ---- Why-mobile checklist -------------------------------------- */
+    .checklist {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 24px;
+      margin: 16px 0;
+    }
+    @media (max-width: 600px) { .checklist { grid-template-columns: 1fr; } }
+    .check {
+      display: grid;
+      grid-template-columns: 20px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .check__icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(109, 208, 106, 0.15);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+    .check__body { color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; }
+    .check__body strong { color: var(--ink); }
+
+    /* ---- Feature grid ---------------------------------------------- */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .feature {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 22px 22px 20px;
+    }
+    .feature__icon {
+      width: 38px;
+      height: 38px;
+      background: rgba(255, 128, 48, 0.12);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 0 14px;
+    }
+    .feature__icon svg { width: 22px; height: 22px; color: var(--orange); }
+    .feature h3 { margin-bottom: 4px; }
+    .feature p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+
+    /* ---- Tech card -------------------------------------------------- */
+    .tech-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0 0;
+    }
+    .tech {
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      color: var(--ink-soft);
+      padding: 7px 13px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* ---- The big demo CTA ----------------------------------------- */
+    .demo-cta {
+      background:
+        radial-gradient(circle at 30% 50%, rgba(255, 128, 48, 0.20), transparent 50%),
+        radial-gradient(circle at 70% 50%, rgba(106, 154, 216, 0.15), transparent 50%),
+        var(--bg-card);
+      border: 1px solid var(--orange);
+      border-radius: 16px;
+      padding: 44px 36px;
+      text-align: center;
+      margin-top: 24px;
+    }
+    .demo-cta__eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin: 0 0 10px;
+      font-weight: 700;
+    }
+    .demo-cta__title {
+      font-size: clamp(24px, 3.5vw, 32px);
+      margin: 0 0 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .demo-cta__body {
+      color: var(--ink-soft);
+      max-width: 50ch;
+      margin: 0 auto 22px;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    .demo-cta .btn--primary {
+      font-size: 17px;
+      padding: 16px 30px;
+    }
+
+    /* ---- About / contact ------------------------------------------- */
+    .about-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 720px) { .about-grid { grid-template-columns: 1fr; } }
+    .about-card {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .about-card p { color: var(--ink-soft); font-size: 14.5px; }
+    .about-card a { font-weight: 600; }
+
+    /* ---- Footer ----------------------------------------------------- */
+    footer {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+      text-align: center;
+      color: var(--ink-faint);
+      font-size: 13px;
+    }
+    .signature {
+      color: var(--ink-soft);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========== HERO ========== -->
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="hero__eyebrow">Publisher pitch · 2026</p>
+      <h1 class="hero__title">A mobile city-builder with <em>desktop-grade depth</em>.</h1>
+      <p class="hero__sub">
+        MQ City Builder is a premium mobile-first city simulator — built for touch from day one, not ported down from a PC game. Feature-complete beta is live in your browser right now. Looking for a mobile publishing partner.
+      </p>
+      <div class="hero__ctas">
+        <a class="btn btn--primary" href="https://mqcity.app" target="_blank" rel="noopener">Play the live beta →</a>
+        <a class="btn btn--ghost" href="#what-you-get">What you'd be publishing</a>
+      </div>
+      <div class="hero__pills">
+        <span class="pill"><span class="pill__dot"></span>Beta 1.1.3 live now</span>
+        <span class="pill">Feature-complete</span>
+        <span class="pill">Mobile-first</span>
+        <span class="pill">PWA installable</span>
+        <span class="pill">~28 months of dev</span>
+        <span class="pill">~130 PRs shipped</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== STATS STRIP ========== -->
+  <section>
+    <h2 style="margin-bottom:18px;">What's in the box</h2>
+    <div class="stats">
+      <div class="stat">
+        <p class="stat__num">100+</p>
+        <p class="stat__label">Building variants</p>
+      </div>
+      <div class="stat">
+        <p class="stat__num">10</p>
+        <p class="stat__label">Political factions</p>
+      </div>
+      <div class="stat">
+        <p class="stat__num">28</p>
+        <p class="stat__label">Achievements</p>
+      </div>
+      <div class="stat">
+        <p class="stat__num">3</p>
+        <p class="stat__label">Road tiers</p>
+      </div>
+      <div class="stat">
+        <p class="stat__num">240</p>
+        <p class="stat__label">Months of saved stats</p>
+      </div>
+      <div class="stat">
+        <p class="stat__num">3</p>
+        <p class="stat__label">Cloud save slots</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== WHAT IT IS ========== -->
+  <section id="what-you-get">
+    <h2>What it is</h2>
+    <p class="section-lede">
+      A low-poly 3D city-builder that gives mobile players the systems depth they've never had on a phone. Think
+      <strong>Cities: Skylines' simulation</strong> meeting <strong>Townscaper's painterly polish</strong>
+      meeting <strong>SimCity's political layer</strong> — all running natively in a browser at 60fps on a Pixel 7.
+    </p>
+    <div class="features">
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="1"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <h3>Real city simulation</h3>
+        <p>Cars route via A* on a road graph. Pedestrians use a separate path graph. Traffic congestion propagates upstream and drags down zone demand. Buses follow auto-cycled depot routes. Crime, tourism, and pollution all model per-tile.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0113 0"/></svg>
+        </div>
+        <h3>10 factions, named leaders, real politics</h3>
+        <p>Every faction has a happiness function tied to game state. Yearly elections re-form a 4-seat council that gates costs, vetoes zoning changes, and shifts population. The mayor (player) navigates a real political layer, not a sliders panel.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V10l8-6 8 6v11"/><path d="M9 21v-7h6v7"/></svg>
+        </div>
+        <h3>4 civic monuments built block-by-block</h3>
+        <p>Mayor's Mansion (4×2), City Hall (5×3), Provincial Capital (6×4), National Capital (7×4). Each placed per-tile over weeks of in-game time with visible construction sites + crane geometry. All rotatable.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="6" height="18"/><rect x="14" y="9" width="6" height="12"/></svg>
+        </div>
+        <h3>4 density tiers + skyscrapers</h3>
+        <p>R / C / I / Mixed-Use × Low / Medium / High / Max. Plus 2×2 skyscrapers with a 4-stage construction over 12 sim months — each stage is its own visible build site (foundation, steel skeleton, facade going up, finished tower).</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h3>Real economy on a sim-month tick</h3>
+        <p>Treasury, R/C/I tax sliders, monthly settlement, bond issuance (3 tiers), wealth surtax brackets, district-level surtax, lumber + produce export markets with oscillating global prices.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c2-4 6-6 10-6s8 2 10 6c-2 4-6 6-10 6s-8-2-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3>Day/night cycle with real lighting</h3>
+        <p>Sun arcs across the sky. Skyscrapers light up at night. Street lamps cast pools. Parks glow. Mansion + monuments emit accent lighting for late-night aerial photo mode.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+        </div>
+        <h3>Random events drive replayability</h3>
+        <p>Recessions, fires, lawsuits, referendums. Each one shifts modifiers (faction moods, market prices, demand) and surfaces a severity-tinted decision modal. Choice events block until the player picks.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><polyline points="14 7 21 7 21 14"/></svg>
+        </div>
+        <h3>240-month stats panel</h3>
+        <p>Native canvas line graphs for population, treasury, mood, RCI demand, export revenue — captured at every month rollover. No chart library; lightweight + fast.</p>
+      </div>
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </div>
+        <h3>Civic actions + political capital</h3>
+        <p>Endorse a faction. Form a coalition. Stage a photo-op when you build something popular. Trigger a Mayoral Override to bypass the council for one term. All powered by accumulating Political Capital — a single resource, not a currency to be bought.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== WHY MOBILE ========== -->
+  <section>
+    <h2>Why it works on mobile (where almost no city-builder does)</h2>
+    <p class="section-lede">
+      Most mobile city-builders are downsized desktop ports — they assume a mouse, get cramped on small screens, and use timers / energy systems to fake depth. MQ City Builder was built mobile-first from day one. The proof: it's already running great in a browser tab on every phone made in the last 5 years.
+    </p>
+    <div class="checklist">
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>Custom pointer-events handler</strong> built for touch. Pinch zooms from the gesture midpoint. Two-finger pan. Long-press for context. Same code path covers mouse + pen so it scales to tablets and the web without rewrites.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>One-handed playable.</strong> Toolbar pinned to the bottom edge, reachable with a thumb. All buttons ≥44pt. The full game can be played in portrait orientation without scrolling the HUD.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>60fps on Pixel 7 / iPhone 13.</strong> Sim decoupled from render: simulation runs at 10Hz, rendering at 60Hz. Spatial hashing for proximity queries. InstancedMesh for repeating geometry. Performance was the second-most-tracked goal after fun.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>Tiered map sizes.</strong> Small (64×64) runs on a 2021 mid-range Android. Medium (128×128) is the default. Large (256×256) for flagship phones + tablets.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>PWA installable.</strong> Already has manifest + service worker + custom icon. iOS / Android home-screen install works today. Opens like a native app, runs offline once loaded.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>Cloud saves with cross-device sync.</strong> Supabase auth + per-account save store. Same city on phone + tablet + laptop. 3 save slots with rename + city naming.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>Tutorial + playtest infrastructure.</strong> Live tutorial coach watches the player and advances when they hit milestones. Skippable. Re-launchable from settings.</div>
+      </div>
+      <div class="check">
+        <div class="check__icon">✓</div>
+        <div class="check__body"><strong>Easy native-app wrap.</strong> Capacitor wraps the existing web build into iOS / Android shells. ~1 week of work, no engine rewrite needed.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== TECH ========== -->
+  <section>
+    <h2>What's already built (the de-risking section)</h2>
+    <p class="section-lede">
+      The hardest engineering — the simulation, the rendering, the save system, the auth, the deployment pipeline, the cross-device sync — is shipped and stable. A publisher signing today is signing a finished product, not a promise.
+    </p>
+    <div class="features" style="grid-template-columns: 1fr 1fr;">
+      <div class="feature">
+        <h3 style="color: var(--orange);">Engine + simulation</h3>
+        <p>TypeScript strict mode. Three.js renderer with a custom orthographic 3/4 camera. Decoupled sim tick (10Hz) and render tick (60Hz). Full ECS-style separation of world, simulation, and rendering systems. ~50 source files, ~30K lines, no `any` types.</p>
+      </div>
+      <div class="feature">
+        <h3 style="color: var(--orange);">Save system</h3>
+        <p>Schema v27 with full backwards compatibility back to v2. IndexedDB local + Supabase cloud sync. Portable city codes (gzipped base64) so players can share city saves through any text channel. ~87KB per typical 128×128 save, compressed.</p>
+      </div>
+      <div class="feature">
+        <h3 style="color: var(--orange);">Auth + cloud</h3>
+        <p>Supabase-backed accounts (email + password + magic link + OAuth scaffolding). Row-level security policies enforce per-user isolation. Auto-deploy via GitHub Actions on every push to main.</p>
+      </div>
+      <div class="feature">
+        <h3 style="color: var(--orange);">Deployment + ops</h3>
+        <p>Custom domain (mqcity.app) with auto-provisioned Let's Encrypt SSL. GitHub Pages hosting at zero cost. Bundle ~1MB raw / 257KB gzipped — fits in mobile cellular range. PWA service worker for offline.</p>
+      </div>
+    </div>
+    <div class="tech-stack" style="margin-top:24px;">
+      <span class="tech">TypeScript 5</span>
+      <span class="tech">Three.js 0.169</span>
+      <span class="tech">Vite 5</span>
+      <span class="tech">Supabase</span>
+      <span class="tech">IndexedDB</span>
+      <span class="tech">Capacitor-ready</span>
+      <span class="tech">PWA</span>
+      <span class="tech">GitHub Actions CI/CD</span>
+      <span class="tech">No frameworks</span>
+      <span class="tech">No backend (Supabase)</span>
+    </div>
+  </section>
+
+  <!-- ========== LIVE DEMO CTA ========== -->
+  <section>
+    <div class="demo-cta">
+      <p class="demo-cta__eyebrow">Don't read about it — play it</p>
+      <h2 class="demo-cta__title">The full beta runs in your browser, right now.</h2>
+      <p class="demo-cta__body">
+        Open the link on any phone or laptop. Sign up takes 10 seconds (we'll spot you the cloud-save slot). Paint roads, zone neighbourhoods, watch skyscrapers rise, hold an election. No download, no install, no commitment. You'll know within 5 minutes whether this is the city sim your players have been waiting for.
+      </p>
+      <a class="btn btn--primary" href="https://mqcity.app" target="_blank" rel="noopener">Launch the beta in a new tab →</a>
+    </div>
+  </section>
+
+  <!-- ========== ABOUT + CONTACT ========== -->
+  <section>
+    <h2>The dev</h2>
+    <div class="about-grid">
+      <div class="about-card">
+        <h3 style="margin-bottom:10px;">Solo developer, 28+ months in</h3>
+        <p>One person making this — design, code, art direction, deployment, the lot. Shipping cadence is the proof: ~130 squash-merged PRs to <code>main</code>, weekly visible content drops, every step from Alpha 1.0 → Beta 1.1.3 documented in the project's PROGRESS.md.</p>
+        <p>What you'd be signing: a developer who delivers on schedule, takes feedback well, and has carried a substantial codebase through multiple feature pivots without shipping a broken build.</p>
+      </div>
+      <div class="about-card">
+        <h3 style="margin-bottom:10px;">What I'm looking for in a partner</h3>
+        <p><strong>Mobile expertise.</strong> Someone who knows how to make a premium mobile city-builder land — store positioning, screenshot kit, ASO, soft-launch strategy, localization, the lot.</p>
+        <p><strong>Reach I can't replicate alone.</strong> Press relationships, influencer outreach, festival/showcase placement, mobile-PR channels.</p>
+        <p><strong>Open on the deal shape.</strong> Royalty split, freemium with cosmetics, premium one-time, subscription, ad-supported — I'm open. Pitch the model that wins for your catalogue, and we'll talk about the split.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== CONTACT ========== -->
+  <section style="text-align:center;">
+    <h2 style="margin-bottom:20px;">Let's talk</h2>
+    <p style="color:var(--ink-soft);max-width:50ch;margin:0 auto 28px;">Email or message — I respond to every pitch personally within 48 hours. Happy to send a pitch deck, give you a recorded walkthrough, or hop on a call.</p>
+    <p style="font-size:20px;font-weight:700;margin:0 0 8px;">
+      <a href="mailto:hello@mqcity.app">hello@mqcity.app</a>
+    </p>
+    <p style="color:var(--ink-faint);font-size:13px;margin:0;">— or play the build first at <a href="https://mqcity.app">mqcity.app</a> —</p>
+  </section>
+
+  <footer>
+    <p class="signature">MQ City Builder · Beta 1.1.3 · Built mobile-first, sold on it.</p>
+  </footer>
+</body>
+</html>

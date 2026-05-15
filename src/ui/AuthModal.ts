@@ -17,7 +17,7 @@
 
 import { getSupabase } from '../auth/SupabaseClient';
 
-type Pane = 'signin' | 'signup' | 'magic' | 'verify' | 'reset' | 'newpassword';
+type Pane = 'signin' | 'signup' | 'magic' | 'verify' | 'reset';
 
 export class AuthModal {
   private modal: HTMLElement;
@@ -88,11 +88,7 @@ export class AuthModal {
     });
     document.getElementById('auth-form-reset')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      this.handleReset(e.target as HTMLFormElement);
-    });
-    document.getElementById('auth-form-newpassword')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      this.handleNewPassword(e.target as HTMLFormElement);
+      this.handleOneTimeLogin(e.target as HTMLFormElement);
     });
 
     // Esc closes the modal.
@@ -267,52 +263,32 @@ export class AuthModal {
     if (btn) btn.disabled = busy;
   }
 
-  private async handleReset(form: HTMLFormElement): Promise<void> {
+  private async handleOneTimeLogin(form: HTMLFormElement): Promise<void> {
     const supa = getSupabase();
     if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
     const fd = new FormData(form);
     const email = String(fd.get('email') ?? '').trim();
     if (!email) { this.setStatus('Email required.', 'error'); return; }
     this.setSubmitting(form, true);
-    this.setStatus('Sending reset link…', null);
-    // redirectTo points back to mqcity.app — when the user clicks the
-    // link in their email, Supabase's detectSessionInUrl picks up the
-    // recovery token and fires PASSWORD_RECOVERY, which main.ts hooks
-    // into to pop the "set new password" pane.
-    const { error } = await supa.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin
+    this.setStatus('Sending sign-in link…', null);
+    // signInWithOtp with the email-link variant. Default emailRedirectTo
+    // is the Supabase project's Site URL (https://mqcity.app). When
+    // the user clicks the link, Supabase puts them at the redirect URL
+    // with the access token in the URL hash; the SDK's
+    // detectSessionInUrl picks it up and signs them in. No password
+    // step required - this IS the sign-in. shouldCreateUser default
+    // (true) means new emails will be auto-signed-up via this path
+    // too, which is a fine secondary signup option.
+    const { error } = await supa.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin }
     });
     this.setSubmitting(form, false);
     if (error) {
       this.setStatus(error.message, 'error');
       return;
     }
-    this.setStatus(`Reset link sent. Check ${email} and tap the link to set a new password.`, 'success');
-  }
-
-  private async handleNewPassword(form: HTMLFormElement): Promise<void> {
-    const supa = getSupabase();
-    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
-    const fd = new FormData(form);
-    const password = String(fd.get('password') ?? '');
-    if (!password || password.length < 6) {
-      this.setStatus('Password must be at least 6 characters.', 'error');
-      return;
-    }
-    this.setSubmitting(form, true);
-    this.setStatus('Setting new password…', null);
-    // The user is already signed-in with a recovery session at this
-    // point (Supabase put them there when they clicked the email link).
-    // updateUser persists the new password against that session.
-    const { error } = await supa.auth.updateUser({ password });
-    this.setSubmitting(form, false);
-    if (error) {
-      this.setStatus(error.message, 'error');
-      return;
-    }
-    this.setStatus('Password updated. You\'re signed in.', 'success');
-    this.onSuccess?.();
-    setTimeout(() => this.close(), 800);
+    this.setStatus(`Sign-in link sent. Check ${email} and tap the link to sign in.`, 'success');
   }
 
   private async handleOAuth(provider: 'google' | 'apple'): Promise<void> {

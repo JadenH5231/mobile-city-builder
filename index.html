@@ -739,7 +739,7 @@
             <input type="password" name="password" autocomplete="current-password" required minlength="6" />
           </label>
           <button type="submit" class="auth-modal__submit">Sign in</button>
-          <button type="button" class="auth-modal__skip" data-auth-tab="reset" style="text-decoration:underline">Forgot password?</button>
+          <button type="button" class="auth-modal__skip" data-auth-tab="reset" style="text-decoration:underline">One time login link</button>
         </form>
 
         <form id="auth-form-signup" class="auth-modal__form" data-auth-pane="signup">
@@ -763,35 +763,22 @@
           <p class="auth-modal__hint">No password needed — we'll email you a 6-digit code to sign in.</p>
         </form>
 
-        <!-- Reset-password request pane (Beta 1.0.8). Shown when the
-             player taps "Forgot password?" on the sign-in pane. Sends
-             a recovery email via supabase.auth.resetPasswordForEmail,
-             redirect URL = mqcity.app, which lands them back here with
-             a recovery token; the SDK fires PASSWORD_RECOVERY and we
-             swap to the newpassword pane below. -->
+        <!-- One-time-login pane (Beta 1.0.9). Shown when the player taps
+             "One time login link" on the sign-in pane. Sends a magic
+             link via supabase.auth.signInWithOtp; clicking the emailed
+             link signs them in directly via Supabase's
+             detectSessionInUrl. No password reset step — if they
+             forgot their password they can keep using these links
+             indefinitely, OR sign in normally once and update their
+             password from settings later (future). -->
         <form id="auth-form-reset" class="auth-modal__form" data-auth-pane="reset">
-          <p class="auth-modal__hint">Enter the email you signed up with — we'll send you a link to set a new password.</p>
+          <p class="auth-modal__hint">Enter your email — we'll send you a one-time link to sign in.</p>
           <label class="auth-modal__field">
             <span>Email</span>
             <input type="email" name="email" autocomplete="email" required />
           </label>
-          <button type="submit" class="auth-modal__submit">Send reset link</button>
+          <button type="submit" class="auth-modal__submit">Email me a sign-in link</button>
           <button type="button" class="auth-modal__skip" data-auth-tab="signin" style="text-decoration:underline">Back to sign in</button>
-        </form>
-
-        <!-- Set-new-password pane (Beta 1.0.8). Shown when the player
-             clicks the recovery link in their email — Supabase fires
-             PASSWORD_RECOVERY which main.ts forwards into open('newpassword').
-             At this point the user is signed in with a temporary recovery
-             session; submitting calls auth.updateUser({ password }) to
-             persist the new password and they stay signed in. -->
-        <form id="auth-form-newpassword" class="auth-modal__form" data-auth-pane="newpassword">
-          <p class="auth-modal__hint">Choose a new password for your MQ City Builder account.</p>
-          <label class="auth-modal__field">
-            <span>New password</span>
-            <input type="password" name="password" autocomplete="new-password" required minlength="6" />
-          </label>
-          <button type="submit" class="auth-modal__submit">Set new password</button>
         </form>
 
         <!-- Verify-code pane (Beta 1.0.2). Shown programmatically after a

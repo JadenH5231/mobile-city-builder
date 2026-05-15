@@ -22,20 +22,19 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
- * Schema 26 (Alpha 4.18 — Level 4 / Max density tier): widens
- * `zoneCap` and `density` to allow value 4 for the new mid-rise tier
- * bridging L3 and skyscrapers. The on-disk format is unchanged (both
- * fields were already serialized as plain numbers); the schema bump
- * just signals the new value range. v25-and-earlier saves load fine —
- * they never have density=4 or zoneCap=4 tiles.
+ * Schema 27 (Alpha 4.21 — Big-build rotation): adds optional
+ * `bigBuildRotation` per tile. Only the anchor of a big civic build
+ * carries a non-zero value (0..3, number of 90° CW turns). v26-and-
+ * earlier saves load with rotation 0 everywhere — every existing
+ * building keeps its original orientation, no migration pain.
  *
- * Earlier: v25 cloverleaves, v24 ramps, v23 per-block big-build,
- * v22 civic monuments, v21 mansion, v20 beautification, v19 land
- * ownership, v18 skyscrapers, v17 districts, v16 bonds, v15 tourism,
- * v14 patina, v13 achievements, v12 bridges, v11 stats, v10 events,
- * v9 highestPop, v8 luxury, v7 elevation+bridge.
+ * Earlier: v26 max-density, v25 cloverleaves, v24 ramps, v23 per-block
+ * big-build, v22 civic monuments, v21 mansion, v20 beautification,
+ * v19 land ownership, v18 skyscrapers, v17 districts, v16 bonds,
+ * v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
+ * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
  */
-const SCHEMA = 26;
+const SCHEMA = 27;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -113,6 +112,11 @@ export interface TileSnapshot {
   /** Cloverleaf interchange bit (Alpha 4.17 / schema 25+). v24-and-
    *  earlier saves load with `false` (no cloverleaves existed pre-4.17). */
   cloverleaf?: boolean;
+  /** Big-build rotation (Alpha 4.21 / schema 27+). Only meaningful on
+   *  the anchor tile of a multi-tile civic monument. Number of 90° CW
+   *  turns; world-space dimensions swap for odd values. v26-and-
+   *  earlier saves load with `undefined → 0` (default orientation). */
+  bigBuildRotation?: 0 | 1 | 2 | 3;
 }
 
 export interface SaveData {
@@ -361,7 +365,8 @@ export function serialize(
       nationalCapital: t.nationalCapital,
       bigBuildBlockPaid: t.bigBuildBlockPaid,
       ramp: t.ramp,
-      cloverleaf: t.cloverleaf
+      cloverleaf: t.cloverleaf,
+      bigBuildRotation: t.bigBuildRotation
     };
   }
   const edges: number[] = [];
@@ -529,6 +534,10 @@ export function applySave(
     t.ramp = snap.ramp ?? false;
     // Cloverleaf bit (schema 25+). v24-and-earlier load with `false`.
     t.cloverleaf = snap.cloverleaf ?? false;
+    // Big-build rotation (schema 27+). v26-and-earlier saves default
+    // to 0 (every existing civic monument keeps its original
+    // orientation across the upgrade).
+    t.bigBuildRotation = (snap.bigBuildRotation ?? 0) as 0 | 1 | 2 | 3;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

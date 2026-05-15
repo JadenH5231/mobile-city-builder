@@ -209,6 +209,18 @@ export class Tile {
   provincialCapital = false;
   nationalCapital = false;
   /**
+   * Big-build rotation (Alpha 4.21). Only meaningful on the ANCHOR tile
+   * of a multi-tile civic monument footprint (Mayor's Mansion / City
+   * Hall / Provincial / National Capital). 0 = native orientation
+   * (footprint extends right+down from anchor). Each step is 90° CW
+   * rotation around the footprint center; for odd rotations (1, 3) the
+   * world-space footprint dimensions swap (a 4×2 mansion at rot 1 is a
+   * 2×4 footprint). Renderer rotates geometry by `-rot * π/2` around
+   * the rotated footprint center. Old saves (schema ≤ 26) load with
+   * rotation = 0 everywhere — backwards-compat.
+   */
+  bigBuildRotation: 0 | 1 | 2 | 3 = 0;
+  /**
    * Highway interchange ramp bit (Alpha 4.16). When true, this tile is
    * a highway-to-local/avenue merge ramp:
    *  - Renders with merge chevrons + yellow stripes + EXIT signage so

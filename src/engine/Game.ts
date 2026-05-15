@@ -70,6 +70,8 @@ import {
   ZONE_TIER_CAP,
   ZONE_TOOL_INFO,
   dirBetween,
+  rotatedFootprint,
+  type BigBuildRotation,
   type Building,
   type MapSize,
   type RoadType,
@@ -326,6 +328,10 @@ export class Game {
     kind: BigBuildKind;
     x: number;
     y: number;
+    /** Current rotation of the previewed footprint (Alpha 4.21). Player
+     *  cycles 0 → 1 → 2 → 3 via the floating Rotate button (or R key).
+     *  Carried into `reserveMonumentFootprint` on commit. */
+    rotation: BigBuildRotation;
     expiresAt: number;
     timer: number;
   } | null = null;
@@ -2167,9 +2173,13 @@ export class Game {
    */
   private canPlaceMonumentFootprint(
     kind: BigBuildKind,
-    x: number, y: number
+    x: number, y: number,
+    rotation: BigBuildRotation = 0
   ): boolean {
     const fp = this.monumentFootprint(kind);
+    // Rotated world-space dimensions (Alpha 4.21). Odd rotations swap
+    // (w, h). The anchor stays at (x, y).
+    const { w, h } = rotatedFootprint(fp.w, fp.h, rotation);
     // One-per-city: a quick existence sweep on the matching tile bit.
     // Cloverleaf is multi-instance — the player can build many across
     // the city, so skip the one-per-city check for that kind.
@@ -2190,8 +2200,8 @@ export class Game {
     const blockCost = Math.round(monumentBlockCost(kind) * mult);
     if (this.economy.treasury < blockCost && !this.cheatUnlimitedMoney) return false;
     // Footprint validation — every tile must be owned grass with nothing on it.
-    for (let dy = 0; dy < fp.h; dy++) {
-      for (let dx = 0; dx < fp.w; dx++) {
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
         const t = this.grid.get(x + dx, y + dy);
         if (!t) return false;
         if (!t.owned) return false;
@@ -2233,36 +2243,42 @@ export class Game {
     x: number, y: number
   ): boolean {
     const fp = this.monumentFootprint(kind);
-    const valid = this.canPlaceMonumentFootprint(kind, x, y);
-    // Second tap on the same armed tile + same kind → commit.
+    // Second tap on the same armed tile + same kind → commit, using the
+    // CURRENTLY-armed rotation (player may have cycled it via the
+    // Rotate button between taps).
     if (this.pendingMonument
         && this.pendingMonument.kind === kind
         && this.pendingMonument.x === x
         && this.pendingMonument.y === y) {
+      const armedRot = this.pendingMonument.rotation;
       this.clearMonumentPreview();
-      if (kind === 'mayor_mansion') return this.placeMayorMansion(x, y);
+      if (kind === 'mayor_mansion') return this.placeMayorMansion(x, y, armedRot);
       // All other kinds (civic monuments + cloverleaf) go through the
       // unified per-block reservation entry point.
-      return this.reserveMonumentFootprint(x, y, kind);
+      return this.reserveMonumentFootprint(x, y, kind, armedRot);
     }
-    // First tap (or different tile) → arm preview ghost. Show even if
-    // invalid (red ghost) so the player understands why it can't go here.
+    // First tap (or different tile) → arm preview ghost at rotation 0.
+    // Player can rotate via the floating Rotate button.
+    const startRot: BigBuildRotation = 0;
+    const valid = this.canPlaceMonumentFootprint(kind, x, y, startRot);
     this.clearMonumentPreview();
     // Use the anchor tile's elevation for the ghost lift so it follows hills.
     const t = this.grid.get(x, y);
     const elevation = t?.elevation ?? 0;
-    this.renderer.showFootprintPreview(x, y, fp.w, fp.h, valid, elevation);
+    const { w: rw, h: rh } = rotatedFootprint(fp.w, fp.h, startRot);
+    this.renderer.showFootprintPreview(x, y, rw, rh, valid, elevation);
     if (!valid) {
       // Surface a one-line reason that mirrors what the commit-time toast
       // would say. The full placement method has more specific messages
       // (off-map, occupied, etc.) — for preview we use a generic line.
       this.onStatusMessage?.(`Cannot place ${fp.label} here`);
       this.pendingMonument = null;
+      this.onPendingMonumentChange?.(null);
       return false;
     }
     // Arm — preview shows, status toast prompts second tap.
     const cost = Math.round(fp.cost * this.council.costMultiplier(kind));
-    this.onStatusMessage?.(`Tap again to confirm ${fp.label} ($${cost.toLocaleString()})`);
+    this.onStatusMessage?.(`Tap again to confirm ${fp.label} ($${cost.toLocaleString()}) — ↻ to rotate`);
     const timer = window.setTimeout(() => {
       // Auto-clear after the arm window — no surprise commits.
       if (this.pendingMonument
@@ -2274,11 +2290,63 @@ export class Game {
     }, Game.MONUMENT_ARM_MS);
     this.pendingMonument = {
       kind, x, y,
+      rotation: startRot,
       expiresAt: performance.now() + Game.MONUMENT_ARM_MS,
       timer
     };
+    this.onPendingMonumentChange?.(this.pendingMonument);
     return false;
   }
+
+  /**
+   * Cycle the currently-armed monument's rotation by +90° CW (Alpha 4.21).
+   * Wired to the floating "Rotate" button (and the R key on desktop).
+   * No-op when no monument is armed. Re-validates the rotated footprint
+   * (might be invalid at the new orientation if a tile is occupied) and
+   * re-shows the preview ghost. Status toast is updated. Timer is reset
+   * so the player has the full arm window after rotating.
+   */
+  cyclePendingRotation(): void {
+    if (!this.pendingMonument) return;
+    const next = ((this.pendingMonument.rotation + 1) % 4) as BigBuildRotation;
+    const { kind, x, y } = this.pendingMonument;
+    const fp = this.monumentFootprint(kind);
+    const valid = this.canPlaceMonumentFootprint(kind, x, y, next);
+    // Update state, reset timer, re-show preview, update toast.
+    clearTimeout(this.pendingMonument.timer);
+    const t = this.grid.get(x, y);
+    const elevation = t?.elevation ?? 0;
+    const { w: rw, h: rh } = rotatedFootprint(fp.w, fp.h, next);
+    this.renderer.showFootprintPreview(x, y, rw, rh, valid, elevation);
+    const cost = Math.round(fp.cost * this.council.costMultiplier(kind));
+    if (valid) {
+      this.onStatusMessage?.(`${fp.label} rotated · ${rw}×${rh} · tap again to confirm ($${cost.toLocaleString()})`);
+    } else {
+      this.onStatusMessage?.(`${fp.label} rotated · ${rw}×${rh} · won't fit here at this orientation`);
+    }
+    const timer = window.setTimeout(() => {
+      if (this.pendingMonument
+          && this.pendingMonument.kind === kind
+          && this.pendingMonument.x === x
+          && this.pendingMonument.y === y) {
+        this.clearMonumentPreview();
+      }
+    }, Game.MONUMENT_ARM_MS);
+    this.pendingMonument = {
+      kind, x, y,
+      rotation: next,
+      expiresAt: performance.now() + Game.MONUMENT_ARM_MS,
+      timer
+    };
+    this.onPendingMonumentChange?.(this.pendingMonument);
+  }
+
+  /** UI hook called whenever pendingMonument changes (Alpha 4.21). The
+   *  bottom HUD wiring uses this to show/hide the floating Rotate
+   *  button. Pass null when armed state clears. */
+  onPendingMonumentChange?: (
+    state: { kind: BigBuildKind; x: number; y: number; rotation: BigBuildRotation } | null
+  ) => void;
 
   /** Clear any armed monument preview — renderer ghost + state + timer.
    *  Called on tool change, pan, undo, reset, and on successful commit. */
@@ -2286,6 +2354,7 @@ export class Game {
     if (this.pendingMonument) {
       clearTimeout(this.pendingMonument.timer);
       this.pendingMonument = null;
+      this.onPendingMonumentChange?.(null);
     }
     this.renderer.clearFootprintPreview();
   }
@@ -2307,8 +2376,8 @@ export class Game {
    * - Treasury < per-block cost (~$62K)
    * - Council banned
    */
-  private placeMayorMansion(x: number, y: number): boolean {
-    return this.reserveMonumentFootprint(x, y, 'mayor_mansion');
+  private placeMayorMansion(x: number, y: number, rotation: BigBuildRotation = 0): boolean {
+    return this.reserveMonumentFootprint(x, y, 'mayor_mansion', rotation);
   }
 
   /** Generalised first-block reservation (Alpha 4.15). Used for both
@@ -2319,9 +2388,14 @@ export class Game {
    *  are paid via `payNextMonumentBlock`. */
   private reserveMonumentFootprint(
     x: number, y: number,
-    kind: BigBuildKind
+    kind: BigBuildKind,
+    rotation: BigBuildRotation = 0
   ): boolean {
     const fp = this.monumentFootprint(kind);
+    // Rotated world-space dimensions (Alpha 4.21). The anchor (x, y)
+    // stays the same; the footprint extends right+down by (worldW,
+    // worldH). For odd rotations these are swapped.
+    const { w: worldW, h: worldH } = rotatedFootprint(fp.w, fp.h, rotation);
     // Pick the tile-bit accessor based on kind.
     const setKindBit = (t: Tile, v: boolean): void => {
       if (kind === 'mayor_mansion') t.mayorMansion = v;
@@ -2355,20 +2429,21 @@ export class Game {
       return false;
     }
     const blockCost = Math.round(monumentBlockCost(kind) * mult);
-    const totalBlocks = fp.w * fp.h;
+    const totalBlocks = worldW * worldH;
     if (this.economy.treasury < blockCost && !this.cheatUnlimitedMoney) {
       this.onStatusMessage?.(`Not enough money — first block costs $${blockCost.toLocaleString()}`);
       return false;
     }
     // Footprint validation — every tile must be free, owned grass.
+    // Iterates the ROTATED world-space rectangle (Alpha 4.21).
     const offsets: Array<[number, number]> = [];
-    for (let dy = 0; dy < fp.h; dy++) {
-      for (let dx = 0; dx < fp.w; dx++) offsets.push([dx, dy]);
+    for (let dy = 0; dy < worldH; dy++) {
+      for (let dx = 0; dx < worldW; dx++) offsets.push([dx, dy]);
     }
     for (const [dx, dy] of offsets) {
       const t = this.grid.get(x + dx, y + dy);
       if (!t) {
-        this.onStatusMessage?.(`${fp.label} needs a ${fp.w}×${fp.h} free area`);
+        this.onStatusMessage?.(`${fp.label} needs a ${worldW}×${worldH} free area`);
         return false;
       }
       if (!t.owned) {
@@ -2386,13 +2461,17 @@ export class Game {
       }
     }
     // Reserve the footprint — every tile gets the kind-bit, the anchor
-    // ALSO gets bigBuildBlockPaid = true (the first installment is
-    // included in this placement).
+    // ALSO gets bigBuildBlockPaid = true AND the rotation written onto
+    // it (Alpha 4.21). Rotation is only meaningful on the anchor; the
+    // renderer reads it there when emitting the rotated geometry.
     for (const [dx, dy] of offsets) {
       const t = this.grid.get(x + dx, y + dy)!;
       setKindBit(t, true);
       // Anchor is paid for; everything else awaits a tap.
-      if (dx === 0 && dy === 0) t.bigBuildBlockPaid = true;
+      if (dx === 0 && dy === 0) {
+        t.bigBuildBlockPaid = true;
+        t.bigBuildRotation = rotation;
+      }
     }
     this.economy.treasury -= blockCost;
     // No `building` value on the anchor yet — that flips on completion.

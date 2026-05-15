@@ -7,7 +7,8 @@ import {
   PROVINCIAL_CAPITAL_WIDTH,
   PROVINCIAL_CAPITAL_DEPTH,
   NATIONAL_CAPITAL_WIDTH,
-  NATIONAL_CAPITAL_DEPTH
+  NATIONAL_CAPITAL_DEPTH,
+  rotatedFootprint
 } from '../types';
 
 /**
@@ -228,10 +229,14 @@ export class Motorcade {
 function findCapitalAnchor(grid: Grid): { x: number; y: number; w: number; h: number } | null {
   for (const t of grid.iter()) {
     if (t.building === 'national_capital') {
-      return { x: t.x, y: t.y, w: NATIONAL_CAPITAL_WIDTH, h: NATIONAL_CAPITAL_DEPTH };
+      // Honour the anchor's rotation (Alpha 4.21) — odd rotations swap
+      // (w, h) so the perimeter scan walks the correct world-space face.
+      const { w, h } = rotatedFootprint(NATIONAL_CAPITAL_WIDTH, NATIONAL_CAPITAL_DEPTH, t.bigBuildRotation);
+      return { x: t.x, y: t.y, w, h };
     }
     if (t.building === 'provincial_capital') {
-      return { x: t.x, y: t.y, w: PROVINCIAL_CAPITAL_WIDTH, h: PROVINCIAL_CAPITAL_DEPTH };
+      const { w, h } = rotatedFootprint(PROVINCIAL_CAPITAL_WIDTH, PROVINCIAL_CAPITAL_DEPTH, t.bigBuildRotation);
+      return { x: t.x, y: t.y, w, h };
     }
   }
   return null;

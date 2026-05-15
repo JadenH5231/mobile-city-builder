@@ -17,7 +17,7 @@
 
 import { getSupabase } from '../auth/SupabaseClient';
 
-type Pane = 'signin' | 'signup' | 'magic' | 'verify';
+type Pane = 'signin' | 'signup' | 'magic' | 'verify' | 'reset' | 'newpassword';
 
 export class AuthModal {
   private modal: HTMLElement;
@@ -85,6 +85,14 @@ export class AuthModal {
     });
     document.getElementById('auth-verify-resend')?.addEventListener('click', () => {
       this.handleResend();
+    });
+    document.getElementById('auth-form-reset')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleReset(e.target as HTMLFormElement);
+    });
+    document.getElementById('auth-form-newpassword')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleNewPassword(e.target as HTMLFormElement);
     });
 
     // Esc closes the modal.
@@ -257,6 +265,54 @@ export class AuthModal {
   private setSubmitting(form: HTMLFormElement, busy: boolean): void {
     const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (btn) btn.disabled = busy;
+  }
+
+  private async handleReset(form: HTMLFormElement): Promise<void> {
+    const supa = getSupabase();
+    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
+    const fd = new FormData(form);
+    const email = String(fd.get('email') ?? '').trim();
+    if (!email) { this.setStatus('Email required.', 'error'); return; }
+    this.setSubmitting(form, true);
+    this.setStatus('Sending reset link…', null);
+    // redirectTo points back to mqcity.app — when the user clicks the
+    // link in their email, Supabase's detectSessionInUrl picks up the
+    // recovery token and fires PASSWORD_RECOVERY, which main.ts hooks
+    // into to pop the "set new password" pane.
+    const { error } = await supa.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    this.setSubmitting(form, false);
+    if (error) {
+      this.setStatus(error.message, 'error');
+      return;
+    }
+    this.setStatus(`Reset link sent. Check ${email} and tap the link to set a new password.`, 'success');
+  }
+
+  private async handleNewPassword(form: HTMLFormElement): Promise<void> {
+    const supa = getSupabase();
+    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
+    const fd = new FormData(form);
+    const password = String(fd.get('password') ?? '');
+    if (!password || password.length < 6) {
+      this.setStatus('Password must be at least 6 characters.', 'error');
+      return;
+    }
+    this.setSubmitting(form, true);
+    this.setStatus('Setting new password…', null);
+    // The user is already signed-in with a recovery session at this
+    // point (Supabase put them there when they clicked the email link).
+    // updateUser persists the new password against that session.
+    const { error } = await supa.auth.updateUser({ password });
+    this.setSubmitting(form, false);
+    if (error) {
+      this.setStatus(error.message, 'error');
+      return;
+    }
+    this.setStatus('Password updated. You\'re signed in.', 'success');
+    this.onSuccess?.();
+    setTimeout(() => this.close(), 800);
   }
 
   private async handleOAuth(provider: 'google' | 'apple'): Promise<void> {

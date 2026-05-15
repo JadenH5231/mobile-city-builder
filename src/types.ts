@@ -400,6 +400,27 @@ export type Building =
   | 'clock_tower'
   | 'triumphal_arch'
   | 'pier'
+  // Toronto landmark Easter eggs (Alpha 4.24). NOT exposed in any
+  // toolbar / place tool / faction stance / milestone unlock — they
+  // exist purely so the bundled Toronto preset (scripts/generate-
+  // toronto.mjs) can paint iconic landmarks the generic museum /
+  // stadium / observatory don't capture. Single-tile each with
+  // visuals deliberately scaled larger than normal buildings so
+  // they read as landmarks at the game's orthographic zoom. The
+  // renderer's `cityBuildingParts` switch knows about them; every
+  // simulation system silently ignores them (no population, no jobs,
+  // no upkeep, no service coverage). Source-divers can spot them
+  // here as a hint that the Toronto preset is the easter egg.
+  | 'cn_tower'
+  | 'rogers_centre'
+  | 'scotiabank_arena'
+  | 'union_station'
+  | 'casa_loma'
+  | 'royal_ontario_museum'
+  | 'art_gallery_ontario'
+  | 'distillery_district'
+  | 'pearson_terminal'
+  | 'runway'
   // The Mayor's Mansion (Alpha 4.2). Single-instance 4×2 showpiece —
   // the most detailed build in the game. The mansion itself occupies
   // the back row (4 tiles wide); the front row is lavish formal
@@ -499,7 +520,21 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   national_capital: 20000000,
   // Cloverleaf interchange (Alpha 4.17) — 5×5 prefab placed via per-
   // block construction. Total ~$50K spread across 25 blocks ≈ $2K/block.
-  cloverleaf: 50000
+  cloverleaf: 50000,
+  // Toronto landmark Easter eggs (Alpha 4.24). Cost 0 because they're
+  // not exposed in any place tool — only the bundled Toronto preset
+  // stamps them. Listed here only so TS's exhaustive Building Record
+  // type-checks. Source-divers, hi 👋
+  cn_tower: 0,
+  rogers_centre: 0,
+  scotiabank_arena: 0,
+  union_station: 0,
+  casa_loma: 0,
+  royal_ontario_museum: 0,
+  art_gallery_ontario: 0,
+  distillery_district: 0,
+  pearson_terminal: 0,
+  runway: 0
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -546,7 +581,19 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   national_capital: 35000,
   // Cloverleaf upkeep — meaningful but not punishing. Multi-acre
   // pavement + medians + lighting. Equivalent to a small landmark.
-  cloverleaf: 200
+  cloverleaf: 200,
+  // Toronto landmark Easter eggs (Alpha 4.24). Free upkeep — they're
+  // cosmetic-only and not exposed via any place tool.
+  cn_tower: 0,
+  rogers_centre: 0,
+  scotiabank_arena: 0,
+  union_station: 0,
+  casa_loma: 0,
+  royal_ontario_museum: 0,
+  art_gallery_ontario: 0,
+  distillery_district: 0,
+  pearson_terminal: 0,
+  runway: 0
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles

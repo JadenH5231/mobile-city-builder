@@ -755,8 +755,29 @@
             <span>Email</span>
             <input type="email" name="email" autocomplete="email" required />
           </label>
-          <button type="submit" class="auth-modal__submit">Email me a sign-in link</button>
-          <p class="auth-modal__hint">No password needed — we'll email you a one-tap link to sign in.</p>
+          <button type="submit" class="auth-modal__submit">Email me a sign-in code</button>
+          <p class="auth-modal__hint">No password needed — we'll email you a 6-digit code to sign in.</p>
+        </form>
+
+        <!-- Verify-code pane (Beta 1.0.2). Shown programmatically after a
+             successful sign-up OR magic-link request — not a tab the
+             player can pick directly. The verify form expects the
+             6-digit one-time code Supabase emails to the user; a
+             "Resend code" link is available if the email didn't show
+             up. The email field is read-only here so the user can't
+             accidentally edit it after the code was sent. -->
+        <form id="auth-form-verify" class="auth-modal__form" data-auth-pane="verify">
+          <p class="auth-modal__hint" id="auth-verify-msg">Check your email for a 6-digit code and enter it below.</p>
+          <label class="auth-modal__field">
+            <span>Email</span>
+            <input type="email" name="email" id="auth-verify-email" readonly />
+          </label>
+          <label class="auth-modal__field">
+            <span>6-digit code</span>
+            <input type="text" name="token" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required class="auth-modal__field--otp" />
+          </label>
+          <button type="submit" class="auth-modal__submit">Verify and sign in</button>
+          <button type="button" class="auth-modal__skip" id="auth-verify-resend" style="text-decoration:underline">Resend the code</button>
         </form>
 
         <div id="auth-modal-status" class="auth-modal__status" aria-live="polite"></div>

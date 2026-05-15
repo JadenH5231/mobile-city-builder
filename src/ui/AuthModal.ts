@@ -17,11 +17,17 @@
 
 import { getSupabase } from '../auth/SupabaseClient';
 
-type Pane = 'signin' | 'signup' | 'magic';
+type Pane = 'signin' | 'signup' | 'magic' | 'verify';
 
 export class AuthModal {
   private modal: HTMLElement;
   private status: HTMLElement;
+  /** Email captured at sign-up / magic-link send time, carried into the
+   *  verify pane so the user doesn't have to retype it. (Beta 1.0.2) */
+  private pendingEmail = '';
+  /** Tracks how the user arrived at the verify pane so resend uses the
+   *  matching API call (signUp.resend vs. signInWithOtp). */
+  private pendingFlow: 'signup' | 'magic' | null = null;
   /** Optional caller hook fired on successful sign-in (not on sign-up
    *  email send or magic-link send — those don't sign the user in
    *  immediately). The caller typically reloads the city on this. */
@@ -72,6 +78,13 @@ export class AuthModal {
     document.getElementById('auth-form-magic')?.addEventListener('submit', (e) => {
       e.preventDefault();
       this.handleMagicLink(e.target as HTMLFormElement);
+    });
+    document.getElementById('auth-form-verify')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleVerify(e.target as HTMLFormElement);
+    });
+    document.getElementById('auth-verify-resend')?.addEventListener('click', () => {
+      this.handleResend();
     });
 
     // Esc closes the modal.
@@ -144,16 +157,17 @@ export class AuthModal {
       this.setStatus(error.message, 'error');
       return;
     }
-    if (data.user && !data.session) {
-      // Email confirmation required.
-      this.setStatus(`Account created. Check ${email} for a verification link, then come back and sign in.`, 'success');
-    } else if (data.session) {
-      // Auto-confirmed (Supabase project setting).
+    if (data.session) {
+      // Auto-confirmed (Supabase project setting OFF email confirmation).
       this.setStatus('Account created. Signed in.', 'success');
       this.onSuccess?.();
       setTimeout(() => this.close(), 600);
     } else {
-      this.setStatus('Account created. Check your email to verify.', 'success');
+      // Email confirmation required → switch to the verify-code pane
+      // (Beta 1.0.2). The code is in the email Supabase just sent.
+      this.pendingEmail = email;
+      this.pendingFlow = 'signup';
+      this.showVerifyPane(email, `We sent a 6-digit code to ${email}. Enter it below to finish creating your account.`);
     }
   }
 
@@ -164,14 +178,78 @@ export class AuthModal {
     const email = String(fd.get('email') ?? '').trim();
     if (!email) { this.setStatus('Email required.', 'error'); return; }
     this.setSubmitting(form, true);
-    this.setStatus('Sending link…', null);
-    const { error } = await supa.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+    this.setStatus('Sending code…', null);
+    // shouldCreateUser:false so the magic-link tab can't accidentally
+    // create a brand-new account (use the Create account tab for that).
+    const { error } = await supa.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     this.setSubmitting(form, false);
     if (error) {
       this.setStatus(error.message, 'error');
       return;
     }
-    this.setStatus(`Link sent. Check ${email} and tap it to sign in.`, 'success');
+    this.pendingEmail = email;
+    this.pendingFlow = 'magic';
+    this.showVerifyPane(email, `We sent a 6-digit code to ${email}. Enter it below to sign in.`);
+  }
+
+  /** Switch to the verify-code pane. Pre-fills the (read-only) email
+   *  field and updates the helper message. */
+  private showVerifyPane(email: string, message: string): void {
+    const emailInput = document.getElementById('auth-verify-email') as HTMLInputElement | null;
+    const msgEl = document.getElementById('auth-verify-msg');
+    if (emailInput) emailInput.value = email;
+    if (msgEl) msgEl.textContent = message;
+    this.switchPane('verify');
+    // Auto-focus the code input so the player can start typing immediately.
+    setTimeout(() => {
+      const tokenInput = document.querySelector<HTMLInputElement>('#auth-form-verify input[name="token"]');
+      tokenInput?.focus();
+    }, 50);
+  }
+
+  private async handleVerify(form: HTMLFormElement): Promise<void> {
+    const supa = getSupabase();
+    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
+    const fd = new FormData(form);
+    const email = String(fd.get('email') ?? '').trim() || this.pendingEmail;
+    const token = String(fd.get('token') ?? '').trim();
+    if (!email || !token) { this.setStatus('Email and code required.', 'error'); return; }
+    if (!/^\d{6}$/.test(token)) { this.setStatus('Enter the 6-digit code from your email.', 'error'); return; }
+    this.setSubmitting(form, true);
+    this.setStatus('Verifying…', null);
+    // type:'email' covers both signup-confirmation and magic-link OTP
+    // verification in Supabase's current API.
+    const { error } = await supa.auth.verifyOtp({ email, token, type: 'email' });
+    this.setSubmitting(form, false);
+    if (error) {
+      this.setStatus(error.message, 'error');
+      return;
+    }
+    this.setStatus('Signed in.', 'success');
+    this.onSuccess?.();
+    setTimeout(() => this.close(), 600);
+  }
+
+  /** Resend the verification code via the same flow that sent the
+   *  original. Used from the "Resend the code" link on the verify
+   *  pane. */
+  private async handleResend(): Promise<void> {
+    const supa = getSupabase();
+    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
+    const email = this.pendingEmail;
+    if (!email) { this.setStatus('No pending email. Start over.', 'error'); return; }
+    this.setStatus('Resending code…', null);
+    let error;
+    if (this.pendingFlow === 'signup') {
+      ({ error } = await supa.auth.resend({ type: 'signup', email }));
+    } else {
+      ({ error } = await supa.auth.signInWithOtp({ email, options: { shouldCreateUser: false } }));
+    }
+    if (error) {
+      this.setStatus(error.message, 'error');
+      return;
+    }
+    this.setStatus(`A new 6-digit code was sent to ${email}.`, 'success');
   }
 
   private setSubmitting(form: HTMLFormElement, busy: boolean): void {

@@ -48,10 +48,42 @@ Go to **Authentication → Providers**.
 
 ### Email (always enabled)
 - Leave **Email** enabled.
-- Decide on email confirmation: ON = users must click an emailed link
-  before signing in (better for spam-prevention); OFF = sign-up signs
-  them in immediately (better for fast playtest). Toggle in
-  **Authentication → Providers → Email → Confirm email**.
+- Decide on email confirmation: ON = users must verify their email
+  with a 6-digit code before signing in (better for spam-prevention);
+  OFF = sign-up signs them in immediately (better for fast playtest).
+  Toggle in **Authentication → Providers → Email → Confirm email**.
+
+### Switch the verification emails to send a 6-digit CODE (not a link)
+By default Supabase emails users a "click this link to verify" message.
+The auth modal in this app expects a **6-digit one-time code instead**
+— easier for users to trust ("just a code from MQ City Builder") vs. a
+long random link from a domain they don't recognise.
+
+Two email templates need updating:
+
+1. **Authentication → Email Templates → Confirm signup** → click
+   **Edit template**. Replace the body so it sends `{{ .Token }}`
+   instead of `{{ .ConfirmationURL }}`. A clean version:
+
+   ```html
+   <h2>Confirm your MQ City Builder account</h2>
+   <p>Your verification code is:</p>
+   <p style="font-size:24px;letter-spacing:0.2em;font-family:monospace">{{ .Token }}</p>
+   <p>Enter this code in the game to finish signing up. The code expires in 60 minutes.</p>
+   ```
+
+2. **Authentication → Email Templates → Magic Link** → same swap:
+
+   ```html
+   <h2>Sign in to MQ City Builder</h2>
+   <p>Your sign-in code is:</p>
+   <p style="font-size:24px;letter-spacing:0.2em;font-family:monospace">{{ .Token }}</p>
+   <p>Enter this code in the game to sign in. The code expires in 60 minutes.</p>
+   ```
+
+Save each template. Done — new sign-ups and magic-link requests now
+deliver a 6-digit code that the player types into the verify-code
+pane in the auth modal.
 
 ### Google (optional, ~5 minutes)
 The auth modal shows a "Continue with Google" button by default — to

@@ -72,6 +72,27 @@ export async function importSaveCode(code: string): Promise<SaveData> {
   if (!parsed || typeof parsed !== 'object' || typeof (parsed as { schemaVersion?: unknown }).schemaVersion !== 'number') {
     throw new Error("That code didn't decode to a valid city.");
   }
+  // Defensive structural validation (Beta 1.0.7) — a portable code is
+  // user-supplied input that the recipient might paste from any source
+  // (Discord, forum, etc.). Reject obviously-malicious payloads BEFORE
+  // they reach the renderer / sim where bad values would crash the tab.
+  // We only check the spine of the SaveData; per-tile fields fall back to
+  // safe defaults inside applySave.
+  const p = parsed as Record<string, unknown>;
+  const w = typeof p.width === 'number' ? p.width : 0;
+  const h = typeof p.height === 'number' ? p.height : 0;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 8 || h < 8 || w > 512 || h > 512) {
+    throw new Error(`That city's dimensions (${w}×${h}) are outside the supported range (8-512 tiles per side).`);
+  }
+  if (!Array.isArray(p.tiles)) {
+    throw new Error('That city is missing its tile data.');
+  }
+  if (p.tiles.length !== w * h) {
+    throw new Error(`That city's tile count (${p.tiles.length}) doesn't match its dimensions (${w}×${h} = ${w * h}).`);
+  }
+  if (p.roadEdges !== undefined && !Array.isArray(p.roadEdges)) {
+    throw new Error('That city has malformed road data.');
+  }
   return parsed as SaveData;
 }
 

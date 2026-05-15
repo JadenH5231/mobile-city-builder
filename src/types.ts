@@ -63,7 +63,11 @@ export interface RoadTierProps {
 export const ROAD_TIER: Record<RoadType, RoadTierProps> = {
   local:    { baseSpeed: 2.0, slowdown: 0.50, maintenance: 15, color: 0x3b3b3b, width: 0.45 },
   avenue:   { baseSpeed: 2.8, slowdown: 0.25, maintenance: 25, color: 0x2c2c2c, width: 0.65 },
-  highway:  { baseSpeed: 4.0, slowdown: 0.20, maintenance: 40, color: 0x1f1f1f, width: 0.60 }
+  // Highway visually widened in Beta 1.1.2 (0.60 → 0.78) so it actually
+  // reads as "the bigger road" — was previously narrower than an
+  // avenue. New asphalt colour 0x252525 is slightly lighter so the
+  // white edge stripes + dashed white centerline pop at zoom-out.
+  highway:  { baseSpeed: 4.0, slowdown: 0.20, maintenance: 40, color: 0x252525, width: 0.78 }
 };
 
 /**

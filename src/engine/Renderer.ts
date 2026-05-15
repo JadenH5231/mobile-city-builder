@@ -5942,16 +5942,36 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
         bx - opx, yStripeB, bz - opz
       );
     } else {
-      // Highway — white edge stripes just inside the shoulder.
-      const inset = 0.04; // pulled in slightly from the actual edge
+      // Highway (Beta 1.1.2) — three layers of striping so it reads as
+      // a real motorway:
+      //   1. Solid white edge stripes just inside each shoulder
+      //   2. Dashed white centerline running the length of the tile
+      //      (suggests two travel lanes within the carriageway —
+      //      players read this as "this is the big road")
+      //   3. (Concrete shoulder band rendered later as part of the
+      //      asphalt geometry — see commented section below)
+      const inset = 0.05;
       const sx = px - (px / half) * inset;
       const sz = pz - (pz / half) * inset;
+      // Solid edge stripes, both shoulders.
       whiteLanePositions.push(
         ax + sx, yStripeA, az + sz,
         bx + sx, yStripeB, bz + sz,
         ax - sx, yStripeA, az - sz,
         bx - sx, yStripeB, bz - sz
       );
+      // Dashed white centerline — 4 dashes per edge alternating
+      // dash/gap/dash/gap (positions 0.05-0.20, 0.30-0.45,
+      // 0.55-0.70, 0.80-0.95 along the segment).
+      const dashSpans: Array<[number, number]> = [
+        [0.06, 0.21], [0.30, 0.45], [0.55, 0.70], [0.79, 0.94]
+      ];
+      for (const [t0, t1] of dashSpans) {
+        whiteLanePositions.push(
+          ax + dx * t0, yStripeA + (yStripeB - yStripeA) * t0, az + dz * t0,
+          ax + dx * t1, yStripeA + (yStripeB - yStripeA) * t1, az + dz * t1
+        );
+      }
     }
   }
 
@@ -6199,20 +6219,45 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     // Bridge tiles override elevation: their deck floats over water at
     // BRIDGE_LIFT regardless of the (negative) underlying elevation.
     const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
-    // Highway direction arrows restored (Beta 1.1.0). Direction is now
-    // player-set: paint-time imprint sets the initial direction, and
-    // the `highway_flip` tool can toggle a whole connected line.
-    // Bidirectional tiles (`highwayDir === -1`) skip the arrow.
+    // Highway direction arrows (Beta 1.1.0 restored, Beta 1.1.2 redesigned).
+    // Direction is player-set: paint-time imprint + `highway_flip`
+    // tool. Bidirectional tiles (`highwayDir === -1`) skip the arrow.
+    //
+    // Two stacked chevrons per tile (instead of the old single
+    // triangle) reads as "highway flow direction" much more clearly
+    // at any zoom level — the repeat pattern resembles real freeway
+    // chevron pavement markings.
     if (t.roadType === 'highway' && t.highwayDir >= 0 && t.highwayDir < 8) {
       const cx = (t.x + 0.5) * TILE_SIZE;
       const cz = (t.y + 0.5) * TILE_SIZE;
       const offset = DIR_OFFSETS[t.highwayDir]!;
-      const arrow = makeArrowGeom(0.18, 0.22);
       const yaw = Math.atan2(offset[0], offset[1]);
-      arrow.rotateY(yaw);
-      arrow.translate(cx, tileY + 0.003, cz);
-      arrows.push(arrow);
-      arrowColours.push(HIGHWAY_ARROW_COLOR);
+      // Two chevrons spaced 0.20 apart along the flow direction. The
+      // forward chevron is brighter (full HIGHWAY_ARROW_COLOR), the
+      // trailing one is slightly dimmer for depth.
+      for (const [chevronOffset, brightnessAlpha] of [[ 0.10, 1.0], [-0.14, 0.70]] as const) {
+        const chevron = makeChevronGeom(0.22, 0.16);
+        chevron.rotateY(yaw);
+        // Push the chevron forward/back along the flow direction.
+        const fx = offset[0] / Math.hypot(offset[0], offset[1] || 1);
+        const fz = offset[1] / Math.hypot(offset[0], offset[1] || 1);
+        chevron.translate(
+          cx + fx * chevronOffset,
+          tileY + 0.005,
+          cz + fz * chevronOffset
+        );
+        arrows.push(chevron);
+        // Dim the trailing chevron by interpolating toward the asphalt.
+        const ar = ((HIGHWAY_ARROW_COLOR >> 16) & 0xff) / 255;
+        const ag = ((HIGHWAY_ARROW_COLOR >> 8) & 0xff) / 255;
+        const ab = (HIGHWAY_ARROW_COLOR & 0xff) / 255;
+        const aspR = 0x25 / 255;
+        const dimmedR = aspR + (ar - aspR) * brightnessAlpha;
+        const dimmedG = aspR + (ag - aspR) * brightnessAlpha;
+        const dimmedB = aspR + (ab - aspR) * brightnessAlpha;
+        const packed = (Math.round(dimmedR * 255) << 16) | (Math.round(dimmedG * 255) << 8) | Math.round(dimmedB * 255);
+        arrowColours.push(packed);
+      }
     }
     if (t.stopSign) {
       // Place one small stop sign per road approach, on the right shoulder
@@ -6931,15 +6976,48 @@ function pushQuad(
   indices[ii + 3] = v;     indices[ii + 4] = v + 3; indices[ii + 5] = v + 2;
 }
 
-// Restored Beta 1.1.0. Flat triangle pointing +Z (rotated by the caller
-// to match the highway's flow direction).
-function makeArrowGeom(width: number, length: number): BufferGeometry {
+// makeArrowGeom (single-triangle direction arrow) was replaced in
+// Beta 1.1.2 by the makeChevronGeom below — chevrons read more
+// like real freeway pavement markings. Removed to keep the bundle clean.
+
+// Beta 1.1.2 — chevron-style arrow (two notched triangles forming a
+// `>` shape) for highway pavement markings. Reads as "freeway flow"
+// at any zoom, much more legible than a single solid triangle.
+// Two stacked of these per highway tile create the classic dashed
+// chevron pattern.
+function makeChevronGeom(width: number, length: number): BufferGeometry {
+  const w = width / 2;
+  const l = length / 2;
+  // Outer chevron > with an inner notch cut so it reads as an arrow
+  // outline, not a solid triangle. 6 vertices: tip + 2 wings + 2
+  // inner-notch points + 1 base-center.
+  const tipZ = l;
+  const baseZ = -l;
+  const innerZ = -l * 0.40;     // notch depth
   const positions = new Float32Array([
-    -width / 2, 0, -length / 2,
-     width / 2, 0, -length / 2,
-              0, 0,  length / 2
+    // 0: tip
+       0, 0, tipZ,
+    // 1: right wing (back)
+       w, 0, baseZ,
+    // 2: right inner (notch)
+       w * 0.45, 0, innerZ,
+    // 3: base center (notch peak)
+       0, 0, innerZ - 0.04,
+    // 4: left inner (notch)
+      -w * 0.45, 0, innerZ,
+    // 5: left wing (back)
+      -w, 0, baseZ,
   ]);
-  const indices = new Uint32Array([0, 2, 1]);
+  // Triangulate: two triangles per side of the chevron (left + right wings).
+  // Wind so the tile-y normal points up.
+  const indices = new Uint32Array([
+    // Right side
+    0, 2, 1,
+    1, 2, 3,
+    // Left side
+    0, 5, 4,
+    5, 3, 4,
+  ]);
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(positions, 3));
   g.setIndex(new BufferAttribute(indices, 1));

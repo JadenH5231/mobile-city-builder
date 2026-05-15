@@ -2258,7 +2258,12 @@ export class Game {
       return this.reserveMonumentFootprint(x, y, kind, armedRot);
     }
     // First tap (or different tile) → arm preview ghost at rotation 0.
-    // Player can rotate via the floating Rotate button.
+    // Player can rotate via the floating Rotate button — even if the
+    // current orientation doesn't fit, ARM ANYWAY (Alpha 4.21.1 fix per
+    // playtest: "when its in a spot you can't place it in it doesn't
+    // rotate") so the Rotate button appears and the player can cycle
+    // until they find a fitting orientation. The second-tap commit path
+    // re-validates and surfaces a clear toast if still invalid.
     const startRot: BigBuildRotation = 0;
     const valid = this.canPlaceMonumentFootprint(kind, x, y, startRot);
     this.clearMonumentPreview();
@@ -2267,18 +2272,12 @@ export class Game {
     const elevation = t?.elevation ?? 0;
     const { w: rw, h: rh } = rotatedFootprint(fp.w, fp.h, startRot);
     this.renderer.showFootprintPreview(x, y, rw, rh, valid, elevation);
-    if (!valid) {
-      // Surface a one-line reason that mirrors what the commit-time toast
-      // would say. The full placement method has more specific messages
-      // (off-map, occupied, etc.) — for preview we use a generic line.
-      this.onStatusMessage?.(`Cannot place ${fp.label} here`);
-      this.pendingMonument = null;
-      this.onPendingMonumentChange?.(null);
-      return false;
-    }
-    // Arm — preview shows, status toast prompts second tap.
     const cost = Math.round(fp.cost * this.council.costMultiplier(kind));
-    this.onStatusMessage?.(`Tap again to confirm ${fp.label} ($${cost.toLocaleString()}) — ↻ to rotate`);
+    if (valid) {
+      this.onStatusMessage?.(`Tap again to confirm ${fp.label} ($${cost.toLocaleString()}) — ↻ to rotate`);
+    } else {
+      this.onStatusMessage?.(`${fp.label} won't fit at this orientation — ↻ to rotate or tap elsewhere`);
+    }
     const timer = window.setTimeout(() => {
       // Auto-clear after the arm window — no surprise commits.
       if (this.pendingMonument

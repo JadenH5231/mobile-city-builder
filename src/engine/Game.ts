@@ -69,7 +69,6 @@ import {
   TRAFFIC_LIGHT_COST,
   ZONE_TIER_CAP,
   ZONE_TOOL_INFO,
-  dirBetween,
   rotatedFootprint,
   type BigBuildRotation,
   type Building,
@@ -2905,9 +2904,12 @@ export class Game {
     }
     const desiredEdges = new Set<number>();
     const desiredStubs = new Set<number>();
-    // For highway strokes, remember the flow direction at each tile so we
-    // can imprint it after edges are placed. Map<tileIdx, dirIndex>.
-    const desiredDirs = tier === 'highway' ? new Map<number, number>() : null;
+    // Highway flow direction is no longer set at paint time (Alpha 4.22.2).
+    // Cars dynamically claim direction on tile entry via `Vehicles.update`;
+    // unclaimed (`highwayDir === -1`) tiles are treated as bidirectional
+    // by `RoadGraph.canTraverse`. Painting a highway stroke just lays the
+    // road tiles — the player doesn't have to think about which way they
+    // painted. The `desiredDirs` map and its imprint loop are removed.
 
     // Highways auto-paint a parallel reverse-direction lane (Alpha 4.22)
     // — the user's ask: "have highways automatically paint two roads,
@@ -2932,19 +2934,6 @@ export class Game {
           const a = pth[i]!;
           const b = pth[i + 1]!;
           desiredEdges.add(packEdge(this.tileIndex(a.x, a.y), this.tileIndex(b.x, b.y)));
-          if (desiredDirs) {
-            // Flow direction = "from a toward b" — applies to tile a.
-            const d = dirBetween(a.x, a.y, b.x, b.y);
-            if (d !== -1) desiredDirs.set(this.tileIndex(a.x, a.y), d);
-          }
-        }
-        // Last tile inherits the previous segment's direction (no outgoing edge
-        // in this stroke; cars passing through just continue in the same flow).
-        if (desiredDirs && pth.length >= 2) {
-          const a = pth[pth.length - 2]!;
-          const b = pth[pth.length - 1]!;
-          const d = dirBetween(a.x, a.y, b.x, b.y);
-          if (d !== -1) desiredDirs.set(this.tileIndex(b.x, b.y), d);
         }
       }
     }
@@ -3000,13 +2989,8 @@ export class Game {
       }
     }
 
-    // Imprint highway flow direction on each tile in the stroke.
-    if (desiredDirs) {
-      for (const [tileIdx, dir] of desiredDirs) {
-        const { x, y } = this.unpackTile(tileIdx);
-        if (this.grid.setHighwayDir(x, y, dir)) roadsChanged = true;
-      }
-    }
+    // Highway flow direction imprint loop removed in Alpha 4.22.2 —
+    // direction is now dynamic per `Vehicles.claimHighwayDir`.
 
     // Forest clearing — every tile that's now a road but was forest gets
     // paved over. Track each cleared tile so a stroke retreat can grow the

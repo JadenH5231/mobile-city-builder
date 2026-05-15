@@ -226,7 +226,7 @@ export class Renderer {
     // horizon, moon is above). Intensity also driven there — 0 by day,
     // ~0.55 by deep night. Restores the directional shading contrast on
     // building faces that the dim sunLight loses at night.
-    this.moonLight = new DirectionalLight(0xa8b8e8, 0);
+    this.moonLight = new DirectionalLight(0xc4d0e8, 0);
     this.moonLight.position.set(-40, -80, -30);
     this.scene.add(this.moonLight);
 
@@ -1762,7 +1762,10 @@ export class Renderer {
     // midnight. Cool blue-white tint stays constant.
     this.moonLight.position.set(-sunX, Math.max(40, -sunY + 60), -sunZ);
     const nightMix = Math.max(0, Math.min(1, 1 - dayMix * 1.8));
-    this.moonLight.intensity = nightMix * 0.55;
+    // Bumped 4.20.3: 0.55 → 0.75 to carry the night look now that
+    // emissive is dialled way down. Moon now does the visible
+    // depth+brightness work; emissive is just a subliminal floor.
+    this.moonLight.intensity = nightMix * 0.75;
     // Hemisphere sky/ground tint: shift cooler at night.
     if (dayMix < 0.05) {
       this.hemisphereLight.color.setHex(0x303860);
@@ -1811,15 +1814,17 @@ export class Renderer {
       mat.opacity = 0;
       this.buildingGlowMesh.visible = false;
     }
-    // Building emissive (Alpha 4.20.2). At night, ramp the warm-cream
-    // emissive on the three building meshes so each face appears
-    // lit-from-within. Combined with the new moonLight giving back
-    // face-to-face shading contrast, this is the depth + vibrancy the
-    // user asked for ("I want lighting on the buildings"). Capped at
-    // 0.32 so the buildings glow without washing out their underlying
-    // zone colours — moonlight + emissive together still preserve the
-    // distinct red/blue/green palettes per zone.
-    const buildingEmissive = nightOpacity * 0.32;
+    // Building emissive (Alpha 4.20.2 → tuned in 4.20.3 after playtest:
+    // "All of the buildings are just this ugly light brown colour. the
+    // entire building"). Lambert .emissive ADDS the colour uniformly to
+    // every face of the merged mesh — at intensity 0.32, the cream
+    // (255,216,168) was adding ~(81,69,54) to every channel and
+    // overwhelming the actual zone diffuse colours. Dropped to 0.05
+    // max — just barely lifts the deep darks so buildings don't go
+    // pitch-black, without flattening their distinct palettes. The
+    // depth-and-vibrancy heavy lifting is now done by moonLight +
+    // litWindowsMesh; emissive just keeps faces visible.
+    const buildingEmissive = nightOpacity * 0.05;
     if (this.buildingsMesh) {
       const mat = this.buildingsMesh.material as MeshLambertMaterial;
       mat.emissiveIntensity = buildingEmissive;

@@ -49,6 +49,17 @@ export class AuthModal {
       });
     }
 
+    // OAuth buttons (Beta 1.0). Each one calls supabase.auth.signInWithOAuth
+    // and the redirect handles the rest. If the provider isn't enabled in
+    // the Supabase dashboard, surfacing the error in the status pane is
+    // enough — the user understands "this needs setup."
+    for (const btn of modal.querySelectorAll<HTMLButtonElement>('[data-auth-oauth]')) {
+      btn.addEventListener('click', () => {
+        const provider = btn.dataset.authOauth as 'google' | 'apple';
+        this.handleOAuth(provider);
+      });
+    }
+
     // Form submits — one handler per pane.
     document.getElementById('auth-form-signin')?.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -166,5 +177,33 @@ export class AuthModal {
   private setSubmitting(form: HTMLFormElement, busy: boolean): void {
     const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (btn) btn.disabled = busy;
+  }
+
+  private async handleOAuth(provider: 'google' | 'apple'): Promise<void> {
+    const supa = getSupabase();
+    if (!supa) { this.setStatus('Cloud sign-in is not configured for this build.', 'error'); return; }
+    this.setStatus(`Redirecting to ${provider === 'google' ? 'Google' : 'Apple'}…`, null);
+    // Disable both OAuth buttons during redirect so the user doesn't
+    // double-click and end up with two redirects fighting each other.
+    for (const btn of this.modal.querySelectorAll<HTMLButtonElement>('[data-auth-oauth]')) {
+      btn.disabled = true;
+    }
+    const { error } = await supa.auth.signInWithOAuth({
+      provider,
+      options: {
+        // Come back to the same URL after OAuth — Supabase's
+        // detectSessionInUrl picks up the tokens and onAuthStateChange
+        // fires, which our main.ts handler reloads on.
+        redirectTo: window.location.href
+      }
+    });
+    if (error) {
+      this.setStatus(error.message, 'error');
+      for (const btn of this.modal.querySelectorAll<HTMLButtonElement>('[data-auth-oauth]')) {
+        btn.disabled = false;
+      }
+    }
+    // On success, the browser navigates away to the OAuth provider —
+    // no need to handle the success path here.
   }
 }

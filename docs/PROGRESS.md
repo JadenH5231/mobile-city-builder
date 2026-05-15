@@ -4,6 +4,19 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.0 — MQ City Builder rebrand + Google/Apple OAuth + first-launch sign-in prompt** — first beta release. The game is now branded **MQ City Builder** everywhere user-visible (page title, manifest, README, auth modal, app icon name). Three changes on top of Alpha 4.25's cloud-saves layer:
+  - **Google + Apple OAuth buttons in the auth modal**. Both render at the top above the email/password tabs with proper provider branding (white-on-black Apple, white with Google logo). Each tap calls `supabase.auth.signInWithOAuth({ provider, redirectTo: location.href })`. The provider must be enabled in the Supabase dashboard (`Authentication → Providers → Google` / `→ Apple`); without that, the click surfaces an error in the modal's status pane. CLOUD_SETUP.md walks through both flows — Google takes ~5 min, Apple needs a $99/yr Apple Developer account.
+  - **First-launch auto-prompt**: after `initAuth()`, if Supabase is configured AND the user isn't signed in AND they've never seen the prompt before (`localStorage['mqcity-auth-prompted']` flag), the auth modal opens automatically after 800 ms. A "Skip for now — play without saving to the cloud" link at the bottom of the modal lets them dismiss; the flag is set the moment we open the modal so refresh doesn't re-prompt. Once they sign in OR explicitly skip, they can always reopen via the Account pill in the More menu. Player ask: "I would like the login to pop up to come up if the user is not logged in so they know to log in."
+  - **Rebrand to MQ City Builder + version 1.0.0-beta.1**:
+    - `<title>` → `MQ City Builder — Beta 1.0`
+    - `apple-mobile-web-app-title` + `application-name` meta tags set
+    - `manifest.webmanifest` name → `MQ City Builder`, short_name → `MQ City`
+    - `README.md` H1 → `MQ City Builder`, status line → Beta 1.0
+    - `package.json` name → `mq-city-builder`, version → `1.0.0-beta.1`
+    - Auth modal title → `Welcome to MQ City Builder`
+    - **Storage keys deliberately unchanged** (`city-builder-active-slot` localStorage key, `city-builder` IndexedDB DB name) — renaming would orphan every existing local save. Cosmetic rebrand only; data layer untouched.
+  - No save schema bump (still v27). Bundle ~983 KB raw / ~257 KB gzipped.
+
 - **Alpha 4.25 — Beta launch prep: optional Supabase cloud saves + auth modal** — user direction: "I would like a way for a user to sign up and have an account so city import/export is more for sharing than it is saving the world." Adds Supabase-backed cloud saves + sign-in/sign-up flow, **fully opt-in at the build level** — without `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`, the auth pill is hidden and saves stay 100% IndexedDB local (existing behaviour preserved for forks).
   - **New `src/auth/` module**:
     - `SupabaseClient.ts` — single-instance `getSupabase()` reading `import.meta.env.VITE_SUPABASE_*`. Returns `null` when unset (no warning — local-only is a fully-supported state).

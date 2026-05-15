@@ -1,9 +1,9 @@
 {
-  "name": "city-builder",
+  "name": "mq-city-builder",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0-beta.1",
   "type": "module",
-  "description": "Premium mobile city-builder prototype (Three.js + TypeScript, low-poly).",
+  "description": "MQ City Builder — premium mobile-first low-poly 3D city builder (Three.js + TypeScript). Beta 1.0.",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "typecheck": "tsc --noEmit",

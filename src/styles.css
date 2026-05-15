@@ -309,6 +309,91 @@ body {
 .auth-modal__status.is-error { color: #ff6e6e; }
 .auth-modal__status.is-success { color: #6dd06a; }
 
+/* OAuth provider buttons (Beta 1.0) */
+.auth-modal__oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.auth-modal__oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  font: 500 14px/1 inherit;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.auth-modal__oauth-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.auth-modal__oauth-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.auth-modal__oauth-btn--google {
+  background: #ffffff;
+  color: #1a1a1a;
+  border-color: #ffffff;
+}
+.auth-modal__oauth-btn--google:hover {
+  background: #f0f0f0;
+  border-color: #f0f0f0;
+}
+.auth-modal__oauth-btn--apple {
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
+}
+.auth-modal__oauth-btn--apple:hover {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+}
+.auth-modal__oauth-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.auth-modal__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 14px;
+  color: #6a6f78;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.auth-modal__divider::before,
+.auth-modal__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.auth-modal__skip {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a8f98;
+  font: 13px/1 inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-modal__skip:hover { color: #c0c4cc; }
+
 /* Floating Rotate button (Alpha 4.21). Sits just above the toolbar
    centred horizontally; visible only when a big civic build is armed
    for placement. The placement-ghost preview re-renders each tap. */

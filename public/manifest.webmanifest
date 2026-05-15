@@ -1,7 +1,7 @@
 {
-  "name": "Greenmeadow — City Builder",
-  "short_name": "Greenmeadow",
-  "description": "Premium mobile-first low-poly 3D city builder. No microtransactions, no timers — just a city to grow.",
+  "name": "MQ City Builder",
+  "short_name": "MQ City",
+  "description": "MQ City Builder — premium mobile-first low-poly 3D city builder. Single-purchase, no microtransactions, no timers — just a city to grow.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

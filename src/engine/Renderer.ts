@@ -133,11 +133,6 @@ export class Renderer {
   private ambientLight!: AmbientLight;
   private hemisphereLight!: HemisphereLight;
   private sunLight!: DirectionalLight;
-  /** Moon directional light (Alpha 4.20.2). Activates at night so building
-   *  faces have shading contrast even when the sun is below the horizon —
-   *  without it, hemisphere + ambient give uniform fill and the city looks
-   *  flat. Cool blue-white tint, opposite the sun's azimuth. */
-  private moonLight!: DirectionalLight;
   private carsMesh: InstancedMesh;
   /** Vehicle window/light overlays (Alpha 4.4). Sibling InstancedMeshes
    *  that mirror their parent's per-instance matrix every frame —
@@ -221,14 +216,6 @@ export class Renderer {
     this.sunLight = new DirectionalLight(0xffffff, 0.85);
     this.sunLight.position.set(40, 80, 30);
     this.scene.add(this.sunLight);
-    // Moon directional (Alpha 4.20.2). Cool blue-white, dim. Position is
-    // updated in applyTimeOfDay to mirror the sun (so when sun is below
-    // horizon, moon is above). Intensity also driven there — 0 by day,
-    // ~0.55 by deep night. Restores the directional shading contrast on
-    // building faces that the dim sunLight loses at night.
-    this.moonLight = new DirectionalLight(0xc4d0e8, 0);
-    this.moonLight.position.set(-40, -80, -30);
-    this.scene.add(this.moonLight);
 
     // Selection square — a wireframe plane that we move to the picked tile.
     const sel = new Mesh(
@@ -870,15 +857,6 @@ export class Renderer {
   /** Night-lights overlay (Alpha 3.0.1). Glowing yellow lamps on
    *  avenues, walking paths, and parks; opacity ramps in at night. */
   private nightLightsMesh: Mesh | null = null;
-  /** Building glow mesh (Alpha 4.20). Soft cream-white halos at the
-   *  base of every developed L2+ residential / commercial / mixed-use
-   *  tile + one larger halo per skyscraper anchor. Reads as "interior
-   *  light spilling onto the sidewalk" — complements the brighter
-   *  yellow streetlamp pools rather than competing with them. */
-  private buildingGlowMesh: Mesh | null = null;
-  /** Lazily-created cream-white radial gradient texture for building
-   *  glow halos. Distinct from `lampGlowTexture` (warmer yellow). */
-  private buildingGlowTexture: import('three').Texture | null = null;
   /** Smooth radial-gradient pools of light around each lamp (Alpha 3.1.6).
    *  Built alongside `nightLightsMesh` but uses a CanvasTexture with a
    *  radial gradient so the falloff is continuous instead of steppy. */
@@ -940,21 +918,6 @@ export class Renderer {
     if (glow) {
       this.lampGlowMesh = glow;
       this.worldGroup.add(this.lampGlowMesh);
-    }
-    // Building glow halos (Alpha 4.20). Soft cream-white pools at the
-    // base of L2+ R/C/MU tiles + skyscraper anchors. Dispose any
-    // previous mesh first so we don't leak geometry on rebuilds.
-    if (this.buildingGlowMesh) {
-      this.worldGroup.remove(this.buildingGlowMesh);
-      this.buildingGlowMesh.geometry.dispose();
-      (this.buildingGlowMesh.material as MeshBasicMaterial).dispose();
-      this.buildingGlowMesh = null;
-    }
-    if (!this.buildingGlowTexture) this.buildingGlowTexture = makeBuildingGlowTexture();
-    const bglow = buildBuildingGlowMesh(grid, this.buildingGlowTexture);
-    if (bglow) {
-      this.buildingGlowMesh = bglow;
-      this.worldGroup.add(this.buildingGlowMesh);
     }
   }
 
@@ -1754,18 +1717,6 @@ export class Renderer {
     this.sunLight.intensity = 0.18 + dayMix * 0.85;
     this.ambientLight.intensity = 0.20 + dayMix * 0.45;
     this.hemisphereLight.intensity = 0.20 + dayMix * 0.40;
-    // Moon directional (Alpha 4.20.2): mirrors the sun's azimuth so when
-    // the sun dips below the horizon the moon rises opposite. Position
-    // it at (-sunX, |sunY| + offset, -sunZ) so it always casts from
-    // above-and-opposite. Intensity ramps in proportional to night
-    // darkness — the moon is invisible at noon and full-strength at
-    // midnight. Cool blue-white tint stays constant.
-    this.moonLight.position.set(-sunX, Math.max(40, -sunY + 60), -sunZ);
-    const nightMix = Math.max(0, Math.min(1, 1 - dayMix * 1.8));
-    // Bumped 4.20.3: 0.55 → 0.75 to carry the night look now that
-    // emissive is dialled way down. Moon now does the visible
-    // depth+brightness work; emissive is just a subliminal floor.
-    this.moonLight.intensity = nightMix * 0.75;
     // Hemisphere sky/ground tint: shift cooler at night.
     if (dayMix < 0.05) {
       this.hemisphereLight.color.setHex(0x303860);
@@ -1801,48 +1752,6 @@ export class Renderer {
       // Lit windows are subtle in twilight, full at deep night.
       mat.opacity = nightOpacity * 0.85;
       this.litWindowsMesh.visible = nightOpacity > 0.01;
-    }
-    if (this.buildingGlowMesh) {
-      // Disabled in Alpha 4.20.2 — playtest verdict on 4.20/4.20.1: "i
-      // dont want ground light I want lighting on the buildings". Mesh
-      // is still built (cheap; one quad per L2+ tile) but gated to zero
-      // opacity / hidden so the ground stays clean. The "buildings feel
-      // lit" goal is now met by per-mesh emissive (below) + the new
-      // moonLight directional, not by ground halos. Mesh kept around so
-      // we can re-enable the ground spill cheaply if it ever fits.
-      const mat = this.buildingGlowMesh.material as MeshBasicMaterial;
-      mat.opacity = 0;
-      this.buildingGlowMesh.visible = false;
-    }
-    // Building emissive (Alpha 4.20.2 → tuned in 4.20.3 after playtest:
-    // "All of the buildings are just this ugly light brown colour. the
-    // entire building"). Lambert .emissive ADDS the colour uniformly to
-    // every face of the merged mesh — at intensity 0.32, the cream
-    // (255,216,168) was adding ~(81,69,54) to every channel and
-    // overwhelming the actual zone diffuse colours. Dropped to 0.05
-    // max — just barely lifts the deep darks so buildings don't go
-    // pitch-black, without flattening their distinct palettes. The
-    // depth-and-vibrancy heavy lifting is now done by moonLight +
-    // litWindowsMesh; emissive just keeps faces visible.
-    const buildingEmissive = nightOpacity * 0.05;
-    if (this.buildingsMesh) {
-      const mat = this.buildingsMesh.material as MeshLambertMaterial;
-      mat.emissiveIntensity = buildingEmissive;
-    }
-    if (this.skyscrapersMesh) {
-      const mat = this.skyscrapersMesh.material as MeshLambertMaterial;
-      mat.emissiveIntensity = buildingEmissive;
-    }
-    // cityBuildingsGroup contains the city-services mesh (services +
-    // landmarks + capitals + mansion). Walk children to find the merged
-    // mesh and update its emissive too.
-    for (const child of this.cityBuildingsGroup.children) {
-      if (child instanceof Mesh) {
-        const mat = child.material as MeshLambertMaterial;
-        if (mat && 'emissiveIntensity' in mat) {
-          mat.emissiveIntensity = buildingEmissive;
-        }
-      }
     }
   }
 
@@ -2188,15 +2097,7 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
   }
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
-  // Emissive cream tint stays at 0 intensity by default; applyTimeOfDay
-  // ramps emissiveIntensity at night so buildings appear lit from
-  // within instead of going to flat dim silhouettes (Alpha 4.20.2).
-  const mat = new MeshLambertMaterial({
-    vertexColors: true,
-    flatShading: true,
-    emissive: 0xffd8a8,
-    emissiveIntensity: 0
-  });
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
 }
 
@@ -2229,12 +2130,7 @@ function buildSkyscrapersMesh(grid: Grid): Mesh | null {
     vertexColors: true,
     flatShading: true,
     transparent: true,
-    opacity: 1.0,
-    // Same night-emissive treatment as buildingsMesh (Alpha 4.20.2) so
-    // skyscraper faces glow with interior light at night instead of
-    // turning into pitch-black silhouettes against the sky gradient.
-    emissive: 0xffd8a8,
-    emissiveIntensity: 0
+    opacity: 1.0
   });
   return new Mesh(merged, mat);
 }
@@ -2726,142 +2622,6 @@ function makeRadialGlowTexture(): import('three').Texture {
   const tex = new CanvasTexture(canvas);
   tex.needsUpdate = true;
   return tex;
-}
-
-/**
- * Building glow texture (Alpha 4.20). Soft cream-white radial glow for
- * the new per-building light spillover on Medium / High / Max / Sky
- * residential / commercial / mixed-use tiles. Distinct from the
- * lamp-glow texture: cooler colour (cream-white vs. warm yellow), even
- * softer falloff (lower centre alpha, earlier taper). The intent is
- * "warm interior light spilling out onto the sidewalk" — complement,
- * don't compete with the streetlights' brighter yellow pools.
- */
-function makeBuildingGlowTexture(): import('three').Texture {
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  // Cream-white centre, very soft falloff. Cooler than the lamp glow's
-  // sodium-vapor yellow so it reads as "interior incandescent" — the
-  // kind of warm-but-not-orange light you actually see spilling out of
-  // apartment windows at night.
-  // Bumped peaks 4.20.1: original 0.42 / 0.22 / 0.06 was too subtle to
-  // notice against deep night sky + lamp glow already on screen. Brighter
-  // centre + slower falloff so the spill actually reads beyond the
-  // building's silhouette.
-  grad.addColorStop(0, 'rgba(255, 246, 210, 0.78)');
-  grad.addColorStop(0.30, 'rgba(255, 238, 200, 0.45)');
-  grad.addColorStop(0.65, 'rgba(248, 230, 195, 0.18)');
-  grad.addColorStop(1, 'rgba(248, 230, 195, 0.0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/**
- * Building glow halo mesh (Alpha 4.20). One translucent radial glow
- * quad per developed L2+ residential / commercial / mixed-use tile,
- * sized by density tier: L2 = 0.55, L3 = 0.75, L4 = 0.95. Skyscraper
- * anchors get a single larger halo (1.20) covering the whole 2×2
- * footprint. The result: at night, big buildings visibly leak light
- * onto the surrounding sidewalk + neighbouring buildings, like a
- * real city's residential / commercial blocks do.
- *
- * Mirrors `buildLampGlowMesh` in structure but uses its own
- * cream-white texture so the colour reads distinct from the warmer
- * yellow streetlamp glow. Industrial tiles deliberately skipped —
- * factories don't have residential / office windows lit at night.
- */
-function buildBuildingGlowMesh(grid: Grid, texture: import('three').Texture): Mesh | null {
-  type GlowSpec = { cx: number; cz: number; y: number; r: number };
-  const halos: GlowSpec[] = [];
-  // Tracks tile indices we've already emitted a halo for, so
-  // skyscraper anchors don't double-emit per-tile halos.
-  const handled = new Set<number>();
-  for (const t of grid.iter()) {
-    if (t.zone === 'none') continue;
-    if (t.zone === 'industrial') continue;  // factories don't read as "interior lit"
-    if (t.density < 2) continue;             // L0/L1 skipped — only lit from L2 up
-    const idx = t.y * grid.width + t.x;
-    if (handled.has(idx)) continue;
-    handled.add(idx);
-    const baseY = SIDEWALK_LIFT + t.elevation + 0.012;
-    const cx = t.x + 0.5;
-    const cz = t.y + 0.5;
-    // Skyscrapers: the anchor (lex-smallest tile of the 2×2 footprint)
-    // emits ONE bigger halo centred on the footprint centroid. Mark the
-    // other 3 tiles handled so they don't emit their own halos.
-    if (t.skyscraper) {
-      // Is this the anchor? Anchor is the lex-smallest tile of a 2×2
-      // group of matching skyscraper tiles. Cheap check: only emit
-      // when neither (-1, y) nor (x, -1) tile is part of this skyscraper.
-      const north = grid.get(t.x, t.y - 1);
-      const west = grid.get(t.x - 1, t.y);
-      const isAnchor = !(north?.skyscraper && north.zone === t.zone) && !(west?.skyscraper && west.zone === t.zone);
-      if (!isAnchor) continue;
-      // Mark the 3 other footprint tiles handled.
-      handled.add(idx + 1);
-      handled.add(idx + grid.width);
-      handled.add(idx + grid.width + 1);
-      halos.push({ cx: cx + 0.5, cz: cz + 0.5, y: baseY, r: 2.80 });
-      continue;
-    }
-    // Regular density-tiered halo. Bumped 4.20.1 from (0.55/0.75/0.95)
-    // because the original radii barely cleared the building footprint
-    // — the centre of every halo was hidden by its own building from a
-    // 3/4 camera angle, leaving only a thin invisible ring on the
-    // sidewalk. New radii spill ~1 tile beyond the footprint so the
-    // light reads as actual window-spill onto the surrounding ground.
-    let r: number;
-    if (t.density >= 4) r = 2.00;
-    else if (t.density === 3) r = 1.60;
-    else r = 1.20;  // density === 2
-    halos.push({ cx, cz, y: baseY, r });
-  }
-  if (halos.length === 0) return null;
-  const positions = new Float32Array(halos.length * 4 * 3);
-  const uvs = new Float32Array(halos.length * 4 * 2);
-  const indices = new Uint32Array(halos.length * 6);
-  let vi = 0, ui = 0, ii = 0, v = 0;
-  for (const h of halos) {
-    const x0 = h.cx - h.r;
-    const x1 = h.cx + h.r;
-    const z0 = h.cz - h.r;
-    const z1 = h.cz + h.r;
-    const y = h.y;
-    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z0;
-    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z0;
-    positions[vi++] = x1; positions[vi++] = y; positions[vi++] = z1;
-    positions[vi++] = x0; positions[vi++] = y; positions[vi++] = z1;
-    uvs[ui++] = 0; uvs[ui++] = 0;
-    uvs[ui++] = 1; uvs[ui++] = 0;
-    uvs[ui++] = 1; uvs[ui++] = 1;
-    uvs[ui++] = 0; uvs[ui++] = 1;
-    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 1;
-    indices[ii++] = v; indices[ii++] = v + 3; indices[ii++] = v + 2;
-    v += 4;
-  }
-  const geom = new BufferGeometry();
-  geom.setAttribute('position', new BufferAttribute(positions, 3));
-  geom.setAttribute('uv', new BufferAttribute(uvs, 2));
-  geom.setIndex(new BufferAttribute(indices, 1));
-  // Additive blending so overlapping halos build up. depthWrite off so
-  // we don't z-fight with the ground / road meshes underneath.
-  const mat = new MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: AdditiveBlending
-  });
-  const mesh = new Mesh(geom, mat);
-  mesh.visible = false;
-  return mesh;
 }
 
 /** Texture for the four "+" expansion buttons rendered just outside the
@@ -3886,16 +3646,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
 
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
-  // Same night-emissive treatment as buildingsMesh / skyscrapersMesh
-  // (Alpha 4.20.2). Service buildings (museums, hospitals, fire stations,
-  // landmarks, the Mayor's Mansion + capitals…) all glow with interior
-  // light at night so the civic skyline reads as alive instead of dark.
-  const mat = new MeshLambertMaterial({
-    vertexColors: true,
-    flatShading: true,
-    emissive: 0xffd8a8,
-    emissiveIntensity: 0
-  });
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
 }
 

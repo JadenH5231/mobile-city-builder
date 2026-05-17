@@ -33,6 +33,9 @@ export interface TutorialStep {
 }
 
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
+  // Steps 1-5 use ONLY tools available in STARTING_TOOLS (types.ts).
+  // Power / water / avenue / stop sign all unlock at Village (200 pop)
+  // and the tutorial reaches them via the Village milestone in step 6.
   {
     title: 'Paint your first road',
     hint:
@@ -42,44 +45,44 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     title: 'Zone next to that road',
     hint:
-      'Pick R Zoning (low density) and drag on grass that touches a road. Buildings will sprout.',
+      'Pick R Zoning (low density) and drag on grass that touches a road. Buildings will sprout in a few seconds.',
     check: (g) => anyTileWithZone(g, 'residential')
   },
   {
-    title: 'Grow a small neighborhood',
+    title: 'Add a Park',
     hint:
-      'Keep painting R zones until your population passes 20. Watch the pop pill at the top.',
-    check: (g) => g.population.totalResidents >= 20
+      'Tap the Park tool, drop one inside your neighborhood. Parks lift the mood + help your zones grow.',
+    check: (g) => anyBuilding(g, 'park')
+  },
+  {
+    title: 'Meet the factions',
+    hint:
+      'Tap the Population pill at the top. Ten factions watch every move you make — see their mood here.',
+    check: (g) => g.happinessPanelOpenedOnce
+  },
+  {
+    title: 'Open the Budget',
+    hint:
+      'Tap the $ Treasury pill. R/C/I tax sliders drive both your income AND demand — find the sweet spot.',
+    check: (g) => g.budgetPanelOpenedOnce
+  },
+  {
+    title: 'Grow to 200 residents',
+    hint:
+      'Paint more roads + R zones until population hits 200. At 200 you reach Village — unlocking power, water, avenues, and stop signs.',
+    check: (g) => g.population.totalResidents >= 200
   },
   {
     title: 'Place a Power Plant',
     hint:
-      'Open Services → Power. Tap a free grass tile. Without power, density caps at low.',
+      'Services → Power (just unlocked). Tap a free grass tile. Power lifts your density cap above Low.',
     check: (g) => anyBuilding(g, 'power_plant')
   },
   {
     title: 'Place a Water Tower',
     hint:
-      'Services → Water. The combination of Power + Water + a Park nearby unlocks Medium tiers.',
+      'Services → Water. Power + Water + a Park nearby together unlock Medium density on your zones.',
     check: (g) => anyBuilding(g, 'water_tower')
-  },
-  {
-    title: 'Add a Park',
-    hint:
-      'Services → Park. Parks reach a few tiles around them — drop one inside your neighborhood.',
-    check: (g) => anyBuilding(g, 'park')
-  },
-  {
-    title: 'Open Community Sentiment',
-    hint:
-      'Tap the Pop pill. Ten factions watch every move you make — meet them, see their mood.',
-    check: (g) => g.happinessPanelOpenedOnce
-  },
-  {
-    title: 'Open the Budget panel',
-    hint:
-      'Tap the $ Treasury pill. Adjust R/C/I tax sliders — taxes drive demand and your income.',
-    check: (g) => g.budgetPanelOpenedOnce
   },
   {
     title: 'Build a real city',

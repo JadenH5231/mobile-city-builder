@@ -336,22 +336,29 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.1.6 (Legal links into Settings; Ontario governing law)
+
+Tiny follow-up on 1.1.5 — user feedback was that the canvas-footer chip was too easy to miss and cluttered the game UI. So:
+
+- **Removed `#legal-footer`** (and its CSS). No more floating bottom-left chip.
+- **New dedicated "Legal & support" group in Settings** with two prominent link rows (`.settings__legal-link`: Privacy Policy + Terms of Service, each opening in a new tab with a ↗ arrow). Below the links, a contact line points to `hello@mqcity.app`. Placed right after Account & data so a player scrolling settings hits it without effort.
+- **Account & data group cleaned up** — no longer carries the redundant legal blurb; its only job is now the signed-in account display + Delete-my-account button.
+- **Terms section 16 jurisdiction**: British Columbia → **Ontario**. User is based in Ontario.
+- SW cache `mq-city-v2` → `mq-city-v3` so existing PWAs grab the new HTML.
+
+**Rule for any new legal / compliance surface:** put it in the Settings panel, not as a floating canvas chip. Discoverability through a known menu > ubiquity through chrome.
+
 ## Status: Beta 1.1.5 (Legal pages + account deletion — public-launch unblocker)
 
 Compliance polish so the live build is shareable under GDPR / CCPA / PIPEDA without exposure. Pure additive change — no gameplay touched, no save schema bump.
 
 **Two new static pages in `public/`**:
 - `privacy.html` — full Privacy Policy. Covers what's collected with/without an account, IndexedDB + localStorage + Supabase-auth-token storage (no tracking cookies), third-party processors (Supabase, GitHub Pages, Cloudflare), GDPR/CCPA/PIPEDA rights, 30-day deletion SLA, children's-data exemption. Dark theme matching `pitch.html`.
-- `terms.html` — beta-stage Terms of Service. Acceptance, 13+ eligibility, beta-status disclaimer, prohibited conduct, user-content licence, free-during-beta pricing, AS-IS, US$50-or-paid-amount liability cap, BC/Canada governing law.
-
-**Linked from three places**:
-1. **Auth modal subtitle** — small "By continuing you agree to the Terms and Privacy Policy" line below the welcome text.
-2. **Persistent `#legal-footer`** — bottom-left chip with `Terms · Privacy` links, always present on the game canvas. Hidden in `photo-mode`.
-3. **Settings → Account & data** — links + (when signed in) email + UUID display + **Delete my account** button.
+- `terms.html` — beta-stage Terms of Service. Acceptance, 13+ eligibility, beta-status disclaimer, prohibited conduct, user-content licence, free-during-beta pricing, AS-IS, US$50-or-paid-amount liability cap, Ontario/Canada governing law (set to Ontario in 1.1.6).
 
 **Account deletion** (beta-stage GDPR Article 17 flow): the Delete button is an `<a class="settings__button settings__button--danger">` whose `href` is populated by `main.ts`'s `onAuthChange` listener to `mailto:hello@mqcity.app?subject=...&body=...` with the user's email + UUID prefilled. The developer processes the request manually within 30 days. Self-service edge-function deletion is on the roadmap.
 
-**Service worker bumped** `mq-city-v1` → `mq-city-v2`. Legal pages added to install-shell SHELL. Navigation handler now tries cache match for the exact request before falling back to `index.html`, so `/privacy.html` and `/terms.html` load offline correctly instead of getting redirected to the SPA shell.
+**Service worker** caches `privacy.html` + `terms.html` in the install shell. Navigation handler tries cache match for the exact request before falling back to `index.html`, so `/privacy.html` and `/terms.html` load offline correctly instead of getting redirected to the SPA shell.
 
 When adding a new processor (analytics, payments, etc.), update both `privacy.html` (the section 5 list of processors) and the auth modal's legal line if disclosure changes. Don't bolt on a new mood for cookies — there are no tracking cookies; if that changes we add a banner, not a footer link.
 

@@ -3942,42 +3942,51 @@ body.photo-mode .tutorial-banner {
   min-width: 0;
 }
 
-/* Persistent legal footer (Beta 1.1.5) — small bottom-left chip linking
-   to Terms + Privacy. Positioned so it never overlaps the toolbar; on
-   narrow phones the toolbar drives bottom-edge layout. */
-.legal-footer {
-  position: fixed;
-  left: 8px;
-  bottom: 6px;
-  z-index: 8;
+/* Legal & support group (Beta 1.1.6) — dedicated Settings section
+   surfacing the Privacy Policy + Terms of Service + contact email.
+   Replaced the canvas-footer chip at user request: discoverability via
+   Settings, not floating UI. */
+.settings__legal-links {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.settings__legal-link {
+  display: flex;
   align-items: center;
-  padding: 3px 8px;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.45);
-  background: rgba(10, 20, 16, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 999px;
-  pointer-events: auto;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-.legal-footer a {
-  color: rgba(255, 255, 255, 0.65);
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(207, 232, 214, 0.12);
+  border-radius: 10px;
+  color: var(--pill-fg);
   text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 140ms ease, border-color 140ms ease;
 }
-.legal-footer a:hover {
-  color: #ff8030;
+.settings__legal-link:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 216, 77, 0.40);
 }
-.legal-footer span {
-  opacity: 0.5;
+.settings__legal-link-arrow {
+  color: #9ba0a8;
+  font-size: 14px;
+  font-weight: 600;
 }
-/* Hide footer when full-bleed modal or photo mode is up so it doesn't
-   bleed through. The body class is set/cleared by main.ts as
-   appropriate. */
-body.photo-mode .legal-footer { display: none; }
+.settings__legal-contact {
+  font-size: 12px;
+  color: #9ba0a8;
+  line-height: 1.45;
+  padding: 0 2px;
+}
+.settings__legal-contact a {
+  color: #ffe98a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* UI-scale (Alpha 4.8) — applied to <html> by the Settings class. */
 html.ui-scale-small  { font-size: 90%; }

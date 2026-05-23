@@ -277,24 +277,42 @@
         <div id="setting-cheats-active" class="settings__cheats-active hidden">⚠ Achievements paused while cheats are on.</div>
       </div>
 
-      <!-- Account & data (Beta 1.1.5). GDPR Article 17 — every user can
-           delete their account on request. Until a self-service edge
-           function ships, "Delete my account" drafts an email to
-           hello@mqcity.app prefilled with the user's email + UID; the
-           developer processes the request manually within 30 days.
-           Section auto-shows when signed in via main.ts. -->
+      <!-- Account & data (Beta 1.1.5; refocused 1.1.6). Signed-in users
+           see their email + UID and can request deletion (GDPR Article
+           17). Until a self-service edge function ships, "Delete my
+           account" drafts an email to hello@mqcity.app prefilled with
+           the user's email + UID; the developer processes the request
+           manually within 30 days. Section auto-shows the account-meta
+           + delete button via main.ts on auth-state change. -->
       <div class="settings__group">
         <div class="settings__group-title">Account &amp; data</div>
-        <div class="settings__group-sub">Sign in to manage your cloud account and your saved cities.</div>
+        <div class="settings__group-sub">Sign in (in the More menu) to sync your cities across devices and manage your account.</div>
         <div id="setting-account-meta" class="settings__account-meta hidden">
           <div class="settings__account-row"><span class="settings__account-label">Email</span><span id="setting-account-email" class="settings__account-value mono">—</span></div>
           <div class="settings__account-row"><span class="settings__account-label">Account ID</span><span id="setting-account-id" class="settings__account-value mono">—</span></div>
         </div>
         <a id="setting-delete-account" class="settings__button settings__button--danger hidden" href="#" role="button">Delete my account</a>
-        <div class="settings__group-sub" style="margin-top:8px">
-          By using MQ City Builder you agree to the
-          <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and
-          <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.
+      </div>
+
+      <!-- Legal & support (Beta 1.1.6). Replaces the canvas-footer chip
+           — user feedback was that the footer was too easy to miss.
+           Surfaced as its own Settings group with prominent link rows
+           so the Privacy + Terms are obviously discoverable. -->
+      <div class="settings__group">
+        <div class="settings__group-title">Legal &amp; support</div>
+        <div class="settings__group-sub">Read these any time. Both pages open in a new tab.</div>
+        <div class="settings__legal-links">
+          <a class="settings__legal-link" href="privacy.html" target="_blank" rel="noopener">
+            <span>Privacy Policy</span>
+            <span class="settings__legal-link-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="settings__legal-link" href="terms.html" target="_blank" rel="noopener">
+            <span>Terms of Service</span>
+            <span class="settings__legal-link-arrow" aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <div class="settings__legal-contact">
+          Questions or privacy / deletion requests: <a href="mailto:hello@mqcity.app">hello@mqcity.app</a>.
         </div>
       </div>
 
@@ -701,16 +719,6 @@
       <span class="rotate-monument-btn__label">Rotate</span>
     </button>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
-
-    <!-- Persistent legal footer (Beta 1.1.5). Small bottom-left chip with
-         links to the Terms and Privacy Policy. Always present on the
-         game canvas so the public-launch GDPR / CCPA disclosure is one
-         tap away from anywhere in the app. -->
-    <div id="legal-footer" class="legal-footer" aria-label="Legal links">
-      <a href="terms.html" target="_blank" rel="noopener">Terms</a>
-      <span aria-hidden="true">·</span>
-      <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
-    </div>
 
     <!-- Auth modal (Alpha 4.25). Hidden until a sign-in/up flow is opened
          from the More menu. Supports email + password and magic-link

@@ -4,6 +4,13 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.1.6 — Legal links into Settings (drop the canvas chip); Ontario governing law** — user feedback on 1.1.5: the floating bottom-left `Terms · Privacy` chip was too easy to miss and cluttered the canvas. So 1.1.6 pulls it out entirely and lands the discoverability inside Settings.
+  - Removed `#legal-footer` from `index.html` and its `.legal-footer` CSS block.
+  - Added a dedicated **Legal & support** group to the Settings panel with two prominent `.settings__legal-link` rows (Privacy Policy / Terms of Service) and a `hello@mqcity.app` contact line below.
+  - Account & data group dropped its trailing legal blurb — its only job is now the signed-in account display + Delete-my-account button.
+  - Terms section 16 jurisdiction: BC → **Ontario** (user is Ontario-based).
+  - SW cache name `mq-city-v2` → `mq-city-v3`.
+
 - **Beta 1.1.5 — Legal pages + account deletion (public-launch unblocker)** — gates removed for GDPR / CCPA / PIPEDA + mobile app-store compliance. No new gameplay surface; pure compliance polish.
   - **`public/privacy.html`** — full privacy policy covering what's collected (Supabase account email + UUID + hashed password + game-state snapshots), what's stored client-side (IndexedDB `city-builder` DB, `localStorage` settings + auth tokens), third-party processors (Supabase, GitHub Pages, Cloudflare), GDPR/CCPA/PIPEDA rights table, account-deletion process, children's data exemption, security posture. Plain-English summary callout up top. Same dark theme as `pitch.html`. Last-updated date stamped.
   - **`public/terms.html`** — beta-stage Terms of Service: acceptance, 13+ eligibility, beta-status disclaimer (save formats can change), license to use, prohibited conduct, user content licence (for cities saved to cloud), pricing (free during beta; future paid options disclosed at purchase), third-party reliance, termination, AS-IS disclaimer, liability cap (greater of paid amount or US$50), indemnification, BC/Canada governing law. Mirrors privacy.html styling.

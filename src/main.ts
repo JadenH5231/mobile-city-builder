@@ -993,6 +993,14 @@ if (isCloudEnabled()) {
   });
 
   // Reactive pill state — show "Sign in" or "alice@…" based on auth.
+  // Settings → Account & data wiring (Beta 1.1.5). Show user email + UID
+  // and the "Delete my account" mailto when signed in. Hides when
+  // signed out so the section just reads "Sign in to manage…".
+  const accountMetaEl = document.getElementById('setting-account-meta');
+  const accountEmailEl = document.getElementById('setting-account-email');
+  const accountIdEl = document.getElementById('setting-account-id');
+  const deleteAccountEl = document.getElementById('setting-delete-account') as HTMLAnchorElement | null;
+
   onAuthChange((snap) => {
     const user = snap.user;
     if (signinBtn && signoutBtn && nameEl) {
@@ -1008,6 +1016,34 @@ if (isCloudEnabled()) {
         signoutBtn.style.display = 'none';
         nameEl.style.display = 'none';
         nameEl.textContent = '';
+      }
+    }
+    if (user) {
+      if (accountMetaEl) accountMetaEl.classList.remove('hidden');
+      if (accountEmailEl) accountEmailEl.textContent = user.email ?? '—';
+      if (accountIdEl) accountIdEl.textContent = user.id;
+      if (deleteAccountEl) {
+        deleteAccountEl.classList.remove('hidden');
+        // GDPR Article 17 beta-stage flow: open the user's mail client
+        // with a prefilled request. The developer processes the request
+        // manually within 30 days. The link uses mailto: directly so the
+        // OS picks the user's preferred mail app on every platform.
+        const subject = encodeURIComponent('Account deletion request — MQ City Builder');
+        const body = encodeURIComponent(
+          'I would like to delete my MQ City Builder account and all data associated with it.\n\n' +
+          `Email: ${user.email ?? '(no email on account)'}\n` +
+          `Account ID: ${user.id}\n\n` +
+          'Please confirm once the deletion is complete.\n'
+        );
+        deleteAccountEl.href = `mailto:hello@mqcity.app?subject=${subject}&body=${body}`;
+      }
+    } else {
+      if (accountMetaEl) accountMetaEl.classList.add('hidden');
+      if (accountEmailEl) accountEmailEl.textContent = '—';
+      if (accountIdEl) accountIdEl.textContent = '—';
+      if (deleteAccountEl) {
+        deleteAccountEl.classList.add('hidden');
+        deleteAccountEl.removeAttribute('href');
       }
     }
   });

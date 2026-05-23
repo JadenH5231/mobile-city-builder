@@ -4,13 +4,18 @@
 // Skips hashed Vite asset URLs (they're immutable; standard cache
 // rules apply). Indexed-DB save data is untouched by the SW.
 
-const CACHE = 'mq-city-v1';
+const CACHE = 'mq-city-v2';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './mansion-icon.svg',
-  './mansion-icon-maskable.svg'
+  './mansion-icon-maskable.svg',
+  // Legal pages (Beta 1.1.5) — cached so account-deletion, terms, and
+  // privacy disclosures stay reachable offline. Important for
+  // GDPR/CCPA: users must be able to read the policy any time.
+  './privacy.html',
+  './terms.html'
 ];
 
 self.addEventListener('install', (event) => {
@@ -36,10 +41,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   // Network-first for the HTML shell so the player gets fresh JS bundles
-  // when online; cache fallback when offline.
+  // when online; cache fallback when offline. Offline fallback first
+  // tries the exact request (so /privacy.html and /terms.html stay
+  // reachable), then falls back to the SPA shell at index.html.
   if (req.mode === 'navigate' || req.destination === 'document') {
     event.respondWith(
-      fetch(req).catch(() => caches.match('./index.html'))
+      fetch(req).catch(() =>
+        caches.match(req).then((hit) => hit || caches.match('./index.html'))
+      )
     );
     return;
   }

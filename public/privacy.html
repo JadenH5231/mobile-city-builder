@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — MQ City Builder</title>
+  <meta name="description" content="MQ City Builder privacy policy — what we collect, where we store it, and how to delete your account." />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="./mansion-icon.svg" />
+  <style>
+    :root {
+      --bg: #0e1014;
+      --bg-card: #181b21;
+      --bg-elev: #1f232a;
+      --line: #2a2e36;
+      --ink: #f3efe6;
+      --ink-soft: #b8b4ab;
+      --ink-faint: #6a6f78;
+      --orange: #ff8030;
+      --orange-deep: #d6651b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
+    a:hover { color: #ffa860; }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 56px 24px 96px;
+    }
+    @media (max-width: 720px) { .wrap { padding: 40px 18px 80px; } }
+
+    .crumbs {
+      font-size: 13px;
+      color: var(--ink-faint);
+      margin-bottom: 32px;
+    }
+    .crumbs a { color: var(--ink-faint); }
+    .crumbs a:hover { color: var(--orange); }
+
+    h1 {
+      font-size: clamp(28px, 5vw, 40px);
+      line-height: 1.15;
+      margin: 0 0 6px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: var(--ink-soft);
+      font-size: 16px;
+      margin: 0 0 8px;
+    }
+    .updated {
+      font-size: 13px;
+      color: var(--ink-faint);
+      margin: 0 0 36px;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 36px 0 10px;
+      letter-spacing: -0.005em;
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 22px 0 6px;
+      color: var(--ink);
+    }
+    p, ul { margin: 0 0 14px; color: var(--ink); }
+    ul { padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    .muted { color: var(--ink-soft); }
+
+    .callout {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--orange);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      font-size: 15px;
+    }
+    .callout strong { color: var(--orange); }
+
+    .table-of-rights {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 8px 18px;
+      margin: 12px 0 18px;
+      font-size: 15px;
+    }
+    .table-of-rights dt {
+      color: var(--orange);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .table-of-rights dd {
+      margin: 0;
+      color: var(--ink);
+    }
+
+    code, .mono {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--ink-soft);
+    }
+
+    .footer-back {
+      margin-top: 48px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+      color: var(--ink-faint);
+    }
+    .footer-back a { color: var(--orange); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="crumbs">
+      <a href="./">← MQ City Builder</a>
+    </div>
+
+    <h1>Privacy Policy</h1>
+    <p class="lede">What we collect, why, where it lives, and how to delete it.</p>
+    <p class="updated">Last updated: 23 May 2026 · MQ City Builder Beta</p>
+
+    <div class="callout">
+      <strong>Plain-English summary.</strong> MQ City Builder is a single-purchase
+      premium game with no ads, no trackers, and no third-party analytics. If you
+      play without an account, nothing leaves your device. If you create an
+      account, we store your email and your saved cities on Supabase so you can
+      play across devices. We do not sell, rent, or share your data, and you can
+      delete your account at any time.
+    </div>
+
+    <h2>1. Who we are</h2>
+    <p>
+      MQ City Builder ("MQ City Builder", "we", "us", or "our") is an independent
+      browser-based city-building game operated by a sole developer.
+      The service is reachable at <a href="https://mqcity.app">mqcity.app</a>.
+      For privacy questions or requests, contact
+      <a href="mailto:hello@mqcity.app">hello@mqcity.app</a>.
+    </p>
+
+    <h2>2. What we collect</h2>
+
+    <h3>2.1 Without an account</h3>
+    <p>
+      If you play without signing in, we do not collect any personal information
+      on our servers. Your save data is held entirely on your own device in your
+      browser's IndexedDB, plus a small set of preferences in
+      <code>localStorage</code>. Nothing is uploaded.
+    </p>
+
+    <h3>2.2 With an account</h3>
+    <p>When you create an account or sign in, we collect:</p>
+    <ul>
+      <li><strong>Email address.</strong> Used to identify your account and to send sign-in links and security-related messages.</li>
+      <li><strong>An account identifier (UUID).</strong> Generated by our authentication provider so we can associate your saved cities with your account.</li>
+      <li><strong>A hashed password</strong> if you create an account with email + password. We never see or store your password in readable form.</li>
+      <li><strong>Authentication timestamps</strong> (account created, last signed in) used for security and abuse prevention.</li>
+      <li><strong>Your saved city snapshots.</strong> When you have an account, your cities are uploaded as game-state snapshots so you can resume on another device. These contain only game data (tile grid, treasury, settings, etc.) — no personal content.</li>
+    </ul>
+
+    <h3>2.3 Technical data</h3>
+    <p>
+      Our hosting provider (GitHub Pages) and our authentication / database
+      provider (Supabase) may log standard request data such as IP address,
+      browser user-agent, and request timestamps for security, abuse prevention,
+      and platform operations. We do not use this data for advertising or
+      profiling, and we do not combine it with your game data.
+    </p>
+    <p class="muted">
+      We do not currently run any analytics, telemetry, or behavioural-tracking
+      tools on the game itself. If we add gameplay analytics later, we will
+      update this page first and disclose what is collected.
+    </p>
+
+    <h2>3. Cookies, IndexedDB, and local storage</h2>
+    <p>
+      MQ City Builder does not use advertising or tracking cookies. We use the
+      following client-side storage mechanisms for the game to function:
+    </p>
+    <ul>
+      <li><strong>IndexedDB</strong> (<code>city-builder</code> database) — stores your save slots locally on your device so the game can resume offline. Required for the game to work.</li>
+      <li><strong>localStorage</strong> — stores preferences such as the active save slot, settings (volume, palette, UI scale, difficulty), tutorial state, and which transient prompts you have already dismissed. Required for the game to remember your choices between sessions.</li>
+      <li><strong>Supabase authentication tokens</strong> (stored in <code>localStorage</code> when you sign in) — keeps you signed in across sessions. Cleared when you sign out.</li>
+    </ul>
+    <p class="muted">
+      None of these are used for tracking, advertising, or sharing with third
+      parties. Clearing your browser data will reset the game and sign you out.
+    </p>
+
+    <h2>4. How we use your information</h2>
+    <p>We use the limited data described above to:</p>
+    <ul>
+      <li>Sign you in and keep you signed in.</li>
+      <li>Save and restore your cities across devices.</li>
+      <li>Send security and account messages (sign-in links, deletion confirmations).</li>
+      <li>Diagnose technical issues and prevent abuse of the service.</li>
+    </ul>
+    <p>
+      We do <strong>not</strong> use your data for advertising, profiling, or
+      automated decision-making, and we do <strong>not</strong> sell or rent it
+      to anyone.
+    </p>
+
+    <h2>5. Who we share it with</h2>
+    <p>
+      We share data only with the third-party providers that operate the
+      service on our behalf, and only the data needed to provide their part of
+      it:
+    </p>
+    <ul>
+      <li><strong>Supabase</strong> (authentication and database) — handles your account, password hashing, sign-in emails, and storage of your saved cities. Supabase processes data on our behalf as a processor. See <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase's privacy policy</a>.</li>
+      <li><strong>GitHub Pages</strong> (web hosting) — serves the game's static files. See <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub's privacy statement</a>.</li>
+      <li><strong>Cloudflare</strong> (DNS and routing) — directs requests for <code>mqcity.app</code>. See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's privacy policy</a>.</li>
+    </ul>
+    <p>
+      We may also disclose data if required to do so by law (e.g. a valid court
+      order), or to protect the rights, safety, or property of MQ City Builder
+      or its users.
+    </p>
+
+    <h2>6. Where your data lives</h2>
+    <p>
+      Account and save data is stored on Supabase's infrastructure. Supabase
+      operates data centres in multiple regions, including the United States
+      and the European Union. By using the service you understand that your
+      data may be processed in countries other than your own. We rely on
+      Supabase's compliance posture and contractual safeguards for international
+      transfers.
+    </p>
+
+    <h2>7. How long we keep it</h2>
+    <p>
+      We keep your account and saved cities for as long as your account is
+      active. If you delete your account, we delete the account record and any
+      cloud-stored saves associated with it. Backups may retain a copy for up
+      to 30 days before they roll off; after that the data is gone.
+    </p>
+    <p class="muted">
+      Local data on your own device (IndexedDB and localStorage) is under your
+      control — clear your browser data to remove it.
+    </p>
+
+    <h2>8. Your rights</h2>
+    <p>
+      Depending on where you live, you may have rights under laws such as the
+      EU/UK General Data Protection Regulation (GDPR), the California Consumer
+      Privacy Act (CCPA/CPRA), and Canada's PIPEDA. These typically include:
+    </p>
+    <dl class="table-of-rights">
+      <dt>Access</dt><dd>Ask us what data we hold about you.</dd>
+      <dt>Correction</dt><dd>Ask us to correct inaccurate data.</dd>
+      <dt>Deletion</dt><dd>Ask us to delete your account and associated data.</dd>
+      <dt>Portability</dt><dd>Ask for a copy of your data in a portable format.</dd>
+      <dt>Objection</dt><dd>Object to certain processing of your data.</dd>
+      <dt>Withdraw consent</dt><dd>Where processing relies on consent, withdraw it at any time.</dd>
+    </dl>
+    <p>
+      We respond to verified requests within 30 days. To exercise any of these
+      rights, email <a href="mailto:hello@mqcity.app">hello@mqcity.app</a> from
+      the email address on your account.
+    </p>
+    <p>
+      California residents have additional rights under the CCPA/CPRA,
+      including the right to know what categories of personal information we
+      collect and the right to non-discrimination for exercising these rights.
+      We do not sell or share personal information as those terms are defined
+      under California law.
+    </p>
+
+    <h2>9. How to delete your account</h2>
+    <p>
+      During the beta, account deletion is a one-step request:
+    </p>
+    <ul>
+      <li>Open <strong>Settings</strong> in the game and tap <strong>"Delete my account"</strong>, which will draft an email containing your account ID; or</li>
+      <li>Email <a href="mailto:hello@mqcity.app?subject=Account%20deletion%20request">hello@mqcity.app</a> from the email on your account with the subject "Account deletion request".</li>
+    </ul>
+    <p>
+      We confirm and process deletion within 30 days, usually much sooner. A
+      self-service in-game deletion button is on the roadmap.
+    </p>
+
+    <h2>10. Children</h2>
+    <p>
+      MQ City Builder is not directed to children under 13 (or under 16 in
+      jurisdictions that set that higher age for data-processing consent). We
+      do not knowingly collect personal information from children under those
+      ages. If you believe a child has provided us with personal information,
+      contact <a href="mailto:hello@mqcity.app">hello@mqcity.app</a> and we
+      will delete the account.
+    </p>
+
+    <h2>11. Security</h2>
+    <p>
+      We use industry-standard safeguards via Supabase (TLS in transit,
+      encryption at rest, hashed passwords, row-level security so each user
+      can only access their own data). No service can guarantee perfect
+      security, but we work to reduce risk and will notify affected users of
+      any material breach as required by law.
+    </p>
+
+    <h2>12. Changes to this policy</h2>
+    <p>
+      We may update this policy as the game evolves (new features, new
+      providers). When we make material changes we will update the "Last
+      updated" date at the top and, for significant changes affecting how your
+      data is used, notify signed-in users by email or an in-game notice.
+    </p>
+
+    <h2>13. Contact</h2>
+    <p>
+      For any privacy question or request:
+      <a href="mailto:hello@mqcity.app">hello@mqcity.app</a>.
+    </p>
+
+    <div class="footer-back">
+      ← <a href="./">Back to MQ City Builder</a> · also see the <a href="./terms.html">Terms of Service</a>.
+    </div>
+  </div>
+</body>
+</html>

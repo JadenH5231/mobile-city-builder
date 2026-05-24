@@ -4441,6 +4441,43 @@ html.ui-scale-xlarge { font-size: 130%; }
   }
 }
 
+/* Static toolbar block in portrait (Beta 1.5.3) — user feedback:
+ * "I think the Pan Bulldoze and Build/Architect spots take up too
+ * much space, they are static so they can be smaller."
+ *
+ * On a 390px portrait phone the mode toggle + Pan + Bulldoze were
+ * eating ~200-250px of the toolbar's ~366px usable width because
+ * they kept their full labels ("Build" / "Pan" / "Bulldoze"). Dropping
+ * those labels to icon-only at portrait widths frees ~80-100px for
+ * the scrollable build-menu section.
+ *
+ * The mode toggle stays recognisable thanks to its existing colour
+ * coding (yellow tint = Build, purple tint = Architect) — the icon +
+ * background colour is unambiguous without the label. Pan + Bulldoze
+ * use well-known icons (hand cursor / excavator) and stay tap-target
+ * sized (44px wide). */
+@media (max-width: 480px) and (orientation: portrait) {
+  .toolbar__mode .toolbar__btn .toolbar__label,
+  .toolbar__pinned .toolbar__btn .toolbar__label {
+    display: none;
+  }
+  .toolbar__mode .toolbar__btn,
+  .toolbar__pinned .toolbar__btn {
+    /* Square-ish icon-only tap target: minimum 40px, comfortable to
+       hit without horizontal padding inflation from the now-absent
+       label. */
+    padding: 0 8px;
+    min-width: 40px;
+  }
+  .toolbar__mode,
+  .toolbar__pinned {
+    /* Tighter padding + thinner separator margin since the buttons
+       inside no longer have label widths to balance. */
+    padding-right: 4px;
+    margin-right: 1px;
+  }
+}
+
 /* Portrait phones (Beta 1.5.2) — extra space optimisation for the
  * bottom toolbar after user feedback that portrait mode felt cramped.
  * Three things contribute to the squeeze:

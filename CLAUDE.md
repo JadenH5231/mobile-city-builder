@@ -345,6 +345,31 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.5.3 (Static toolbar block — icon-only in portrait)
+
+Follow-up to 1.5.2 portrait toolbar work. User feedback: "I think the
+Pan Bulldoze and Build/Architect spots take up too much space, they
+are static so they can be smaller."
+
+On a 390px portrait phone the mode toggle + Pan + Bulldoze were
+eating ~200-250px of the toolbar's ~366px usable width because they
+kept their full labels ("Build" / "Pan" / "Bulldoze"). The scrollable
+build menu got the leftover ~130-150px, forcing horizontal scroll
+even after the 1.5.2 tightening.
+
+**Fix:** drop labels to icon-only at `max-width: 480px` AND
+`orientation: portrait`. The static block shrinks from ~200-250px to
+~120-140px, freeing ~80-100px for the build menu.
+
+The mode toggle stays recognisable thanks to its existing colour
+coding (yellow tint = Build, purple tint = Architect). Pan + Bulldoze
+use the well-known hand-cursor / excavator icons.
+
+Landscape / desktop are unaffected — labels stay because horizontal
+real estate isn't constrained.
+
+SW cache `mq-city-v13` → `mq-city-v14`. Save schema unchanged.
+
 ## Status: Beta 1.5.2 (Portrait toolbar — tighter, less HUD inflation)
 
 New beta-user feedback: "Playing on my phone on portrait mode doesn't

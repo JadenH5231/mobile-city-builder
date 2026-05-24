@@ -345,6 +345,24 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.5.4 (Bulldoze icon is a wrecking-ball crane)
+
+User feedback: "Can you make the icon a wrecking ball crane instead?
+I think that will make the destruction more noticeable."
+
+The pre-1.5.4 Bulldoze icon was a bulldozer-vehicle silhouette — at
+icon-only size in the new portrait toolbar (1.5.3) it didn't read as
+"destruction" at a glance. Replaced with a wrecking-ball crane:
+base + vertical mast + horizontal boom in the heavy stroke; diagonal
+truss brace + hoist cable in the thin stroke; solid filled wrecking
+ball at the end. Reads as "demolition" much more immediately,
+especially when the toolbar's pinned static block is icon-only.
+
+Updated in BOTH `BUILD_ITEMS` and `ARCHITECT_ITEMS` so the icon is
+consistent across mode switches.
+
+SW cache `mq-city-v14` → `mq-city-v15`.
+
 ## Status: Beta 1.5.3 (Static toolbar block — icon-only in portrait)
 
 Follow-up to 1.5.2 portrait toolbar work. User feedback: "I think the

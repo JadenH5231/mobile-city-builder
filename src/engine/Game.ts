@@ -421,6 +421,13 @@ export class Game {
    *  shopper walks from the stall to the destination tile, "shops"
    *  briefly, walks back. Despawns on the same timer as its car. */
   readonly shoppers = new Shoppers();
+  /** Parking-management strictness (Beta 1.3.5 / Phase 3). Set from
+   *  main.ts after `settings.load()` and on every change of the
+   *  Settings panel's "Parking management" select. Default 'lenient'
+   *  matches the pre-Phase-3 behaviour (cars use parking when
+   *  available, no penalty if missing). Off = decorative; Realistic /
+   *  Strict apply revenue penalties on under-parked commercial. */
+  parkingStrictness: import('../ui/SettingsPanel').ParkingStrictness = 'lenient';
   readonly buses = new Buses();
   /** Motorcade event (Alpha 4.14). Fires every MOTORCADE_INTERVAL_MONTHS
    *  when a Provincial / National Capital is placed. */
@@ -1048,7 +1055,7 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council, this.parkingStrictness);
         // Beautification budget defunded this month (Alpha 4.0) — surface
         // a status toast so the player understands why the streetscape
         // suddenly stripped down. The flag is set by Economy and
@@ -1206,8 +1213,11 @@ export class Game {
           this.walkPathfinder,
           // Beta 1.3 Phase 2 — pass the parking registry so spawning
           // cars heading to a destination with adjacent parking reserve
-          // a stall and arrive into the visible parked state.
-          this.parking
+          // a stall and arrive into the visible parked state. Phase 3
+          // (Beta 1.3.5) makes this conditional on strictness — Off
+          // mode skips reservations entirely so parking lots stay
+          // purely decorative.
+          this.parkingStrictness === 'off' ? undefined : this.parking
         );
         this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder);
         // Tourist arrivals (Alpha 4.14) — only fire when the city is

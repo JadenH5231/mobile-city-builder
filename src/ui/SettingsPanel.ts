@@ -16,6 +16,17 @@
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'sandbox';
 export type UIScale = 'small' | 'normal' | 'large' | 'xlarge';
 export type Palette = 'none' | 'deuteranopia' | 'protanopia' | 'tritanopia';
+/** Parking-management strictness (Beta 1.3.5 — Phase 3). Determines
+ *  how much the player has to think about parking.
+ *  - 'off': parking lots are decorative. No reservations, no penalty.
+ *  - 'lenient': cars use parking when available, no penalty if missing.
+ *    Current default — what Phase 2 + 2.1 already do.
+ *  - 'realistic': under-parked commercial tiles (no 4-adjacent
+ *    parking_lot) take a -15% revenue penalty each month.
+ *  - 'strict': under-parked commercial tiles take a -30% penalty.
+ *    Same routing as Realistic.
+ */
+export type ParkingStrictness = 'off' | 'lenient' | 'realistic' | 'strict';
 
 export interface SettingsData {
   difficulty: Difficulty;
@@ -31,6 +42,8 @@ export interface SettingsData {
    *  — most players don't care about framerate; it's debug noise. Power
    *  users can toggle it from Settings → Display. */
   showFps: boolean;
+  /** Parking-management strictness (Beta 1.3.5). See `ParkingStrictness`. */
+  parkingStrictness: ParkingStrictness;
 }
 
 const STORAGE_KEY = 'mq-city-settings';
@@ -50,7 +63,11 @@ const DEFAULTS: SettingsData = {
   // the sim. Existing users with a saved setting keep their preference.
   defaultSimSpeed: 0,
   confirmReset: true,
-  showFps: false
+  showFps: false,
+  // Lenient = current behaviour (cars use parking when available, no
+  // penalty if missing). The default lets new players experience the
+  // visible parking + walker without managing it as a mechanic.
+  parkingStrictness: 'lenient'
 };
 
 /** Difficulty effects table — single source of truth for downstream
@@ -189,6 +206,7 @@ export function bindSettingsPanel(
   bindSelect('setting-ui-scale', 'uiScale');
   bindSelect('setting-palette', 'palette');
   bindSelect('setting-default-speed', 'defaultSimSpeed');
+  bindSelect('setting-parking-strictness', 'parkingStrictness');
 
   // Checkboxes.
   const bindCheck = <K extends keyof SettingsData>(id: string, key: K): void => {
@@ -216,6 +234,7 @@ export function bindSettingsPanel(
     bindSelect('setting-ui-scale', 'uiScale');
     bindSelect('setting-palette', 'palette');
     bindSelect('setting-default-speed', 'defaultSimSpeed');
+    bindSelect('setting-parking-strictness', 'parkingStrictness');
     bindCheck('setting-reduce-motion', 'reduceMotion');
     bindCheck('setting-confirm-reset', 'confirmReset');
     bindCheck('setting-show-fps', 'showFps');

@@ -345,6 +345,61 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.5.1 (Shoppers walk PathGraph instead of cutting straight)
+
+User feedback: "When people fan out from parking lots they still need
+to walk towards and use normal pathing that's there for them rather
+than fan out in any direction."
+
+Pre-1.5.1 the `Shoppers` system used a straight-line lerp from stall
+to destination — walkers visibly cut across grass / buildings / other
+zones to reach the destination, which broke the illusion of a
+plausible city. The reasoning in the original `Shoppers.ts` comment
+was that "a straight-line walk is simpler and more legible," but a
+city-builder is judged on visible plausibility and the straight-line
+shortcut undermined it.
+
+**The fix:** `Shoppers.spawnForParkedCar` now takes `grid`,
+`pathGraph`, and `pathfinder` (passed through from `Vehicles.update`).
+At spawn it:
+
+1. Finds the nearest 4-adjacent walkable tile (sidewalk / path / park)
+   to the parking-lot tile — the **entry** point onto the pedestrian
+   network.
+2. Finds the nearest 4-adjacent walkable tile to the destination —
+   the **approach** point.
+3. Runs A* on the PathGraph between them.
+4. Builds a waypoint chain: `[stall pos, entry tile centre, ...path
+   tile centres..., approach tile centre, destination pos]`.
+
+The `Shopper` interface now stores `waypoints` + cumulative `lengths`
++ `totalLength`. The `resolve` function interpolates by distance
+along the chain, so the walker moves at constant speed regardless of
+per-segment length variation. Outbound walks the chain forward;
+return walks it in reverse.
+
+**Fallback:** if any prerequisite is missing (no walkable neighbour
+near parking lot or destination, no PathGraph route found, or path
+longer than `MAX_SHOPPER_PATH_TILES = 12`), the shopper falls back to
+the old straight-line behaviour. This preserves the visual on early-
+game cities that haven't built paths yet — players still see walkers
+arrive, just without the routing finesse.
+
+**Walking duration scales with path length** (no longer just stall→
+dest distance). Long path-routed walks naturally take proportionally
+longer (`legSec = max(MIN_LEG_SEC, totalLength / SHOPPER_WALK_TILES_
+PER_SEC)`) so the shopper finishes their route before the car's
+`parkedUntil` timer expires; if the visit is too short, the legs get
+clamped to MIN_LEG_SEC and the middle "shopping" phase shrinks.
+
+When adding a future "park-then-walk" mechanism (transit stations,
+ferry terminals, etc.), the **principle from this release**: route
+walkers along the existing pedestrian network rather than letting
+them cut. The PathGraph is already built (sidewalks + walking-paths +
+parks), the Pathfinding instance is already wired into Game; new
+walk legs just plug into it. Straight-line lerps look like a
+prototype.
+
 ## Status: Beta 1.5 (Transport trucks — freight that connects I → C)
 
 User feedback: "Transport trucks. Transport trucks spawn from industry

@@ -345,6 +345,34 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.1 ("Clear visual ghosts" debug button)
+
+User feedback: "Is there a way to add a debug button that removes
+weird visual artifacts? Sometimes bridges don't delete properly and
+it's annoying. I think in some cases the actual entity is gone, but
+it's the visual that's sticking around."
+
+Added a **Diagnostics** section to the Settings panel with a
+"Clear visual ghosts" button that triggers a full renderer-mesh
+rebuild from the current grid state. Drops every cached world mesh
+(terrain, zones, paths, roads INCLUDING bridges, road ornaments,
+buildings, services, beautification) and re-derives them from the
+authoritative Tile state. Any orphan mesh whose underlying entity
+has been bulldozed gets purged in the rebuild.
+
+Wires via `Renderer.refreshTheme(grid, mood, months, forestry,
+farm)` — the same well-trodden code path the Theme picker uses to
+swap palettes in-place — so the implementation is one new HTML
+button + a passthrough `onClearGhosts` hook in `SettingsPanel.ts` +
+the rebuild call in `main.ts`. No new renderer code.
+
+Status toast "Visual artifacts cleared" fires on success so the
+player knows the click was registered. The Settings panel stays
+open (unlike Show Tutorial which auto-closes) so the player can try
+again if the first attempt didn't fully clear everything.
+
+SW cache `mq-city-v16` → `mq-city-v17`.
+
 ## Status: Beta 1.6 (Warehouses + supply chain — commercial needs supplies to earn)
 
 User feedback: "I want a new industry, warehouses. These buildings

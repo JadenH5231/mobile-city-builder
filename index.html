@@ -252,6 +252,18 @@
         <button id="setting-reset-all" type="button" class="settings__button settings__button--danger">Reset all settings to defaults</button>
       </div>
 
+      <!-- Diagnostics (Beta 1.6.1). One-shot "redraw everything from the
+           current sim state" button — clears the class of bug where a
+           visual mesh (a bridge, a parking lot decoration, an old
+           building) sticks around after the underlying tile state has
+           been cleared. Triggers the same path the theme picker uses,
+           which rebuilds every world mesh from scratch from the grid. -->
+      <div class="settings__group">
+        <div class="settings__group-title">Diagnostics</div>
+        <div class="settings__group-sub">If a visual artifact stays on the map after you bulldoze (e.g. a leftover bridge), tap here to rebuild every mesh from the current city state.</div>
+        <button id="setting-clear-ghosts" type="button" class="settings__button">Clear visual ghosts</button>
+      </div>
+
       <!-- Backup & sync (Alpha 4.11). Export the current city to a
            portable code the player can copy onto another device, and
            import a code into the active slot. Always overwrites the

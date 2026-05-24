@@ -29,6 +29,7 @@ import { Traffic } from '../simulation/Traffic';
 import { TrafficLights } from '../simulation/TrafficLights';
 import { Vehicles } from '../simulation/Vehicles';
 import { Parking } from '../simulation/Parking';
+import { SupplyChain } from '../simulation/SupplyChain';
 import { Shoppers } from '../simulation/Shoppers';
 import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
@@ -114,6 +115,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_forestry: 'Forestry',
   place_farm: 'Farm',
   place_big_box: 'Big Box',
+  place_warehouse: 'Warehouse',
   place_parking_lot: 'Parking Lot',
   place_school: 'School',
   place_hospital: 'Hospital',
@@ -415,6 +417,9 @@ export class Game {
    *  destination with adjacent parking reserve a stall here and
    *  visibly park in it on arrival. */
   readonly parking = new Parking();
+  /** Supply chain — Beta 1.6. Per-tile supplies inventory, monthly
+   *  consumption, and the revenue multiplier Economy reads each month. */
+  readonly supplyChain = new SupplyChain();
   /** Shoppers — walking final-leg of parked-car trips (Beta 1.3.4 /
    *  Phase 2.1). Spawned by Vehicles.update when a car parks; each
    *  shopper walks from the stall to the destination tile, "shops"
@@ -698,6 +703,7 @@ export class Game {
       // + hometown hate it. Parking lot polarises drivers vs
       // greenleaf/transit similarly.
       ['place_big_box', 'big_box'],
+      ['place_warehouse', 'warehouse'],
       ['place_parking_lot', 'parking_lot'],
       ['place_school', 'school'],
       ['place_hospital', 'hospital'],
@@ -760,7 +766,7 @@ export class Game {
       'place_forestry', 'place_farm',
       // Big Box + Parking Lot (Beta 1.3). Milestones below gate them
       // to Town tier — same as forestry / farm.
-      'place_big_box', 'place_parking_lot',
+      'place_big_box', 'place_warehouse', 'place_parking_lot',
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
       'place_stop_sign', 'place_traffic_light', 'place_ramp',
@@ -1054,7 +1060,14 @@ export class Game {
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council, this.parkingStrictness);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council, this.parkingStrictness, this.supplyChain);
+        // Beta 1.6 — supply-chain monthly consumption fires exactly on
+        // a month rollover, AFTER Economy reads the supply state (Economy
+        // factors current supplies into commercial revenue), so the tick
+        // order is: revenue computed → supplies consumed for next month.
+        if (this.economy.monthsElapsed > monthsBefore) {
+          this.supplyChain.tickMonth(this.grid);
+        }
         // Beautification budget defunded this month (Alpha 4.0) — surface
         // a status toast so the player understands why the streetscape
         // suddenly stripped down. The flag is set by Economy and
@@ -1234,6 +1247,13 @@ export class Game {
         // Spawn rate scales with developed industrial tile count;
         // capped by MAX_TRUCKS.
         this.vehicles.spawnTruckTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
+        // Beta 1.6 — outside-connection import trucks. When the city
+        // is connected AND a developed commercial tile is critically
+        // low on supplies AND no domestic truck is en-route to it,
+        // periodically spawn an import truck from the edge to that
+        // tile. The destination is marked import-sourced on arrival
+        // (-25% revenue penalty) until the next domestic delivery.
+        this.tickImportTrucks(SIM_STEP_MS);
         this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
         this.pedestrians.spawnTick(
           SIM_STEP_MS,
@@ -1275,7 +1295,11 @@ export class Game {
         // Beta 1.5.1 — pass the pedestrian path graph + pathfinder so
         // shoppers spawned on car-parking can plan a sidewalk route
         // to the destination instead of cutting straight across grass.
-        this.pathGraph, this.walkPathfinder
+        this.pathGraph, this.walkPathfinder,
+        // Beta 1.6 — pass the supply chain so truck arrivals refill
+        // commercial supplies / warehouse buffers / apply import
+        // penalties on the destination tile.
+        this.supplyChain
       );
       // Beta 1.3.4 (Phase 2.1) — tick shoppers each render frame.
       // Cheap O(N) where N is current shoppers list (capped at MAX_SHOPPERS).
@@ -1481,7 +1505,10 @@ export class Game {
       bridge: t.bridge,
       bridgeRoad: t.bridgeRoad,
       hasRoadAdjacent: this.grid.hasRoadAdjacent(tile.x, tile.y),
-      zoneDemand
+      zoneDemand,
+      // Beta 1.6 — supply-chain inventory for the chip.
+      supplies: this.supplyChain.isCommercialConsumer(t) || t.building === 'warehouse' ? t.supplies : -1,
+      importSource: t.importSource
     };
     this.panel.show({ ...baseInfo, reasons: diagnoseTile(baseInfo) });
   }
@@ -1900,20 +1927,17 @@ export class Game {
     // Big Box + Parking Lot terrain gates (Beta 1.3). Both want flat
     // dry land — grass or sand — and must not pave over water, forest,
     // or an existing zoned tile.
-    if (kind === 'big_box' || kind === 'parking_lot') {
+    if (kind === 'big_box' || kind === 'parking_lot' || kind === 'warehouse') {
       const t = this.grid.get(x, y);
+      const label = kind === 'big_box' ? 'Big Box'
+                  : kind === 'warehouse' ? 'Warehouse'
+                  : 'Parking lot';
       if (t && (t.terrain === 'water' || t.terrain === 'forest')) {
-        this.onStatusMessage?.(
-          (kind === 'big_box' ? 'Big Box' : 'Parking lot') +
-          ' must be placed on flat dry land (grass or sand)'
-        );
+        this.onStatusMessage?.(label + ' must be placed on flat dry land (grass or sand)');
         return false;
       }
       if (t && t.zone !== 'none') {
-        this.onStatusMessage?.(
-          (kind === 'big_box' ? 'Big Box' : 'Parking lot') +
-          ' cannot go on a zoned tile — bulldoze the zone first'
-        );
+        this.onStatusMessage?.(label + ' cannot go on a zoned tile — bulldoze the zone first');
         return false;
       }
     }
@@ -2068,6 +2092,62 @@ export class Game {
   // operation. The dispatcher in `handleTap` still recognises the
   // `highway_flip` tool value (for legacy save state / external
   // dispatch) but it's a no-op with a status toast.
+
+  /**
+   * Outside-connection import-truck spawn tick (Beta 1.6). Throttled
+   * by an internal accumulator so we don't burn budget per-frame
+   * scanning the grid. Each tick, if conditions are met:
+   *
+   *   1. City is connected to the outside (any edge road tile exists).
+   *   2. At least one developed commercial tile has supplies < the
+   *      critical threshold.
+   *   3. The MAX_TRUCKS cap isn't already saturated.
+   *
+   * Then we pick the most-supply-starved commercial tile and spawn
+   * an import truck from a randomly chosen edge road tile.
+   *
+   * The financial penalty (-25% revenue) is applied per-tile via the
+   * `importSource` flag set in `SupplyChain.deliver('import', ...)`
+   * — that's the "slight financial penalty" the user asked for.
+   * Cleared automatically when the next domestic delivery arrives.
+   */
+  private importTruckAccumulator = 0;
+  private tickImportTrucks(stepMs: number): void {
+    // ~1 import-truck spawn attempt every 4 sim seconds. Caps the
+    // visual chaos so imports trickle in rather than convoying.
+    const RATE_PER_SEC = 0.25;
+    const CRITICAL_SUPPLY = 0.30;
+    this.importTruckAccumulator += (stepMs / 1000) * RATE_PER_SEC;
+    if (this.importTruckAccumulator < 1) return;
+    this.importTruckAccumulator -= 1;
+
+    if (!this.globalMarket.isConnected()) return;
+    // Find the most supply-starved commercial tile.
+    let worst: { x: number; y: number; supplies: number } | null = null;
+    for (const t of this.grid.iter()) {
+      if (!this.supplyChain.isCommercialConsumer(t)) continue;
+      if (t.supplies >= CRITICAL_SUPPLY) continue;
+      if (!worst || t.supplies < worst.supplies) {
+        worst = { x: t.x, y: t.y, supplies: t.supplies };
+      }
+    }
+    if (!worst) return;
+    // Pick a random edge road tile as the import origin.
+    const edges: Array<{ x: number; y: number }> = [];
+    const w = this.grid.width, h = this.grid.height;
+    for (const t of this.grid.iter()) {
+      if (!t.road) continue;
+      if (t.x === 0 || t.x === w - 1 || t.y === 0 || t.y === h - 1) {
+        edges.push({ x: t.x, y: t.y });
+      }
+    }
+    if (edges.length === 0) return;
+    const edgeRoad = edges[Math.floor(Math.random() * edges.length)]!;
+    this.vehicles.spawnImportTruck(
+      this.grid, this.roadGraph, this.pathfinder, edgeRoad,
+      { x: worst.x, y: worst.y }
+    );
+  }
 
   private placeRamp(x: number, y: number): boolean {
     const t = this.grid.get(x, y);

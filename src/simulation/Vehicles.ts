@@ -199,6 +199,11 @@ export interface Car {
    *  the car despawns, and a `PendingReturn` fires (the visit interval
    *  has been spent visibly at the stall rather than invisibly queued). */
   parkedUntil?: number;
+  /** Supply-chain delivery source for trucks (Beta 1.6). On arrival,
+   *  Vehicles.update calls SupplyChain.deliver with this value so the
+   *  receiving tile (commercial or warehouse) refills correctly. Only
+   *  set for kind === 'truck'. */
+  truckSource?: import('./SupplyChain').DeliverySource;
 }
 
 /**
@@ -334,18 +339,52 @@ export class Vehicles {
     }
   }
 
+  /**
+   * Warehouse-aware truck spawn (Beta 1.6). Picks an origin + dest +
+   * source-kind for the supply chain:
+   *
+   *   - 40% try industry → warehouse (if any warehouse has supplies < 1)
+   *     — restocks the warehouse's buffer, biggest single payload.
+   *   - 40% try warehouse → commercial (if any warehouse has supplies > 0
+   *     AND any commercial tile exists) — most efficient delivery.
+   *   - 20% try industry → commercial direct (always works as long as
+   *     industrial + commercial tiles exist) — pre-1.6 behaviour, kept
+   *     as the fallback when warehouses aren't in the picture or all
+   *     branches fail.
+   *
+   * Each branch falls through to industry→commercial if its prerequisite
+   * is missing (e.g. no warehouses exist yet). So a city with no
+   * warehouses always works (just less efficiently).
+   */
   private attemptTruckSpawn(
     grid: Grid,
     roadGraph: RoadGraph,
     pathfinder: Pathfinding
   ): void {
-    const origin = pickRandomDevelopedTile(grid, 'industrial');
-    if (!origin) return;
-    // Bias destination toward big_box (matches the resident-car bias
-    // from 1.4.2). Big_box stores receive disproportionately more
-    // freight than regular commercial in real life.
-    const dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    if (!dest) return;
+    const roll = Math.random();
+    let origin: { x: number; y: number } | null = null;
+    let dest: { x: number; y: number } | null = null;
+    let source: import('./SupplyChain').DeliverySource = 'industry-direct';
+
+    if (roll < 0.40) {
+      // Industry → warehouse (restock).
+      origin = pickRandomDevelopedTile(grid, 'industrial');
+      dest = pickRandomWarehouseTile(grid, /* prefer non-full */ true);
+      source = 'industry-to-warehouse';
+    } else if (roll < 0.80) {
+      // Warehouse → commercial (deliver).
+      origin = pickRandomWarehouseTile(grid, /* require supplies > 0 */ false);
+      dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+      source = 'warehouse';
+    }
+    // Fallback when any of the above failed — direct industry to
+    // commercial (the pre-1.6 path).
+    if (!origin || !dest) {
+      origin = pickRandomDevelopedTile(grid, 'industrial');
+      dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+      source = 'industry-direct';
+    }
+    if (!origin || !dest) return;
 
     const startRoad = nearestRoadTile(grid, origin.x, origin.y);
     if (!startRoad) return;
@@ -382,10 +421,62 @@ export class Vehicles {
       originRoadIdx: startIdx,
       originHomeX: origin.x,
       originHomeY: origin.y,
-      kind: 'truck'
+      kind: 'truck',
+      truckSource: source
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile, TRUCK_LOAD_WEIGHT);
+  }
+
+  /** Spawn an import truck from the city edge to a commercial tile
+   *  (Beta 1.6). Triggered by Game.ts when a commercial tile is
+   *  critically low on supplies AND the city is connected. The truck
+   *  arrives, marks the destination as import-sourced (-25% revenue
+   *  penalty), then queues a return trip back to its edge tile. */
+  spawnImportTruck(
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding,
+    edgeRoad: { x: number; y: number },
+    dest: { x: number; y: number }
+  ): boolean {
+    if (this.countByKind('truck') >= MAX_TRUCKS) return false;
+    const endRoad = nearestRoadTile(grid, dest.x, dest.y);
+    if (!endRoad) return false;
+    const startIdx = edgeRoad.y * grid.width + edgeRoad.x;
+    const endIdx = endRoad.y * grid.width + endRoad.x;
+    if (startIdx === endIdx) return false;
+    const edgeCost = (_from: number, to: number, base: number): number => {
+      const tx = to % grid.width;
+      const ty = (to - tx) / grid.width;
+      const t = grid.get(tx, ty);
+      if (!t) return base;
+      return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
+    };
+    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
+    if (!path || path.length < 2) return false;
+    const color = 0x9a9a9a;  // generic grey for imports (utility look)
+    const car: Car = {
+      pathTiles: path,
+      segmentIdx: 0,
+      segmentT: 0,
+      speed: TRUCK_SPEED_MULT,
+      color,
+      loadedTile: path[1]!,
+      pauseRemaining: 0,
+      yielding: false,
+      yieldSince: 0,
+      destX: dest.x,
+      destY: dest.y,
+      originRoadIdx: startIdx,
+      originHomeX: edgeRoad.x,
+      originHomeY: edgeRoad.y,
+      kind: 'truck',
+      truckSource: 'import'
+    };
+    this.cars.push(car);
+    this.incrementLoad(grid, car.loadedTile, TRUCK_LOAD_WEIGHT);
+    return true;
   }
 
   /** Count active cars matching `kind` (or 'resident' if `kind` undefined,
@@ -766,7 +857,8 @@ export class Vehicles {
     parking?: import('./Parking').Parking,
     shoppers?: import('./Shoppers').Shoppers,
     pathGraph?: PathGraph,
-    walkPathfinder?: Pathfinding
+    walkPathfinder?: Pathfinding,
+    supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
@@ -1143,6 +1235,16 @@ export class Vehicles {
               : carKind === 'truck'
               ? (TRUCK_VISIT_LOW_SEC + Math.random() * (TRUCK_VISIT_HIGH_SEC - TRUCK_VISIT_LOW_SEC)) * 1000
               : (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
+            // Beta 1.6 — supply-chain delivery on truck arrival. The
+            // car.destX/Y is the original destination tile (commercial
+            // or warehouse). truckSource tells SupplyChain whether to
+            // top-up commercial supplies, refill the warehouse
+            // buffer, or mark the destination as import-sourced
+            // (-25% revenue penalty).
+            if (carKind === 'truck' && supplyChain && car.truckSource
+                && car.destX !== undefined && car.destY !== undefined) {
+              supplyChain.deliver(grid, car.destX, car.destY, car.truckSource);
+            }
             this.pendingReturns.push({
               readyAt: now + visitMs,
               originRoadIdx: car.originRoadIdx,
@@ -1288,6 +1390,28 @@ function pickRandomBuildingTile(
   let count = 0;
   for (const t of grid.iter()) {
     if (t.building !== kind) continue;
+    count++;
+    if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
+  }
+  return chosen;
+}
+
+/** Pick a random warehouse tile (Beta 1.6). When `preferNotFull` is
+ *  true (industry → warehouse trips), only warehouse tiles with
+ *  supplies < 1 are eligible — fully-stocked warehouses don't need
+ *  restocking. When false (warehouse → commercial trips), only
+ *  warehouses with supplies > 0 are eligible — empty warehouses
+ *  have nothing to ship out. */
+function pickRandomWarehouseTile(
+  grid: Grid,
+  preferNotFull: boolean
+): { x: number; y: number } | null {
+  let chosen: { x: number; y: number } | null = null;
+  let count = 0;
+  for (const t of grid.iter()) {
+    if (t.building !== 'warehouse') continue;
+    if (preferNotFull && t.supplies >= 0.95) continue;
+    if (!preferNotFull && t.supplies <= 0.05) continue;
     count++;
     if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
   }

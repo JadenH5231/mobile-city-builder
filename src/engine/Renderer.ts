@@ -3857,6 +3857,32 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       }
       continue;
     }
+    // Warehouse (Beta 1.6) — modular cluster of adjacent warehouse
+    // tiles forms one freight distribution centre. Same per-tile
+    // exterior-side detection pattern as bigBoxClusterParts; absorbs
+    // adjacent parking_lot tiles into the apron.
+    if (t.building === 'warehouse') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'warehouse', visited);
+      const parts = warehouseClusterParts(cluster, grid);
+      for (const c of cluster) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = c.x + dx, ny = c.y + dy;
+          const nt = grid.get(nx, ny);
+          if (nt && nt.building === 'parking_lot') {
+            visited.add(ny * grid.width + nx);
+          }
+        }
+      }
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Big Box (Beta 1.3) — modular cluster of adjacent big_box tiles
     // forms one strip-mall composition. The cluster builder also
     // absorbs adjacent parking_lot tiles into the same paved field.
@@ -5932,6 +5958,285 @@ function cardinalYaw(dx: number, dy: number): number {
     return dx > 0 ? Math.PI / 2 : -Math.PI / 2;
   }
   return dy > 0 ? 0 : Math.PI;
+}
+
+/* ---- Warehouse (Beta 1.6) ----------------------------------------- *
+ * Fully-modular warehouse cluster — same per-tile exterior-side
+ * detection as bigBoxClusterParts so any shape (1xN, 2x2, L, T, U,
+ * plus, etc) emits ONE cohesive freight building. Visual signature:
+ *
+ *   - Long flat warehouse body, slightly taller than a big_box
+ *     (warehouses are tall to fit pallet racks).
+ *   - Repeating row of LOADING-DOCK doors along the front (south)
+ *     face — one per cluster front tile.
+ *   - Subtle roof vents (cylindrical exhaust stacks) and a single
+ *     skylight strip along the centre.
+ *   - Painted brand-stripe in industrial-grey + safety-yellow.
+ *   - Optional rooftop sign on the largest cluster tile.
+ *
+ * Colour palette is neutral / industrial (greys + safety-yellow
+ * accents), distinct from big_box's retail-brand palette.
+ * --------------------------------------------------------------------- */
+function warehouseClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+  _grid: Grid
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  // Industrial / freight palette.
+  const wallLight = 0xbab8b2;        // pale industrial concrete
+  const wallDark = 0x6c6a64;          // dock-band / cladding accent
+  const roof = 0x3a3a38;              // dark tar/rubber roof
+  const roofVent = 0x4a4f56;          // exhaust stack
+  const safety = 0xf2c648;            // safety yellow accent stripe
+  const dockDoor = 0x2e3036;          // dark loading-dock door
+  const skylight = 0xb8d4d6;          // pale blue-glass skylight strip
+  const apron = 0x2e2f33;             // asphalt (matches parking)
+  const lampPole = 0x2c2d31;
+  const lampHead = 0xfff2c8;
+
+  const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  const widthTiles = maxX - minX + 1;
+  const depthTiles = maxY - minY + 1;
+  const clusterSet = new Set(sorted.map((c) => c.x + ',' + c.y));
+  const inCluster = (x: number, y: number) => clusterSet.has(x + ',' + y);
+
+  type Meta = { x: number; y: number; N: boolean; E: boolean; S: boolean; W: boolean };
+  const tileMeta: Meta[] = sorted.map((c) => ({
+    x: c.x, y: c.y,
+    N: !inCluster(c.x, c.y - 1),
+    E: !inCluster(c.x + 1, c.y),
+    S: !inCluster(c.x, c.y + 1),
+    W: !inCluster(c.x - 1, c.y)
+  }));
+
+  // Warehouse body is slightly taller than big_box (pallet rack
+  // heights need ~10m clearance in real life); height scales with
+  // footprint like big_box.
+  const sizeBonus = Math.min(0.20, Math.max(0, Math.min(widthTiles, depthTiles) - 1) * 0.06);
+  const bodyHeight = 0.40 + sizeBonus;
+
+  const SIDE_INSET = 0.04;
+  const BACK_INSET = 0.10;
+  const FRONT_INSET = 0.28;
+  const extent = (m: Meta) => {
+    const iN = m.N ? BACK_INSET : 0;
+    const iS = m.S ? FRONT_INSET : 0;
+    const iE = m.E ? SIDE_INSET : 0;
+    const iW = m.W ? SIDE_INSET : 0;
+    const w = TILE_SIZE - iE - iW;
+    const d = TILE_SIZE - iN - iS;
+    const cx = (m.x + 0.5) * TILE_SIZE + (iW - iE) / 2;
+    const cz = (m.y + 0.5) * TILE_SIZE + (iN - iS) / 2;
+    return { w, d, cx, cz, xWest: cx - w / 2, xEast: cx + w / 2, zNorth: cz - d / 2, zSouth: cz + d / 2 };
+  };
+
+  // 1. Asphalt apron under cluster — like big_box, matches parking
+  // surface so adjacent parking_lot tiles blend in.
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(1.02, 0.018, 1.02), color: apron, dx: cx, dy: 0.009, dz: cz });
+  }
+
+  // 2. Per-tile body slab.
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = extent(m);
+    if (w <= 0 || d <= 0) continue;
+    out.push({
+      makeGeom: () => box(w, bodyHeight, d),
+      color: wallLight,
+      dx: cx, dy: bodyHeight / 2 + 0.03, dz: cz
+    });
+  }
+
+  // 2a. Inner-corner filler at NORTH-side notches (same idea as
+  // bigBoxClusterParts — fills the small gap where two perpendicular
+  // SIDE_INSET walls meet at an inner corner).
+  for (let gy = minY; gy <= maxY + 1; gy++) {
+    for (let gx = minX; gx <= maxX + 1; gx++) {
+      const tl = inCluster(gx - 1, gy - 1);
+      const tr = inCluster(gx, gy - 1);
+      const bl = inCluster(gx - 1, gy);
+      const br = inCluster(gx, gy);
+      const cnt = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+      if (cnt !== 3) continue;
+      if (!tl) {
+        out.push({
+          makeGeom: () => box(SIDE_INSET, bodyHeight, BACK_INSET),
+          color: wallLight,
+          dx: gx + SIDE_INSET / 2, dy: bodyHeight / 2 + 0.03, dz: gy + BACK_INSET / 2
+        });
+      } else if (!tr) {
+        out.push({
+          makeGeom: () => box(SIDE_INSET, bodyHeight, BACK_INSET),
+          color: wallLight,
+          dx: gx - SIDE_INSET / 2, dy: bodyHeight / 2 + 0.03, dz: gy + BACK_INSET / 2
+        });
+      }
+    }
+  }
+
+  // 3. Roof per-tile with small overhang on exterior sides.
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = extent(m);
+    if (w <= 0 || d <= 0) continue;
+    const ovE = m.E ? 0.01 : 0;
+    const ovW = m.W ? 0.01 : 0;
+    const ovN = m.N ? 0.01 : 0;
+    const ovS = m.S ? 0.01 : 0;
+    out.push({
+      makeGeom: () => box(w + ovE + ovW, 0.02, d + ovN + ovS),
+      color: roof,
+      dx: cx + (ovE - ovW) / 2, dy: bodyHeight + 0.04, dz: cz + (ovS - ovN) / 2
+    });
+  }
+
+  // 4. Loading-dock band on every S-exterior tile — multiple visible
+  // dock doors painted on the front face (this is the warehouse's
+  // signature visual).
+  for (const m of tileMeta) {
+    if (!m.S) continue;
+    const { w, cx, zSouth } = extent(m);
+    // Concrete dock band along the full tile front.
+    out.push({
+      makeGeom: () => box(w, 0.12, 0.05),
+      color: wallDark,
+      dx: cx, dy: 0.06, dz: zSouth - 0.025
+    });
+    // Three loading-dock doors per S-exterior tile, evenly spaced.
+    const doorCount = 3;
+    const doorSpacing = w / (doorCount + 1);
+    for (let i = 1; i <= doorCount; i++) {
+      const dx = cx - w / 2 + i * doorSpacing;
+      out.push({
+        makeGeom: () => box(0.16, 0.18, 0.03),
+        color: dockDoor,
+        dx, dy: 0.09, dz: zSouth - 0.01
+      });
+      // Painted dock-number bar above each door (yellow safety stripe).
+      out.push({
+        makeGeom: () => box(0.18, 0.018, 0.02),
+        color: safety,
+        dx, dy: 0.195, dz: zSouth - 0.01
+      });
+    }
+  }
+
+  // 5. Parapet + brand stripe along the front, plus corner pilasters.
+  for (const m of tileMeta) {
+    if (!m.S) continue;
+    const { w, cx, zSouth } = extent(m);
+    // Parapet (top of wall) in the lighter wall colour.
+    out.push({
+      makeGeom: () => box(w, 0.06, 0.04),
+      color: wallLight,
+      dx: cx, dy: bodyHeight + 0.06, dz: zSouth - 0.02
+    });
+    // Safety-yellow brand stripe near the top.
+    out.push({
+      makeGeom: () => box(w, 0.020, 0.025),
+      color: safety,
+      dx: cx, dy: bodyHeight + 0.02, dz: zSouth - 0.025
+    });
+    // Corner pilasters (thicker on true cluster outer corners).
+    const westThick = m.W;
+    const eastThick = m.E;
+    out.push({
+      makeGeom: () => box(westThick ? 0.06 : 0.035, bodyHeight + (westThick ? 0.04 : 0), westThick ? 0.06 : 0.035),
+      color: wallDark,
+      dx: cx - w / 2 + (westThick ? 0.03 : 0.018),
+      dy: bodyHeight / 2 + (westThick ? 0.05 : 0.03),
+      dz: zSouth - 0.025
+    });
+    out.push({
+      makeGeom: () => box(eastThick ? 0.06 : 0.035, bodyHeight + (eastThick ? 0.04 : 0), eastThick ? 0.06 : 0.035),
+      color: wallDark,
+      dx: cx + w / 2 - (eastThick ? 0.03 : 0.018),
+      dy: bodyHeight / 2 + (eastThick ? 0.05 : 0.03),
+      dz: zSouth - 0.025
+    });
+  }
+
+  // 6. Back-side loading-dock band (less prominent — for over-the-road
+  // delivery if needed).
+  for (const m of tileMeta) {
+    if (!m.N) continue;
+    const { w, cx, zNorth } = extent(m);
+    out.push({
+      makeGeom: () => box(w, 0.10, 0.06),
+      color: wallDark,
+      dx: cx, dy: 0.05, dz: zNorth + 0.03
+    });
+  }
+
+  // 7. Skylight strip — one per tile, lengthwise down the centre.
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = extent(m);
+    if (w <= 0 || d <= 0) continue;
+    out.push({
+      makeGeom: () => box(w * 0.5, 0.012, d * 0.55),
+      color: skylight,
+      dx: cx, dy: bodyHeight + 0.055, dz: cz
+    });
+  }
+
+  // 8. Rooftop vents — cylindrical exhaust stacks (1-2 per tile).
+  for (const c of sorted) {
+    const tileX = (c.x + 0.5) * TILE_SIZE;
+    const tileZ = (c.y + 0.5) * TILE_SIZE;
+    const h = ((c.x * 374761393) ^ (c.y * 668265263)) >>> 0;
+    const count = ((h >> 2) % 2) + 1;
+    for (let i = 0; i < count; i++) {
+      const ox = (((h >> (i * 5)) & 0xff) / 255 - 0.5) * 0.50;
+      const oz = (((h >> (i * 5 + 4)) & 0xff) / 255 - 0.5) * 0.40;
+      const r = 0.04 + (((h >> (i * 3 + 12)) & 0x07) / 7) * 0.025;
+      const hh = 0.06 + (((h >> (i * 3 + 16)) & 0x07) / 7) * 0.04;
+      out.push({
+        makeGeom: () => cyl(r, hh, 10),
+        color: roofVent,
+        dx: tileX + ox, dy: bodyHeight + 0.04 + hh / 2, dz: tileZ + oz
+      });
+    }
+  }
+
+  // 9. Front lamps at each S-exterior run's corners (per-run, matches
+  // big_box lamp placement convention).
+  const sExtTiles = tileMeta.filter((m) => m.S).sort((a, b) => a.y - b.y || a.x - b.x);
+  const sRuns: Meta[][] = [];
+  for (const m of sExtTiles) {
+    const lastRun = sRuns[sRuns.length - 1];
+    if (lastRun && lastRun[lastRun.length - 1]!.y === m.y &&
+        lastRun[lastRun.length - 1]!.x === m.x - 1) {
+      lastRun.push(m);
+    } else {
+      sRuns.push([m]);
+    }
+  }
+  for (const run of sRuns) {
+    const lampInset = 0.08;
+    const leftExt = extent(run[0]!);
+    const rightExt = extent(run[run.length - 1]!);
+    const lampZ = leftExt.zSouth + 0.10;
+    const lampXs: number[] = [
+      leftExt.xWest + lampInset,
+      rightExt.xEast - lampInset
+    ];
+    if (run.length >= 3) {
+      lampXs.push((leftExt.xWest + rightExt.xEast) / 2);
+    }
+    for (const x of lampXs) {
+      out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: x, dy: 0.11, dz: lampZ });
+      out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: x, dy: 0.23, dz: lampZ });
+    }
+  }
+
+  return out;
 }
 
 /** Standalone parking-lot tile builder. Same paving + striping as the

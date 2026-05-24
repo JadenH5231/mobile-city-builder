@@ -40,7 +40,7 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * Older saves load identically since neither building can have been
  * placed in them. No structural schema change.
  */
-const SCHEMA = 28;
+const SCHEMA = 29;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -123,6 +123,15 @@ export interface TileSnapshot {
    *  turns; world-space dimensions swap for odd values. v26-and-
    *  earlier saves load with `undefined → 0` (default orientation). */
   bigBuildRotation?: 0 | 1 | 2 | 3;
+  /** Supply-chain inventory (Beta 1.6 / schema 29+). Per-tile [0..1]
+   *  on developed commercial tiles + warehouse tiles. Pre-29 saves
+   *  load with default 1 (fully stocked) so the supply chain doesn't
+   *  cripple long-running cities on first load post-update. */
+  supplies?: number;
+  /** Import-source flag (Beta 1.6 / schema 29+). True when the most
+   *  recent delivery to this commercial tile came from a city-edge
+   *  import truck (-25% revenue penalty until next domestic delivery). */
+  importSource?: boolean;
 }
 
 export interface SaveData {
@@ -419,7 +428,9 @@ export function serialize(
       bigBuildBlockPaid: t.bigBuildBlockPaid,
       ramp: t.ramp,
       cloverleaf: t.cloverleaf,
-      bigBuildRotation: t.bigBuildRotation
+      bigBuildRotation: t.bigBuildRotation,
+      supplies: t.supplies,
+      importSource: t.importSource
     };
   }
   const edges: number[] = [];
@@ -603,6 +614,11 @@ export function applySave(
     // to 0 (every existing civic monument keeps its original
     // orientation across the upgrade).
     t.bigBuildRotation = (snap.bigBuildRotation ?? 0) as 0 | 1 | 2 | 3;
+    // Supply chain (schema 29+). Pre-29 saves load with supplies=1
+    // (fully stocked) so commercial revenue isn't suddenly choked the
+    // first time a long-running city is opened post-update.
+    t.supplies = snap.supplies ?? 1;
+    t.importSource = snap.importSource ?? false;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

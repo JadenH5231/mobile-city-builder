@@ -268,4 +268,23 @@ export class Tile {
    * supports.
    */
   cloverleaf = false;
+  /**
+   * Supply chain (Beta 1.6). For developed commercial tiles + warehouse
+   * tiles, this is the current inventory (0..1, normalised). Truck
+   * arrivals refill it; SupplyChain.tick consumes a small amount each
+   * sim month. When 0 on a commercial tile, that tile generates no tax
+   * revenue (the store is "out of stock"). On warehouse tiles, 0 means
+   * no goods to ship downstream — the warehouse stops dispatching
+   * delivery trucks until industry restocks it. Unused on every other
+   * building kind (residential, industrial, services, decoratives, etc).
+   */
+  supplies = 1;
+  /**
+   * Import-source flag (Beta 1.6). True when the most recent delivery
+   * to this commercial tile came from a city-edge import truck rather
+   * than from the city's own industry/warehouse network. Imports keep
+   * the store open but apply a -25% revenue penalty (priced-in cost of
+   * outsourced supply). Cleared on the next domestic delivery.
+   */
+  importSource = false;
 }

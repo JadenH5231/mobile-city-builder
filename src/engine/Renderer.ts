@@ -3617,6 +3617,50 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       }
       continue;
     }
+    // Big Box (Beta 1.3) — modular cluster of adjacent big_box tiles
+    // forms one strip-mall composition. The cluster builder also
+    // absorbs adjacent parking_lot tiles into the same paved field.
+    if (t.building === 'big_box') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'big_box', visited);
+      const parts = bigBoxClusterParts(cluster, grid);
+      // Also mark adjacent parking tiles as visited so they don't
+      // double-render when the per-tile parking_lot branch fires.
+      for (const c of cluster) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = c.x + dx, ny = c.y + dy;
+          const nt = grid.get(nx, ny);
+          if (nt && nt.building === 'parking_lot') {
+            visited.add(ny * grid.width + nx);
+          }
+        }
+      }
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
+    // Parking Lot (Beta 1.3) — standalone tile. Note: parking tiles
+    // adjacent to a big_box already rendered with the big_box cluster
+    // above (and have been added to `visited`), so only orphan
+    // parking lots reach this branch.
+    if (t.building === 'parking_lot') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const parts = parkingLotParts([{ x: t.x, y: t.y }]);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Mayor's Mansion (Alpha 4.2) — single-instance 4×2 showpiece. The
     // anchor tile (lex-smallest of the footprint) carries `building =
     // 'mayor_mansion'`; the other seven tiles have `mayorMansion=true`
@@ -4849,6 +4893,196 @@ function emitFarmFeature(
       break;
     }
   }
+}
+
+/* ---- Big Box + Parking Lot (Beta 1.3, Phase 1) ----------------------- *
+ *
+ * Big Box stores cluster like farm/forestry — adjacent big_box tiles
+ * flood-fill into one larger composition. The cluster builder ALSO
+ * walks adjacent parking_lot tiles and paves them as part of the same
+ * field, so a player surrounding a big_box with stalls reads as one
+ * lot. Parking lots placed standalone get their own builder below.
+ *
+ * Phase 1 ships the visuals + buildable types only. Phase 2 will wire
+ * the actual parking simulation (cars route to a stall, park, walker
+ * spawns to complete the trip). Phase 3 adds the difficulty slider.
+ * --------------------------------------------------------------------- */
+
+function bigBoxClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+  grid: Grid
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+  // Lex-order the cluster — first tile is the "primary store"; the
+  // rest are wings / annexes that extend the storefront.
+  const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  const memberSet = new Set<string>();
+  for (const c of sorted) memberSet.add(c.x + ',' + c.y);
+  // Collect adjacent parking_lot tiles (NOT inside the cluster) so we
+  // pave them in the same composition. They render as part of the
+  // store's lot rather than a separate disconnected square.
+  const adjacentParking = new Set<string>();
+  for (const c of sorted) {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = c.x + dx, ny = c.y + dy;
+      const nt = grid.get(nx, ny);
+      if (nt && nt.building === 'parking_lot') adjacentParking.add(nx + ',' + ny);
+    }
+  }
+
+  // Colour palette: warm beige big-box walls, dark asphalt apron, red
+  // brand stripe, white storefront fascia. Saturation is deliberately
+  // mid — these are NOT showpiece builds; they're commodity retail.
+  const wall = 0xd6c9aa;            // warm beige stucco
+  const wallDark = 0xa89e84;        // accent stripe / loading dock
+  const fascia = 0xf2efe5;           // white parapet band
+  const brandStripe = 0xc23a3a;      // red corporate stripe
+  const roof = 0x5e564a;             // dark tar roof
+  const roofAccent = 0x4a4338;
+  const asphalt = 0x2e2f33;
+  const stripeWhite = 0xefe7d2;      // parking-stall paint
+  const stripeYellow = 0xf2c648;
+  const cartCorral = 0xa9a297;
+  const lampPole = 0x2c2d31;
+  const lampHead = 0xfff2c8;
+
+  // 1. Asphalt apron under the entire cluster + the adjacent parking
+  // lots. Single flat layer 0.018 thick so it reads as paving without
+  // being a hill the store sits on.
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(1.02, 0.018, 1.02), color: asphalt, dx: cx, dy: 0.009, dz: cz });
+  }
+
+  // 2. Store body — a low, wide rectangular box across all cluster
+  // tiles. For 1-tile clusters this is a single store; for 2+ tiles
+  // it stretches across them as one continuous building.
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    // Wall (chunky 0.30 tall box).
+    out.push({ makeGeom: () => box(0.92, 0.30, 0.62), color: wall, dx: cx, dy: 0.18, dz: cz - 0.10 });
+    // Loading-dock / back of building accent (darker band along the rear).
+    out.push({ makeGeom: () => box(0.92, 0.10, 0.06), color: wallDark, dx: cx, dy: 0.05, dz: cz - 0.40 });
+    // White parapet fascia along the front face — pro big-box signal.
+    out.push({ makeGeom: () => box(0.92, 0.06, 0.04), color: fascia, dx: cx, dy: 0.36, dz: cz + 0.21 });
+    // Red corporate stripe just under the fascia.
+    out.push({ makeGeom: () => box(0.92, 0.025, 0.03), color: brandStripe, dx: cx, dy: 0.31, dz: cz + 0.205 });
+    // Flat dark-tar roof slab on top.
+    out.push({ makeGeom: () => box(0.94, 0.02, 0.64), color: roof, dx: cx, dy: 0.34, dz: cz - 0.10 });
+    // Two small roof HVAC units for industrial detail.
+    out.push({ makeGeom: () => box(0.14, 0.06, 0.10), color: roofAccent, dx: cx - 0.18, dy: 0.38, dz: cz - 0.10 });
+    out.push({ makeGeom: () => box(0.10, 0.04, 0.10), color: roofAccent, dx: cx + 0.20, dy: 0.37, dz: cz - 0.15 });
+  }
+
+  // 3. Storefront detail — entry doors + cart corrals on the primary
+  // (lex-smallest) tile only, so a multi-tile cluster reads as having
+  // one main entrance rather than N stamped doors.
+  const primary = sorted[0]!;
+  {
+    const cx = (primary.x + 0.5) * TILE_SIZE;
+    const cz = (primary.y + 0.5) * TILE_SIZE;
+    // Glass entry vestibule.
+    out.push({ makeGeom: () => box(0.34, 0.22, 0.04), color: 0x2a3a52, dx: cx, dy: 0.14, dz: cz + 0.22 });
+    // Sliding-door split line (subtle dark vertical strip).
+    out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: 0x141a24, dx: cx, dy: 0.14, dz: cz + 0.22 });
+    // Cart corrals — two small enclosures left + right of the entry.
+    for (const cxOff of [-0.28, 0.28]) {
+      out.push({ makeGeom: () => box(0.10, 0.05, 0.18), color: cartCorral, dx: cx + cxOff, dy: 0.025, dz: cz + 0.36 });
+    }
+  }
+
+  // 4. Lamp posts at the cluster corners — pavement-realistic detail.
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  for (const [lx, ly] of [[minX, maxY], [maxX, maxY]] as const) {
+    const cx = (lx + 0.5) * TILE_SIZE;
+    const cz = (ly + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: cx + 0.40, dy: 0.11, dz: cz + 0.40 });
+    out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: cx + 0.40, dy: 0.23, dz: cz + 0.40 });
+  }
+  void minX; void minY;
+
+  // 5. Adjacent parking-lot tiles — paved + striped exactly like a
+  // standalone parking_lot tile, but rendered together so the visual
+  // boundary between store apron and lot is seamless. Re-uses the
+  // parkingLotParts geometry helper inline.
+  for (const key of adjacentParking) {
+    const [sxStr, syStr] = key.split(',');
+    const sx = parseInt(sxStr!, 10), sy = parseInt(syStr!, 10);
+    emitParkingTile(out, sx, sy, asphalt, stripeWhite, stripeYellow, lampPole, lampHead);
+  }
+
+  return out;
+}
+
+/** Standalone parking-lot tile builder. Same paving + striping as the
+ *  parking lots absorbed into a big_box cluster. The painted stalls
+ *  here are visual only in Phase 1; Phase 2 will assign stall slots
+ *  to specific car instances. */
+function parkingLotParts(
+  cluster: Array<{ x: number; y: number }>
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+  const asphalt = 0x2e2f33;
+  const stripeWhite = 0xefe7d2;
+  const stripeYellow = 0xf2c648;
+  const lampPole = 0x2c2d31;
+  const lampHead = 0xfff2c8;
+  for (const c of cluster) {
+    emitParkingTile(out, c.x, c.y, asphalt, stripeWhite, stripeYellow, lampPole, lampHead);
+  }
+  return out;
+}
+
+/** Shared per-tile paving + stall geometry. Called by both the big_box
+ *  cluster builder (for adjacent parking tiles) and the standalone
+ *  parkingLotParts (for one-off lots). Emits an asphalt pad, painted
+ *  edge curb, two rows of stall stripes (3 stalls each = 6 visible
+ *  stall slots per tile), a centre median line, and a corner lamp. */
+function emitParkingTile(
+  out: CityBuildingPart[],
+  tileX: number, tileY: number,
+  asphalt: number, stripeWhite: number, stripeYellow: number,
+  lampPole: number, lampHead: number
+): void {
+  const cx = (tileX + 0.5) * TILE_SIZE;
+  const cz = (tileY + 0.5) * TILE_SIZE;
+  // 1. Asphalt pad.
+  out.push({ makeGeom: () => box(1.02, 0.018, 1.02), color: asphalt, dx: cx, dy: 0.009, dz: cz });
+  // 2. Faded yellow centre median (horizontal divider between the
+  // two parking rows).
+  out.push({ makeGeom: () => box(0.86, 0.005, 0.03), color: stripeYellow, dx: cx, dy: 0.020, dz: cz });
+  // 3. Two rows of 3 stall stripes each — 6 visible stalls per tile.
+  // Stripes are short white rectangles perpendicular to the median.
+  // Front row (positive Z), back row (negative Z).
+  for (const rowZ of [-0.30, 0.30]) {
+    for (const stallX of [-0.30, 0.00, 0.30]) {
+      out.push({
+        makeGeom: () => box(0.022, 0.005, 0.24),
+        color: stripeWhite, dx: cx + stallX, dy: 0.021, dz: cz + rowZ
+      });
+    }
+    // Also paint an outer-edge stripe so the row's outer boundary reads.
+    out.push({
+      makeGeom: () => box(0.022, 0.005, 0.24),
+      color: stripeWhite, dx: cx + 0.42, dy: 0.021, dz: cz + rowZ
+    });
+    out.push({
+      makeGeom: () => box(0.022, 0.005, 0.24),
+      color: stripeWhite, dx: cx - 0.42, dy: 0.021, dz: cz + rowZ
+    });
+  }
+  // 4. Corner lamp pole (one per tile, deterministic far-corner) so
+  // larger lots get a sprinkling of lights without needing perimeter
+  // logic in Phase 1.
+  out.push({ makeGeom: () => box(0.020, 0.20, 0.020), color: lampPole, dx: cx + 0.42, dy: 0.10, dz: cz + 0.42 });
+  out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: cx + 0.42, dy: 0.21, dz: cz + 0.42 });
 }
 
 function lerpColor(a: number, b: number, t: number): number {

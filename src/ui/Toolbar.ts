@@ -431,6 +431,17 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
               stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
         <path d="M3 21h18 M6 12v-3 M9 8v-2 M14 9v-3 M19 11v-2"
               stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` },
+      // Big Box store (Beta 1.3). Wide, low retail box icon — square
+      // outline with a fascia stripe + entry doors hint.
+      { kind: 'tool', tool: 'place_big_box', label: 'Big Box', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 9h18v11H3z M3 9l2-4h14l2 4 M10 14h4v6h-4z"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      // Parking Lot (Beta 1.3). 2x3-stall grid hint — pure geometric.
+      { kind: 'tool', tool: 'place_parking_lot', label: 'Parking', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 4h18v16H3z M7 4v16 M13 4v16 M19 4v16 M3 12h18"
+              stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
       </svg>` }
     ]
   },

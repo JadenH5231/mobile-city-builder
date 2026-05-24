@@ -34,8 +34,13 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * v19 land ownership, v18 skyscrapers, v17 districts, v16 bonds,
  * v15 tourism, v14 patina, v13 achievements, v12 bridges, v11 stats,
  * v10 events, v9 highestPop, v8 luxury, v7 elevation+bridge.
+ *
+ * v28 (Beta 1.3) — Big Box + Parking Lot building kinds. Pure additive:
+ * a tile's `building` field can now also be `'big_box'` or `'parking_lot'`.
+ * Older saves load identically since neither building can have been
+ * placed in them. No structural schema change.
  */
-const SCHEMA = 27;
+const SCHEMA = 28;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**

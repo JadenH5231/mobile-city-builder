@@ -1,7 +1,8 @@
 import type { Grid } from '../world/Grid';
 import type { PathGraph } from './PathGraph';
 import type { Pathfinding } from './Pathfinding';
-import { MAX_PEDESTRIANS, PEDESTRIAN_PALETTE } from '../types';
+import { MAX_PEDESTRIANS } from '../types';
+import { getActiveTheme } from '../themes/registry';
 
 /**
  * Pedestrian sim — runs alongside Vehicles and Buses. A walker spawns at a
@@ -84,7 +85,8 @@ export class Pedestrians {
     const path = pathfinder.findPath(pathGraph, startIdx, endIdx, grid.width);
     if (!path || path.length < 2 || path.length > MAX_WALK_TILES) return;
 
-    const color = PEDESTRIAN_PALETTE[Math.floor(Math.random() * PEDESTRIAN_PALETTE.length)] ?? 0xffffff;
+    const _pp = getActiveTheme().vehicles.pedestrians;
+    const color = _pp[Math.floor(Math.random() * _pp.length)] ?? 0xffffff;
     this.walkers.push({
       pathTiles: path,
       segmentIdx: 0,

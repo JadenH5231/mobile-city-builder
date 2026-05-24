@@ -11,6 +11,7 @@ import {
   DirectionalLight,
   DoubleSide,
   EdgesGeometry,
+  FogExp2,
   Group,
   HemisphereLight,
   IcosahedronGeometry,
@@ -69,26 +70,23 @@ import {
   PROVINCIAL_CAPITAL_DEPTH,
   NATIONAL_CAPITAL_WIDTH,
   NATIONAL_CAPITAL_DEPTH,
-  PATH_COLOR,
   PATH_LIFT,
   PATH_WIDTH,
   BRIDGE_LIFT,
   ROAD_LIFT,
   ROAD_TIER,
-  SIDEWALK_COLOR,
   SIDEWALK_LIFT,
   SIDEWALK_PAD,
   TILE_SIZE,
-  ZONE_COLORS,
   ZONE_LIFT,
   rotatedFootprint,
   type BigBuildRotation,
-  type TerrainType,
   type Zone
 } from '../types';
 import type { Buses } from '../simulation/Buses';
 import type { Pedestrians } from '../simulation/Pedestrians';
 import type { Vehicles } from '../simulation/Vehicles';
+import { getActiveTheme, tint } from '../themes/registry';
 
 /**
  * Three.js renderer. Builds the world from three big meshes — terrain, trees,
@@ -100,35 +98,20 @@ import type { Vehicles } from '../simulation/Vehicles';
  * The chunky low-poly look comes from per-vertex colours and flat shading
  * with simple Lambert / hemisphere-light setup. No textures yet — placeholder
  * art lives in code.
+ *
+ * **Theme-pack architecture (Beta 1.2):** colour constants below are
+ * fed from `getActiveTheme()` instead of being baked. The renderer
+ * subscribes to theme changes via `onThemeChange(() => refreshAll())`
+ * so swapping the pack repaints every mesh from scratch with the new
+ * palette. Long-tail colour literals deep inside build functions go
+ * through `tint(stockHex)` — a per-theme HSL+blend filter — so even
+ * unmigrated detail colours read as part of the active theme.
  */
-const TERRAIN_COLORS: Record<TerrainType, number> = {
-  // Slight ground-tone variation by terrain. Grass is the alpha-1 colour.
-  // Forest is darker green so cone-trees pop. Water is a richer blue
-  // (Alpha 2.3 — the old 0x3a7ec2 felt washed out next to land). Sand
-  // is the alpha-1 dune colour.
-  grass: 0x6aa84f,
-  forest: 0x4d8442,
-  water: 0x2c6fa8,
-  sand: 0xddc174
-};
-
-/** Slight tint applied to elevated tiles so hills aren't pure flat colour. */
-const HILL_HIGHLIGHT = 0x7bb558;
-/** Darker shade for valley floors / shaded grass. */
-const VALLEY_TINT = 0x5d9744;
-
-const ROAD_LANE = 0xf2cd5c;
+// THEME() is a thin accessor so call sites stay terse. The function
+// indirection is important: theme state can change at runtime, so we
+// must NOT capture it into a module-level const at load.
+function THEME() { return getActiveTheme(); }
 const SELECTION_COLOR = 0xffd84d;
-const TREE_TRUNK = 0x6e3e1d;
-const TREE_LEAF = 0x2f6a2d;
-/** Subtle dark green shadow disc under each tree (Alpha 2.6). */
-const TREE_SHADOW = 0x2a3a22;
-// Highway direction arrows restored in Beta 1.1.0 — directions are
-// player-set (paint-time imprint + flip tool) so the arrows are
-// stable + meaningful again.
-const HIGHWAY_ARROW_COLOR = 0xf2cd5c;
-const STOP_SIGN_COLOR = 0xc83838;
-const STOP_SIGN_TEXT = 0xffffff;
 
 export class Renderer {
   readonly scene = new Scene();
@@ -219,7 +202,7 @@ export class Renderer {
       powerPreference: 'high-performance'
     });
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.three.setClearColor(0x1a2722);
+    this.three.setClearColor(THEME().terrain.clearColor);
 
     this.scene.add(this.worldGroup);
     this.worldGroup.add(this.cityBuildingsGroup);
@@ -235,13 +218,22 @@ export class Renderer {
     // A few stylized clouds far above the world. Static — added to the
     // scene root so they don't pan with worldGroup.
     this.scene.add(makeClouds());
-    this.ambientLight = new AmbientLight(0xffffff, 0.55);
+    // Initial light setup — `applyTimeOfDay` re-derives all of this
+    // from the active theme's atmosphere on every sim frame.
+    const _atm0 = THEME().atmosphere;
+    this.ambientLight = new AmbientLight(0xffffff, _atm0.ambientIntensityDay);
     this.scene.add(this.ambientLight);
-    this.hemisphereLight = new HemisphereLight(0xbcd9ff, 0x223322, 0.45);
+    this.hemisphereLight = new HemisphereLight(_atm0.hemiSkyDay, _atm0.hemiGroundDay, 0.45);
     this.scene.add(this.hemisphereLight);
-    this.sunLight = new DirectionalLight(0xffffff, 0.85);
+    this.sunLight = new DirectionalLight(_atm0.sunColorNoon, _atm0.sunIntensityDay);
     this.sunLight.position.set(40, 80, 30);
     this.scene.add(this.sunLight);
+    // Optional fog — gentle Mediterranean haze on Coastal Pastel,
+    // none on Stock. Exponential falloff so distant tiles soften
+    // toward the theme's fog colour without a hard cutoff.
+    if (_atm0.fog) {
+      this.scene.fog = new FogExp2(_atm0.fog.color, _atm0.fog.density);
+    }
 
     // Selection square — a wireframe plane that we move to the picked tile.
     const sel = new Mesh(
@@ -307,7 +299,7 @@ export class Renderer {
     const sideWinR = new BoxGeometry(0.005, 0.045, 0.14);
     sideWinR.translate(0.080, 0.115, -0.02);
     const carWindowsGeom = mergeGeoms([winRect, sideWinL, sideWinR], [0xffffff, 0xffffff, 0xffffff]);
-    const carWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
+    const carWindowsMat = new MeshBasicMaterial({ color: THEME().vehicles.windows });
     this.carWindowsMesh = new InstancedMesh(carWindowsGeom, carWindowsMat, CAR_CAPACITY);
     this.carWindowsMesh.count = 0;
     this.carWindowsMesh.frustumCulled = false;
@@ -320,7 +312,7 @@ export class Renderer {
     const hlR = new BoxGeometry(0.030, 0.020, 0.012);
     hlR.translate(0.066, 0.040, 0.170);
     const carHeadlightsGeom = mergeGeoms([hlL, hlR], [0xffffff, 0xffffff]);
-    const carHeadlightsMat = new MeshBasicMaterial({ color: 0xfff4c0 });
+    const carHeadlightsMat = new MeshBasicMaterial({ color: THEME().vehicles.headlights });
     this.carHeadlightsMesh = new InstancedMesh(carHeadlightsGeom, carHeadlightsMat, CAR_CAPACITY);
     this.carHeadlightsMesh.count = 0;
     this.carHeadlightsMesh.frustumCulled = false;
@@ -331,7 +323,7 @@ export class Renderer {
     const tlR = new BoxGeometry(0.024, 0.018, 0.010);
     tlR.translate(0.066, 0.040, -0.170);
     const carTailGeom = mergeGeoms([tlL, tlR], [0xffffff, 0xffffff]);
-    const carTailMat = new MeshBasicMaterial({ color: 0xd83838 });
+    const carTailMat = new MeshBasicMaterial({ color: THEME().vehicles.taillights });
     this.carTaillightsMesh = new InstancedMesh(carTailGeom, carTailMat, CAR_CAPACITY);
     this.carTaillightsMesh.count = 0;
     this.carTaillightsMesh.frustumCulled = false;
@@ -533,7 +525,7 @@ export class Renderer {
         [winFront, winBack, winSideL, winSideR],
         [0xffffff, 0xffffff, 0xffffff, 0xffffff]
       );
-      const winMat = new MeshBasicMaterial({ color: 0x1a2434 });
+      const winMat = new MeshBasicMaterial({ color: THEME().vehicles.windows });
       this.tractorWindowsMesh = new InstancedMesh(winGeom, winMat, MAX_TRACTORS);
       this.tractorWindowsMesh.count = 0;
       this.tractorWindowsMesh.frustumCulled = false;
@@ -562,7 +554,7 @@ export class Renderer {
     const busWindshield = new BoxGeometry(0.14, 0.065, 0.005);
     busWindshield.translate(0, 0.110, 0.277);
     const busWindowsGeom = mergeGeoms([busWinL, busWinR, busWindshield], [0xffffff, 0xffffff, 0xffffff]);
-    const busWindowsMat = new MeshBasicMaterial({ color: 0x1a2434 });
+    const busWindowsMat = new MeshBasicMaterial({ color: THEME().vehicles.windows });
     this.busWindowsMesh = new InstancedMesh(busWindowsGeom, busWindowsMat, 16);
     this.busWindowsMesh.count = 0;
     this.busWindowsMesh.frustumCulled = false;
@@ -574,7 +566,7 @@ export class Renderer {
     const bhlR = new BoxGeometry(0.040, 0.030, 0.012);
     bhlR.translate(0.085, 0.060, 0.277);
     const busHeadlightsGeom = mergeGeoms([bhlL, bhlR], [0xffffff, 0xffffff]);
-    const busHeadlightsMat = new MeshBasicMaterial({ color: 0xfff4c0 });
+    const busHeadlightsMat = new MeshBasicMaterial({ color: THEME().vehicles.headlights });
     this.busHeadlightsMesh = new InstancedMesh(busHeadlightsGeom, busHeadlightsMat, 16);
     this.busHeadlightsMesh.count = 0;
     this.busHeadlightsMesh.frustumCulled = false;
@@ -1733,28 +1725,32 @@ export class Renderer {
     this.sunLight.position.set(sunX, Math.max(-30, sunY), sunZ);
     // Day = 0.25..0.75 (sun above horizon).
     const dayMix = sunY > 0 ? Math.min(1, sunY / 50) : 0;
+    // Theme-driven sky + lighting (Beta 1.2). Stock = original constants;
+    // Coastal Pastel ships warmer sun colours + brighter day intensity +
+    // pastel hemisphere tones + gentle haze fog.
+    const atm = THEME().atmosphere;
     // Sun colour: warm at dawn/dusk, white at noon, cool dim at night.
     const sunColor = lerpHexColor(
-      0x4060c0,                         // night
-      lerpHexColor(0xf0a060, 0xffffff, dayMix), // dawn/dusk → noon
+      atm.sunColorNight,
+      lerpHexColor(atm.sunColorWarm, atm.sunColorNoon, dayMix),
       Math.min(1, Math.max(0, sunY / 40))
     );
     this.sunLight.color.setHex(sunColor);
-    this.sunLight.intensity = 0.18 + dayMix * 0.85;
-    this.ambientLight.intensity = 0.20 + dayMix * 0.45;
+    this.sunLight.intensity = atm.sunIntensityNight + dayMix * (atm.sunIntensityDay - atm.sunIntensityNight);
+    this.ambientLight.intensity = atm.ambientIntensityNight + dayMix * (atm.ambientIntensityDay - atm.ambientIntensityNight);
     this.hemisphereLight.intensity = 0.20 + dayMix * 0.40;
     // Hemisphere sky/ground tint: shift cooler at night.
     if (dayMix < 0.05) {
-      this.hemisphereLight.color.setHex(0x303860);
-      this.hemisphereLight.groundColor.setHex(0x101820);
+      this.hemisphereLight.color.setHex(atm.hemiSkyNight);
+      this.hemisphereLight.groundColor.setHex(atm.hemiGroundNight);
     } else {
-      this.hemisphereLight.color.setHex(0xbcd9ff);
-      this.hemisphereLight.groundColor.setHex(0x223322);
+      this.hemisphereLight.color.setHex(atm.hemiSkyDay);
+      this.hemisphereLight.groundColor.setHex(atm.hemiGroundDay);
     }
     // Repaint sky gradient. Use the WARPED phase too so the sky shifts
     // in lockstep with the sun (otherwise night sky would show during a
     // mid-day visual).
-    repaintSkyGradient(this.skyTexture, warped);
+    repaintSkyGradient(this.skyTexture, warped, atm);
     // Update night-overlay opacity based on darkness amount. Three
     // independently-controllable overlays (Alpha 3.1.6):
     //  - nightLightsMesh: visible lamp fixtures (poles + bulbs).
@@ -1788,6 +1784,49 @@ export class Renderer {
     const mat = m.material;
     if (Array.isArray(mat)) for (const x of mat) x.dispose();
     else mat.dispose();
+  }
+
+  /**
+   * Full theme repaint (Beta 1.2). Called when the active theme changes
+   * mid-game — drops every cached mesh, re-derives global atmosphere
+   * (clear colour, fog, sky), and rebuilds the world from scratch with
+   * the new palette.
+   *
+   * Cheap-ish: each rebuild path is the same one we run on a paint
+   * action, just all together. Even on a Capital-tier city the full
+   * sweep is comfortably under 200 ms on a mid-range device.
+   */
+  refreshTheme(grid: Grid, cityMood = 0, monthsElapsed = 0, forestryHealth = 1, farmHealth = 1): void {
+    const _atm = THEME().atmosphere;
+    this.three.setClearColor(THEME().terrain.clearColor);
+    // Re-derive fog: install / update / clear based on the active theme.
+    if (_atm.fog) {
+      const existing = this.scene.fog;
+      if (existing instanceof FogExp2) {
+        existing.color.setHex(_atm.fog.color);
+        existing.density = _atm.fog.density;
+      } else {
+        this.scene.fog = new FogExp2(_atm.fog.color, _atm.fog.density);
+      }
+    } else if (this.scene.fog) {
+      this.scene.fog = null;
+    }
+    // Force a sky repaint at the current phase so the gradient picks up
+    // the new keyframes immediately rather than waiting for the next
+    // applyTimeOfDay tick.
+    repaintSkyGradient(this.skyTexture, 0.5, _atm);
+    // Rebuild every world mesh — terrain, zones, paths, roads, buildings,
+    // services, beautification. Order matches Game.init's first draw
+    // pass so the worldGroup ends up in the same state.
+    this.drawWorld(grid);
+    this.drawZones(grid);
+    this.drawPaths(grid);
+    this.drawRoads(grid);
+    this.drawBuildings(grid, cityMood, monthsElapsed);
+    this.drawCityBuildings(grid, forestryHealth, farmHealth);
+    if (this.beautificationProvider) {
+      this.drawBeautification(grid, this.beautificationProvider());
+    }
   }
 }
 
@@ -1831,11 +1870,19 @@ function buildTerrainMesh(grid: Grid): Mesh {
       const tile = grid.get(x, y)!;
       // Tint by elevation: brighten hilltops, darken valleys for grass
       // so terrain reads as 3D even on flat-shaded vertex colours.
-      const baseHex = TERRAIN_COLORS[tile.terrain] ?? TERRAIN_COLORS.grass;
+      // Theme-driven (Beta 1.2) — each pack defines its own grass/forest/
+      // water/sand + hill highlight / valley tint values.
+      const _terrain = THEME().terrain;
+      const baseHex =
+        tile.terrain === 'grass'  ? _terrain.grass  :
+        tile.terrain === 'forest' ? _terrain.forest :
+        tile.terrain === 'water'  ? _terrain.water  :
+        tile.terrain === 'sand'   ? _terrain.sand   :
+        _terrain.grass;
       if (tile.terrain === 'grass' && tile.elevation > 0.10) {
-        c.setHex(HILL_HIGHLIGHT);
+        c.setHex(_terrain.hillHighlight);
       } else if (tile.terrain === 'grass' && tile.elevation < -0.02) {
-        c.setHex(VALLEY_TINT);
+        c.setHex(_terrain.valleyTint);
       } else {
         c.setHex(baseHex);
       }
@@ -1901,8 +1948,11 @@ function buildTreesMesh(grid: Grid): Mesh | null {
     const variant = (r >> 8) % 3;
     // Scale wobble: 0.85..1.15 — keeps the forest visually loose.
     const scale = 0.85 + ((r >> 14) & 0xFF) / 255 * 0.30;
-    // Leaf tint variation — three closely related greens.
-    const leafTints = [TREE_LEAF, 0x3a7a3a, 0x4a8e3a];
+    // Leaf tint variation — three closely related greens, anchored to
+    // the active theme's primary leaf colour (Beta 1.2). Coastal Pastel
+    // gives this olive-grove silver-green; stock gives forest-green.
+    const _leaf = THEME().flora.leaf;
+    const leafTints = [_leaf, tint(0x3a7a3a), tint(0x4a8e3a)];
     const leafColor = leafTints[(r >> 22) % leafTints.length]!;
     const cx = (t.x + 0.5) * TILE_SIZE + ox;
     const cz = (t.y + 0.5) * TILE_SIZE + oz;
@@ -1914,7 +1964,7 @@ function buildTreesMesh(grid: Grid): Mesh | null {
     const shadowR = 0.32 * scale;
     const shadow = new CylinderGeometry(shadowR, shadowR * 0.92, 0.005, 8);
     shadow.translate(cx, t.elevation + 0.0035, cz);
-    geoms.push(shadow); colours.push(TREE_SHADOW);
+    geoms.push(shadow); colours.push(THEME().flora.shadow);
 
     if (variant === 0) {
       // Cone tree
@@ -1924,7 +1974,7 @@ function buildTreesMesh(grid: Grid): Mesh | null {
       trunk.translate(0, trunkH / 2, 0);
       trunk.rotateY(rot);
       trunk.translate(cx, 0, cz);
-      geoms.push(trunk); colours.push(TREE_TRUNK);
+      geoms.push(trunk); colours.push(THEME().flora.trunk);
       const leaves = new ConeGeometry(0.28 * scale, leafH, 8);
       leaves.translate(0, trunkH + leafH / 2, 0);
       leaves.rotateY(rot);
@@ -1937,7 +1987,7 @@ function buildTreesMesh(grid: Grid): Mesh | null {
       trunk.translate(0, trunkH / 2, 0);
       trunk.rotateY(rot);
       trunk.translate(cx, 0, cz);
-      geoms.push(trunk); colours.push(TREE_TRUNK);
+      geoms.push(trunk); colours.push(THEME().flora.trunk);
       const lowerH = 0.40 * scale;
       const lower = new ConeGeometry(0.22 * scale, lowerH, 8);
       lower.translate(0, trunkH + lowerH / 2, 0);
@@ -1957,7 +2007,7 @@ function buildTreesMesh(grid: Grid): Mesh | null {
       trunk.translate(0, trunkH / 2, 0);
       trunk.rotateY(rot);
       trunk.translate(cx, 0, cz);
-      geoms.push(trunk); colours.push(TREE_TRUNK);
+      geoms.push(trunk); colours.push(THEME().flora.trunk);
       // Octahedron — sphere-ish low-poly leaf cluster.
       const leafR = 0.30 * scale;
       const leaves = new ConeGeometry(leafR, leafR * 1.6, 6);
@@ -2088,7 +2138,9 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
         if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        // Theme tint (Beta 1.2): long-tail filter so unmigrated detail
+        // colours still feel of-a-piece with the active palette.
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -2118,7 +2170,12 @@ function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number)
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       if (yLift !== 0) p.geom.translate(0, yLift, 0);
       geoms.push(p.geom);
-      colours.push(patina < 1 ? darkenHex(p.color, patina) : p.color);
+      // Theme tint applied at merge time (Beta 1.2) — every per-variant
+      // colour passes through the active pack's mood filter, so the
+      // whole zoned city reads as a coherent palette even though each
+      // variant's BuildingVariants.ts entry stays as authored.
+      const tinted = tint(p.color);
+      colours.push(patina < 1 ? darkenHex(tinted, patina) : tinted);
     }
   }
   if (geoms.length === 0) return null;
@@ -2147,7 +2204,7 @@ function buildSkyscrapersMesh(grid: Grid): Mesh | null {
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       if (yLift !== 0) p.geom.translate(0, yLift, 0);
       geoms.push(p.geom);
-      colours.push(p.color);
+      colours.push(tint(p.color));
     }
   }
   if (geoms.length === 0) return null;
@@ -2592,11 +2649,15 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
 
-  const LAMP_GLOW = 0xfff0a8;       // warm yellow lamp glow
-  const PARK_LAMP_GLOW = 0xffe4b0;  // softer warm tone
-  const LAMP_POLE = 0x3a3a3a;       // dark pole
-  const GROUND_GLOW = 0xfff0a8;     // ground-disc colour matches the bulb
-  const PARK_GROUND_GLOW = 0xffe4b0;
+  // Theme-driven lamp colours (Beta 1.2). Bulb glow inherits from the
+  // theme's lampBulb; the secondary "park" tone is a softer warm-shift
+  // of the same hue. Pole reads from theme.beautification.lampPole.
+  const _bp = THEME().beautification;
+  const LAMP_GLOW = _bp.lampBulb;
+  const PARK_LAMP_GLOW = tint(0xffe4b0);
+  const LAMP_POLE = _bp.lampPole;
+  const GROUND_GLOW = _bp.lampBulb;
+  const PARK_GROUND_GLOW = tint(0xffe4b0);
 
   /** Lamp fixture (Alpha 3.1.6): emits ONLY the visible pole + bulb.
    *  The smooth ground-glow is now a separate `lampGlowMesh` rendered
@@ -3526,7 +3587,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
         const g = p.makeGeom();
         g.translate(p.dx, p.dy, p.dz);
         geoms.push(g);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3539,7 +3600,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
         const g = p.makeGeom();
         g.translate(p.dx, p.dy, p.dz);
         geoms.push(g);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3552,7 +3613,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
         const g = p.makeGeom();
         g.translate(p.dx, p.dy, p.dz);
         geoms.push(g);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3573,7 +3634,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3588,7 +3649,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3599,7 +3660,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3610,7 +3671,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3627,7 +3688,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       for (const p of parts) {
         if (yLift !== 0) p.geom.translate(0, yLift, 0);
         geoms.push(p.geom);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
       continue;
     }
@@ -3655,14 +3716,14 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
         const dzR = p.dx * sinY + p.dz * cosY;
         g.translate(cx + dxR, p.dy, cz + dzR);
         geoms.push(g);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
     } else {
       for (const p of parts) {
         const g = p.makeGeom();
         g.translate(cx + p.dx, p.dy, cz + p.dz);
         geoms.push(g);
-        colours.push(p.color);
+        colours.push(tint(p.color));
       }
     }
     // Walkway connecting the building's front face to the adjacent road
@@ -3673,7 +3734,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       const g = p.makeGeom();
       g.translate(cx + p.dx, p.dy, cz + p.dz);
       geoms.push(g);
-      colours.push(p.color);
+      colours.push(tint(p.color));
     }
   }
 
@@ -3712,7 +3773,7 @@ function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmHealth: 
       const g = p.makeGeom();
       g.translate(cx + p.dx, p.dy + yLift, cz + p.dz);
       geoms.push(g);
-      colours.push(p.color);
+      colours.push(tint(p.color));
     }
   }
 
@@ -5410,16 +5471,19 @@ function buildBeautificationMesh(
     tier === 'light'    ? 1 : 0;
   if (tierLevel === 0) return null;
 
-  // Palette — bright cheerful colours for awning + planter + banner.
-  const PLANT_GREEN = 0x4d8c3a;
-  const PLANTER     = 0x6e4622;
-  const BANNER_RED  = 0xd84545;
-  const BANNER_BLUE = 0x4d8eb9;
-  const LAMP_POLE   = 0x222a32;
-  const LAMP_BULB   = 0xf2cd5c;
-  const TABLE_TOP   = 0xe8e2d4;
-  const ART_BRONZE  = 0x8c6a3a;
-  const ART_BASE    = 0x8a857a;
+  // Palette — theme-driven beautification colours (Beta 1.2). Each
+  // theme provides its own planter / banner / lamp / table / art
+  // values so streetscape flair reads as part of the active pack.
+  const _b = THEME().beautification;
+  const PLANT_GREEN = THEME().flora.plant;
+  const PLANTER     = _b.planter;
+  const BANNER_RED  = _b.bannerPrimary;
+  const BANNER_BLUE = _b.bannerSecondary;
+  const LAMP_POLE   = _b.lampPole;
+  const LAMP_BULB   = _b.lampBulb;
+  const TABLE_TOP   = _b.tableTop;
+  const ART_BRONZE  = _b.artBronze;
+  const ART_BASE    = _b.artBase;
 
   // Per-corner offsets — the four lot corners of a developed tile.
   // We deliberately push toward the lot edge so props land on the
@@ -5564,27 +5628,30 @@ function makeSkyGradient(): CanvasTexture {
   canvas.height = 256;
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
-  // Initial paint at noon (Alpha 2.14 day/night will repaint each frame).
-  repaintSkyGradient(tex, 0.5);
+  // Initial paint at noon — `applyTimeOfDay` will repaint with the
+  // active theme on the very first sim frame.
+  repaintSkyGradient(tex, 0.5, getActiveTheme().atmosphere);
   return tex;
 }
 
 /**
  * Repaint the sky gradient texture for the current time of day (Alpha
- * 2.14). Three keyframe ramps — night → dawn → noon → dusk → night —
+ * 2.14). Five keyframe ramps — night → dawn → noon → dusk → night —
  * lerped together so the sky shifts smoothly across the day cycle.
+ *
+ * Theme-driven (Beta 1.2): keyframes + mid-stop position come from the
+ * active theme's atmosphere. Stock uses the original deep-blue noon /
+ * peach dusk palette; Coastal Pastel uses warm pastel zeniths + soft
+ * horizon glow that reads as Aegean light.
  */
-function repaintSkyGradient(tex: CanvasTexture, phase: number): void {
+function repaintSkyGradient(
+  tex: CanvasTexture,
+  phase: number,
+  atm: { skyKeyframes: ReadonlyArray<{ p: number; zenith: number; mid: number; horizon: number }>; skyMidStop: number }
+): void {
   const canvas = tex.image as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
-  // Keyframe palette: zenith / mid / horizon at four phases.
-  const KF = [
-    { p: 0.00, zenith: 0x141a35, mid: 0x2a2c4a, horizon: 0x4a3a5a },  // midnight
-    { p: 0.22, zenith: 0x4a4f8a, mid: 0xc6886a, horizon: 0xe8a060 },  // dawn
-    { p: 0.50, zenith: 0x5d96d4, mid: 0xa4caea, horizon: 0xe6d8be },  // noon
-    { p: 0.78, zenith: 0x3a4a8a, mid: 0xa66a8a, horizon: 0xe06850 },  // dusk
-    { p: 1.00, zenith: 0x141a35, mid: 0x2a2c4a, horizon: 0x4a3a5a }   // midnight wrap
-  ];
+  const KF = atm.skyKeyframes;
   let lo = KF[0]!, hi = KF[1]!;
   for (let i = 0; i < KF.length - 1; i++) {
     if (phase >= KF[i]!.p && phase <= KF[i + 1]!.p) { lo = KF[i]!; hi = KF[i + 1]!; break; }
@@ -5595,7 +5662,7 @@ function repaintSkyGradient(tex: CanvasTexture, phase: number): void {
   const horizon = lerpHexColor(lo.horizon, hi.horizon, t);
   const grad = ctx.createLinearGradient(0, 0, 0, 256);
   grad.addColorStop(0.00, '#' + zenith.toString(16).padStart(6, '0'));
-  grad.addColorStop(0.55, '#' + mid.toString(16).padStart(6, '0'));
+  grad.addColorStop(atm.skyMidStop, '#' + mid.toString(16).padStart(6, '0'));
   grad.addColorStop(1.00, '#' + horizon.toString(16).padStart(6, '0'));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1, 256);
@@ -5775,7 +5842,7 @@ function buildZoneMesh(grid: Grid): Mesh | null {
 
   for (const t of grid.iter()) {
     if (t.zone === 'none') continue;
-    c.setHex(ZONE_COLORS[t.zone as Exclude<Zone, 'none'>]);
+    c.setHex(THEME().buildings.zoneOverlay[t.zone as Exclude<Zone, 'none'>]);
     // Tier shading — low zones look slightly washed out, high zones more
     // saturated. Player can read intent from the overlay alone. Multiply
     // each channel by the tier factor (0.78 / 0.92 / 1.06) so the colour
@@ -6018,7 +6085,7 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   if (yellowLanePositions.length > 0) {
     const lg = new BufferGeometry();
     lg.setAttribute('position', new BufferAttribute(new Float32Array(yellowLanePositions), 3));
-    lanes = new LineSegments(lg, new LineBasicMaterial({ color: ROAD_LANE }));
+    lanes = new LineSegments(lg, new LineBasicMaterial({ color: THEME().roads.laneStripe }));
   }
   if (whiteLanePositions.length > 0) {
     const wg = new BufferGeometry();
@@ -6248,9 +6315,10 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
         );
         arrows.push(chevron);
         // Dim the trailing chevron by interpolating toward the asphalt.
-        const ar = ((HIGHWAY_ARROW_COLOR >> 16) & 0xff) / 255;
-        const ag = ((HIGHWAY_ARROW_COLOR >> 8) & 0xff) / 255;
-        const ab = (HIGHWAY_ARROW_COLOR & 0xff) / 255;
+        const _arrowHex = THEME().roads.highwayArrow;
+        const ar = ((_arrowHex >> 16) & 0xff) / 255;
+        const ag = ((_arrowHex >> 8) & 0xff) / 255;
+        const ab = (_arrowHex & 0xff) / 255;
         const aspR = 0x25 / 255;
         const dimmedR = aspR + (ar - aspR) * brightnessAlpha;
         const dimmedG = aspR + (ag - aspR) * brightnessAlpha;
@@ -6291,14 +6359,14 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
         sign.rotateX(Math.PI / 2);
         sign.translate(px, tileY + 0.10, pz);
         stops.push(sign);
-        stopColours.push(STOP_SIGN_COLOR);
+        stopColours.push(THEME().roads.stopSignBody);
 
         // White face hint for the silhouette of a stop sign.
         const face = new CylinderGeometry(0.035, 0.035, 0.003, 8);
         face.rotateX(Math.PI / 2);
         face.translate(px, tileY + 0.111, pz);
         stops.push(face);
-        stopColours.push(STOP_SIGN_TEXT);
+        stopColours.push(THEME().roads.stopSignText);
       }
     }
   }
@@ -6791,7 +6859,7 @@ function buildPathMesh(grid: Grid): Mesh | null {
   const colours = new Float32Array(maxQuads * 4 * 3);
   const indices = new Uint32Array(maxQuads * 6);
   const c = new Color();
-  c.setHex(PATH_COLOR);
+  c.setHex(THEME().roads.path);
 
   let vi = 0, ci = 0, ii = 0, v = 0;
   const half = PATH_WIDTH / 2;
@@ -6886,7 +6954,7 @@ function buildSidewalkMesh(grid: Grid): Mesh | null {
   const colours = new Float32Array(tiles.length * 4 * 3);
   const indices = new Uint32Array(tiles.length * 6);
   const c = new Color();
-  c.setHex(SIDEWALK_COLOR);
+  c.setHex(THEME().roads.sidewalk);
   const halfTile = TILE_SIZE * 0.5;
 
   let vi = 0, ci = 0, ii = 0, v = 0;

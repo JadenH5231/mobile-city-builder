@@ -3942,6 +3942,102 @@ body.photo-mode .tutorial-banner {
   min-width: 0;
 }
 
+/* Theme picker (Beta 1.2) — card grid at the top of Settings.
+   Each card is a button rendered by ThemePicker.ts. The grid auto-
+   fits 1 column on phones, 2 columns on wider settings panels. */
+.settings__theme-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+@media (min-width: 480px) {
+  .settings__theme-grid { grid-template-columns: 1fr 1fr; }
+}
+.settings__theme-card {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(207, 232, 214, 0.15);
+  color: var(--pill-fg);
+  border-radius: 12px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: inherit;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.settings__theme-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 216, 77, 0.35);
+}
+.settings__theme-card.is-active {
+  background: rgba(255, 216, 77, 0.10);
+  border-color: rgba(255, 216, 77, 0.55);
+}
+.settings__theme-card.is-active .settings__theme-name {
+  color: #ffe98a;
+}
+.settings__theme-swatch {
+  position: relative;
+  height: 56px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+.settings__theme-swatch-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.30);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.settings__theme-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings__theme-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pill-fg);
+}
+.settings__theme-tagline {
+  font-size: 11px;
+  color: #9ba0a8;
+  line-height: 1.35;
+}
+.settings__theme-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  flex: 0 0 auto;
+}
+.settings__theme-status--active {
+  background: rgba(255, 216, 77, 0.18);
+  border-color: rgba(255, 216, 77, 0.55);
+  color: #ffe98a;
+}
+.settings__theme-status--free {
+  background: rgba(109, 208, 106, 0.18);
+  border-color: rgba(109, 208, 106, 0.45);
+  color: #b6e8b6;
+}
+.settings__theme-status--price {
+  background: rgba(77, 142, 232, 0.18);
+  border-color: rgba(77, 142, 232, 0.45);
+  color: #b6d4ec;
+}
+
 /* Legal & support group (Beta 1.1.6) — dedicated Settings section
    surfacing the Privacy Policy + Terms of Service + contact email.
    Replaced the canvas-footer chip at user request: discoverability via

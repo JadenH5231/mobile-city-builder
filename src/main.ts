@@ -7,7 +7,14 @@ import { formatCurrency } from './ui/BudgetPanel';
 import { initAuth, onAuthChange } from './auth/AuthState';
 import { isCloudEnabled, getSupabase } from './auth/SupabaseClient';
 import { AuthModal } from './ui/AuthModal';
+import { initThemes } from './themes/registry';
+import { bindThemePicker } from './ui/ThemePicker';
 import './styles.css';
+
+// Theme pack init (Beta 1.2). Restores the player's active theme from
+// localStorage BEFORE Game.init so the very first renderer pass uses
+// the correct palette. No-op when no theme is saved (stays on Stock).
+initThemes();
 
 // Auth init (Alpha 4.25). Restores any persisted session BEFORE Game.init
 // so the first saveGame.load() inside Game.init can pull from the cloud
@@ -784,6 +791,21 @@ const settingsPanel = bindSettingsPanel(settings, {
 });
 const settingsBtn = document.getElementById('hud-settings');
 if (settingsBtn) settingsBtn.addEventListener('click', () => settingsPanel.show());
+
+// Theme picker (Beta 1.2). Tapping a card swaps the active theme and
+// fires a full renderer repaint so the world repaints in-place — no
+// reload required.
+bindThemePicker({
+  onApply: () => {
+    game.renderer.refreshTheme(
+      game.grid,
+      game.cityMood(),
+      game.economy.monthsElapsed,
+      game.forestryHealth(),
+      game.farmHealth()
+    );
+  }
+});
 
 // Reset button uses an inline two-tap confirmation rather than confirm().
 // Reason: iOS Safari standalone mode (page added to home screen via the

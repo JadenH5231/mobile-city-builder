@@ -139,6 +139,18 @@
            outer panel at 100vh - 120px with overflow:hidden, so the actual
            scroll has to happen on this inner wrapper. -->
       <div class="settings__scroll">
+
+      <!-- Theme pack picker (Beta 1.2). First group in Settings so the
+           visual-overhaul feature is the first thing players see. Cards
+           are rendered dynamically by ThemePicker.ts from the registry;
+           container starts empty so add-a-new-pack doesn't require an
+           index.html edit. -->
+      <div class="settings__group">
+        <div class="settings__group-title">Theme</div>
+        <div class="settings__group-sub">Repaints the whole world with a different palette + atmosphere. Stock and Coastal Pastel are free; future packs unlock here.</div>
+        <div id="setting-theme-grid" class="settings__theme-grid"></div>
+      </div>
+
       <div class="settings__group">
         <div class="settings__group-title">Difficulty (new cities only)</div>
         <div class="settings__group-sub">Applied when you reset a city or start an empty slot. Current cities keep their difficulty.</div>

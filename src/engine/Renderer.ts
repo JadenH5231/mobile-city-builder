@@ -62,6 +62,7 @@ import {
   MAX_VEHICLES,
   MAX_TOURIST_VEHICLES,
   MAX_SERVICE_VEHICLES,
+  MAX_TRUCKS,
   MAYOR_MANSION_WIDTH,
   MAYOR_MANSION_DEPTH,
   CITY_HALL_WIDTH,
@@ -162,6 +163,17 @@ export class Renderer {
    *  up (taller, longer) so fire trucks visibly read as trucks vs
    *  sedans. */
   private fireAccessoriesMesh!: InstancedMesh;
+  /** Transport-truck meshes (Beta 1.5). Trucks share the per-frame
+   *  segment-following loop with cars but render through their own
+   *  InstancedMeshes because their silhouette is fundamentally bigger
+   *  (semi-truck: dark chassis + light cab + cargo box + windshield +
+   *  headlights + taillights). Four sibling meshes: body (per-instance
+   *  colour for cab+cargo, baked-dark chassis), glass (fixed dark),
+   *  headlights (fixed yellow), taillights (fixed red). */
+  private truckBodyMesh!: InstancedMesh;
+  private truckGlassMesh!: InstancedMesh;
+  private truckHeadlightsMesh!: InstancedMesh;
+  private truckTaillightsMesh!: InstancedMesh;
   /** Farm tractor mesh (Alpha 4.19). One animated tractor per farm
    *  cluster ≥ FARM_TRACTOR_MIN_CLUSTER tiles. Chassis + cabin +
    *  exhaust + 4 wheels + headlights + rear hitch baked into the
@@ -450,6 +462,85 @@ export class Renderer {
       this.fireAccessoriesMesh.count = 0;
       this.fireAccessoriesMesh.frustumCulled = false;
       this.worldGroup.add(this.fireAccessoriesMesh);
+    }
+
+    // Transport trucks (Beta 1.5). Semi-truck silhouette = dark chassis
+    // (full-length base frame) + light-coloured cab (front) + light-
+    // coloured cargo box (rear, slightly taller). Layout in local frame
+    // matches the car convention: +Z is forward, headlights at cab
+    // front, taillights at cargo box rear. The cab + cargo box have
+    // vertex color WHITE so per-instance color tints them; the chassis
+    // is baked as DARK GREY in the vertex color stream so the per-
+    // instance color tints it minimally (white × 0.15 = 0.15) — the
+    // frame stays dark regardless of truck fleet colour.
+    {
+      const TRUCK_CHASSIS = 0x2a2a2a;        // dark grey frame
+      const TRUCK_LIGHT = 0xffffff;          // cab + cargo (per-instance tint)
+      // Chassis: full-length base frame.
+      const truckChassis = new BoxGeometry(0.22, 0.04, 0.50);
+      truckChassis.translate(0, 0.020, 0);
+      // Cab: 0.16 long, sits front (z>0), starts at z=0.09, ends z=0.25.
+      const truckCab = new BoxGeometry(0.22, 0.10, 0.16);
+      truckCab.translate(0, 0.040 + 0.050, 0.170);
+      // Cargo box: 0.28 long, sits rear (z<0). Slightly TALLER than cab
+      // for a real box-truck silhouette (cab ends y=0.14, cargo
+      // ends y=0.19).
+      const truckCargo = new BoxGeometry(0.22, 0.15, 0.28);
+      truckCargo.translate(0, 0.040 + 0.075, -0.090);
+      // Small cab-to-cargo step is the 0.04 gap from z=0.05 (cargo
+      // front) to z=0.09 (cab back) — left as chassis frame only.
+      const truckBodyGeom = mergeGeoms(
+        [truckChassis, truckCab, truckCargo],
+        [TRUCK_CHASSIS, TRUCK_LIGHT, TRUCK_LIGHT]
+      );
+      // Material: vertexColors true so the chassis grey + cab/cargo
+      // white are read from the vertex stream; per-instance color
+      // multiplies onto each (chassis stays dark because 0.15 × any
+      // tint is still dark).
+      const truckBodyMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+      this.truckBodyMesh = new InstancedMesh(truckBodyGeom, truckBodyMat, MAX_TRUCKS);
+      this.truckBodyMesh.count = 0;
+      this.truckBodyMesh.frustumCulled = false;
+      this.worldGroup.add(this.truckBodyMesh);
+      // Glass: dark windshield on the cab front face + side windows
+      // along the cab flanks (matches the car windows convention).
+      const truckWindshield = new BoxGeometry(0.18, 0.06, 0.005);
+      truckWindshield.translate(0, 0.115, 0.25 - 0.003);
+      const truckSideWinL = new BoxGeometry(0.005, 0.05, 0.13);
+      truckSideWinL.translate(-0.110, 0.110, 0.170);
+      const truckSideWinR = new BoxGeometry(0.005, 0.05, 0.13);
+      truckSideWinR.translate(0.110, 0.110, 0.170);
+      const truckGlassGeom = mergeGeoms(
+        [truckWindshield, truckSideWinL, truckSideWinR],
+        [0xffffff, 0xffffff, 0xffffff]
+      );
+      const truckGlassMat = new MeshBasicMaterial({ color: THEME().vehicles.windows });
+      this.truckGlassMesh = new InstancedMesh(truckGlassGeom, truckGlassMat, MAX_TRUCKS);
+      this.truckGlassMesh.count = 0;
+      this.truckGlassMesh.frustumCulled = false;
+      this.worldGroup.add(this.truckGlassMesh);
+      // Headlights — two bright dots low on the cab front face.
+      const truckHlL = new BoxGeometry(0.030, 0.020, 0.012);
+      truckHlL.translate(-0.072, 0.060, 0.252);
+      const truckHlR = new BoxGeometry(0.030, 0.020, 0.012);
+      truckHlR.translate(0.072, 0.060, 0.252);
+      const truckHlGeom = mergeGeoms([truckHlL, truckHlR], [0xffffff, 0xffffff]);
+      const truckHlMat = new MeshBasicMaterial({ color: THEME().vehicles.headlights });
+      this.truckHeadlightsMesh = new InstancedMesh(truckHlGeom, truckHlMat, MAX_TRUCKS);
+      this.truckHeadlightsMesh.count = 0;
+      this.truckHeadlightsMesh.frustumCulled = false;
+      this.worldGroup.add(this.truckHeadlightsMesh);
+      // Taillights — two red dots on the cargo box rear face (z = -0.23).
+      const truckTlL = new BoxGeometry(0.028, 0.020, 0.010);
+      truckTlL.translate(-0.075, 0.080, -0.232);
+      const truckTlR = new BoxGeometry(0.028, 0.020, 0.010);
+      truckTlR.translate(0.075, 0.080, -0.232);
+      const truckTlGeom = mergeGeoms([truckTlL, truckTlR], [0xffffff, 0xffffff]);
+      const truckTlMat = new MeshBasicMaterial({ color: THEME().vehicles.taillights });
+      this.truckTaillightsMesh = new InstancedMesh(truckTlGeom, truckTlMat, MAX_TRUCKS);
+      this.truckTaillightsMesh.count = 0;
+      this.truckTaillightsMesh.frustumCulled = false;
+      this.worldGroup.add(this.truckTaillightsMesh);
     }
 
     // Farm tractor (Alpha 4.19). One detailed tractor per large farm
@@ -1199,18 +1290,23 @@ export class Renderer {
     const obj = this.tmpObj;
     const c = this.tmpColor;
     const gridWidth = grid.width;
-    // Per-frame counters for the per-kind accessory overlays (Alpha
-    // 4.15.2). Each overlay's `count` is set to its tally so unused
-    // instance slots aren't drawn.
+    // Per-frame counters. Cars and trucks live in vehicles.cars together
+    // but render to separate InstancedMeshes — `carIdx` tracks the car
+    // instance slot, `truckIdx` tracks truck instance slot. Police and
+    // fire accessory overlays count separately.
+    let carIdx = 0;
+    let truckIdx = 0;
     let policeIdx = 0;
     let fireIdx = 0;
     for (let i = 0; i < vehicles.cars.length; i++) {
       const car = vehicles.cars[i]!;
+      const kind = car.kind ?? 'resident';
+      const isTruck = kind === 'truck';
       // Beta 1.3 Phase 2 — parked-state render. Position at the stall
       // (x, z, yaw) baked into the reservation. Skip all the segment
       // interpolation / lane-offset / road-surface-Y math below.
-      // Sibling overlays (windows/headlights/taillights/accessories)
-      // share the same matrix — they're parked too.
+      // Trucks don't park in lots (they're freight, not cars) so they
+      // never hit this branch.
       if (car.isParked && car.parking) {
         const stall = car.parking;
         const tile = grid.get(stall.tileX, stall.tileY);
@@ -1219,12 +1315,13 @@ export class Renderer {
         obj.rotation.set(0, stall.yaw, 0);
         obj.scale.set(1, 1, 1);
         obj.updateMatrix();
-        this.carsMesh.setMatrixAt(i, obj.matrix);
-        this.carWindowsMesh.setMatrixAt(i, obj.matrix);
-        this.carHeadlightsMesh.setMatrixAt(i, obj.matrix);
-        this.carTaillightsMesh.setMatrixAt(i, obj.matrix);
+        this.carsMesh.setMatrixAt(carIdx, obj.matrix);
+        this.carWindowsMesh.setMatrixAt(carIdx, obj.matrix);
+        this.carHeadlightsMesh.setMatrixAt(carIdx, obj.matrix);
+        this.carTaillightsMesh.setMatrixAt(carIdx, obj.matrix);
         c.setHex(car.color);
-        this.carsMesh.setColorAt(i, c);
+        this.carsMesh.setColorAt(carIdx, c);
+        carIdx++;
         void tile;
         continue;
       }
@@ -1262,53 +1359,68 @@ export class Renderer {
       );
       // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
       obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
-      // Per-kind scale (Alpha 4.14, expanded 4.15.2):
+      // Per-kind scale (Alpha 4.14, expanded 4.15.2; Beta 1.5):
       //  - motorcade_limo → 1.6× length (stretched limousine)
-      //  - fire_response → 1.10× wide × 1.50× tall × 1.40× long (truck)
-      // Everything else uses unit scale. The accessory mesh inherits
-      // the same matrix so police lights / fire ladder scale with the
-      // body and stay attached.
-      const kind = car.kind ?? 'resident';
+      //  - fire_response → 1.10× wide × 1.50× tall × 1.40× long
+      //  - truck → unit scale (truck geometry is pre-sized larger)
+      // Everything else uses unit scale.
       if (kind === 'motorcade_limo') obj.scale.set(1, 1, 1.6);
       else if (kind === 'fire_response') obj.scale.set(1.10, 1.50, 1.40);
       else obj.scale.set(1, 1, 1);
       obj.updateMatrix();
-      this.carsMesh.setMatrixAt(i, obj.matrix);
-      // Sibling overlays mirror the body's matrix (Alpha 4.4).
-      this.carWindowsMesh.setMatrixAt(i, obj.matrix);
-      this.carHeadlightsMesh.setMatrixAt(i, obj.matrix);
-      this.carTaillightsMesh.setMatrixAt(i, obj.matrix);
-      c.setHex(car.color);
-      this.carsMesh.setColorAt(i, c);
-      // Police accessory overlay (Alpha 4.15.2). Patrol cars dispatched
-      // from police stations + the two motorcade escorts get a light
-      // bar + side stripes + bumper trim. The mesh's `count` is set
-      // below to the running tally `policeIdx`.
-      if (kind === 'patrol' || kind === 'motorcade_lead' || kind === 'motorcade_tail') {
-        this.policeAccessoriesMesh.setMatrixAt(policeIdx, obj.matrix);
-        policeIdx++;
-      }
-      // Fire-truck accessory overlay (Alpha 4.15.2). Fire-response cars
-      // get a yellow ladder + red light bar + chrome grille + tank.
-      // The body matrix is already scaled up so the truck reads as
-      // bigger than a sedan.
-      if (kind === 'fire_response') {
-        this.fireAccessoriesMesh.setMatrixAt(fireIdx, obj.matrix);
-        fireIdx++;
+      if (isTruck) {
+        // Trucks write to their own dedicated InstancedMesh group.
+        this.truckBodyMesh.setMatrixAt(truckIdx, obj.matrix);
+        this.truckGlassMesh.setMatrixAt(truckIdx, obj.matrix);
+        this.truckHeadlightsMesh.setMatrixAt(truckIdx, obj.matrix);
+        this.truckTaillightsMesh.setMatrixAt(truckIdx, obj.matrix);
+        c.setHex(car.color);
+        this.truckBodyMesh.setColorAt(truckIdx, c);
+        truckIdx++;
+      } else {
+        this.carsMesh.setMatrixAt(carIdx, obj.matrix);
+        // Sibling overlays mirror the body's matrix (Alpha 4.4).
+        this.carWindowsMesh.setMatrixAt(carIdx, obj.matrix);
+        this.carHeadlightsMesh.setMatrixAt(carIdx, obj.matrix);
+        this.carTaillightsMesh.setMatrixAt(carIdx, obj.matrix);
+        c.setHex(car.color);
+        this.carsMesh.setColorAt(carIdx, c);
+        carIdx++;
+        // Police accessory overlay (Alpha 4.15.2).
+        if (kind === 'patrol' || kind === 'motorcade_lead' || kind === 'motorcade_tail') {
+          this.policeAccessoriesMesh.setMatrixAt(policeIdx, obj.matrix);
+          policeIdx++;
+        }
+        // Fire-truck accessory overlay (Alpha 4.15.2).
+        if (kind === 'fire_response') {
+          this.fireAccessoriesMesh.setMatrixAt(fireIdx, obj.matrix);
+          fireIdx++;
+        }
       }
     }
-    this.carsMesh.count = vehicles.cars.length;
-    this.carWindowsMesh.count = vehicles.cars.length;
-    this.carHeadlightsMesh.count = vehicles.cars.length;
-    this.carTaillightsMesh.count = vehicles.cars.length;
+    this.carsMesh.count = carIdx;
+    this.carWindowsMesh.count = carIdx;
+    this.carHeadlightsMesh.count = carIdx;
+    this.carTaillightsMesh.count = carIdx;
+    this.truckBodyMesh.count = truckIdx;
+    this.truckGlassMesh.count = truckIdx;
+    this.truckHeadlightsMesh.count = truckIdx;
+    this.truckTaillightsMesh.count = truckIdx;
     this.policeAccessoriesMesh.count = policeIdx;
     this.fireAccessoriesMesh.count = fireIdx;
-    if (vehicles.cars.length > 0) {
+    if (carIdx > 0) {
       this.carsMesh.instanceMatrix.needsUpdate = true;
       if (this.carsMesh.instanceColor) this.carsMesh.instanceColor.needsUpdate = true;
       this.carWindowsMesh.instanceMatrix.needsUpdate = true;
       this.carHeadlightsMesh.instanceMatrix.needsUpdate = true;
       this.carTaillightsMesh.instanceMatrix.needsUpdate = true;
+    }
+    if (truckIdx > 0) {
+      this.truckBodyMesh.instanceMatrix.needsUpdate = true;
+      if (this.truckBodyMesh.instanceColor) this.truckBodyMesh.instanceColor.needsUpdate = true;
+      this.truckGlassMesh.instanceMatrix.needsUpdate = true;
+      this.truckHeadlightsMesh.instanceMatrix.needsUpdate = true;
+      this.truckTaillightsMesh.instanceMatrix.needsUpdate = true;
     }
     if (policeIdx > 0) this.policeAccessoriesMesh.instanceMatrix.needsUpdate = true;
     if (fireIdx > 0) this.fireAccessoriesMesh.instanceMatrix.needsUpdate = true;

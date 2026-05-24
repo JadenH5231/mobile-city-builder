@@ -1228,6 +1228,12 @@ export class Game {
         // Emergency dispatch (Alpha 4.14) — police + fire stations
         // periodically send out one of their kind on a tour.
         this.vehicles.spawnServiceTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
+        // Freight trucks (Beta 1.5) — industrial tiles spawn delivery
+        // trucks that drive to commercial destinations, dwell briefly,
+        // then queue a return trip back to their industrial origin.
+        // Spawn rate scales with developed industrial tile count;
+        // capped by MAX_TRUCKS.
+        this.vehicles.spawnTruckTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
         this.buses.spawnTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
         this.pedestrians.spawnTick(
           SIM_STEP_MS,

@@ -345,6 +345,81 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6 (Warehouses + supply chain — commercial needs supplies to earn)
+
+User feedback: "I want a new industry, warehouses. These buildings
+receive goods from industry and ship it to commercial, adding one
+new step to the supply chain. I want you to do some heavy lifting
+making a new supply chain system where commercial buildings need
+supplies to produce their tax revenue, if they don't get them or run
+out before a new shipment arrives they stop producing tax revenue.
+Outside connections can also bring in goods if there isn't enough
+industry but this should come at a slight financial penalty as well.
+Warehouses should work in any direction, be truly modular and also
+require parking lots for employees to be operational. If a map
+doesn't have warehouses they can ship from industry directly, but
+make warehouses a more efficient way of doing it."
+
+New `Tile.supplies` (0..1) on developed commercial + warehouse tiles.
+Monthly consumption tick drains supplies (commercial 0.18/mo, warehouse
+0.08/mo); truck arrivals refill them. The Economy revenue formula now
+folds in a city-wide `supplyMultiplier` — a tile at 0 supplies
+contributes ZERO commercial revenue; an import-sourced tile takes a
+-25% penalty.
+
+**Supply routes, in order of preference:**
+
+1. Industry → Warehouse → Commercial (most efficient, biggest payloads)
+2. Industry → Commercial direct (fallback, smaller payload, works
+   without any warehouse)
+3. Outside-edge → Commercial via import truck (-25% revenue penalty,
+   spawned from `Game.tickImportTrucks` when a commercial tile drops
+   below 30% supplies AND the city is connected)
+
+**New files / surfaces:**
+
+- `src/simulation/SupplyChain.ts` — owns per-tile supplies, monthly
+  consumption, the `commercialSupplyState(grid)` query Economy reads
+  each month, and the `deliver(grid, x, y, source)` callback the
+  truck arrival path invokes.
+- `Tile.supplies: number` (default 1) + `Tile.importSource: boolean`
+  fields. Save schema v28 → v29 — pre-29 saves load with supplies=1
+  so long-running cities aren't suddenly choked.
+- `src/engine/Renderer.ts: warehouseClusterParts()` — modular per-tile
+  emission (same pattern as 1.4.1 bigBoxClusterParts). Industrial /
+  freight palette (greys + safety-yellow) distinct from big_box's
+  retail look. Per-tile loading-dock doors on every S-exterior tile
+  (the warehouse signature), rooftop vents + skylight strips,
+  parapet brand stripe.
+- `place_warehouse` Tool in the Industry toolbar group + faction
+  stances + Metro-tier milestone unlock.
+- `Vehicles.attemptTruckSpawn` warehouse-aware — 40% I→W, 40% W→C,
+  20% direct I→C fallback. `Car.truckSource: DeliverySource` carries
+  the source kind to the arrival callback. New `Vehicles.spawnImportTruck`
+  helper.
+- TileInfoPanel chip: `📦 Supplies NN%` (with 🌐 import penalty chip
+  when applicable).
+
+**Warehouse design choices:**
+- Modular like big_box (any cluster shape: 1×N, 2×N, L, T, U, plus).
+- Requires parking-lot adjacency for "employees" — same constraint
+  big_box has, enforced in placement validation.
+- Each tile holds its own supplies buffer (filled by I→W trucks,
+  drained by W→C trucks). A warehouse at 0 supplies stops being
+  picked as a source for outbound trucks.
+
+**Save schema:** v28 → v29. Pre-29 saves load with supplies=1 and
+importSource=false everywhere — full backward compat. SW cache
+`mq-city-v15` → `mq-city-v16`.
+
+When extending the supply chain in the future, the **principle from
+this release**: every new "consumer" tile (residential? civic?) only
+needs to add a `supplies` field + a `tickMonth` decrement + a
+revenue-gate in Economy. Truck routing stays in Vehicles.ts and
+extends by adding a new `DeliverySource` variant + a new spawn
+branch. Don't fragment supply state across multiple modules — keep
+it in SupplyChain so one place owns inventory math.
+
 ## Status: Beta 1.5.4 (Bulldoze icon is a wrecking-ball crane)
 
 User feedback: "Can you make the icon a wrecking ball crane instead?

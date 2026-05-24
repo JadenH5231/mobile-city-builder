@@ -392,6 +392,13 @@ export type Building =
   // placed adjacent to one or more `parking_lot` tiles which the
   // renderer's cluster builder absorbs into the same paved field.
   | 'big_box'
+  // Warehouse (Beta 1.6). Modular freight distribution centre — middle
+  // of the new supply chain. Industrial trucks deliver here; the
+  // warehouse then dispatches its own trucks to nearby commercial
+  // tiles. Truly modular (any cluster shape, mirrors the 1.4.1 big_box
+  // emission). Requires a parking lot within 3 tiles to be
+  // operational (employees), same constraint big_box uses.
+  | 'warehouse'
   // Parking Lot (Beta 1.3). Single-tile flat asphalt with painted
   // parking stalls. Stands alone OR clusters with adjacent big_box
   // tiles for the visual composition. Phase 1 ships the buildable +
@@ -506,6 +513,11 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // build). A 4-tile big_box "supercluster" totals $4.8K — cheaper
   // than a single bus depot.
   big_box: 1200,
+  // Warehouse (Beta 1.6) — per-tile sticker price. A 4-tile cluster
+  // = $6K which is meaningful but cheaper than a hospital. The value
+  // is in throughput: warehouses deliver supplies to commercial much
+  // more efficiently than direct industry→commercial shipments.
+  warehouse: 1500,
   // Parking Lot (Beta 1.3) — pavement is cheap; the lot's value comes
   // from how many cars it can stage. $200/tile keeps the player
   // willing to surround a big_box (or a downtown destination) with
@@ -590,6 +602,11 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // Big Box upkeep (Beta 1.3). Lower than a school but real — the
   // store is a recurring expense beyond its job-generation revenue.
   big_box: 60,
+  // Warehouse upkeep (Beta 1.6). Real recurring cost — staff,
+  // forklifts, lighting, climate control. Higher than big_box
+  // upkeep because warehouses do heavier work per tile (more truck
+  // trips through them).
+  warehouse: 80,
   // Parking Lot upkeep (Beta 1.3). Sweepers, paint, lighting — a
   // small but real recurring expense so the player can't pave the
   // city in stalls for free. Per-tile.
@@ -872,7 +889,7 @@ export const MILESTONES: readonly Milestone[] = [
       // forestry / farm — same modular-industry tier. Big Box is a
       // suburban-commercial archetype; parking lots are the
       // infrastructure for it (and other downtown destinations).
-      'place_big_box', 'place_parking_lot',
+      'place_big_box', 'place_warehouse', 'place_parking_lot',
       // Architect Mode upper-mid tier (Alpha 4.0) — premium water
       // features unlock once the city reads as a metropolis.
       'place_fountain', 'place_reflecting_pool', 'place_memorial_garden',
@@ -1020,6 +1037,10 @@ export type Tool =
   // — adjacent big_box tiles cluster visually (see big_box building
   // notes). Lives in Industry alongside forestry + farm.
   | 'place_big_box'
+  // Warehouse (Beta 1.6). Industry group toolbar entry. Modular like
+  // big_box; requires parking. Plays the middle role of the supply
+  // chain (industry → warehouse → commercial).
+  | 'place_warehouse'
   // Parking Lot (Beta 1.3). Industry group toolbar entry. Stands
   // alone OR clusters into an adjacent big_box's paved field.
   | 'place_parking_lot'
@@ -1132,6 +1153,7 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_farm', 'farm' as const],
   // Big Box + Parking Lot (Beta 1.3).
   ['place_big_box', 'big_box' as const],
+  ['place_warehouse', 'warehouse' as const],
   ['place_parking_lot', 'parking_lot' as const],
   ['place_school', 'school' as const],
   ['place_hospital', 'hospital' as const],

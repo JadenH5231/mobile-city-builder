@@ -425,6 +425,14 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
         <path d="M3 9h18v11H3z M3 9l2-4h14l2 4 M10 14h4v6h-4z"
               stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
       </svg>` },
+      // Warehouse (Beta 1.6). Long low building with a row of loading-dock
+      // doors along the bottom — the iconic warehouse silhouette.
+      { kind: 'tool', tool: 'place_warehouse', label: 'Warehouse', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10h18v10H3z M3 10l9-5 9 5"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+        <path d="M6 16h2v4H6z M11 16h2v4h-2z M16 16h2v4h-2z"
+              stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none"/>
+      </svg>` },
       // Parking Lot (Beta 1.3). 2x3-stall grid hint — pure geometric.
       { kind: 'tool', tool: 'place_parking_lot', label: 'Parking', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3 4h18v16H3z M7 4v16 M13 4v16 M19 4v16 M3 12h18"

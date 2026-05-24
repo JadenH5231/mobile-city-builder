@@ -145,12 +145,13 @@ export class Economy {
     crime?: Crime,
     districts?: Districts,
     council?: Council,
-    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness
+    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness,
+    supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds, crime, districts, council, parkingStrictness);
+      this.runMonth(grid, population, market, events, bonds, crime, districts, council, parkingStrictness, supplyChain);
     }
   }
 
@@ -166,6 +167,14 @@ export class Economy {
     this.totalAccidents++;
   }
 
+  /** Last commercial supply-chain multiplier (Beta 1.6). Cached for
+   *  the BudgetPanel + diagnostic UI. 1.0 = perfectly stocked,
+   *  0.0 = every commercial tile is out of supplies. */
+  lastSupplyMultiplier = 1.0;
+  /** Last fraction of commercial jobs served by import trucks (Beta 1.6).
+   *  Each of those jobs takes the IMPORT_REVENUE_MULTIPLIER penalty. */
+  lastImportedFraction = 0;
+
   private runMonth(
     grid: Grid,
     population: Population,
@@ -175,7 +184,8 @@ export class Economy {
     crime?: Crime,
     districts?: Districts,
     council?: Council,
-    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness
+    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness,
+    supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
@@ -329,10 +339,21 @@ export class Economy {
         parkingMult = 1 - unparkFrac * maxPenalty;
       }
     }
+    // Beta 1.6 — supply-chain multiplier. Each commercial tile's
+    // revenue contribution is scaled by its supplies × import-penalty.
+    // No-supplies tiles drop to 0; import-only tiles take the
+    // IMPORT_REVENUE_MULTIPLIER penalty. Cached on Economy for the
+    // BudgetPanel + tile diagnostic UI.
+    const supplyState = supplyChain
+      ? supplyChain.commercialSupplyState(grid)
+      : { multiplier: 1.0, averageSupplies: NaN, importedFraction: 0 };
+    this.lastSupplyMultiplier = supplyState.multiplier;
+    this.lastImportedFraction = supplyState.importedFraction;
+
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
-      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB * crimeMult * parkingMult +
+      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB * crimeMult * parkingMult * supplyState.multiplier +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
       forestryRevenue +
       farmRevenue +

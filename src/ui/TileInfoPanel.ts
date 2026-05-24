@@ -46,6 +46,14 @@ export interface TileInfo {
   hasRoadAdjacent: boolean;
   /** Faction snapshot — current city demand for this zone, [-1, +1]. */
   zoneDemand: number;
+  /** Supply-chain inventory (Beta 1.6). On developed commercial /
+   *  warehouse tiles, the current stock level in [0, 1]. -1 on tiles
+   *  that don't carry supplies (residential, industrial, parks, etc). */
+  supplies: number;
+  /** True when the most recent delivery came from an outside-edge
+   *  import (Beta 1.6). On commercial tiles only; -25% revenue
+   *  penalty applies while true. */
+  importSource: boolean;
   /** Diagnostic reasons (Alpha 2.13). Bullet points explaining why the
    *  tile is or isn't progressing — e.g. "Awaiting power coverage" or
    *  "Capped at low density by zoning". Each entry has a sentiment
@@ -188,6 +196,19 @@ function chipsFor(info: TileInfo): Array<{ text: string; tone: 'good' | 'warn' |
       info.crimeScore < 0.30 ? 'info' :
       info.crimeScore < 0.55 ? 'warn' : 'block';
     out.push({ text: `🛡 Crime ${(info.crimeScore * 100).toFixed(0)}%`, tone });
+  }
+  // Supply-chain chip (Beta 1.6) — shown on commercial / warehouse tiles
+  // that have a supplies value.
+  if (info.supplies >= 0) {
+    const pct = Math.round(info.supplies * 100);
+    const tone: 'good' | 'warn' | 'block' | 'info' =
+      info.supplies <= 0.05 ? 'block' :
+      info.supplies < 0.30 ? 'warn' :
+      info.supplies < 0.60 ? 'info' : 'good';
+    out.push({ text: `📦 Supplies ${pct}%`, tone });
+    if (info.importSource) {
+      out.push({ text: '🌐 Import-sourced (−25%)', tone: 'warn' });
+    }
   }
   return out;
 }

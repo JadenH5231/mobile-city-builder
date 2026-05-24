@@ -56,7 +56,7 @@
            cardinal iso angles so the chunky low-poly aesthetic stays
            clean. Useful for seeing behind tall buildings / skyscrapers. -->
       <button id="hud-rotate" type="button" class="pill action mono" aria-label="Rotate camera 90°">↻</button>
-      <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">More</button>
+      <button id="hud-more" type="button" class="pill action" aria-label="More options" aria-expanded="false">⋯ More</button>
       <!-- Time-of-day pill (Alpha 4.6). Shows current phase + icon;
            tapping toggles between morning (~7am) and peak night
            (~midnight) so the player can switch the lighting on demand. -->
@@ -214,6 +214,10 @@
         <label class="settings__check">
           <input id="setting-reduce-motion" type="checkbox">
           <span>Reduce motion (slow / disable day-night sun arc)</span>
+        </label>
+        <label class="settings__check">
+          <input id="setting-show-fps" type="checkbox">
+          <span>Show FPS counter (debug)</span>
         </label>
       </div>
 

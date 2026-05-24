@@ -540,9 +540,16 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
     ]
   },
   { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
-          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+    <!-- Wrecking-ball crane (Beta 1.5.4) — base + vertical mast + horizontal boom
+         in the heavy stroke; diagonal truss brace + hoist cable in the thin
+         stroke; solid wrecking ball at the end. Reads as a demolition tool at
+         a glance, more "destruction" than the prior bulldozer silhouette. -->
+    <path d="M3 21h6M6 21V4M6 4h13"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" fill="none"/>
+    <path d="M6 11L17 4M19 4v9"
+          stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+    <circle cx="19" cy="16" r="3" fill="currentColor"/>
   </svg>` },
   // Land tool retired Alpha 3.2.1 — replaced by tap-on-+-button city
   // expansion. The buy_land tool stays in the type union so existing
@@ -559,9 +566,16 @@ const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
   // Bulldoze is pinned in BOTH modes — terraforming + decorative
   // placements still need a way to undo a misplaced item.
   { kind: 'tool', tool: 'bulldoze', label: 'Bulldoze', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M4 17h7l4-3h5M9 17v3h7v-3M4 12h6l1-3h7l1 3"
-          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+    <!-- Wrecking-ball crane (Beta 1.5.4) — base + vertical mast + horizontal boom
+         in the heavy stroke; diagonal truss brace + hoist cable in the thin
+         stroke; solid wrecking ball at the end. Reads as a demolition tool at
+         a glance, more "destruction" than the prior bulldozer silhouette. -->
+    <path d="M3 21h6M6 21V4M6 4h13"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" fill="none"/>
+    <path d="M6 11L17 4M19 4v9"
+          stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+    <circle cx="19" cy="16" r="3" fill="currentColor"/>
   </svg>` },
   // Terraforming — landscape sculpting (cheap basics).
   {

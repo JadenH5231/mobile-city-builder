@@ -4,6 +4,16 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.3.1 — Pinch-vs-paint disambiguation (fixes "pinch placed a road" bug)** — new-user report: with the road tool selected, starting a pinch-to-zoom would place a road tile where the first finger landed because that touch had already committed before the second finger arrived a few milliseconds later. Caused by paint mode firing `onPaintStart` immediately on `pointerdown` (per a deliberate comment in `Input.ts` — "stationary tap should still mark exactly one tile").
+  - **`PAINT_INTENT_DELAY_MS = 110` + `PAINT_INTENT_MOVE_PX = 6`** — new intent-detection window. On pointerdown in paint mode, we now DEFER the `onPaintStart` call: a `paintIntentTimer` is queued for 110 ms with a stored `paintIntentStart` position.
+  - **Four resolutions** for the window:
+    1. **Pinch arrives** (second pointer down within 110ms) → `cancelPaintIntent()` runs, no paint commits, gesture proceeds as a normal pinch.
+    2. **Confirmed drag-paint** (pointer moves > 6px during the window) → `onPaintStart` fires at the original touch position, paint state activates, subsequent moves fire `onPaintMove` as before.
+    3. **Window expires with one finger still down + no significant move** → `onPaintStart` fires (this is the tap-to-place case).
+    4. **Fast tap** (pointer lifts before the window expires) → `onPaintStart` + `onPaintEnd` fire back-to-back so quick taps still place a tile with no perceptible latency relative to the system tap delay.
+  - **Mode swap** (`setMode`) also calls `cancelPaintIntent()` so a pending paint doesn't accidentally commit after the player picks Pan / a different tool.
+  - **Verified** in the Vite dev server at iPhone 15 Pro: synthetic two-finger pinch with the second finger arriving 5 ms after the first places **zero** roads. Real-touch verification needed on device.
+
 - **Beta 1.3 — Big Box + Parking Lot (Phase 1: buildable + cluster rendering)** — first half of a three-phase parking-management feature. Phase 1 adds the two new building types as buildables + visuals + cluster behaviour; **no sim behaviour changes** yet (cars still despawn at destinations normally). Phase 2 will wire cars routing to parking lots + walking the final leg; Phase 3 adds the difficulty slider.
   - **`big_box`** — Walmart-style retail box. Modular like farm/forestry: adjacent big_box tiles flood-fill into one strip-mall composition (single continuous storefront + tar roof + red brand stripe + glass entry vestibule + cart corrals). Generates 2 commercial jobs per tile (below a zoned L1 commercial tile's 3 — deliberately low so big-box adds entry-level retail capacity without competing with downtown). $1200/tile placement, $60/tile/month upkeep. Faction-polarising: Chamber +0.7 / Working Families +0.5 / Drivers +0.6 LOVE; Hometown Heritage -0.9 / YIMBYs -0.7 / Transit -0.7 / Greenleaf -0.6 HATE.
   - **`parking_lot`** — flat asphalt tile with painted stalls (6 visible stall stripes per tile + faded yellow median + corner lamp). Stands alone OR clusters with adjacent big_box tiles for the visual composition — the big_box cluster builder absorbs adjacent parking_lots into the same paved field so there's no visible boundary. $200/tile, $12/tile/month upkeep. Drivers +1.0 LOVE; YIMBYs -0.8 / Transit -0.8 / Greenleaf -0.7 HATE.

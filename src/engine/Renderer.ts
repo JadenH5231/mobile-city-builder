@@ -5199,108 +5199,181 @@ function bigBoxClusterParts(
     out.push({ makeGeom: () => box(1.02, 0.018, 1.02), color: asphalt, dx: cx, dy: 0.009, dz: cz });
   }
 
-  // 2. Store body — wall + roof + fascia + brand stripe per cluster
-  // tile. Each archetype tweaks heights / accents but shares the
-  // shell. Membership-club gets a marginally taller roof.
+  // Cluster bbox + rectangularity (Beta 1.3.7). For rectangular
+  // clusters we emit ONE cohesive building spanning the bbox — a 2×2
+  // big_box becomes one ~2-tile-wide warehouse, not 4 stamped stores.
+  // For irregular clusters (L-shape, etc.) we fall back to per-tile
+  // emission so the rectangular shell doesn't overhang non-cluster
+  // tiles. Rectangular check: size === width × depth.
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  const widthTiles = maxX - minX + 1;
+  const depthTiles = maxY - minY + 1;
+  const isRectangular = sorted.length === widthTiles * depthTiles;
+
+  // Body height — archetype-tweaked. Membership-club + home-improvement
+  // are warehouse-tall; the others sit at the standard 0.30.
   const bodyHeight = archetype === 'home-improvement' ? 0.36
                    : archetype === 'membership-club' ? 0.34
                    : 0.30;
-  for (const c of sorted) {
-    const cx = (c.x + 0.5) * TILE_SIZE;
-    const cz = (c.y + 0.5) * TILE_SIZE;
+
+  // Building footprint (world units). Derived from bbox so a 1-tile
+  // cluster keeps the original 0.92 × 0.62 shell; multi-tile clusters
+  // grow proportionally with 1.0 unit per added tile (since TILE_SIZE
+  // = 1). The 0.08 / 0.38 baked-in margins are the original single-
+  // tile lateral and depth insets.
+  const buildingW = isRectangular ? widthTiles - 0.08 : 0.92;
+  const buildingD = isRectangular ? depthTiles - 0.38 : 0.62;
+  // Centroid of the building — bbox centre in X, slightly back-shifted
+  // in Z so the building leaves room for the front apron (where the
+  // entry + parking visually live). Matches the un-rotated single-tile
+  // convention of `cz - 0.10` for a single tile.
+  const buildingCX = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
+  const buildingCZ = isRectangular
+    ? ((minY + maxY) / 2 + 0.40) * TILE_SIZE
+    : ((primary.y + 0.5) - 0.10) * TILE_SIZE;
+  const frontZ = isRectangular ? (maxY + 0.71) * TILE_SIZE : (primary.y + 0.71) * TILE_SIZE;
+  const backZ = isRectangular ? (minY + 0.09) * TILE_SIZE : (primary.y + 0.09) * TILE_SIZE;
+
+  // 2. Cohesive store body. ONE wall slab + ONE loading-dock band +
+  // ONE fascia + ONE brand stripe + ONE roof slab spanning the cluster.
+  if (isRectangular) {
     // Wall.
-    out.push({ makeGeom: () => box(0.92, bodyHeight, 0.62), color: pal.wall, dx: cx, dy: bodyHeight / 2 + 0.03, dz: cz - 0.10 });
-    // Loading-dock / back accent.
-    out.push({ makeGeom: () => box(0.92, 0.10, 0.06), color: pal.wallDark, dx: cx, dy: 0.05, dz: cz - 0.40 });
-    // White parapet fascia along the front face.
-    out.push({ makeGeom: () => box(0.92, 0.06, 0.04), color: pal.fascia, dx: cx, dy: bodyHeight + 0.06, dz: cz + 0.21 });
+    out.push({ makeGeom: () => box(buildingW, bodyHeight, buildingD), color: pal.wall, dx: buildingCX, dy: bodyHeight / 2 + 0.03, dz: buildingCZ });
+    // Loading-dock band along the back face.
+    out.push({ makeGeom: () => box(buildingW, 0.10, 0.06), color: pal.wallDark, dx: buildingCX, dy: 0.05, dz: backZ + 0.03 });
+    // White parapet fascia along the full front.
+    out.push({ makeGeom: () => box(buildingW, 0.06, 0.04), color: pal.fascia, dx: buildingCX, dy: bodyHeight + 0.06, dz: frontZ - 0.02 });
     // Brand-coloured stripe just under the fascia.
-    out.push({ makeGeom: () => box(0.92, 0.025, 0.03), color: pal.brandStripe, dx: cx, dy: bodyHeight + 0.01, dz: cz + 0.205 });
-    // Flat tar roof slab on top.
-    out.push({ makeGeom: () => box(0.94, 0.02, 0.64), color: pal.roof, dx: cx, dy: bodyHeight + 0.04, dz: cz - 0.10 });
-    // Two HVAC units on the roof for industrial detail.
-    out.push({ makeGeom: () => box(0.14, 0.06, 0.10), color: pal.roofAccent, dx: cx - 0.18, dy: bodyHeight + 0.08, dz: cz - 0.10 });
-    out.push({ makeGeom: () => box(0.10, 0.04, 0.10), color: pal.roofAccent, dx: cx + 0.20, dy: bodyHeight + 0.07, dz: cz - 0.15 });
-    // Archetype-specific side accents.
-    if (archetype === 'warehouse-discount') {
-      // Yellow corner blocks at the wall ends — Walmart-signature.
-      out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: cx - 0.44, dy: bodyHeight * 0.30 + 0.03, dz: cz + 0.21 });
-      out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: cx + 0.44, dy: bodyHeight * 0.30 + 0.03, dz: cz + 0.21 });
-    }
-    if (archetype === 'electronics') {
-      // Tall thin vertical windows along the front — modern electronics-store glass strip.
-      for (const wx of [-0.30, -0.10, 0.10, 0.30]) {
-        out.push({ makeGeom: () => box(0.06, bodyHeight * 0.45, 0.02), color: pal.entryGlass, dx: cx + wx, dy: bodyHeight * 0.35, dz: cz + 0.21 });
-      }
+    out.push({ makeGeom: () => box(buildingW, 0.025, 0.03), color: pal.brandStripe, dx: buildingCX, dy: bodyHeight + 0.01, dz: frontZ - 0.025 });
+    // Flat tar roof slab spanning the cluster.
+    out.push({ makeGeom: () => box(buildingW + 0.02, 0.02, buildingD + 0.02), color: pal.roof, dx: buildingCX, dy: bodyHeight + 0.04, dz: buildingCZ });
+  } else {
+    // Irregular cluster — fall back to per-tile emit so the building
+    // doesn't bleed into non-cluster tiles. Same as the pre-1.3.7
+    // emission path.
+    for (const c of sorted) {
+      const cx = (c.x + 0.5) * TILE_SIZE;
+      const cz = (c.y + 0.5) * TILE_SIZE;
+      out.push({ makeGeom: () => box(0.92, bodyHeight, 0.62), color: pal.wall, dx: cx, dy: bodyHeight / 2 + 0.03, dz: cz - 0.10 });
+      out.push({ makeGeom: () => box(0.92, 0.10, 0.06), color: pal.wallDark, dx: cx, dy: 0.05, dz: cz - 0.40 });
+      out.push({ makeGeom: () => box(0.92, 0.06, 0.04), color: pal.fascia, dx: cx, dy: bodyHeight + 0.06, dz: cz + 0.21 });
+      out.push({ makeGeom: () => box(0.92, 0.025, 0.03), color: pal.brandStripe, dx: cx, dy: bodyHeight + 0.01, dz: cz + 0.205 });
+      out.push({ makeGeom: () => box(0.94, 0.02, 0.64), color: pal.roof, dx: cx, dy: bodyHeight + 0.04, dz: cz - 0.10 });
     }
   }
 
-  // 3. Storefront detail — entry doors + cart corrals on the primary
-  // (lex-smallest) tile only, so a multi-tile cluster reads as having
-  // one main entrance rather than N stamped doors. Each archetype
-  // styles its own entry.
+  // 2b. Per-tile roof HVAC scatter (Beta 1.3.7) — gives the long
+  // continuous roof slab some industrial texture. Each cluster tile
+  // adds 1-3 HVAC units at deterministic-but-varied positions. Roles
+  // mirror the farm system's per-tile feature pattern (without the
+  // exotic role types — for big_box, HVAC variety is enough texture).
+  for (const c of sorted) {
+    const tileX = (c.x + 0.5) * TILE_SIZE;
+    const tileZ = (c.y + 0.5) * TILE_SIZE;
+    // Hash from tile coords for deterministic but per-cluster-tile-
+    // unique HVAC layouts.
+    const h = ((c.x * 374761393) ^ (c.y * 668265263)) >>> 0;
+    const count = ((h >> 2) % 3) + 1;  // 1..3 units per tile
+    for (let i = 0; i < count; i++) {
+      const ox = (((h >> (i * 5)) & 0xff) / 255 - 0.5) * 0.70;
+      const oz = (((h >> (i * 5 + 4)) & 0xff) / 255 - 0.5) * 0.45 - 0.10;
+      const w = 0.08 + (((h >> (i * 3 + 12)) & 0x07) / 7) * 0.10;
+      const hh = 0.03 + (((h >> (i * 3 + 16)) & 0x07) / 7) * 0.04;
+      out.push({
+        makeGeom: () => box(w, hh, w * 0.8),
+        color: pal.roofAccent,
+        dx: tileX + ox, dy: bodyHeight + 0.04 + hh / 2, dz: tileZ + oz
+      });
+    }
+  }
+
+  // 2c. Archetype-specific facade accents — span the full building
+  // width for the cohesive look (yellow corner blocks at the building
+  // extents, not per-tile; electronics windows along the full front).
+  if (isRectangular && archetype === 'warehouse-discount') {
+    out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: buildingCX - buildingW / 2, dy: bodyHeight * 0.30 + 0.03, dz: frontZ - 0.02 });
+    out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: buildingCX + buildingW / 2, dy: bodyHeight * 0.30 + 0.03, dz: frontZ - 0.02 });
+  }
+  if (isRectangular && archetype === 'electronics') {
+    // Vertical glass windows spaced evenly across the entire front.
+    // 4 windows per tile of width — so a 2-tile-wide store gets 8.
+    const windowCount = Math.max(4, widthTiles * 4);
+    const spacing = buildingW / (windowCount + 1);
+    for (let i = 1; i <= windowCount; i++) {
+      const wx = buildingCX - buildingW / 2 + i * spacing;
+      out.push({ makeGeom: () => box(0.06, bodyHeight * 0.45, 0.02), color: pal.entryGlass, dx: wx, dy: bodyHeight * 0.35, dz: frontZ - 0.01 });
+    }
+  }
+
+  // 3. Storefront detail — entry doors + cart corrals at the cluster's
+  // FRONT CENTRE (not the primary tile, which is lex-smallest and would
+  // be the back-left of a multi-tile cluster). Single entry for the
+  // whole building so a 3-wide store reads as ONE Walmart with one set
+  // of doors, not three side-by-side doors.
   {
-    const cx = (primary.x + 0.5) * TILE_SIZE;
-    const cz = (primary.y + 0.5) * TILE_SIZE;
+    const cx = isRectangular ? buildingCX : (primary.x + 0.5) * TILE_SIZE;
+    const cz = isRectangular ? frontZ - 0.01 : (primary.y + 0.5) * TILE_SIZE + 0.22;
+    // Entry vestibule (delta from front face, in unrotated coords)
     if (archetype === 'mass-merchant') {
       // Target-style rounded entry portico + bullseye-suggesting
-      // circular accent above the entry. Two circular discs stacked
-      // (large white outer + small red inner) read as a bullseye
-      // without using the actual logo.
-      out.push({ makeGeom: () => cyl(0.18, 0.06, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.10, dz: cz + 0.16 });
-      out.push({ makeGeom: () => cyl(0.10, 0.07, 12), color: pal.fascia, dx: cx, dy: bodyHeight + 0.105, dz: cz + 0.16 });
-      out.push({ makeGeom: () => cyl(0.05, 0.075, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.11, dz: cz + 0.16 });
-      // Rounded entry vestibule — slightly recessed glass with a curved cap.
-      out.push({ makeGeom: () => box(0.36, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      out.push({ makeGeom: () => cyl(0.18, 0.04, 14), color: pal.fascia, dx: cx, dy: 0.26, dz: cz + 0.22 });
+      // circular accent above the entry.
+      out.push({ makeGeom: () => cyl(0.18, 0.06, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.10, dz: cz - 0.05 });
+      out.push({ makeGeom: () => cyl(0.10, 0.07, 12), color: pal.fascia, dx: cx, dy: bodyHeight + 0.105, dz: cz - 0.05 });
+      out.push({ makeGeom: () => cyl(0.05, 0.075, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.11, dz: cz - 0.05 });
+      // Rounded entry vestibule.
+      out.push({ makeGeom: () => box(0.36, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      out.push({ makeGeom: () => cyl(0.18, 0.04, 14), color: pal.fascia, dx: cx, dy: 0.26, dz: cz + 0.01 });
     } else if (archetype === 'membership-club') {
-      // Costco-style minimal entry — small glass door, no decorative cap.
-      out.push({ makeGeom: () => box(0.26, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      // GAS STATION canopy on the apron front-right — Costco signature.
-      // Tall flat canopy on 4 columns + 2 fuel pumps under it.
-      out.push({ makeGeom: () => box(0.42, 0.012, 0.18), color: pal.brandAccent, dx: cx + 0.50, dy: 0.20, dz: cz + 0.46 });
+      // Costco-style minimal entry + GAS STATION canopy on the apron.
+      out.push({ makeGeom: () => box(0.26, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      // Canopy positioned in the apron-front-right area. For multi-
+      // tile clusters this still lives near the building front-right
+      // (offset from the entry by 0.50 in the un-rotated +X).
+      out.push({ makeGeom: () => box(0.42, 0.012, 0.18), color: pal.brandAccent, dx: cx + 0.50, dy: 0.20, dz: cz + 0.25 });
       for (const [px, pz] of [[-0.18, -0.06], [0.18, -0.06], [-0.18, 0.06], [0.18, 0.06]] as const) {
-        out.push({ makeGeom: () => box(0.014, 0.20, 0.014), color: pal.fascia, dx: cx + 0.50 + px, dy: 0.10, dz: cz + 0.46 + pz });
+        out.push({ makeGeom: () => box(0.014, 0.20, 0.014), color: pal.fascia, dx: cx + 0.50 + px, dy: 0.10, dz: cz + 0.25 + pz });
       }
       for (const px of [-0.08, 0.08]) {
-        out.push({ makeGeom: () => box(0.05, 0.08, 0.03), color: pal.entryFrame, dx: cx + 0.50 + px, dy: 0.04, dz: cz + 0.46 });
+        out.push({ makeGeom: () => box(0.05, 0.08, 0.03), color: pal.entryFrame, dx: cx + 0.50 + px, dy: 0.04, dz: cz + 0.25 });
       }
     } else if (archetype === 'home-improvement') {
-      // Home-Depot-style large square entry with a small overhang.
-      out.push({ makeGeom: () => box(0.40, 0.24, 0.04), color: pal.entryGlass, dx: cx, dy: 0.15, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.012, 0.24, 0.05), color: pal.entryFrame, dx: cx, dy: 0.15, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.46, 0.012, 0.06), color: pal.brandStripe, dx: cx, dy: 0.28, dz: cz + 0.24 });
-      // Lumber stack on the apron — outdoor garden-centre cue.
-      // Stack of 4 brown lumber bars at front-right of primary tile.
+      // Home-Depot-style large square entry with a small overhang +
+      // a lumber stack on the apron.
+      out.push({ makeGeom: () => box(0.40, 0.24, 0.04), color: pal.entryGlass, dx: cx, dy: 0.15, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.012, 0.24, 0.05), color: pal.entryFrame, dx: cx, dy: 0.15, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.46, 0.012, 0.06), color: pal.brandStripe, dx: cx, dy: 0.28, dz: cz + 0.03 });
       for (let s = 0; s < 4; s++) {
-        out.push({ makeGeom: () => box(0.06, 0.012, 0.22), color: 0x8b6b3a, dx: cx + 0.36, dy: 0.024 + s * 0.013, dz: cz + 0.30 });
+        out.push({ makeGeom: () => box(0.06, 0.012, 0.22), color: 0x8b6b3a, dx: cx + 0.36, dy: 0.024 + s * 0.013, dz: cz + 0.09 });
       }
     } else if (archetype === 'electronics') {
       // Best-Buy-style large glass entry vestibule + yellow accent band.
-      out.push({ makeGeom: () => box(0.42, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.48, 0.025, 0.04), color: pal.brandStripe, dx: cx, dy: 0.27, dz: cz + 0.22 });
+      out.push({ makeGeom: () => box(0.42, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.48, 0.025, 0.04), color: pal.brandStripe, dx: cx, dy: 0.27, dz: cz + 0.01 });
     } else {
-      // warehouse-discount — standard wide glass vestibule + blue band.
-      out.push({ makeGeom: () => box(0.34, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.22 });
-      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.22 });
+      // warehouse-discount — standard wide glass vestibule.
+      out.push({ makeGeom: () => box(0.34, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
+      out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
     }
-    // Cart corrals — two small enclosures left + right of the entry.
-    // Skip for membership-club (warehouse model uses flat carts, no corrals).
+    // Cart corrals — two enclosures left + right of the entry on the
+    // apron. Skip for membership-club.
     if (archetype !== 'membership-club') {
       for (const cxOff of [-0.30, 0.30]) {
-        out.push({ makeGeom: () => box(0.10, 0.05, 0.18), color: cartCorral, dx: cx + cxOff, dy: 0.025, dz: cz + 0.36 });
+        out.push({ makeGeom: () => box(0.10, 0.05, 0.18), color: cartCorral, dx: cx + cxOff, dy: 0.025, dz: cz + 0.15 });
       }
     }
   }
 
-  // 4. Home-improvement garden-centre extension — added when the
-  // cluster has a wing tile to the EAST or WEST of the primary. Lives
-  // on the wing tile (NOT on the primary), reads as a greenhouse with
-  // outdoor plant racks.
+  // 4. Home-improvement garden-centre extension — bolted to the
+  // EAST or WEST end of the cohesive building. Lives on the wing
+  // tile, reads as a greenhouse + outdoor plant racks. We find the
+  // wing relative to the PRIMARY tile (lex-smallest); on a properly-
+  // rectangular cluster the wing will be at the cluster's flank.
   if (archetype === 'home-improvement') {
-    // Find a tile to the east or west of the primary inside the cluster.
     const gardenWing = sorted.find((c) =>
       (c.x === primary.x + 1 && c.y === primary.y) ||
       (c.x === primary.x - 1 && c.y === primary.y)
@@ -5308,13 +5381,12 @@ function bigBoxClusterParts(
     if (gardenWing) {
       const cx = (gardenWing.x + 0.5) * TILE_SIZE;
       const cz = (gardenWing.y + 0.5) * TILE_SIZE;
-      // Replace the wing's solid wall section with a glass greenhouse
-      // wedge: lower wall + transparent-looking glass on top.
+      // Garden centre roof — slightly lower than the main building so
+      // it reads as an extension. Greenhouse glass slabs on either
+      // long side. Outdoor plant racks on the apron.
       out.push({ makeGeom: () => box(0.86, 0.10, 0.56), color: 0xc6c3b4, dx: cx, dy: 0.05, dz: cz - 0.10 });
-      // Greenhouse glass slabs (semi-transparent feel via mid-blue).
       out.push({ makeGeom: () => box(0.86, 0.22, 0.04), color: 0xb8d4d6, dx: cx, dy: 0.21, dz: cz + 0.20 });
       out.push({ makeGeom: () => box(0.86, 0.22, 0.04), color: 0xb8d4d6, dx: cx, dy: 0.21, dz: cz - 0.20 });
-      // Outdoor plant racks on the apron (3 small green pads).
       for (const px of [-0.30, 0.00, 0.30]) {
         out.push({ makeGeom: () => box(0.18, 0.06, 0.10), color: planterLeaf, dx: cx + px, dy: 0.030, dz: cz + 0.36 });
         out.push({ makeGeom: () => box(0.18, 0.02, 0.10), color: planter, dx: cx + px, dy: 0.013, dz: cz + 0.36 });
@@ -5322,18 +5394,18 @@ function bigBoxClusterParts(
     }
   }
 
-  // 5. Lamp posts at the cluster corners — geometric anchor for the
-  // night-lights glow registered in buildNightLightsMesh + buildLamp-
-  // GlowMesh. Two outer corners give a multi-tile cluster a properly
-  // lit storefront edge.
-  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
-  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
-  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
-  for (const [lx, ly] of [[minX, maxY], [maxX, maxY]] as const) {
-    const cx = (lx + 0.5) * TILE_SIZE;
-    const cz = (ly + 0.5) * TILE_SIZE;
-    out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: cx + 0.40, dy: 0.11, dz: cz + 0.40 });
-    out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: cx + 0.40, dy: 0.23, dz: cz + 0.40 });
+  // 5. Lamp posts — at the FRONT corners of the cohesive building,
+  // not per-tile. Two lamps per cluster front edge so the lit
+  // storefront wash from buildLampGlowMesh covers the apron evenly.
+  // (Per-tile lamp glows are still registered separately by
+  // buildLampGlowMesh based on each cluster tile's coords.)
+  {
+    const leftLamp = { x: buildingCX - buildingW / 2 - 0.04, z: frontZ + 0.14 };
+    const rightLamp = { x: buildingCX + buildingW / 2 + 0.04, z: frontZ + 0.14 };
+    for (const { x, z } of [leftLamp, rightLamp]) {
+      out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: x, dy: 0.11, dz: z });
+      out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: x, dy: 0.23, dz: z });
+    }
   }
 
   // 6. Adjacent parking-lot tiles — paved + striped + decorated. The

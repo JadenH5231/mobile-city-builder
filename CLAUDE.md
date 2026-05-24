@@ -345,6 +345,59 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.3.8 (Big-box rotation fix + multi-tile cluster polish)
+
+Follow-up on 1.3.6 (storefront rotation) and 1.3.7 (cohesive one-building
+clusters). The user reported "still very weird and not working as it
+should. particularly after 2x2 and beyond" — investigation found a
+SIGN bug in the position-rotation formula in `bigBoxClusterParts`.
+
+**The bug:** Three.js's `BufferGeometry.rotateY(yaw)` uses one rotation
+convention (`new_x = x·cos + z·sin`, `new_z = -x·sin + z·cos`), but the
+loose 2D rotation applied to each part's `(dx, dz)` offset used the
+OPPOSITE 2D convention. So while the geometry rotated correctly to
+face east, the offsets translated the parts in the wrong world
+direction. For 1-tile clusters the misplacement was ≤0.20 units
+(within the same tile, tolerated as "slightly off"); for 2x2+ the
+misplacement scaled with offset distance (~0.71-1.0 units), so lamps
+landed on the WEST edge of an east-facing cluster, entries on the
+wrong wall, etc.
+
+**Other 1.3.8 polish** layered on the rotation fix because they all
+manifest most acutely at multi-tile sizes:
+- **Body height scales with footprint** — was 0.30 flat; now grows by
+  0.05 per tile-extent above 1, capped at +0.20. 2x2 buildings look
+  proportionate instead of squashed.
+- **Multiple entry doors on wide stores** — `widthTiles >= 2` gets
+  TWO entry vestibules spaced 1/3 in from each side, like a real
+  Walmart Supercenter. Bullseye / canopy / lumber-stack accents stay
+  on the primary entry to keep silhouettes readable.
+- **Vertical pilasters at tile seams + thicker corner pilasters** —
+  break up the long blank facade. A 2- or 3-tile-wide store no longer
+  reads as one featureless billboard.
+- **Side service door** on multi-tile clusters — small dark slab on
+  the east flank suggests a side-loading entrance.
+- **Garden-centre wing rework for cohesive clusters** — the old code
+  placed the wing at `primary.x + 1` which for a 2x2 was INSIDE the
+  cohesive building. New path adds an outdoor plant display + lumber
+  pallets + greenhouse-glass fascia accent at the east end of the
+  store's apron.
+- **HVAC scatter now mixes 4 unit types** — dark vent boxes, brushed-
+  aluminum AC units, cylindrical exhaust stacks, wide flat ducts.
+  Roof reads as industrial equipment instead of one repeated shape.
+- **Lamp insets pulled inside the cluster** — was at edge ± 0.04
+  (floating at the road/parking seam); now at edge - 0.08 inside the
+  storefront. For widthTiles ≥ 3 an extra middle lamp lights the
+  apron centre.
+
+When extending big_box rendering, the rotation pivot is the cluster
+centroid (computed in `computeBigBoxFrontYaw`), and ALL store parts
+get post-rotated; only `parkingParts` (the absorbed parking_lot
+tiles) stay axis-aligned (because cars use the un-rotated stall
+positions handed out by `Parking.ts`).
+
+No save schema bump — pure visual fix.
+
 ## Status: Beta 1.2 (Theme packs — Coastal Pastel is the free first pack)
 
 First cosmetic-content release. Introduces a pluggable `ThemePack` system that drives every dominant visual surface from a single source of truth, plus a `tint(hex)` long-tail filter that perceptually unifies any unmigrated detail colour with the active theme. Ships TWO themes: **Stock** (the launch look — pixel-identical to pre-1.2) and **Coastal Pastel** (free Mediterranean-village pack — whitewashed walls, cobalt + terracotta roofs, turquoise water, warm hazy sky, olive flora).

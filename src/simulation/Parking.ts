@@ -117,9 +117,11 @@ export class Parking {
    *  have an available stall nearby?" Returns the reservation OR null
    *  if no neighbour is a parking_lot with a free stall.
    *
-   *  Phase 2 only checks direct 4-adjacency. Phase 2.1 may widen to a
-   *  small Chebyshev radius so a big_box surrounded by lots-with-an-
-   *  intervening-walkway still finds parking. */
+   *  Kept for back-compat with callers that want STRICT adjacency.
+   *  New callers should prefer `findStallNearDest` (Beta 1.4.2) which
+   *  scans an expanding radius so parking lots can serve any nearby
+   *  commercial/industrial destination, not just one that's perfectly
+   *  4-adjacent. */
   reserveStallNear(x: number, y: number): ParkingStall | null {
     const neighbours: Array<[number, number]> = [
       [x, y - 1],
@@ -130,6 +132,41 @@ export class Parking {
     for (const [nx, ny] of neighbours) {
       const stall = this.reserveOnTile(nx, ny);
       if (stall) return stall;
+    }
+    return null;
+  }
+
+  /** Look for a free stall on the CLOSEST parking_lot tile within
+   *  `maxRadius` (Chebyshev) of (destX, destY) (Beta 1.4.2). Used as
+   *  the spawn-time parking decision so a parking lot becomes a true
+   *  transit hub — citizens park there and walk to any commercial /
+   *  industrial destination within walking distance.
+   *
+   *  Scans in expanding Chebyshev rings (r = 1, 2, 3, …). Returns the
+   *  first stall found, which is on the closest parking_lot tile.
+   *  Within a single ring multiple parking_lot tiles may exist; we
+   *  walk them in a deterministic order (N, NE, E, SE, S, SW, W, NW)
+   *  for stability. The pre-1.4.2 `reserveStallNear` semantics (only
+   *  4-adjacent) live in this method too when called with maxRadius=1
+   *  — diagonals are tolerated as "almost adjacent" so a corner
+   *  parking lot still serves a corner destination. */
+  findStallNearDest(destX: number, destY: number, maxRadius: number): ParkingStall | null {
+    for (let r = 1; r <= maxRadius; r++) {
+      // Walk the perimeter of the radius-r square ring around (destX, destY).
+      // Use a Set to avoid double-visiting corners.
+      const ringTiles: Array<[number, number]> = [];
+      for (let dx = -r; dx <= r; dx++) {
+        ringTiles.push([destX + dx, destY - r]);   // top edge
+        ringTiles.push([destX + dx, destY + r]);   // bottom edge
+      }
+      for (let dy = -r + 1; dy <= r - 1; dy++) {
+        ringTiles.push([destX - r, destY + dy]);   // left edge
+        ringTiles.push([destX + r, destY + dy]);   // right edge
+      }
+      for (const [nx, ny] of ringTiles) {
+        const stall = this.reserveOnTile(nx, ny);
+        if (stall) return stall;
+      }
     }
     return null;
   }

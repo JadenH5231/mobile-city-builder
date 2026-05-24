@@ -345,6 +345,72 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.4.2 (Big-box demand bump + parking lots as transit hubs)
+
+User feedback: "If I make a big parking lot it's a little too empty. Scale
+up shopping trip demand for big box stores ever so slightly and make it
+so that if a parking lot exists citizens will also use them to park and
+walk to other different industrial or commercial buildings from the
+parking lot that way they get used a bit more. If there's a big parking
+lot there should be some space, but I shouldn't only see one or two
+cars in a big parking lot."
+
+**The diagnosis (Vehicles + Parking survey):**
+- Big_box tiles had NO spawn weighting — they were one commercial tile
+  among many. Big lots got the same fractional share of trips as a
+  small zoned-C tile.
+- `Parking.reserveStallNear` only checked 4-adjacent tiles, so a
+  parking lot 2-3 tiles from a destination was decorative-only.
+- Standalone parking lots (no big_box adjacent) couldn't be reserved
+  at spawn time at all — the spawn picker looks at "stalls adjacent
+  to my destination," and a standalone lot is adjacent to nothing.
+
+**The fix — two surgical changes:**
+
+1. **Big_box demand bump.** `pickRandomDevelopedTile` now takes an
+   optional `bigBoxBias` weight (default 1) for the weighted-
+   reservoir sample. Commercial picks use `bigBoxBias = 2`, so any
+   big_box tile is twice as likely to be picked among commercial
+   tiles. With a typical city this adds ~10-15 percentage points of
+   shopping trips to big-box destinations — "slight" by the user's
+   ask but enough to keep large lots populated.
+
+2. **Parking-lot transit hubs.** New `Parking.findStallNearDest(destX,
+   destY, maxRadius)` scans expanding Chebyshev rings (r=1, 2, 3…)
+   and returns the first available stall. Used at spawn time with
+   `maxRadius = 3` so any commercial / industrial destination within
+   3 tiles of a parking lot can use it.
+   - When a stall is reserved, the car routes to the **parking lot's**
+     nearest road, not the destination's. So the car physically drives
+     to the parking lot, parks, and the existing Shopper system walks
+     the final leg (any distance — `spawnForParkedCar` already
+     handles arbitrary walk legs).
+   - Standalone parking lots in a commercial / industrial district
+     now function as real transit hubs: cars park there and walkers
+     fan out to the surrounding tiles.
+
+**Why this fills lots without making everything chaotic:** A big lot
+has 6 stalls × N tiles of capacity. With the 2× bias + 3-tile reach,
+the lot now sees:
+- Direct big_box arrivals (1.6-2× more frequent than before)
+- Cars routing to nearby C / MU / I tiles within 3 tiles
+- Both share the same stall pool — visible cars in the lot at any
+  time should be ~5-10× pre-change on a busy retail block.
+
+Cap stays at MAX_VEHICLES = 250, so total cars on map is unchanged —
+the change re-allocates who parks where.
+
+When extending Parking (or any future "park-then-walk" mechanism),
+the **rule from this release**: parking-aware routing must reserve
+BEFORE pathfind so the route actually goes to the parking lot. The
+pre-1.4.2 "reserve after pathfind" model worked only when the lot
+was visually adjacent to the destination's road; expanding to a
+3-tile radius made the lot's distance from the destination's road
+arbitrary, so the car needs to know "I'm driving to the lot, not the
+store" before computing its route.
+
+SW cache `mq-city-v9` → `mq-city-v10`. Save schema unchanged.
+
 ## Status: Beta 1.4.1 (Big-box fully modular — any cluster shape is cohesive)
 
 User feedback after Beta 1.3.8 + 1.4 shipped: "the problem with big box

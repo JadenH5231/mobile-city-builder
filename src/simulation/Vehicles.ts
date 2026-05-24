@@ -334,18 +334,24 @@ export class Vehicles {
     // by user playtest feedback. Roll: 45% C, 30% I, 17% forestry,
     // 8% farm. The forestry / farm picks fall through to commercial
     // when the map has no such buildings (small early cities).
+    //
+    // Beta 1.4.2 — `big_box` commercial tiles get a 2× weight in the
+    // commercial pick. Big-box stores are high-traffic shopping
+    // destinations in real life; the bump makes their parking lots
+    // feel like the bustling retail centres they're modelled on
+    // instead of mostly empty asphalt with one car parked.
     const roll = Math.random();
     let dest: { x: number; y: number } | null = null;
     if (roll < 0.45) {
-      dest = pickRandomDevelopedTile(grid, 'commercial');
+      dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     } else if (roll < 0.75) {
       dest = pickRandomDevelopedTile(grid, 'industrial');
     } else if (roll < 0.92) {
       dest = pickRandomBuildingTile(grid, 'forestry');
-      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     } else {
       dest = pickRandomBuildingTile(grid, 'farm');
-      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     }
     if (!dest) return;
 
@@ -359,12 +365,45 @@ export class Vehicles {
 
     const startRoad = nearestRoadTile(grid, origin.x, origin.y);
     if (!startRoad) return;
-    const endRoad = nearestRoadTile(grid, dest.x, dest.y);
-    if (!endRoad) return;
+
+    // Beta 1.4.2 — parking-aware routing. Try to reserve a stall on a
+    // parking_lot near the destination (within 3 tiles Chebyshev).
+    // If a stall is reserved, route the car to the PARKING LOT's
+    // nearest road, not the destination's. This way:
+    //   - The car physically drives to the parking lot
+    //   - The Shopper walks from the stall to the destination (any
+    //     distance — Shoppers.spawnForParkedCar handles arbitrary leg
+    //     lengths)
+    //   - Parking lots become real transit hubs: a single lot can
+    //     serve big_box, regular C, MU, and even nearby I tiles
+    //
+    // Reservation BEFORE pathfind so the path goes to the right place;
+    // we release the reservation on any subsequent failure path so a
+    // no-route trip doesn't leak a stall.
+    const parkingReservation = parking
+      ? parking.findStallNearDest(dest.x, dest.y, 3)
+      : null;
+
+    // Routing end-point depends on whether parking is used: drive to
+    // the parking lot's nearest road (Beta 1.4.2 transit-hub model) or
+    // to the destination's nearest road (vanilla).
+    let endRoad = parkingReservation
+      ? nearestRoadTile(grid, parkingReservation.tileX, parkingReservation.tileY)
+      : null;
+    if (!endRoad) {
+      endRoad = nearestRoadTile(grid, dest.x, dest.y);
+    }
+    if (!endRoad) {
+      if (parkingReservation) parking?.release(parkingReservation);
+      return;
+    }
 
     const startIdx = startRoad.y * grid.width + startRoad.x;
     const endIdx = endRoad.y * grid.width + endRoad.x;
-    if (startIdx === endIdx) return;
+    if (startIdx === endIdx) {
+      if (parkingReservation) parking?.release(parkingReservation);
+      return;
+    }
 
     // Traffic-aware spawn-time pathfinding: each candidate edge's cost is
     // the (already tier-weighted) base inflated by the destination tile's
@@ -377,21 +416,13 @@ export class Vehicles {
       return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
     };
     const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
-    if (!path || path.length < 2) return;
+    if (!path || path.length < 2) {
+      if (parkingReservation) parking?.release(parkingReservation);
+      return;
+    }
 
     const _pal2 = vehiclePalette();
     const color = _pal2[Math.floor(Math.random() * _pal2.length)] ?? 0xffffff;
-    // Beta 1.3 Phase 2 — parking-aware routing. After a successful
-    // pathfind, try to reserve a stall on a parking_lot 4-adjacent to
-    // the destination. If a stall is free, the car arrives normally
-    // at the destination's nearest road tile then transitions into
-    // the visible parked state. If no stall is free OR no Parking
-    // module was supplied, the car spawns vanilla and despawns at
-    // destination as before. Reserving AFTER the path-find prevents
-    // leaking a stall on a no-path-found destination.
-    const parkingReservation = parking
-      ? parking.reserveStallNear(dest.x, dest.y)
-      : null;
     const car: Car = {
       pathTiles: path,
       segmentIdx: 0,
@@ -1065,15 +1096,21 @@ export class Vehicles {
 
 function pickRandomDevelopedTile(
   grid: Grid,
-  zone: 'residential' | 'commercial' | 'industrial'
+  zone: 'residential' | 'commercial' | 'industrial',
+  bigBoxBias: number = 1
 ): { x: number; y: number } | null {
+  // Weighted reservoir sampling. `big_box` tiles get `bigBoxBias` weight
+  // (Beta 1.4.2 = 2× by default in commercial picks) so shopping trips
+  // bias toward big-box stores — makes their parking lots feel
+  // bustling instead of empty. Other tiles weight = 1.
   let chosen: { x: number; y: number } | null = null;
-  let count = 0;
+  let totalWeight = 0;
   for (const t of grid.iter()) {
     if (t.density === 0 || t.road) continue;
     if (!tileMatchesRole(t.zone, zone)) continue;
-    count++;
-    if (Math.random() * count < 1) chosen = { x: t.x, y: t.y };
+    const weight = t.building === 'big_box' ? bigBoxBias : 1;
+    totalWeight += weight;
+    if (Math.random() * totalWeight < weight) chosen = { x: t.x, y: t.y };
   }
   return chosen;
 }

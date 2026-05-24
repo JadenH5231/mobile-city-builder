@@ -27,6 +27,10 @@ export interface SettingsData {
   reduceMotion: boolean;
   defaultSimSpeed: 0 | 1 | 2 | 3;
   confirmReset: boolean;
+  /** Show the FPS counter pill in the HUD (Beta 1.2.3). Off by default
+   *  — most players don't care about framerate; it's debug noise. Power
+   *  users can toggle it from Settings → Display. */
+  showFps: boolean;
 }
 
 const STORAGE_KEY = 'mq-city-settings';
@@ -39,8 +43,14 @@ const DEFAULTS: SettingsData = {
   uiScale: 'normal',
   palette: 'none',
   reduceMotion: false,
-  defaultSimSpeed: 1,
-  confirmReset: true
+  // Default to paused (Beta 1.2.3) — matches city-builder convention
+  // (Cities: Skylines / SimCity start paused) so new players don't bleed
+  // treasury while they're reading the tutorial / exploring menus. The
+  // player taps ▶ on the HUD speed pill when they're ready to start
+  // the sim. Existing users with a saved setting keep their preference.
+  defaultSimSpeed: 0,
+  confirmReset: true,
+  showFps: false
 };
 
 /** Difficulty effects table — single source of truth for downstream
@@ -96,12 +106,16 @@ export class Settings {
     const body = document.body;
     body.classList.remove('palette-deuteranopia', 'palette-protanopia', 'palette-tritanopia');
     if (this.data.palette !== 'none') body.classList.add(`palette-${this.data.palette}`);
+    // FPS counter visibility (Beta 1.2.3). Hidden by default; the CSS
+    // reveals #hud-fps only when this attribute is present.
+    if (this.data.showFps) body.dataset.showFps = 'true';
+    else delete body.dataset.showFps;
   }
 
   set<K extends keyof SettingsData>(key: K, value: SettingsData[K]): void {
     this.data[key] = value;
     this.save();
-    if (key === 'uiScale' || key === 'palette') this.applyCssSideEffects();
+    if (key === 'uiScale' || key === 'palette' || key === 'showFps') this.applyCssSideEffects();
   }
 
   resetToDefaults(): void {
@@ -185,6 +199,7 @@ export function bindSettingsPanel(
   };
   bindCheck('setting-reduce-motion', 'reduceMotion');
   bindCheck('setting-confirm-reset', 'confirmReset');
+  bindCheck('setting-show-fps', 'showFps');
 
   document.getElementById('setting-show-tutorial')?.addEventListener('click', () => {
     hooks.onShowTutorial();
@@ -203,6 +218,7 @@ export function bindSettingsPanel(
     bindSelect('setting-default-speed', 'defaultSimSpeed');
     bindCheck('setting-reduce-motion', 'reduceMotion');
     bindCheck('setting-confirm-reset', 'confirmReset');
+    bindCheck('setting-show-fps', 'showFps');
   });
 
   paintDiff();

@@ -587,7 +587,8 @@ export class Vehicles {
     grid: Grid,
     gridWidth: number,
     trafficLights?: TrafficLights,
-    parking?: import('./Parking').Parking
+    parking?: import('./Parking').Parking,
+    shoppers?: import('./Shoppers').Shoppers
   ): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
@@ -913,6 +914,26 @@ export class Vehicles {
             // Leave segmentT/segmentIdx where they are — the renderer
             // checks `isParked` and uses the stall position directly
             // (so the floating-mid-segment problem doesn't apply).
+            // Beta 1.3.4 (Phase 2.1) — also spawn a Shopper that walks
+            // the final leg from the stall to the actual destination
+            // tile and back. The Shopper's totalSec matches the Car's
+            // visitMs so the two despawn together. car.destX/destY are
+            // the original commercial / big_box destination tile coords
+            // (set at spawn in attemptSpawn).
+            if (shoppers && car.destX !== undefined && car.destY !== undefined) {
+              // Floor y comes from the parking-lot tile's road-surface
+              // height proxy — sidewalk lift + tile elevation.
+              const stallTile = grid.get(car.parking.tileX, car.parking.tileY);
+              const yBase = (stallTile?.elevation ?? 0) + 0.009;
+              shoppers.spawnForParkedCar(
+                car.parking,
+                car.destX,
+                car.destY,
+                visitMs,
+                car.color,
+                yBase
+              );
+            }
             despawned = false;  // car stays alive, just parked
             break;
           }

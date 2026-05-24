@@ -183,6 +183,13 @@ export class Renderer {
   private busHeadlightsMesh!: InstancedMesh;
   private ferriesMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
+  /** Shopper bodies / heads (Beta 1.3.4 — Phase 2.1). Visible while a
+   *  parked-car shopper is on the outbound or return leg between the
+   *  stall and the destination tile. Hidden during the "shopping"
+   *  phase (inside the store). Same humanoid geometry as pedestrians;
+   *  separate InstancedMesh so the count tallies are independent. */
+  private shopperBodiesMesh!: InstancedMesh;
+  private shopperHeadsMesh!: InstancedMesh;
   /** Sibling head mesh for pedestrians (Alpha 3.2.2). Its matrices are
    *  kept identical to pedestriansMesh; the head + hair geometry sits
    *  above the body via baked-in y offsets. Separate material so skin
@@ -618,6 +625,21 @@ export class Renderer {
     this.pedestriansHeadsMesh.count = 0;
     this.pedestriansHeadsMesh.frustumCulled = false;
     this.worldGroup.add(this.pedestriansHeadsMesh);
+
+    // Shopper InstancedMeshes (Beta 1.3.4 — Phase 2.1). Reuse the same
+    // humanoid geometries built above for pedestrians — same body shape
+    // + head + hair tint. Sized at MAX_SHOPPERS capacity. Separate mesh
+    // objects so the per-frame count + matrices don't fight with the
+    // pedestrian counts.
+    const SHOPPER_CAP = 300;  // MAX_SHOPPERS from Shoppers.ts
+    this.shopperBodiesMesh = new InstancedMesh(bodyGeom, pedMat, SHOPPER_CAP);
+    this.shopperBodiesMesh.count = 0;
+    this.shopperBodiesMesh.frustumCulled = false;
+    this.worldGroup.add(this.shopperBodiesMesh);
+    this.shopperHeadsMesh = new InstancedMesh(headPlusHairGeom, headMat, SHOPPER_CAP);
+    this.shopperHeadsMesh.count = 0;
+    this.shopperHeadsMesh.frustumCulled = false;
+    this.worldGroup.add(this.shopperHeadsMesh);
 
     // Ferries (Alpha 2.19) — small low-poly boat. Hull below the waterline,
     // cabin above. Same instanced-mesh pattern as cars/buses.
@@ -1410,6 +1432,54 @@ export class Renderer {
       this.pedestriansHeadsMesh.instanceMatrix.needsUpdate = true;
       if (this.pedestriansMesh.instanceColor) this.pedestriansMesh.instanceColor.needsUpdate = true;
     }
+  }
+
+  /**
+   * Render shoppers walking from parked cars to their destination
+   * (Beta 1.3.4 — Phase 2.1). Each shopper is interpolated point-to-
+   * point between its stall and the destination tile center;
+   * `resolve()` returns the current world (x, z, yaw, visible). Shoppers
+   * in the "shopping" phase (inside the store) report visible=false
+   * and are skipped from the render count.
+   *
+   * Same humanoid body + head geometry as the pedestrian mesh. The
+   * walking bob animation is re-derived here from per-shopper index +
+   * a global clock so each figure moves out of phase with neighbours.
+   */
+  updateShoppers(shoppers: import('../simulation/Shoppers').Shoppers, grid: Grid): void {
+    const obj = this.tmpObj;
+    const c = this.tmpColor;
+    let visible = 0;
+    const now = performance.now() * 0.001;
+    for (let i = 0; i < shoppers.list.length; i++) {
+      const s = shoppers.list[i]!;
+      const r = shoppers.resolve(s);
+      if (!r.visible) continue;
+      // Surface y from the parking-lot floor — we don't have a tile
+      // index easily here so use the stored yLift. Walkers are short
+      // figures so a small bob is plenty to read as walking.
+      const phase = i * 0.7;
+      const cycle = now * 8.8 + phase;
+      const bob = Math.abs(Math.sin(cycle)) * 0.018;
+      const sway = Math.sin(cycle) * 0.04;
+      obj.position.set(r.x, s.yLift + 0.005 + bob, r.z);
+      obj.rotation.set(0, r.yaw, sway);
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      this.shopperBodiesMesh.setMatrixAt(visible, obj.matrix);
+      this.shopperHeadsMesh.setMatrixAt(visible, obj.matrix);
+      c.setHex(s.color);
+      this.shopperBodiesMesh.setColorAt(visible, c);
+      visible++;
+    }
+    this.shopperBodiesMesh.count = visible;
+    this.shopperHeadsMesh.count = visible;
+    if (visible > 0) {
+      this.shopperBodiesMesh.instanceMatrix.needsUpdate = true;
+      this.shopperHeadsMesh.instanceMatrix.needsUpdate = true;
+      if (this.shopperBodiesMesh.instanceColor) this.shopperBodiesMesh.instanceColor.needsUpdate = true;
+    }
+    void grid;
   }
 
   /** Per-frame bus positions, mirror of `updateCars`. */

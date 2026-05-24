@@ -636,6 +636,8 @@ function unlockLabel(tool: string): string {
     place_park: 'Park',
     place_forestry: 'Forestry',
     place_farm: 'Farm',
+    place_big_box: 'Big Box',
+    place_parking_lot: 'Parking Lot',
     place_school: 'School',
     place_hospital: 'Hospital',
     place_fire_station: 'Fire station',

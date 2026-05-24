@@ -90,6 +90,18 @@ export interface FactionStances {
    *  neutral-to-positive (better than industry), NIMBYs mildly negative
    *  (rural feel near them). */
   farm: number;
+  /** Big Box store (Beta 1.3). Chain-store retail — Chamber + Drivers
+   *  + Working Families love (jobs + cheap goods + parking); Hometown
+   *  HATES (kills small-town main-street feel); YIMBYs hate (sprawl /
+   *  car-oriented); Greenleaf hates (heat-island parking, freight);
+   *  Transit hates (anti-walkability); NIMBYs ambivalent (jobs are
+   *  fine but the traffic isn't). */
+  big_box: number;
+  /** Parking Lot (Beta 1.3). Pure car infrastructure. Drivers love;
+   *  YIMBYs + Transit + Greenleaf HATE (sprawl, heat island, anti-
+   *  walkability); Chamber mildly positive (customer access);
+   *  everyone else mostly neutral. */
+  parking_lot: number;
   /** Public services pack (Alpha 2.10). */
   school: number;
   hospital: number;
@@ -169,6 +181,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.6, cloverleaf: -0.9,
     forestry: -0.4,
     farm: -0.2,
+    // NIMBYs ambivalent on big_box (jobs are good but the traffic isn't).
+    // Mild negative on parking_lot — asphalt near homes lowers vibes.
+    big_box: -0.3, parking_lot: -0.2,
     school: 0.3, hospital: 0.4, fire_station: 0.5, police_station: 0.7,
     museum: -0.1, stadium: -0.6, observatory: 0.2,
     ferry_dock: 0.1, subway_entrance: -0.2,
@@ -195,6 +210,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.3, cloverleaf: -0.6,
     forestry: 0.0,
     farm: -0.1,
+    // YIMBYs HATE big_box (sprawl, car-oriented, low-density) and
+    // HATE parking_lot (asphalt instead of housing).
+    big_box: -0.7, parking_lot: -0.8,
     school: 0.5, hospital: 0.5, fire_station: 0.3, police_station: 0.0,
     museum: 0.0, stadium: -0.2, observatory: 0.4,
     ferry_dock: 0.4, subway_entrance: 0.7,
@@ -226,6 +244,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.5, cloverleaf: -0.9,
     forestry: -0.7,
     farm: 0.4,
+    // Greenleaf HATES big_box (freight emissions, sprawl) and HATES
+    // parking_lot (heat island, paved-over green).
+    big_box: -0.6, parking_lot: -0.7,
     school: 0.4, hospital: 0.5, fire_station: 0.2, police_station: -0.1,
     museum: 0.4, stadium: -0.4, observatory: 0.5,
     ferry_dock: 0.5, subway_entrance: 0.7,
@@ -256,6 +277,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.4, cloverleaf: -0.8,
     forestry: 0.6,
     farm: 0.8,
+    // Hometown Heritage HATES big_box — kills small-town main-street
+    // feel, this is their signature opposition. Mildly negative on
+    // parking_lot for the same modern-suburban aesthetic reason.
+    big_box: -0.9, parking_lot: -0.4,
     school: 0.4, hospital: 0.5, fire_station: 0.7, police_station: 0.6,
     museum: 0.7, stadium: -0.4, observatory: 0.1,
     ferry_dock: 0.2, subway_entrance: -0.1,
@@ -286,6 +311,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: 0.6, cloverleaf: 0.9,
     forestry: 0.7,
     farm: 0.6,
+    // Chamber LOVES big_box — pure jobs + retail draw. Likes
+    // parking_lot for the customer-access angle.
+    big_box: 0.7, parking_lot: 0.4,
     school: 0.3, hospital: 0.4, fire_station: 0.4, police_station: 0.5,
     museum: 0.5, stadium: 0.8, observatory: 0.3,
     ferry_dock: 0.3, subway_entrance: 0.4,
@@ -314,6 +342,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.4, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.1,
+    // Transit HATES big_box (anti-walkability, requires car commute)
+    // and HATES parking_lot (validates car-centric mobility).
+    big_box: -0.7, parking_lot: -0.8,
     school: 0.4, hospital: 0.4, fire_station: 0.3, police_station: 0.1,
     museum: 0.4, stadium: 0.5, observatory: 0.4,
     ferry_dock: 0.7, subway_entrance: 1.0,
@@ -343,6 +374,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: 1.0, cloverleaf: 1.0,
     forestry: 0.2,
     farm: 0.3,
+    // Drivers LOVE big_box (parking + drive-up access) and LOVE
+    // parking_lot (their signature cause — pavement for cars).
+    big_box: 0.6, parking_lot: 1.0,
     school: 0.2, hospital: 0.4, fire_station: 0.5, police_station: 0.6,
     museum: 0.0, stadium: 0.4, observatory: 0.0,
     ferry_dock: 0.0, subway_entrance: -0.1,
@@ -372,6 +406,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: 0.2, cloverleaf: -0.4,
     forestry: 0.5,
     farm: 0.4,
+    // Taxpayers warm to big_box (low capital cost + real jobs) and
+    // neutral on parking_lot (cheap to build).
+    big_box: 0.3, parking_lot: 0.1,
     school: 0.1, hospital: -0.1, fire_station: 0.3, police_station: 0.3,
     museum: 0.2, stadium: 0.0, observatory: -0.1,
     ferry_dock: -0.1, subway_entrance: -0.3,
@@ -401,6 +438,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: -0.5, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.2,
+    // Safer Streets dislikes both — large parking lots are dead at
+    // night (loitering, no eyes-on-the-street), big_box's mall apron
+    // is similar dead space at off-hours.
+    big_box: -0.2, parking_lot: -0.3,
     school: 0.6, hospital: 0.7, fire_station: 0.9, police_station: 0.7,
     museum: 0.4, stadium: -0.1, observatory: 0.3,
     ferry_dock: 0.4, subway_entrance: 0.6,
@@ -430,6 +471,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     ramp: 0.3, cloverleaf: 0.5,
     forestry: 0.6,
     farm: 0.7,
+    // Working Families LOVE big_box (low prices, entry-level jobs) and
+    // mildly like parking_lot (need to drive to work).
+    big_box: 0.5, parking_lot: 0.2,
     school: 0.8, hospital: 0.8, fire_station: 0.5, police_station: 0.4,
     museum: 0.5, stadium: 0.6, observatory: 0.3,
     ferry_dock: 0.3, subway_entrance: 0.6,

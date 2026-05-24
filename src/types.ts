@@ -372,6 +372,23 @@ export type Building =
   | 'bus_depot'
   | 'forestry'
   | 'farm'
+  // Big Box store (Beta 1.3). Modular like farm/forestry — adjacent
+  // big_box tiles flood-fill into one larger composition (a Walmart-
+  // style strip across the cluster). Generates a small number of
+  // commercial jobs per tile at a deliberately lower per-job revenue
+  // than zoned commercial — big-box is meant to be a low-margin job
+  // generator, not a high-tax-yield zone. Faction-polarising: drivers
+  // + chamber love it, hometown + greenleaf + transit hate it. Often
+  // placed adjacent to one or more `parking_lot` tiles which the
+  // renderer's cluster builder absorbs into the same paved field.
+  | 'big_box'
+  // Parking Lot (Beta 1.3). Single-tile flat asphalt with painted
+  // parking stalls. Stands alone OR clusters with adjacent big_box
+  // tiles for the visual composition. Phase 1 ships the buildable +
+  // visuals; Phase 2 wires the car-parking simulation behaviour
+  // (cars route here, park in a stall, occupant walks the rest of
+  // the trip to their destination).
+  | 'parking_lot'
   | 'school'
   | 'hospital'
   | 'fire_station'
@@ -474,6 +491,16 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   forestry: 1200,
   // Farm (Alpha 2.7.1) — grass-only modular industry mirroring forestry.
   farm: 1000,
+  // Big Box store (Beta 1.3) — cheap per-tile sticker price (the
+  // business model is a wide low-cost footprint, not a tall premium
+  // build). A 4-tile big_box "supercluster" totals $4.8K — cheaper
+  // than a single bus depot.
+  big_box: 1200,
+  // Parking Lot (Beta 1.3) — pavement is cheap; the lot's value comes
+  // from how many cars it can stage. $200/tile keeps the player
+  // willing to surround a big_box (or a downtown destination) with
+  // enough stalls to actually relieve traffic.
+  parking_lot: 200,
   // Public services pack (Alpha 2.10).
   school: 4000,
   hospital: 8000,
@@ -550,6 +577,13 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   bus_depot: 300,
   forestry: 90,
   farm: 75,
+  // Big Box upkeep (Beta 1.3). Lower than a school but real — the
+  // store is a recurring expense beyond its job-generation revenue.
+  big_box: 60,
+  // Parking Lot upkeep (Beta 1.3). Sweepers, paint, lighting — a
+  // small but real recurring expense so the player can't pave the
+  // city in stalls for free. Per-tile.
+  parking_lot: 12,
   school: 200,
   hospital: 400,
   fire_station: 250,
@@ -824,6 +858,11 @@ export const MILESTONES: readonly Milestone[] = [
     popThreshold: 2500,
     unlocks: [
       'place_forestry', 'place_farm', 'place_observatory',
+      // Big Box + Parking Lot (Beta 1.3). Unlocked at Metro alongside
+      // forestry / farm — same modular-industry tier. Big Box is a
+      // suburban-commercial archetype; parking lots are the
+      // infrastructure for it (and other downtown destinations).
+      'place_big_box', 'place_parking_lot',
       // Architect Mode upper-mid tier (Alpha 4.0) — premium water
       // features unlock once the city reads as a metropolis.
       'place_fountain', 'place_reflecting_pool', 'place_memorial_garden',
@@ -967,6 +1006,13 @@ export type Tool =
   | 'place_park'
   | 'place_forestry'
   | 'place_farm'
+  // Big Box store (Beta 1.3). Industry group toolbar entry. Modular
+  // — adjacent big_box tiles cluster visually (see big_box building
+  // notes). Lives in Industry alongside forestry + farm.
+  | 'place_big_box'
+  // Parking Lot (Beta 1.3). Industry group toolbar entry. Stands
+  // alone OR clusters into an adjacent big_box's paved field.
+  | 'place_parking_lot'
   | 'place_school'
   | 'place_hospital'
   | 'place_fire_station'
@@ -1074,6 +1120,9 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_park', 'park' as const],
   ['place_forestry', 'forestry' as const],
   ['place_farm', 'farm' as const],
+  // Big Box + Parking Lot (Beta 1.3).
+  ['place_big_box', 'big_box' as const],
+  ['place_parking_lot', 'parking_lot' as const],
   ['place_school', 'school' as const],
   ['place_hospital', 'hospital' as const],
   ['place_fire_station', 'fire_station' as const],

@@ -116,6 +116,11 @@ export class Population {
     let cJobs = 0;
     let iJobs = 0;
     for (const t of grid.iter()) {
+      // Big Box (Beta 1.3) — non-zoned commercial that generates a
+      // small fixed number of jobs per tile. Deliberately below a
+      // zoned L1 commercial tile's 3 jobs so big-box clusters add
+      // entry-level retail capacity without competing with downtown.
+      if (t.building === 'big_box') cJobs += 2;
       if (t.zone === 'none' || t.road) continue;
       // Luxury tiles count even at density 0 — they're permanent placement
       // (not demand-driven growth), so capacity is fixed per tile.

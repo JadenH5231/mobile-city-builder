@@ -112,6 +112,8 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_park: 'Park',
   place_forestry: 'Forestry',
   place_farm: 'Farm',
+  place_big_box: 'Big Box',
+  place_parking_lot: 'Parking Lot',
   place_school: 'School',
   place_hospital: 'Hospital',
   place_fire_station: 'Fire Station',
@@ -667,6 +669,12 @@ export class Game {
       ['place_park', 'park'],
       ['place_forestry', 'forestry'],
       ['place_farm', 'farm'],
+      // Big Box + Parking Lot (Beta 1.3). Both have FACTION_STANCES
+      // entries — drivers + chamber love big_box; greenleaf + transit
+      // + hometown hate it. Parking lot polarises drivers vs
+      // greenleaf/transit similarly.
+      ['place_big_box', 'big_box'],
+      ['place_parking_lot', 'parking_lot'],
       ['place_school', 'school'],
       ['place_hospital', 'hospital'],
       ['place_fire_station', 'fire_station'],
@@ -726,6 +734,9 @@ export class Game {
       'residential_max', 'commercial_max', 'industrial_max', 'mixed_max',
       'place_power', 'place_water', 'place_park',
       'place_forestry', 'place_farm',
+      // Big Box + Parking Lot (Beta 1.3). Milestones below gate them
+      // to Town tier — same as forestry / farm.
+      'place_big_box', 'place_parking_lot',
       'place_school', 'place_hospital', 'place_fire_station', 'place_police_station',
       'place_bus_stop', 'place_bus_depot',
       'place_stop_sign', 'place_traffic_light', 'place_ramp',
@@ -1826,6 +1837,26 @@ export class Game {
       const t = this.grid.get(x, y);
       if (t && t.terrain !== 'grass') {
         this.onStatusMessage?.('Farms can only be placed on grass tiles');
+        return false;
+      }
+    }
+    // Big Box + Parking Lot terrain gates (Beta 1.3). Both want flat
+    // dry land — grass or sand — and must not pave over water, forest,
+    // or an existing zoned tile.
+    if (kind === 'big_box' || kind === 'parking_lot') {
+      const t = this.grid.get(x, y);
+      if (t && (t.terrain === 'water' || t.terrain === 'forest')) {
+        this.onStatusMessage?.(
+          (kind === 'big_box' ? 'Big Box' : 'Parking lot') +
+          ' must be placed on flat dry land (grass or sand)'
+        );
+        return false;
+      }
+      if (t && t.zone !== 'none') {
+        this.onStatusMessage?.(
+          (kind === 'big_box' ? 'Big Box' : 'Parking lot') +
+          ' cannot go on a zoned tile — bulldoze the zone first'
+        );
         return false;
       }
     }

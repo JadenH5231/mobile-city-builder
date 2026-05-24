@@ -29,6 +29,7 @@ import { Traffic } from '../simulation/Traffic';
 import { TrafficLights } from '../simulation/TrafficLights';
 import { Vehicles } from '../simulation/Vehicles';
 import { Parking } from '../simulation/Parking';
+import { Shoppers } from '../simulation/Shoppers';
 import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
 import { CouncilPanel } from '../ui/CouncilPanel';
@@ -415,6 +416,11 @@ export class Game {
    *  destination with adjacent parking reserve a stall here and
    *  visibly park in it on arrival. */
   readonly parking = new Parking();
+  /** Shoppers — walking final-leg of parked-car trips (Beta 1.3.4 /
+   *  Phase 2.1). Spawned by Vehicles.update when a car parks; each
+   *  shopper walks from the stall to the destination tile, "shops"
+   *  briefly, walks back. Despawns on the same timer as its car. */
+  readonly shoppers = new Shoppers();
   readonly buses = new Buses();
   /** Motorcade event (Alpha 4.14). Fires every MOTORCADE_INTERVAL_MONTHS
    *  when a Provincial / National Capital is placed. */
@@ -1248,7 +1254,10 @@ export class Game {
       // Motorcade per-frame pump (Alpha 4.14) — drains its 3-vehicle
       // spawn queue as each spawn timestamp fires.
       this.motorcade.tick(this.grid, this.vehicles);
-      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights, this.parking);
+      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights, this.parking, this.shoppers);
+      // Beta 1.3.4 (Phase 2.1) — tick shoppers each render frame.
+      // Cheap O(N) where N is current shoppers list (capped at MAX_SHOPPERS).
+      this.shoppers.update(dt);
       // Drain any crashes that fired this frame: deduct treasury, hit the
       // destination tile's developmentPressure (so business growth slows
       // when crashes prevent shoppers/workers from arriving).
@@ -1271,6 +1280,10 @@ export class Game {
       this.renderer.updateFerries(this.ferries, this.grid);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
+      // Beta 1.3.4 (Phase 2.1) — shoppers (walkers spawned by parked
+      // cars). Their per-frame tick happens above next to the
+      // vehicles update; this is the render pass.
+      this.renderer.updateShoppers(this.shoppers, this.grid);
       // Farm tractor animation (Alpha 4.19). One tractor per large
       // farm cluster, animated along a boustrophedon path through
       // the cluster's tiles. Pure visual; no sim/road interaction.
@@ -1511,6 +1524,9 @@ export class Game {
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();
+    // Shoppers (Beta 1.3.4 / Phase 2.1) — drop any in-flight walking
+    // shoppers when the city resets so we don't leave orphan figures.
+    this.shoppers.clear();
     // Motorcade event resets too — its in-flight queue references a
     // path of road tiles that may not exist post-restore (Alpha 4.14).
     this.motorcade.reset();

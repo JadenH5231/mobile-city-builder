@@ -113,6 +113,7 @@ src/
     SaveGame.ts       IndexedDB multi-slot auto-save + restore (Alpha 2.20)
   simulation/
     Parking.ts        stall registry per parking_lot tile (Beta 1.3 Phase 2 — visible parking + Phase 3 difficulty hooks)
+    Shoppers.ts       walking final-leg from a parked car to the destination tile (Beta 1.3.4 — Phase 2.1)
   themes/             theme packs (Beta 1.2 — cosmetic swap of every dominant visual surface)
     types.ts          ThemePack interface (palette, atmosphere, matcaps, tint, variants)
     registry.ts       getActiveTheme/setActiveTheme/onThemeChange + tint(hex) long-tail filter

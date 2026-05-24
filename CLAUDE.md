@@ -345,6 +345,62 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.4 (Highway redesign — bidirectional divided multi-lane)
+
+Substantial highway rework in response to direct user feedback: "Highways
+are still just too confusing. They often times don't work." The
+pre-1.4 system had one-way highways with per-tile direction stamping,
+a dual-carriageway auto-paint, a 1-way variant tool, a direction-flip
+tool, and animated chevron arrows. In practice this surface produced
+a non-stop stream of "dead end" routing failures — direction mismatches
+at junctions silently dropped edges from the road graph, and players
+had no paint-time feedback about which way each tile would face.
+
+**The redesign:** highways are now a single **bidirectional** road
+tier that visibly reads as a divided multi-lane road. One tool, one
+direction, no flipping. The visual style does the heavy lifting:
+- **Double-yellow median** down the centre (the "this is two-way"
+  cue every driver recognises)
+- **White outer edge stripes** + **white inner lane lines** suggesting
+  two lanes of travel on each side of the median
+- **Asphalt ramp flares** at every highway↔non-highway adjacency —
+  a slim trapezoidal merge lane between the wide highway and the
+  narrow local/avenue. Reads as "this is where cars enter and leave
+  the big road."
+
+**Removed surface area:**
+- `road_highway_oneway` (1-Way variant tool) — retired from the
+  toolbar; Tool value preserved in the union for save back-compat.
+- `highway_flip` (direction flip tool) — retired; dispatcher reduced
+  to a one-line status toast for legacy state.
+- `computeHighwayParallelPath` (dual-carriageway auto-paint helper)
+  — deleted; no auto-paired parallel lane any more.
+- `flipHighwayDirection` (flood-fill component reverser) — deleted.
+- Highway chevron arrows — no longer rendered for newly-painted
+  tiles. Legacy save data that still has a non-default `highwayDir`
+  shows a single faded grey chevron as a visual hint, but the
+  simulation treats the tile as bidirectional regardless.
+
+**Simulation change:** `RoadGraph.rebuild` no longer enforces the
+`highwayDir` one-way constraint. Every road edge becomes symmetric
+in the adjacency list. Edge weight still depends on the destination
+tile's tier (highways are 0.55, avenues 0.75, locals 1.0), so A*
+continues to prefer highways for long trips — the "highways are fast"
+behaviour everyone liked remains intact.
+
+**Save schema:** unchanged. `Tile.highwayDir` is kept as a v25+ field
+for backward compatibility but is inert at runtime. Old saves with
+painted directions load and play normally; the directions just stop
+mattering for routing.
+
+When adding a future road tier or fancier highway feature, the
+**principle from this release**: visual clarity beats simulation
+realism. A double-yellow median + edge stripes + ramp flares makes
+players say "of course that's a highway" without reading any tutorial.
+The previous one-way-arrow system was simulation-accurate but
+visually opaque, and that gap between what the player saw and what
+the road graph enforced was the source of every "doesn't work" complaint.
+
 ## Status: Beta 1.3.8 (Big-box rotation fix + multi-tile cluster polish)
 
 Follow-up on 1.3.6 (storefront rotation) and 1.3.7 (cohesive one-building

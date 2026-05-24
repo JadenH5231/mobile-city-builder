@@ -53,7 +53,8 @@ export interface TileInfo {
   reasons: ReadonlyArray<{ kind: 'good' | 'warn' | 'block' | 'info'; text: string }>;
 }
 
-const DIR_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+// (DIR_LABELS removed Beta 1.4 — highway direction display was retired
+// when highways became bidirectional.)
 
 /**
  * Bottom-sheet info + diagnostic panel (Alpha 2.13). Shows the tile's
@@ -146,10 +147,8 @@ function headlineFor(info: TileInfo): string {
     return `Overpass · ${info.terrain}`;
   }
   if (info.road) {
+    // Beta 1.4 — highways are bidirectional; no direction suffix.
     let label = info.roadType;
-    if (info.roadType === 'highway' && info.highwayDir >= 0 && info.highwayDir < 8) {
-      label += ` →${DIR_LABELS[info.highwayDir]}`;
-    }
     if (info.bridge) label += ' (bridge)';
     return `${label} road · ${info.terrain}`;
   }

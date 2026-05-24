@@ -28,6 +28,7 @@ import { Services } from '../simulation/Services';
 import { Traffic } from '../simulation/Traffic';
 import { TrafficLights } from '../simulation/TrafficLights';
 import { Vehicles } from '../simulation/Vehicles';
+import { Parking } from '../simulation/Parking';
 import { BudgetPanel } from '../ui/BudgetPanel';
 import { HappinessPanel } from '../ui/HappinessPanel';
 import { CouncilPanel } from '../ui/CouncilPanel';
@@ -408,6 +409,12 @@ export class Game {
    *  systems don't trip over each other's gScore/cameFrom maps within a tick. */
   private readonly walkPathfinder = new Pathfinding();
   readonly vehicles = new Vehicles();
+  /** Parking-stall registry (Beta 1.3 Phase 2). Tracks the 6 stalls per
+   *  parking_lot tile. Rebuilt whenever parking lots are placed /
+   *  bulldozed (see `refreshParking()` callers). Cars spawning toward a
+   *  destination with adjacent parking reserve a stall here and
+   *  visibly park in it on arrival. */
+  readonly parking = new Parking();
   readonly buses = new Buses();
   /** Motorcade event (Alpha 4.14). Fires every MOTORCADE_INTERVAL_MONTHS
    *  when a Provincial / National Capital is placed. */
@@ -569,6 +576,11 @@ export class Game {
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
@@ -1185,7 +1197,11 @@ export class Game {
           this.pathfinder,
           this.population.totalResidents,
           this.pathGraph,
-          this.walkPathfinder
+          this.walkPathfinder,
+          // Beta 1.3 Phase 2 — pass the parking registry so spawning
+          // cars heading to a destination with adjacent parking reserve
+          // a stall and arrive into the visible parked state.
+          this.parking
         );
         this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder);
         // Tourist arrivals (Alpha 4.14) — only fire when the city is
@@ -1232,7 +1248,7 @@ export class Game {
       // Motorcade per-frame pump (Alpha 4.14) — drains its 3-vehicle
       // spawn queue as each spawn timestamp fires.
       this.motorcade.tick(this.grid, this.vehicles);
-      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights);
+      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights, this.parking);
       // Drain any crashes that fired this frame: deduct treasury, hit the
       // destination tile's developmentPressure (so business growth slows
       // when crashes prevent shoppers/workers from arriving).
@@ -1464,6 +1480,11 @@ export class Game {
 
   private afterStateRestore(): void {
     this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
     this.roadGraph.rebuild(this.grid);
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
@@ -1900,6 +1921,11 @@ export class Game {
     if (!this.grid.setBuilding(x, y, kind)) return false;
     this.economy.treasury -= cost;
     this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     // Parks are walkable (Alpha 2.6.1) — rebuild the pedestrian graph
     // so walkers can route through the new park tile immediately.
@@ -2589,6 +2615,11 @@ export class Game {
     this.economy.treasury -= blockCost;
     // No `building` value on the anchor yet — that flips on completion.
     this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     // Refresh the ghost web to show the unpaid blocks.
     this.refreshMonumentGhostWeb();
@@ -2649,6 +2680,11 @@ export class Game {
         this.finalizeCloverleaf(anchor.x, anchor.y);
       }
       this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
       this.maybeOfferPhotoOp(kind);
       this.onStatusMessage?.(`${fp.label} complete! 🎉`);
     } else {
@@ -3617,6 +3653,11 @@ export class Game {
       this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
       // Service coverage changed — rerun the sweep so Development sees it.
       this.services.recompute(this.grid);
+    // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
+    // building grid changes. Cheap O(grid). Idempotent: existing stalls
+    // on still-present tiles keep their occupancy state; bulldozed
+    // parking_lots drop out of the registry.
+    this.parking.rebuild(this.grid);
       // The bulldoze may have removed a tile of an in-progress big-build
       // reservation matching the active tool — refresh the ghost web so
       // it reflects the new state (Alpha 4.15).

@@ -5145,7 +5145,15 @@ function bigBoxClusterParts(
   grid: Grid
 ): CityBuildingPart[] {
   if (cluster.length === 0) return [];
-  const out: CityBuildingPart[] = [];
+  // Beta 1.3.6 — store-front rotation. The store-related geometry
+  // (asphalt apron, body, fascia, brand stripe, entry, lamps) goes
+  // into `storeParts`, gets POST-ROTATED to face whichever cardinal
+  // the parking lot (or nearest road) sits on. Absorbed parking_lot
+  // tiles go into `parkingParts` and stay axis-aligned — the
+  // rotation is TOWARD the parking, so the relative orientation
+  // store→parking stays correct (storefront opens onto the lot).
+  const storeParts: CityBuildingPart[] = [];
+  const parkingParts: CityBuildingPart[] = [];
   // Lex-order the cluster — first tile is the "primary store"; the
   // rest are wings / annexes that extend the storefront.
   const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
@@ -5164,6 +5172,10 @@ function bigBoxClusterParts(
       if (nt && nt.building === 'parking_lot') adjacentParking.add(nx + ',' + ny);
     }
   }
+  // Local alias so the rest of the function can keep writing to `out`
+  // (storeParts) without churn. Parking-lot emission appends to
+  // parkingParts explicitly at the end.
+  const out = storeParts;
 
   // Shared lot palette — Phase 1 colours kept stable so adjacent
   // parking lots merge visually with the apron.
@@ -5328,16 +5340,115 @@ function bigBoxClusterParts(
   // decorations argument tells emitParkingTile to skip lights it's
   // already provided by big_box lamps, and to use store-adjacent
   // cluster-aware fencing (skips the edge shared with the store).
+  // Emitted to parkingParts (NOT storeParts) so the post-rotation
+  // pass only twists the store geometry; the parking stripes stay
+  // axis-aligned, matching the world coords the Parking module hands
+  // out for in-stall car placement.
   for (const key of adjacentParking) {
     const [sxStr, syStr] = key.split(',');
     const sx = parseInt(sxStr!, 10), sy = parseInt(syStr!, 10);
-    emitParkingTile(out, sx, sy, {
+    emitParkingTile(parkingParts, sx, sy, {
       asphalt, stripeWhite, stripeYellow, stripeBlue,
       lampPole, lampHead, fenceCol, fencePost, planter, planterLeaf, cartCorral
     }, grid, /* attachedToBigBox */ true);
   }
 
-  return out;
+  // 7. Beta 1.3.6 — rotate the store geometry so the storefront faces
+  // whichever cardinal the absorbed parking lot (or nearest road)
+  // sits on. Yaw is snapped to 0 / π/2 / π / 3π/2 because the painted
+  // building geometry is axis-aligned boxes — fractional rotations
+  // look weird at this zoom.
+  const { yaw, cx: pivotX, cz: pivotZ } = computeBigBoxFrontYaw(sorted, adjacentParking, grid);
+  if (yaw !== 0) {
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    for (const p of storeParts) {
+      // Rotate (dx, dz) around (pivotX, pivotZ).
+      const odx = p.dx - pivotX;
+      const odz = p.dz - pivotZ;
+      p.dx = pivotX + odx * cos - odz * sin;
+      p.dz = pivotZ + odx * sin + odz * cos;
+      // Pre-rotate the geometry itself by wrapping makeGeom. Since the
+      // box geoms are built at origin, rotateY(yaw) reorients them
+      // around their own centre — combined with the (dx, dz)
+      // rotation above, the whole composition turns as a rigid body.
+      const orig = p.makeGeom;
+      p.makeGeom = () => {
+        const g = orig();
+        g.rotateY(yaw);
+        return g;
+      };
+    }
+  }
+
+  // Concat: store geometry first (rotated), parking lots second (axis-aligned).
+  return storeParts.concat(parkingParts);
+}
+
+/**
+ * Determine which cardinal direction a big_box cluster's storefront
+ * should face (Beta 1.3.6). Returns a yaw value snapped to one of
+ * 0 / π/2 / π / -π/2 (south / east / north / west) and the world-
+ * space pivot to rotate around.
+ *
+ * Priority:
+ *  1. If any parking_lot is 4-adjacent to the cluster, face the
+ *     centroid of those parking lots.
+ *  2. Otherwise, face the first road tile 4-adjacent to any cluster
+ *     tile.
+ *  3. Otherwise, default to south (yaw = 0) — the original baked
+ *     orientation of every box in `bigBoxClusterParts`.
+ *
+ * Snapping rule (cardinalYaw): the bigger axis of the (dx, dy)
+ * offset wins. The yaw rotates the un-rotated +Z-facing geometry to
+ * line up with the chosen cardinal:
+ *   +Z (south, dy > 0): yaw = 0
+ *   +X (east,  dx > 0): yaw = +π/2
+ *   -Z (north, dy < 0): yaw = π
+ *   -X (west,  dx < 0): yaw = -π/2
+ */
+function computeBigBoxFrontYaw(
+  sorted: Array<{ x: number; y: number }>,
+  adjacentParking: Set<string>,
+  grid: Grid
+): { yaw: number; cx: number; cz: number } {
+  // Cluster centroid (tile coords).
+  let cxSum = 0, cySum = 0;
+  for (const c of sorted) { cxSum += c.x; cySum += c.y; }
+  const ccx = cxSum / sorted.length;
+  const ccy = cySum / sorted.length;
+  const pivotX = (ccx + 0.5) * TILE_SIZE;
+  const pivotZ = (ccy + 0.5) * TILE_SIZE;
+
+  if (adjacentParking.size > 0) {
+    let pxSum = 0, pySum = 0;
+    for (const key of adjacentParking) {
+      const parts = key.split(',');
+      pxSum += parseInt(parts[0]!, 10);
+      pySum += parseInt(parts[1]!, 10);
+    }
+    const pcx = pxSum / adjacentParking.size;
+    const pcy = pySum / adjacentParking.size;
+    return { yaw: cardinalYaw(pcx - ccx, pcy - ccy), cx: pivotX, cz: pivotZ };
+  }
+  // No parking → use road adjacency.
+  for (const c of sorted) {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nt = grid.get(c.x + dx, c.y + dy);
+      if (nt && nt.road) {
+        return { yaw: cardinalYaw(dx, dy), cx: pivotX, cz: pivotZ };
+      }
+    }
+  }
+  // Default — face south, same as the un-rotated geometry.
+  return { yaw: 0, cx: pivotX, cz: pivotZ };
+}
+
+function cardinalYaw(dx: number, dy: number): number {
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+  return dy > 0 ? 0 : Math.PI;
 }
 
 /** Standalone parking-lot tile builder. Same paving + striping as the

@@ -4,6 +4,13 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.3.6 — Big-box clusters face their parking lot (no more identical-direction stamping)** — user feedback: "the big box stores need to be able to point in different directions based on what direction you are building them. They look weird all facing the same direction." Right — the cluster builder always baked the storefront on +Z.
+  - **New `computeBigBoxFrontYaw(sorted, adjacentParking, grid)`** — picks a cardinal yaw (0, π/2, π, or -π/2) from where the cluster's parking lots sit (first priority) or the nearest adjacent road (second priority), defaulting to south (yaw 0) when neither exists. Snap-to-cardinal via `cardinalYaw(dx, dy)` — the larger axis wins. Returns the world-space pivot for rotation (cluster centroid).
+  - **`bigBoxClusterParts`** restructured to emit STORE geometry into a `storeParts` array and absorbed parking-lot geometry into a separate `parkingParts` array. After all parts are emitted, the rotation pass rotates each `storeParts` entry's (dx, dz) around the cluster centroid AND wraps `makeGeom` to pre-rotate the geometry by `yaw` — so the whole composition turns as a rigid body. Concat: `storeParts.concat(parkingParts)` at return.
+  - **Why parking lots stay axis-aligned**: the Parking module hands cars stall coords computed from fixed `STALL_OFFSETS`. If I rotated the parking tile, the painted stripes would be in different world positions than the stall coords cars park at. Since rotation is TOWARD the parking, the relative orientation (storefront opens onto the lot) stays correct without rotating the lot itself.
+  - **Verified** with math: yaw=0 → entry at z+0.22, yaw=π/2 → entry at x+0.22, yaw=π → entry at z-0.22, yaw=-π/2 → entry at x-0.22. All four cardinals lined up.
+  - All archetype-specific accents (gas canopy on membership-club, bullseye on mass-merchant, garden centre on home-improvement, glass strip on electronics, yellow corner blocks on warehouse-discount) rotate with the rest of the store body.
+
 - **Beta 1.3.5 — Parking strictness difficulty (Phase 3, completes the parking feature)** — final phase of the parking-management arc. Adds a player-facing "Parking management" setting in Settings → Simulation with four escalating levels:
   - **Off** — parking lots are decorative. `Vehicles.attemptSpawn` skips `reserveStallNear` entirely; no cars visibly park; no revenue penalty. For players who don't want parking as a gameplay element.
   - **Lenient** (default) — current behaviour. Cars use parking when available, no penalty when missing. Preserves the Phase 2 + 2.1 experience for existing players.

@@ -4,6 +4,14 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.2.1 — Toolbar overflow affordance on narrow phones (iPhone mini fix)** — beta-tester report: an iPhone mini user couldn't see toolbar items to the right of Bulldoze. Root cause: on a 375px viewport the toolbar scroll strip overflows (10 build groups + ~263px of hidden content), but there was no visual indication scrolling was possible. The strip was actually scrollable; the user just didn't know.
+  - **Fade-edge gradients** on the right/left of `.toolbar` via `::before` + `::after` pseudo-elements. Painted only when there's content past that edge (driven by a new `data-scroll-state` attribute on `.toolbar`: `none | start | middle | end`).
+  - **Tiny chevron hints** (`‹` / `›`) absolutely positioned over the fade edges. Same data-attribute-driven visibility.
+  - **One-time scroll-teach animation** on first launch — when the toolbar has overflow and the player hasn't seen the hint before (localStorage gate `mqcity-toolbar-scroll-hinted`), the scroll strip gently animates 0 → 40px → 0 over 1.1s with the right chevron pulsing in sync. Teaches the gesture without ever needing copy.
+  - **`Toolbar.updateScrollState()`** computes the state from `scrollWidth / clientWidth / scrollLeft`. Wired to the existing scroll listener + a new `window.resize` listener so rotation / keyboard-pop refresh it correctly.
+  - **Very-narrow-phone breakpoint at `<400px`**: padding 10→8, min-width 40→36, smaller gaps. Fits ~1 extra scroll item on iPhone mini before forcing the scroll, plus tighter density on the pinned cluster (Pan / Bulldoze).
+  - Verified via Vite dev server at 375x812: 10 scroll items, 263px overflow, `start → middle → end → start` state transitions all paint correctly.
+
 - **Beta 1.2 — Theme packs (system + first free pack "Coastal Pastel")** — first cosmetic-content release. Introduces the `ThemePack` architecture: a pluggable single-source-of-truth for every dominant visual surface (terrain palette, road palette, building zone palettes, vehicle palette, flora, beautification, atmosphere — sky gradient, sun colours, fog) plus a `tint(hex)` long-tail filter that perceptually unifies the unmigrated detail colours. Stock theme = identity tint = pixel-identical to pre-1.2; Coastal Pastel ships with a Mediterranean / Aegean palette + warm hazy atmosphere + olive-grove flora. Bundle 994 KB raw / 264 KB gzipped.
   - **`src/themes/`** new module:
     - `types.ts` — `ThemePack` interface (terrain, roads, buildings, vehicles, flora, beautification, atmosphere, matcaps, moodTint, extraVariants, exclusiveMonument).

@@ -4152,6 +4152,89 @@ html.ui-scale-xlarge { font-size: 130%; }
 /* (Old .budget__cheats* rules removed in Alpha 4.10.1 — cheats moved
  * to the Settings modal and reuse the .settings__check checkbox style.) */
 
+/* ---- Toolbar scroll-overflow affordance (Beta 1.2.1) ----------------- *
+ * On viewports where the scroll strip overflows (iPhone mini etc.), the
+ * user couldn't tell there was more content past Bulldoze. We now paint
+ * a soft fade-edge on the overflowing side(s) plus a tiny chevron, and
+ * trigger a one-time scroll-hint animation on first launch.
+ * Toolbar.ts sets `data-scroll-state` to "start" | "middle" | "end" |
+ * "none" on the .toolbar element based on the inner .toolbar__scroll's
+ * scrollLeft + scrollWidth + clientWidth.
+ * --------------------------------------------------------------------- */
+.toolbar {
+  position: relative;
+}
+.toolbar::before,
+.toolbar::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  z-index: 2;
+  border-radius: 999px;
+}
+.toolbar::before {
+  left: 4px;
+  background: linear-gradient(to right, var(--pill-bg) 0%, rgba(10, 20, 16, 0) 100%);
+}
+.toolbar::after {
+  right: 4px;
+  background: linear-gradient(to left, var(--pill-bg) 0%, rgba(10, 20, 16, 0) 100%);
+}
+/* Show right-edge fade when there's more content to the right
+   (i.e. state is "start" or "middle"). */
+.toolbar[data-scroll-state="start"]::after,
+.toolbar[data-scroll-state="middle"]::after {
+  opacity: 1;
+}
+/* Show left-edge fade once the user has scrolled past the start
+   (state is "middle" or "end"). */
+.toolbar[data-scroll-state="middle"]::before,
+.toolbar[data-scroll-state="end"]::before {
+  opacity: 1;
+}
+/* Chevron indicators sit on top of the fade so they stay legible.
+   Rendered via a CSS mask of a unicode chevron — keeps the DOM clean. */
+.toolbar__scroll-hint {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease, transform 200ms ease;
+  z-index: 3;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  line-height: 14px;
+  font-weight: 700;
+  user-select: none;
+}
+.toolbar__scroll-hint--left { left: 10px; }
+.toolbar__scroll-hint--right { right: 10px; }
+.toolbar[data-scroll-state="start"] .toolbar__scroll-hint--right,
+.toolbar[data-scroll-state="middle"] .toolbar__scroll-hint--right {
+  opacity: 1;
+}
+.toolbar[data-scroll-state="middle"] .toolbar__scroll-hint--left,
+.toolbar[data-scroll-state="end"] .toolbar__scroll-hint--left {
+  opacity: 1;
+}
+/* Subtle nudge on the right chevron during the first-launch scroll
+   hint, applied by Toolbar.ts via a transient class. */
+.toolbar.is-scroll-hinting .toolbar__scroll-hint--right {
+  animation: toolbar-hint-pulse 1200ms ease-in-out;
+}
+@keyframes toolbar-hint-pulse {
+  0%, 100% { transform: translateY(-50%) translateX(0); }
+  50%      { transform: translateY(-50%) translateX(-6px); }
+}
+
 /* ---- Narrow-viewport toolbar (Alpha 4.1) ----------------------------- *
  * Portrait phones (≤ 480px wide) — tighter pills, icon-only labels in
  * the scroll strip so more categories fit without horizontal scrolling.
@@ -4205,5 +4288,38 @@ html.ui-scale-xlarge { font-size: 130%; }
     flex: 0 0 76px;
     height: 42px;
     font-size: 10.5px;
+  }
+}
+
+/* Very narrow phones (iPhone 12/13/14 mini = 375px, older / smaller still).
+ * Tighter pill packing so 1-2 more scroll-strip items fit on-screen before
+ * the user has to scroll past Bulldoze. The scroll fade still teaches the
+ * gesture; this just reduces how much hiding happens. (Beta 1.2.1) */
+@media (max-width: 399px) {
+  .toolbar__scroll .toolbar__btn {
+    padding: 0 8px;
+    min-width: 36px;
+    gap: 3px;
+  }
+  .toolbar__pinned .toolbar__btn,
+  .toolbar__mode .toolbar__btn {
+    padding: 0 8px;
+    font-size: 11.5px;
+  }
+  .toolbar {
+    gap: 1px;
+    padding: 2px;
+  }
+  .toolbar__mode {
+    padding-right: 4px;
+    margin-right: 1px;
+  }
+  .toolbar__pinned {
+    padding-right: 4px;
+    margin-right: 1px;
+    gap: 2px;
+  }
+  .toolbar__scroll {
+    gap: 2px;
   }
 }

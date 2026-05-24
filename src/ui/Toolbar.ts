@@ -653,6 +653,10 @@ export class Toolbar {
    *  'architect' = terraforming + monuments toolbar. The leading
    *  mode-toggle pill swaps between them. */
   private mode: ToolbarMode = 'build';
+  /** The scrollable strip inside the toolbar. Held so we can read its
+   *  scrollLeft / scrollWidth / clientWidth in updateScrollState (Beta
+   *  1.2.1 — iPhone-mini overflow affordance). */
+  private scrollEl: HTMLElement | null = null;
   onChange?: (tool: Tool) => void;
   /** Fired when the user taps a locked tool — Game wires this to a toast. */
   onLocked?: (tool: Tool) => void;
@@ -671,6 +675,11 @@ export class Toolbar {
     if (!el) throw new Error('Toolbar: missing #toolbar');
     this.el = el;
     this.render();
+
+    // Re-evaluate overflow state on viewport changes (rotation, keyboard
+    // pop, browser-chrome show/hide) so the fade-edges / chevrons stay
+    // correct. Beta 1.2.1 — part of the iPhone-mini overflow fix.
+    window.addEventListener('resize', () => this.updateScrollState(), { passive: true });
 
     // Outside-tap closes any open popover. Use pointerdown so it fires on
     // touch start without waiting for the click to fully resolve.
@@ -761,12 +770,31 @@ export class Toolbar {
     pinned.className = 'toolbar__pinned';
     const scroll = document.createElement('div');
     scroll.className = 'toolbar__scroll';
-    // Re-close popovers when the scroll strip is panned (used to live
-    // on `this.el` directly).
-    scroll.addEventListener('scroll', () => this.closePopovers(), { passive: true });
+    // Re-close popovers when the scroll strip is panned + update the
+    // overflow indicators so the fade-edges / chevrons reflect whether
+    // there's more content past either side. Beta 1.2.1 — bug fix for
+    // iPhone mini (375px) where users couldn't tell the toolbar
+    // scrolled past Bulldoze.
+    scroll.addEventListener('scroll', () => {
+      this.closePopovers();
+      this.updateScrollState();
+    }, { passive: true });
     this.el.appendChild(modeWrap);
     this.el.appendChild(pinned);
     this.el.appendChild(scroll);
+    // Chevron hints — small text glyphs absolutely positioned over the
+    // toolbar edges. CSS shows/hides each based on data-scroll-state.
+    const hintLeft = document.createElement('span');
+    hintLeft.className = 'toolbar__scroll-hint toolbar__scroll-hint--left';
+    hintLeft.setAttribute('aria-hidden', 'true');
+    hintLeft.textContent = '‹';
+    const hintRight = document.createElement('span');
+    hintRight.className = 'toolbar__scroll-hint toolbar__scroll-hint--right';
+    hintRight.setAttribute('aria-hidden', 'true');
+    hintRight.textContent = '›';
+    this.el.appendChild(hintLeft);
+    this.el.appendChild(hintRight);
+    this.scrollEl = scroll;
 
     // Mode-toggle pill (Alpha 4.0). Cycles Build → Architect → Build.
     // Renders as a single pill with a dynamic label/icon so the player
@@ -805,6 +833,79 @@ export class Toolbar {
         scroll.appendChild(this.makeGroup(item));
       }
     }
+    // Initial overflow-state paint + one-time scroll-teach animation
+    // for first-time players on narrow viewports (Beta 1.2.1). The
+    // setTimeout lets the layout settle so scrollWidth is correct.
+    setTimeout(() => {
+      this.updateScrollState();
+      this.maybeRunFirstLaunchScrollHint();
+    }, 0);
+  }
+
+  /**
+   * Update the toolbar's data-scroll-state attribute based on whether
+   * the scroll strip has more content past either end. CSS uses this
+   * to fade the appropriate edge and reveal the chevron hint.
+   *
+   * States: 'none' (no overflow) | 'start' (at scrollLeft 0, more to right)
+   *       | 'middle' (more on both sides) | 'end' (scrolled to rightmost).
+   *
+   * Beta 1.2.1 — fixes iPhone-mini bug where users couldn't tell the
+   * toolbar scrolled past Bulldoze.
+   */
+  private updateScrollState(): void {
+    const scroll = this.scrollEl;
+    if (!scroll) return;
+    const overflow = scroll.scrollWidth - scroll.clientWidth;
+    let state: 'none' | 'start' | 'middle' | 'end';
+    if (overflow <= 2) {
+      state = 'none';
+    } else {
+      const sl = scroll.scrollLeft;
+      const atStart = sl <= 1;
+      const atEnd = sl >= overflow - 1;
+      state = atStart ? 'start' : atEnd ? 'end' : 'middle';
+    }
+    this.el.dataset.scrollState = state;
+  }
+
+  /**
+   * One-time scroll-teach animation on first launch (Beta 1.2.1). When
+   * the toolbar has overflow and the player hasn't been hinted before,
+   * we briefly scroll right ~30px and back so the gesture is shown.
+   * Tracked via localStorage; safe in private mode (the catch swallows
+   * a denied write and the hint just doesn't replay).
+   */
+  private maybeRunFirstLaunchScrollHint(): void {
+    const KEY = 'mqcity-toolbar-scroll-hinted';
+    try {
+      if (localStorage.getItem(KEY) === '1') return;
+    } catch { /* private mode — fall through and animate once per session */ }
+    const scroll = this.scrollEl;
+    if (!scroll) return;
+    const overflow = scroll.scrollWidth - scroll.clientWidth;
+    if (overflow <= 2) return; // no overflow → nothing to teach
+    try { localStorage.setItem(KEY, '1'); } catch { /* private mode */ }
+    // Add the pulse class so the right chevron also bobs in sync with
+    // the scroll, then animate scrollLeft 0 → 36 → 0 over ~1.2s.
+    this.el.classList.add('is-scroll-hinting');
+    const target = Math.min(40, overflow);
+    const start = performance.now();
+    const dur = 1100;
+    const tick = (now: number): void => {
+      const t = Math.min(1, (now - start) / dur);
+      // Ease in-out then back: 0 → 1 → 0 across t ∈ [0, 1].
+      const phase = t < 0.5 ? t * 2 : (1 - t) * 2;
+      const ease = phase * phase * (3 - 2 * phase); // smoothstep
+      scroll.scrollLeft = target * ease;
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        scroll.scrollLeft = 0;
+        this.el.classList.remove('is-scroll-hinting');
+      }
+    };
+    requestAnimationFrame(tick);
   }
 
   /**

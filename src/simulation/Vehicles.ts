@@ -134,6 +134,21 @@ export interface Car {
    *  - render appearance (different colour / scale per kind)
    *  - pullover behaviour (motorcade kinds force others off the road) */
   kind?: CarKind;
+  /** Parking reservation (Beta 1.3 Phase 2). Set at spawn time if the
+   *  destination has a free stall on an adjacent `parking_lot` tile. On
+   *  arrival the car transitions into the visible parked-state instead
+   *  of an immediate despawn-and-queue-return. */
+  parking?: import('./Parking').ParkingStall;
+  /** True once the car has reached its destination and is sitting
+   *  in its stall (Phase 2). Skips movement physics + collisions; the
+   *  Renderer reads `car.parking` for its world position instead of
+   *  interpolating along the path. */
+  isParked?: boolean;
+  /** performance.now() timestamp when the car should unpark. Set when
+   *  the car enters the parked phase; on expiry the stall is released,
+   *  the car despawns, and a `PendingReturn` fires (the visit interval
+   *  has been spent visibly at the stall rather than invisibly queued). */
+  parkedUntil?: number;
 }
 
 /**
@@ -213,7 +228,8 @@ export class Vehicles {
     pathfinder: Pathfinding,
     residents: number,
     pathGraph?: PathGraph,
-    _walkPathfinder?: Pathfinding
+    _walkPathfinder?: Pathfinding,
+    parking?: import('./Parking').Parking
   ): void {
     if (residents <= 0) return;
     const seconds = stepMs / 1000;
@@ -227,7 +243,7 @@ export class Vehicles {
         this.spawnAccumulator = 0;
         break;
       }
-      this.attemptSpawn(grid, roadGraph, pathfinder, pathGraph);
+      this.attemptSpawn(grid, roadGraph, pathfinder, pathGraph, parking);
     }
   }
 
@@ -299,7 +315,8 @@ export class Vehicles {
     grid: Grid,
     roadGraph: RoadGraph,
     pathfinder: Pathfinding,
-    pathGraph?: PathGraph
+    pathGraph?: PathGraph,
+    parking?: import('./Parking').Parking
   ): void {
     const origin = pickRandomDevelopedTile(grid, 'residential');
     if (!origin) return;
@@ -364,6 +381,17 @@ export class Vehicles {
 
     const _pal2 = vehiclePalette();
     const color = _pal2[Math.floor(Math.random() * _pal2.length)] ?? 0xffffff;
+    // Beta 1.3 Phase 2 — parking-aware routing. After a successful
+    // pathfind, try to reserve a stall on a parking_lot 4-adjacent to
+    // the destination. If a stall is free, the car arrives normally
+    // at the destination's nearest road tile then transitions into
+    // the visible parked state. If no stall is free OR no Parking
+    // module was supplied, the car spawns vanilla and despawns at
+    // destination as before. Reserving AFTER the path-find prevents
+    // leaking a stall on a no-path-found destination.
+    const parkingReservation = parking
+      ? parking.reserveStallNear(dest.x, dest.y)
+      : null;
     const car: Car = {
       pathTiles: path,
       segmentIdx: 0,
@@ -379,7 +407,8 @@ export class Vehicles {
       originRoadIdx: startIdx,
       originHomeX: origin.x,
       originHomeY: origin.y,
-      kind: 'resident'
+      kind: 'resident',
+      parking: parkingReservation ?? undefined
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile);
@@ -553,7 +582,13 @@ export class Vehicles {
    * stop-sign behaviour. After this call, `crashesThisFrame` holds any
    * collisions that fired — Game inspects it per render frame.
    */
-  update(dt: number, grid: Grid, gridWidth: number, trafficLights?: TrafficLights): void {
+  update(
+    dt: number,
+    grid: Grid,
+    gridWidth: number,
+    trafficLights?: TrafficLights,
+    parking?: import('./Parking').Parking
+  ): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
 
@@ -655,6 +690,35 @@ export class Vehicles {
 
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
+
+      // Beta 1.3 Phase 2 — parked-state handling. Skips all movement
+      // physics, collision rolls, and segment progression. The car sits
+      // at its reserved stall until `parkedUntil` expires, then we
+      // release the stall, push a return-trip entry, and despawn.
+      if (car.isParked) {
+        if (now >= (car.parkedUntil ?? 0)) {
+          // Visit complete. Free the stall + queue the return trip if
+          // this car came from a known origin (returns don't recurse).
+          if (car.parking && parking) parking.release(car.parking);
+          if (
+            car.originRoadIdx !== undefined &&
+            car.originHomeX !== undefined &&
+            car.originHomeY !== undefined
+          ) {
+            this.pendingReturns.push({
+              readyAt: now,                                  // immediate
+              originRoadIdx: car.originRoadIdx,
+              destRoadIdx: car.pathTiles[car.pathTiles.length - 1]!,
+              originHomeX: car.originHomeX,
+              originHomeY: car.originHomeY,
+              kind: car.kind ?? 'resident',
+              color: car.color
+            });
+          }
+          this.cars.splice(i, 1);
+        }
+        continue;
+      }
 
       // Stage 1: minimum stop-sign pause. Counts down from
       // STOP_SIGN_PAUSE_SEC. When it expires, the car switches to
@@ -827,9 +891,35 @@ export class Vehicles {
         // End of path — trip completed cleanly.
         if (car.segmentIdx >= car.pathTiles.length - 1) {
           this.decrementLoad(grid, car.loadedTile);
-          // Outbound trip: queue a return car after a randomised visit
-          // interval so traffic feels two-way. Cars without originRoadIdx
-          // (i.e. return cars themselves) don't recurse — they just despawn.
+
+          // Beta 1.3 Phase 2 — parking-aware arrival. If the car has a
+          // stall reserved AND the parking_lot is still valid (not
+          // bulldozed mid-trip), transition into the visible parked
+          // state INSTEAD of the immediate despawn-and-queue-return.
+          // The visit interval is then spent visibly at the stall;
+          // the return trip queues when the parked timer expires (see
+          // the parked-state branch at the top of this loop).
+          if (
+            car.parking &&
+            parking &&
+            parking.isReservationValid(car.parking)
+          ) {
+            const carKind = car.kind ?? 'resident';
+            const visitMs = carKind === 'tourist'
+              ? (8 + Math.random() * 7) * 1000
+              : (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
+            car.isParked = true;
+            car.parkedUntil = now + visitMs;
+            // Leave segmentT/segmentIdx where they are — the renderer
+            // checks `isParked` and uses the stall position directly
+            // (so the floating-mid-segment problem doesn't apply).
+            despawned = false;  // car stays alive, just parked
+            break;
+          }
+
+          // No parking → fall through to the original despawn-and-
+          // queue-return path. Cars without originRoadIdx (i.e. return
+          // cars themselves) don't recurse — they just despawn.
           if (
             car.originRoadIdx !== undefined &&
             car.originHomeX !== undefined &&

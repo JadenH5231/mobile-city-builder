@@ -1184,6 +1184,28 @@ export class Renderer {
     let fireIdx = 0;
     for (let i = 0; i < vehicles.cars.length; i++) {
       const car = vehicles.cars[i]!;
+      // Beta 1.3 Phase 2 — parked-state render. Position at the stall
+      // (x, z, yaw) baked into the reservation. Skip all the segment
+      // interpolation / lane-offset / road-surface-Y math below.
+      // Sibling overlays (windows/headlights/taillights/accessories)
+      // share the same matrix — they're parked too.
+      if (car.isParked && car.parking) {
+        const stall = car.parking;
+        const tile = grid.get(stall.tileX, stall.tileY);
+        const parkY = roadSurfaceY(grid, stall.tileX, stall.tileY) + 0.05;
+        obj.position.set(stall.worldX, parkY, stall.worldZ);
+        obj.rotation.set(0, stall.yaw, 0);
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        this.carsMesh.setMatrixAt(i, obj.matrix);
+        this.carWindowsMesh.setMatrixAt(i, obj.matrix);
+        this.carHeadlightsMesh.setMatrixAt(i, obj.matrix);
+        this.carTaillightsMesh.setMatrixAt(i, obj.matrix);
+        c.setHex(car.color);
+        this.carsMesh.setColorAt(i, c);
+        void tile;
+        continue;
+      }
       const a = car.pathTiles[car.segmentIdx]!;
       const b = car.pathTiles[car.segmentIdx + 1]!;
       const aTileX = a % gridWidth;

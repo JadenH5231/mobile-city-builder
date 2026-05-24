@@ -199,18 +199,28 @@ body {
 }
 .auth-modal__close {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
-  border: none;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: #c0c4cc;
-  font-size: 16px;
+  background: rgba(20, 24, 32, 0.85);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  padding: 0;
 }
-.auth-modal__close:hover { background: rgba(255, 255, 255, 0.12); }
+.auth-modal__close:hover,
+.auth-modal__close:active { background: rgba(255, 255, 255, 0.18); }
 .auth-modal__title {
   margin: 0 0 4px;
   font-size: 20px;
@@ -940,25 +950,29 @@ body {
 
 .tile-info__close {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--pill-border);
-  color: var(--pill-fg);
+  background: rgba(20, 24, 32, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-size: 22px;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  z-index: 3;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .tile-info__close:active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* Treasury pill in HUD — interactive, opens the budget panel. */
@@ -1004,15 +1018,61 @@ body {
 
 /* Photo mode — hide every HUD chrome layer so the user can frame a shot
    of the world unobstructed. The bottom toolbar, HUD pills, info panels,
-   and modals all collapse. The photo pill itself stays so the user can
-   exit the mode. */
-body.photo-mode #hud > *:not(#hud-photo),
+   and modals all collapse. Exit affordance is `#photo-exit` floating
+   top-right — added in Beta 1.2.2 after a beta-tester report that they
+   had "no way out" of photo mode. (The previous "tap the photo pill
+   inside the More popover" path didn't work because the popover is
+   also hidden in this state.) */
+body.photo-mode #hud > *,
 body.photo-mode .toolbar,
 body.photo-mode .info-panel,
 body.photo-mode .tile-info,
 body.photo-mode .modal,
 body.photo-mode .photo-op {
   display: none !important;
+}
+
+/* Photo-mode exit button (Beta 1.2.2). Hidden by default; shown only
+   when body.photo-mode is on. Top-right with safe-area-inset padding
+   so the chip clears the iPhone notch / Dynamic Island in PWA mode.
+   Large tap target (44px height per WCAG mobile guidance) so it's
+   never missed. */
+.photo-exit {
+  display: none;
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 12px);
+  right: calc(env(safe-area-inset-right, 0) + 12px);
+  z-index: 30;
+  appearance: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(10, 20, 16, 0.85);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.55);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  height: 44px;
+  min-width: 44px;
+}
+.photo-exit:active {
+  background: rgba(255, 216, 77, 0.20);
+}
+.photo-exit__icon {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+body.photo-mode .photo-exit {
+  display: inline-flex;
 }
 
 .pill.action:disabled {
@@ -1078,25 +1138,29 @@ body.photo-mode .photo-op {
 
 .info-panel__close {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--pill-border);
-  color: var(--pill-fg);
+  background: rgba(20, 24, 32, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-size: 22px;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  z-index: 3;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .info-panel__close:active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* Budget panel content */
@@ -1773,18 +1837,27 @@ body.photo-mode .tutorial-banner {
 .event-modal__close {
   position: absolute;
   top: 8px;
-  right: 10px;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: 0;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 16px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  background: rgba(20, 24, 32, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
   line-height: 1;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
-.event-modal__close:hover { color: rgba(255, 255, 255, 0.95); }
+.event-modal__close:hover,
+.event-modal__close:active { background: rgba(255, 255, 255, 0.18); }
 
 .event-modal__head {
   display: flex;
@@ -2193,17 +2266,27 @@ body.photo-mode .tutorial-banner {
 .modal__close {
   position: absolute;
   top: 8px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--pill-border);
-  color: var(--pill-fg);
+  background: rgba(20, 24, 32, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-size: 22px;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.modal__close:active {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .modal__title {
@@ -4160,10 +4243,15 @@ html.ui-scale-xlarge { font-size: 130%; }
  * Toolbar.ts sets `data-scroll-state` to "start" | "middle" | "end" |
  * "none" on the .toolbar element based on the inner .toolbar__scroll's
  * scrollLeft + scrollWidth + clientWidth.
+ *
+ * Beta 1.2.2 hotfix: DO NOT set `position: relative` here — the parent
+ * `.toolbar` is already `position: fixed` at the bottom of the viewport,
+ * which is itself a positioning context for absolutely-positioned
+ * pseudo-elements. The earlier 1.2.1 attempt to add `position: relative`
+ * cascaded over `position: fixed`, dropping the toolbar into normal
+ * flow at the TOP of the document — catastrophic regression for every
+ * mobile player.
  * --------------------------------------------------------------------- */
-.toolbar {
-  position: relative;
-}
 .toolbar::before,
 .toolbar::after {
   content: '';

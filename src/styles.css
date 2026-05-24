@@ -4440,3 +4440,111 @@ html.ui-scale-xlarge { font-size: 130%; }
     gap: 2px;
   }
 }
+
+/* Portrait phones (Beta 1.5.2) — extra space optimisation for the
+ * bottom toolbar after user feedback that portrait mode felt cramped.
+ * Three things contribute to the squeeze:
+ *   1. The aria-pressed group button expands inline to show its label,
+ *      shifting every other pill sideways. At 420px wide there's no
+ *      room for the inflation, so dropping the inline label saves the
+ *      layout from jumping.
+ *   2. Popover grids use 76 × 42 px buttons — at 4 items per row that
+ *      needs 304+ px just for buttons, forcing 5-item groups (R / C / I
+ *      multi-tier with Lux + Skyscraper) to wrap to 2 rows. Shrinking
+ *      to 60 × 38 fits 4-5 per row on a 360px phone in one line.
+ *   3. The HUD's per-tile data labels eat ~120px of horizontal space
+ *      per row; in portrait we trim them to digits only so the HUD
+ *      stays single-row and doesn't push the toolbar further up.
+ *
+ * Targeted at portrait orientation explicitly so landscape phones
+ * (which have plenty of horizontal room) keep the readable layout.
+ */
+@media (max-width: 480px) and (orientation: portrait) {
+  /* Don't expand the active group's label — saves ~40-60px horizontal. */
+  .toolbar__scroll .toolbar__btn[aria-pressed="true"] .toolbar__label {
+    display: none;
+  }
+  .toolbar__scroll .toolbar__btn[aria-pressed="true"] .toolbar__chevron {
+    display: none;
+  }
+  /* A small bottom-border accent on the active group communicates
+     "this is selected" without consuming horizontal layout space. */
+  .toolbar__scroll .toolbar__btn[aria-pressed="true"] {
+    box-shadow: inset 0 -2px 0 #f2c648;
+  }
+}
+
+/* Ultra-narrow phones (≤360px = iPhone SE, smaller Androids).
+ * Compress popover items so 4+ density tiers fit in a single row, and
+ * tighten the whole toolbar so 13 entries fit without scrolling on a
+ * 360px-wide screen. (Beta 1.5.2) */
+@media (max-width: 360px) {
+  .toolbar {
+    max-width: calc(100vw - 6px);
+    padding: 2px;
+    gap: 1px;
+  }
+  .toolbar__scroll .toolbar__btn {
+    padding: 0 6px;
+    min-width: 34px;
+    height: 42px;
+  }
+  .toolbar__pinned .toolbar__btn,
+  .toolbar__mode .toolbar__btn {
+    padding: 0 6px;
+    font-size: 11px;
+  }
+  .toolbar__mode,
+  .toolbar__pinned {
+    padding-right: 3px;
+    margin-right: 1px;
+    gap: 1px;
+  }
+  .toolbar__scroll {
+    gap: 1px;
+  }
+  /* Compress popover items — 60 × 38 fits 5 per row on 360px screens
+     (was 76 × 42 which wrapped to 2 rows on multi-tier groups). */
+  .toolbar__popover-btn {
+    flex: 0 0 60px;
+    height: 38px;
+    font-size: 9.5px;
+    padding: 4px 4px;
+    gap: 2px;
+  }
+  .toolbar__popover-btn .toolbar__icon {
+    width: 14px;
+    height: 14px;
+  }
+  /* Popover sheet itself fills more of the viewport so the player can
+     see all options at a glance without horizontal scroll inside it. */
+  .toolbar__popover {
+    max-width: calc(100vw - 12px);
+    padding: 6px;
+  }
+}
+
+/* HUD compression in portrait (Beta 1.5.2). The bottom toolbar shares
+ * the bottom 80-100px of screen with the HUD pill row. In portrait, the
+ * HUD wraps to 2-3 rows and pushes the toolbar further from the bottom
+ * (which then crowds the play area). Tightening pill padding +
+ * font-size on portrait-mode phones keeps the HUD to a single row at
+ * 390px+ widths. */
+@media (max-width: 480px) and (orientation: portrait) {
+  #hud {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .pill {
+    padding: 5px 8px;
+    font-size: 10.5px;
+  }
+  .rci {
+    padding: 4px 7px;
+    gap: 6px;
+  }
+  .rci__bar {
+    width: 8px;
+    height: 22px;
+  }
+}

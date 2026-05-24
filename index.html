@@ -732,6 +732,23 @@
     </button>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
 
+    <!-- Photo-mode exit button (Beta 1.2.2). Visible only while
+         body.photo-mode is on. Without this the player has no way out
+         of photo mode — the toolbar + HUD + popovers are all hidden,
+         so the Photo toggle (which lives inside #hud-more-popover)
+         can't be reached. Floating top-right with safe-area-inset
+         padding so the chip stays clear of the notch / Dynamic Island
+         on iOS. Wired in main.ts. -->
+    <button
+      type="button"
+      id="photo-exit"
+      class="photo-exit"
+      aria-label="Exit photo mode"
+    >
+      <span class="photo-exit__icon" aria-hidden="true">✕</span>
+      <span class="photo-exit__label">Exit Photo</span>
+    </button>
+
     <!-- Auth modal (Alpha 4.25). Hidden until a sign-in/up flow is opened
          from the More menu. Supports email + password and magic-link
          (passwordless). All UI is vanilla DOM to match the rest of the

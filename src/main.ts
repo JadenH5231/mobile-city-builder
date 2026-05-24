@@ -733,19 +733,24 @@ showTutorialBtn?.addEventListener('click', () => tutorial.restart());
 // (Settings panel binds its show-tutorial via the hooks param below.)
 
 // Photo mode — hide all HUD chrome via a body-level CSS class so panels
-// and the toolbar disappear together. Tap anywhere on the canvas to exit
-// (the canvas listener is wired further down).
+// and the toolbar disappear together. The dedicated #photo-exit floating
+// button (Beta 1.2.2) is the visible exit affordance — it's the only
+// way out of photo mode now that the More popover is hidden too.
 const photoBtn = document.getElementById('hud-photo') as HTMLButtonElement | null;
+const photoExitBtn = document.getElementById('photo-exit') as HTMLButtonElement | null;
+const setPhotoMode = (on: boolean): void => {
+  game.photoMode = on;
+  document.body.classList.toggle('photo-mode', on);
+  if (photoBtn) photoBtn.setAttribute('aria-pressed', String(on));
+};
 if (photoBtn) {
-  const renderPhoto = (): void => {
-    photoBtn.setAttribute('aria-pressed', String(game.photoMode));
-    document.body.classList.toggle('photo-mode', game.photoMode);
-  };
-  renderPhoto();
-  photoBtn.addEventListener('click', () => {
-    game.photoMode = !game.photoMode;
-    renderPhoto();
-  });
+  // Sync initial state in case photoMode was restored from a save.
+  setPhotoMode(game.photoMode);
+  photoBtn.addEventListener('click', () => setPhotoMode(!game.photoMode));
+}
+if (photoExitBtn) {
+  // Dedicated exit chip — fires immediately, no toggle ambiguity.
+  photoExitBtn.addEventListener('click', () => setPhotoMode(false));
 }
 
 // Faction Detail panel (Alpha 4.9 — B3 from production audit).

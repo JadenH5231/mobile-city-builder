@@ -4,6 +4,19 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.3.5 — Parking strictness difficulty (Phase 3, completes the parking feature)** — final phase of the parking-management arc. Adds a player-facing "Parking management" setting in Settings → Simulation with four escalating levels:
+  - **Off** — parking lots are decorative. `Vehicles.attemptSpawn` skips `reserveStallNear` entirely; no cars visibly park; no revenue penalty. For players who don't want parking as a gameplay element.
+  - **Lenient** (default) — current behaviour. Cars use parking when available, no penalty when missing. Preserves the Phase 2 + 2.1 experience for existing players.
+  - **Realistic** — cars use parking when available + commercial / mixed-use / big_box tiles WITHOUT a 4-adjacent `parking_lot` take a revenue penalty scaling with the city's under-parked fraction. Worst case: every commercial tile lacks parking → -15% commercial revenue.
+  - **Strict** — same routing as Realistic but worst-case penalty doubled to -30%.
+  - **`ParkingStrictness` type** added to `SettingsPanel.ts` + new `parkingStrictness` field in `SettingsData` (defaults to `'lenient'`).
+  - **Settings panel UI**: new "Parking management" select in the Simulation group with each level's headline penalty in its label so the player knows what they're choosing.
+  - **`Game.parkingStrictness`** field — synced from `settings.data.parkingStrictness` on boot + on every Settings panel select change. The select's change handler is wired in `main.ts` (not in `SettingsPanel.ts`) — listener reads from `select.value` directly to side-step a listener-registration-order race where the main.ts listener fires before SettingsPanel's bindSelect updates `settings.data`.
+  - **Vehicles.spawnTick** receives `parking` conditionally — Off mode passes `undefined` so the reservation pipeline never engages.
+  - **Economy.runMonth** receives the strictness; computes a `parkingMult ∈ [1 - max, 1]` from the under-parked fraction; applies it on the commercial-jobs revenue line right next to the existing crime + hospital multipliers.
+  - **SW cache** `mq-city-v5` → `v6`.
+  - Verified at iPhone 15 Pro: cycling through Off / Lenient / Realistic / Strict in the Settings select correctly updates `game.parkingStrictness` each time; build is clean.
+
 - **Beta 1.3.4 — Parking walker (Phase 2.1: shopper completes the trip on foot)** — second-to-last piece of the parking feature. When a car parks at a stall, a **Shopper** spawns at the stall position, walks in a straight line to the actual destination tile (commercial / big_box), "shops" briefly while invisible (entered the store), then walks back to the parked car. The shopper's total duration is aligned to the car's `parkedUntil` so they despawn together.
   - **`src/simulation/Shoppers.ts`** — new module. `Shopper` struct carries `{ startX, startZ, endX, endZ, elapsed, totalSec, outEnd, shopEnd, color, yLift }`. `spawnForParkedCar(stall, destX, destY, durationMs, color, yBase)` computes leg duration from straight-line distance + a minimum-leg floor; `resolve(s)` returns the current `{x, z, yaw, visible}` based on phase boundaries. `update(dt)` ticks elapsed + despawns on `>= totalSec`. Cap at `MAX_SHOPPERS = 300` (cheap on InstancedMesh budget).
   - **`Vehicles.update`** arrival hook now also calls `shoppers.spawnForParkedCar()` alongside the `car.isParked = true` transition, passing the car's destination tile + visit duration + colour.

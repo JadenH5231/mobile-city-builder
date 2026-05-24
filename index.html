@@ -232,6 +232,18 @@
             <option value="3">Very Fast (▶▶▶)</option>
           </select>
         </div>
+        <!-- Parking management strictness (Beta 1.3.5 / Phase 3). Sets
+             how much the player has to think about parking. See
+             ParkingStrictness in SettingsPanel.ts. -->
+        <div class="settings__field">
+          <label for="setting-parking-strictness"><span>Parking management</span></label>
+          <select id="setting-parking-strictness" class="settings__select">
+            <option value="off">Off — parking is decorative</option>
+            <option value="lenient" selected>Lenient — cars use it if available</option>
+            <option value="realistic">Realistic — -15% revenue without parking</option>
+            <option value="strict">Strict — -30% revenue without parking</option>
+          </select>
+        </div>
         <label class="settings__check">
           <input id="setting-confirm-reset" type="checkbox" checked>
           <span>Confirm before Reset City</span>

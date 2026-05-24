@@ -135,11 +135,22 @@ export class Economy {
   /** Accident cost accruing during the current month, settled at month rollover. */
   private monthAccidentCost = 0;
 
-  tick(stepMs: number, grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts, council?: Council): void {
+  tick(
+    stepMs: number,
+    grid: Grid,
+    population: Population,
+    market?: GlobalMarket,
+    events?: Events,
+    bonds?: Bonds,
+    crime?: Crime,
+    districts?: Districts,
+    council?: Council,
+    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness
+  ): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds, crime, districts, council);
+      this.runMonth(grid, population, market, events, bonds, crime, districts, council, parkingStrictness);
     }
   }
 
@@ -155,7 +166,17 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  private runMonth(grid: Grid, population: Population, market?: GlobalMarket, events?: Events, bonds?: Bonds, crime?: Crime, districts?: Districts, council?: Council): void {
+  private runMonth(
+    grid: Grid,
+    population: Population,
+    market?: GlobalMarket,
+    events?: Events,
+    bonds?: Bonds,
+    crime?: Crime,
+    districts?: Districts,
+    council?: Council,
+    parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness
+  ): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
     // pays 2.5x the regular R rate. The base portion is already inside
@@ -272,10 +293,46 @@ export class Economy {
     // floor at max crime; in practice the multiplier sits well above 0.9
     // even in cities with no police coverage.
     const crimeMult = crime ? crime.commercialRevenueMultiplier() : 1.0;
+    // Parking penalty (Beta 1.3.5 / Phase 3). Realistic + Strict modes
+    // penalise commercial revenue when commercial tiles don't have a
+    // 4-adjacent parking_lot. The penalty scales with the fraction of
+    // under-parked tiles citywide:
+    //   - 'off' / 'lenient'  → 1.0 (no penalty; lenient is current)
+    //   - 'realistic' → up to -15% if every commercial tile is unparked
+    //   - 'strict'    → up to -30% if every commercial tile is unparked
+    // A city with NO commercial tiles gets multiplier 1.0 (no
+    // denominator). The fence-checks here are O(grid) but cheap; only
+    // counted on tiles where it matters (developed C / MU / big_box).
+    let parkingMult = 1.0;
+    if (parkingStrictness === 'realistic' || parkingStrictness === 'strict') {
+      let parkable = 0;
+      let unparked = 0;
+      for (const t of grid.iter()) {
+        const counts =
+          (t.zone === 'commercial' && t.density > 0) ||
+          (t.zone === 'mixed' && t.density > 0) ||
+          t.building === 'big_box';
+        if (!counts) continue;
+        parkable++;
+        const n = [
+          grid.get(t.x + 1, t.y),
+          grid.get(t.x - 1, t.y),
+          grid.get(t.x, t.y + 1),
+          grid.get(t.x, t.y - 1)
+        ];
+        const hasParking = n.some((nb) => nb && nb.building === 'parking_lot');
+        if (!hasParking) unparked++;
+      }
+      if (parkable > 0) {
+        const unparkFrac = unparked / parkable;
+        const maxPenalty = parkingStrictness === 'strict' ? 0.30 : 0.15;
+        parkingMult = 1 - unparkFrac * maxPenalty;
+      }
+    }
     const revenue =
       population.totalResidents * this.taxR * REV_PER_RESIDENT +
       luxuryBonusRevenue +
-      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB * crimeMult +
+      population.totalCommercialJobs * this.taxC * REV_PER_C_JOB * crimeMult * parkingMult +
       population.totalIndustrialJobs * this.taxI * REV_PER_I_JOB +
       forestryRevenue +
       farmRevenue +

@@ -72,6 +72,18 @@ if (game.simSpeed === 1 && settings.data.defaultSimSpeed !== 1) {
 }
 // Reduce motion (Alpha 4.8) — slows the day/night sun arc.
 game.reduceMotion = settings.data.reduceMotion;
+// Beta 1.3.5 (Phase 3) — sync parking-management strictness from
+// Settings to Game on boot, and again whenever the player changes the
+// Settings panel select. The change handler is attached via a small
+// DOM listener since SettingsPanel.ts doesn't expose a callback API.
+// Read from `select.value` directly (NOT settings.data) because
+// listener registration order means my handler can fire before
+// SettingsPanel's bindSelect has called settings.set().
+game.parkingStrictness = settings.data.parkingStrictness;
+const parkingStrictnessSelect = document.getElementById('setting-parking-strictness') as HTMLSelectElement | null;
+parkingStrictnessSelect?.addEventListener('change', () => {
+  game.parkingStrictness = parkingStrictnessSelect.value as typeof game.parkingStrictness;
+});
 
 // Active-tool cost preview pill (Alpha 4.5). Game updates it via
 // refreshToolCostPill whenever the active tool, the treasury, or

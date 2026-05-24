@@ -10,6 +10,7 @@ import {
   COLLISION_RATE_CAP,
   COLLISION_RATE_PER_OTHER,
   MAX_VEHICLES,
+  MAX_TRUCKS,
   MAX_TOURIST_VEHICLES,
   MAX_SERVICE_VEHICLES,
   PATH_CAR_SUPPRESSION,
@@ -46,6 +47,14 @@ function vehiclePalette(): readonly number[] { return getActiveTheme().vehicles.
  *   any non-motorcade car within MOTORCADE_PULLOVER_RADIUS gets its
  *   pauseRemaining bumped each tick (frozen on the shoulder until the
  *   convoy passes).
+ * - `truck` (Beta 1.5): freight transport that spawns from a developed
+ *   industrial tile, drives to a developed commercial tile, dwells
+ *   briefly (delivery), then queues a return trip to the industrial
+ *   origin. Slower than cars (0.85× speed) and contributes 2× to per-
+ *   tile trafficLoad — they take up MORE space on the road so a fleet
+ *   of trucks measurably slows nearby cars. Subject to stop signs /
+ *   lights / collisions like normal cars. Counts against its own cap
+ *   `MAX_TRUCKS`, separate from MAX_VEHICLES.
  */
 export type CarKind =
   | 'resident'
@@ -54,7 +63,8 @@ export type CarKind =
   | 'fire_response'
   | 'motorcade_lead'
   | 'motorcade_limo'
-  | 'motorcade_tail';
+  | 'motorcade_tail'
+  | 'truck';
 
 /** Tile-radius around a motorcade vehicle inside which other cars freeze
  *  on the shoulder (Alpha 4.14). Manhattan distance — cheap. */
@@ -70,6 +80,46 @@ const MOTORCADE_PULLOVER_PAUSE_SEC = 0.7;
  * player to think about traffic flow. Memory: feedback_traffic_pressure.
  */
 const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
+/**
+ * Truck spawn rate per developed industrial tile per real-time second
+ * (Beta 1.5). With ~40 industrial tiles that's ~0.4 trucks/sec attempted,
+ * naturally throttled by the MAX_TRUCKS = 30 cap. Tuned low so trucks
+ * read as occasional freight, not constant convoys.
+ */
+const TRUCK_SPAWN_PER_INDUSTRY_PER_SEC = 0.010;
+/** Truck speed multiplier vs cars (Beta 1.5). Trucks are heavier and
+ *  accelerate / cruise slower than cars on the same road tier. */
+const TRUCK_SPEED_MULT = 0.85;
+/** Per-tile trafficLoad weight for trucks (Beta 1.5). Cars contribute 1;
+ *  trucks contribute 2 because they take more physical road space. The
+ *  per-tile load drives EMA + congestion-aware A* edge cost + cap on
+ *  free-flow speed, so a corridor of trucks visibly slows other traffic
+ *  passing through. */
+const TRUCK_LOAD_WEIGHT = 2;
+/** Truck delivery dwell time at commercial destination (Beta 1.5).
+ *  Slightly shorter than a resident's visit because trucks are dropping
+ *  cargo, not running errands. */
+const TRUCK_VISIT_LOW_SEC = 4;
+const TRUCK_VISIT_HIGH_SEC = 10;
+/** Truck colour palette (Beta 1.5). Utilitarian / delivery-fleet colours
+ *  — picked at spawn so a city's truck fleet reads as a mixed bag of
+ *  carriers. The chassis stays dark grey regardless (baked into the
+ *  vertex colors of the body geometry); per-instance colour tints only
+ *  the cab + cargo box. */
+const TRUCK_PALETTE: ReadonlyArray<number> = [
+  0xe8e6dc,  // white delivery
+  0xc0c8d4,  // silver fleet
+  0x6090b0,  // light blue carrier
+  0xa05030,  // brown courier
+  0x4a6a3a,  // dark green hauler
+  0xb05050,  // red logistics
+  0x3a4a60   // dark blue freight
+];
+
+/** Per-vehicle trafficLoad weight (Beta 1.5). Trucks count double. */
+function carLoadWeight(car: Car): number {
+  return (car.kind === 'truck') ? TRUCK_LOAD_WEIGHT : 1;
+}
 /** Probability a candidate spawn near a bus stop is silently dropped. */
 const BUS_STOP_SUPPRESSION = 0.7;
 /** Probability that a candidate spawn near a subway entrance is suppressed
@@ -208,6 +258,9 @@ export class Vehicles {
   readonly cars: Car[] = [];
   /** Spawn credits accumulator, in fractional cars-to-spawn. */
   private spawnAccumulator = 0;
+  /** Spawn credits accumulator for trucks (Beta 1.5). Drives the
+   *  industrial-tile-count × TRUCK_SPAWN_PER_INDUSTRY_PER_SEC rate. */
+  private truckSpawnAccumulator = 0;
   /** Crash events that fired during the most recent `update` call. Cleared each tick. */
   readonly crashesThisFrame: CrashEvent[] = [];
   /** Outbound trips whose driver is "visiting" the destination, waiting to
@@ -247,6 +300,94 @@ export class Vehicles {
     }
   }
 
+  /**
+   * Truck spawn tick (Beta 1.5). Called each sim step from Game.ts.
+   * Trucks spawn at a rate proportional to developed industrial tile
+   * count (industry generates freight). Each spawn picks a random
+   * developed industrial tile as origin and a random developed
+   * commercial tile as destination. Trucks do NOT use parking lots
+   * (semi-trucks deliver curbside, not in stalls).
+   */
+  spawnTruckTick(
+    stepMs: number,
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding
+  ): void {
+    // Count developed industrial tiles cheaply — gates the spawn rate
+    // to "how much industry exists" without per-frame iteration when
+    // industry is tiny / absent.
+    let industryCount = 0;
+    for (const t of grid.iter()) {
+      if (t.density > 0 && tileMatchesRole(t.zone, 'industrial')) industryCount++;
+    }
+    if (industryCount === 0) return;
+    const seconds = stepMs / 1000;
+    this.truckSpawnAccumulator += industryCount * TRUCK_SPAWN_PER_INDUSTRY_PER_SEC * seconds;
+    while (this.truckSpawnAccumulator >= 1) {
+      this.truckSpawnAccumulator -= 1;
+      if (this.countByKind('truck') >= MAX_TRUCKS) {
+        this.truckSpawnAccumulator = 0;
+        break;
+      }
+      this.attemptTruckSpawn(grid, roadGraph, pathfinder);
+    }
+  }
+
+  private attemptTruckSpawn(
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding
+  ): void {
+    const origin = pickRandomDevelopedTile(grid, 'industrial');
+    if (!origin) return;
+    // Bias destination toward big_box (matches the resident-car bias
+    // from 1.4.2). Big_box stores receive disproportionately more
+    // freight than regular commercial in real life.
+    const dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+    if (!dest) return;
+
+    const startRoad = nearestRoadTile(grid, origin.x, origin.y);
+    if (!startRoad) return;
+    const endRoad = nearestRoadTile(grid, dest.x, dest.y);
+    if (!endRoad) return;
+
+    const startIdx = startRoad.y * grid.width + startRoad.x;
+    const endIdx = endRoad.y * grid.width + endRoad.x;
+    if (startIdx === endIdx) return;
+
+    const edgeCost = (_from: number, to: number, base: number): number => {
+      const tx = to % grid.width;
+      const ty = (to - tx) / grid.width;
+      const t = grid.get(tx, ty);
+      if (!t) return base;
+      return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
+    };
+    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
+    if (!path || path.length < 2) return;
+
+    const color = TRUCK_PALETTE[Math.floor(Math.random() * TRUCK_PALETTE.length)] ?? 0xe8e6dc;
+    const car: Car = {
+      pathTiles: path,
+      segmentIdx: 0,
+      segmentT: 0,
+      speed: TRUCK_SPEED_MULT,
+      color,
+      loadedTile: path[1]!,
+      pauseRemaining: 0,
+      yielding: false,
+      yieldSince: 0,
+      destX: dest.x,
+      destY: dest.y,
+      originRoadIdx: startIdx,
+      originHomeX: origin.x,
+      originHomeY: origin.y,
+      kind: 'truck'
+    };
+    this.cars.push(car);
+    this.incrementLoad(grid, car.loadedTile, TRUCK_LOAD_WEIGHT);
+  }
+
   /** Count active cars matching `kind` (or 'resident' if `kind` undefined,
    *  which catches legacy spawns that didn't set the field). Cheap O(N)
    *  pass — N is bounded by MAX_VEHICLES + MAX_TOURIST + MAX_SERVICE. */
@@ -278,6 +419,7 @@ export class Vehicles {
       if (kind === 'tourist'  && this.countByKind('tourist')  >= MAX_TOURIST_VEHICLES) continue;
       if ((kind === 'patrol' || kind === 'fire_response')
           && this.countByKind('patrol') + this.countByKind('fire_response') >= MAX_SERVICE_VEHICLES) continue;
+      if (kind === 'truck' && this.countByKind('truck') >= MAX_TRUCKS) continue;
       // Plan the reverse leg using the same congestion-aware cost the
       // outbound spawn used. This is the "rush hour back home" car.
       const edgeCost = (_from: number, to: number, base: number): number => {
@@ -295,8 +437,11 @@ export class Vehicles {
         pathTiles: path,
         segmentIdx: 0,
         segmentT: 0,
-        // Emergency-vehicle slight speed boost preserved on return.
-        speed: (kind === 'patrol' || kind === 'fire_response') ? 1.15 : 1.0,
+        // Trucks preserve their slower speed on return. Emergency-vehicle
+        // slight boost preserved on return. Everyone else cruises at 1.0.
+        speed: kind === 'truck' ? TRUCK_SPEED_MULT
+             : (kind === 'patrol' || kind === 'fire_response') ? 1.15
+             : 1.0,
         color,
         loadedTile: path[1]!,
         pauseRemaining: 0,
@@ -307,7 +452,7 @@ export class Vehicles {
         kind
       };
       this.cars.push(car);
-      this.incrementLoad(grid, car.loadedTile);
+      this.incrementLoad(grid, car.loadedTile, carLoadWeight(car));
     }
   }
 
@@ -922,7 +1067,7 @@ export class Vehicles {
 
         // End of path — trip completed cleanly.
         if (car.segmentIdx >= car.pathTiles.length - 1) {
-          this.decrementLoad(grid, car.loadedTile);
+          this.decrementLoad(grid, car.loadedTile, carLoadWeight(car));
 
           // Beta 1.3 Phase 2 — parking-aware arrival. If the car has a
           // stall reserved AND the parking_lot is still valid (not
@@ -979,11 +1124,14 @@ export class Vehicles {
           ) {
             const arrivedIdx = car.pathTiles[car.segmentIdx]!;
             const carKind = car.kind ?? 'resident';
-            // Tourists get a shorter visit timer — they're tourists, not
-            // commuters. 8-15 sec for tourists vs the standard 8-22 for
-            // residents/emergency.
+            // Per-kind dwell time at the destination:
+            //  - Tourist: 8-15s (sightseeing, but shorter than commute)
+            //  - Truck:   4-10s (delivering cargo, quick stop)
+            //  - Default: 8-22s (resident running errands)
             const visitMs = carKind === 'tourist'
               ? (8 + Math.random() * 7) * 1000
+              : carKind === 'truck'
+              ? (TRUCK_VISIT_LOW_SEC + Math.random() * (TRUCK_VISIT_HIGH_SEC - TRUCK_VISIT_LOW_SEC)) * 1000
               : (CAR_VISIT_LOW_SEC + Math.random() * (CAR_VISIT_HIGH_SEC - CAR_VISIT_LOW_SEC)) * 1000;
             this.pendingReturns.push({
               readyAt: now + visitMs,
@@ -1006,7 +1154,7 @@ export class Vehicles {
         const arrivedY = (arrivedIdx - arrivedX) / gridWidth;
         const arrivedTile = grid.get(arrivedX, arrivedY);
         if (!arrivedTile) {
-          this.decrementLoad(grid, car.loadedTile);
+          this.decrementLoad(grid, car.loadedTile, carLoadWeight(car));
           this.cars.splice(i, 1);
           despawned = true;
           break;
@@ -1052,7 +1200,7 @@ export class Vehicles {
               destY: car.destY,
               atIdx: arrivedIdx
             });
-            this.decrementLoad(grid, car.loadedTile);
+            this.decrementLoad(grid, car.loadedTile, carLoadWeight(car));
             this.cars.splice(i, 1);
             despawned = true;
             break;
@@ -1062,9 +1210,10 @@ export class Vehicles {
         // Normal load transition: leave the arrived tile, count toward next.
         const newTarget = car.pathTiles[car.segmentIdx + 1];
         if (newTarget !== undefined) {
-          this.decrementLoad(grid, car.loadedTile);
+          const w = carLoadWeight(car);
+          this.decrementLoad(grid, car.loadedTile, w);
           car.loadedTile = newTarget;
-          this.incrementLoad(grid, car.loadedTile);
+          this.incrementLoad(grid, car.loadedTile, w);
         }
       }
       if (despawned) continue;
@@ -1079,18 +1228,18 @@ export class Vehicles {
     for (const t of grid.iter()) t.trafficLoad = 0;
   }
 
-  private incrementLoad(grid: Grid, idx: number): void {
+  private incrementLoad(grid: Grid, idx: number, weight = 1): void {
     const x = idx % grid.width;
     const y = (idx - x) / grid.width;
     const t = grid.get(x, y);
-    if (t) t.trafficLoad++;
+    if (t) t.trafficLoad += weight;
   }
-  private decrementLoad(grid: Grid, idx: number): void {
+  private decrementLoad(grid: Grid, idx: number, weight = 1): void {
     const x = idx % grid.width;
     const y = (idx - x) / grid.width;
     const t = grid.get(x, y);
     if (!t) return;
-    if (t.trafficLoad > 0) t.trafficLoad--;
+    t.trafficLoad = Math.max(0, t.trafficLoad - weight);
   }
 }
 

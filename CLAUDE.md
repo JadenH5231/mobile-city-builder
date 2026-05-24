@@ -345,6 +345,83 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.5 (Transport trucks — freight that connects I → C)
+
+User feedback: "Transport trucks. Transport trucks spawn from industry
+and bring deliveries to commercial buildings before making a return
+trip to industry. Transport trucks take up more space on the road and
+slow up traffic a bit more than a car would."
+
+**Implementation summary:**
+
+New `CarKind = 'truck'` in `src/simulation/Vehicles.ts`. Trucks share
+the existing per-frame segment-following + collision + stop-sign /
+traffic-light logic with cars — they're cars, just with different
+spawn semantics, slower speed, double traffic load, and a distinct
+silhouette. Code reuse > parallel module.
+
+**Spawn behaviour:**
+- `spawnTruckTick` called each sim step from `Game.ts`; spawn rate
+  scales with developed industrial tile count
+  (`TRUCK_SPAWN_PER_INDUSTRY_PER_SEC = 0.010`). A typical mid-game
+  industrial district produces ~0.4 truck spawn attempts per second,
+  naturally throttled by the `MAX_TRUCKS = 30` cap (see `types.ts`).
+- Each spawn picks a random developed industrial tile as **origin**
+  and a random developed commercial tile as **destination**. Big_box
+  destinations get the same 2× bias as resident-car commercial picks
+  (big-box stores receive disproportionately more freight in real
+  life).
+- Trucks do NOT use parking lots — semi-trucks deliver curbside, not
+  in 6-stall lots. The new 1.4.2 `findStallNearDest` flow is skipped
+  for trucks.
+
+**Behaviour vs cars:**
+- Speed: `TRUCK_SPEED_MULT = 0.85` — trucks cruise 15% slower than
+  cars on the same road tier (preserved on return trip).
+- Traffic load: `TRUCK_LOAD_WEIGHT = 2` — trucks contribute 2 to per-
+  tile `trafficLoad` (cars contribute 1), so a corridor of trucks
+  visibly congests other traffic. `incrementLoad`/`decrementLoad`
+  now take an optional weight parameter; all callsites use
+  `carLoadWeight(car)`.
+- Dwell time: `TRUCK_VISIT_LOW_SEC = 4`, `TRUCK_VISIT_HIGH_SEC = 10`
+  (vs cars 8–22) — short delivery stop, then return trip queued via
+  the existing `pendingReturns` mechanism. Trucks count against their
+  own cap in `scheduleReturnTrips`.
+
+**Visual design (release quality):**
+
+Semi-truck / box-truck silhouette in `src/engine/Renderer.ts`:
+- **Dark grey chassis** (full-length base frame, 0.22 wide × 0.04
+  tall × 0.50 long)
+- **Cab** at the front (0.22 × 0.10 × 0.16, +Z direction = forward)
+- **Cargo box** at the rear (0.22 × 0.15 × 0.28, slightly taller than
+  the cab — classic box-truck proportions)
+- **Dark windshield** + side windows on the cab
+- **Yellow headlights** on the cab front
+- **Red taillights** on the cargo box rear
+
+Total truck length 0.50 vs car 0.34 (~1.5× longer). The chassis colour
+(dark grey) is baked into the vertex stream so per-instance colour
+tints ONLY the cab + cargo box — the frame stays dark regardless of
+fleet colour. 7-colour `TRUCK_PALETTE` (white, silver, blue, brown,
+green, red, dark blue) so a city's truck fleet reads as mixed carriers.
+
+Four sibling `InstancedMesh` objects per truck (body, glass,
+headlights, taillights); cap at `MAX_TRUCKS = 30`. The `updateCars`
+loop branches on `kind === 'truck'` and tracks `truckIdx` separately
+from `carIdx` so cars and trucks render to disjoint instance buffers
+in one pass.
+
+When adding a future vehicle type that needs a distinctly bigger
+silhouette (e.g., construction trucks, garbage trucks), the
+**principle from this release**: bake the always-dark parts (chassis,
+underframe) into the vertex colour stream so per-instance colour
+multiplies them to "still dark" automatically, then keep the
+tintable parts (body panels) vertex-coloured white so per-instance
+colour tints them at full strength.
+
+Bundle +4 KB raw / +1.7 KB gzipped — lean.
+
 ## Status: Beta 1.4.2 (Big-box demand bump + parking lots as transit hubs)
 
 User feedback: "If I make a big parking lot it's a little too empty. Scale

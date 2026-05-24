@@ -16,11 +16,15 @@ import {
   SUBWAY_SUPPRESSION_RADIUS,
   ROAD_TIER,
   STOP_SIGN_PAUSE_SEC,
-  VEHICLE_PALETTE,
   type Building,
   type RoadType
 } from '../types';
 import { nearBusStop } from './Buses';
+import { getActiveTheme } from '../themes/registry';
+/** Theme-driven civilian car palette accessor (Beta 1.2). Wrapped in
+ *  a function because the active theme can change at runtime; any
+ *  cached const at import time would freeze the original palette. */
+function vehiclePalette(): readonly number[] { return getActiveTheme().vehicles.cars; }
 
 /**
  * Car kind (Alpha 4.14). The simulation gates spawn caps and visual
@@ -269,7 +273,8 @@ export class Vehicles {
       };
       const path = pathfinder.findPath(roadGraph, r.destRoadIdx, r.originRoadIdx, grid.width, edgeCost);
       if (!path || path.length < 2) continue;
-      const color = r.color ?? VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
+      const _pal = vehiclePalette();
+      const color = r.color ?? _pal[Math.floor(Math.random() * _pal.length)] ?? 0xffffff;
       const car: Car = {
         pathTiles: path,
         segmentIdx: 0,
@@ -357,7 +362,8 @@ export class Vehicles {
     const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
     if (!path || path.length < 2) return;
 
-    const color = VEHICLE_PALETTE[Math.floor(Math.random() * VEHICLE_PALETTE.length)] ?? 0xffffff;
+    const _pal2 = vehiclePalette();
+    const color = _pal2[Math.floor(Math.random() * _pal2.length)] ?? 0xffffff;
     const car: Car = {
       pathTiles: path,
       segmentIdx: 0,
@@ -425,7 +431,7 @@ export class Vehicles {
     if (!path || path.length < 2) return;
     // Tourists use a brighter palette so they're visually distinct (golds
     // and pastels) and stand out against the muted resident palette.
-    const TOURIST_PALETTE = [0xf0c060, 0xe88a4d, 0xb8d068, 0xeac4e2, 0x6bc4c8];
+    const TOURIST_PALETTE = getActiveTheme().vehicles.tourist;
     const color = TOURIST_PALETTE[Math.floor(Math.random() * TOURIST_PALETTE.length)] ?? 0xffffff;
     const car: Car = {
       pathTiles: path, segmentIdx: 0, segmentT: 0, speed: 1.0,

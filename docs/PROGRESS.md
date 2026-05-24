@@ -4,6 +4,19 @@ Update this file every time you complete (or partially complete) a build-order s
 
 ## Releases
 
+- **Beta 1.2 — Theme packs (system + first free pack "Coastal Pastel")** — first cosmetic-content release. Introduces the `ThemePack` architecture: a pluggable single-source-of-truth for every dominant visual surface (terrain palette, road palette, building zone palettes, vehicle palette, flora, beautification, atmosphere — sky gradient, sun colours, fog) plus a `tint(hex)` long-tail filter that perceptually unifies the unmigrated detail colours. Stock theme = identity tint = pixel-identical to pre-1.2; Coastal Pastel ships with a Mediterranean / Aegean palette + warm hazy atmosphere + olive-grove flora. Bundle 994 KB raw / 264 KB gzipped.
+  - **`src/themes/`** new module:
+    - `types.ts` — `ThemePack` interface (terrain, roads, buildings, vehicles, flora, beautification, atmosphere, matcaps, moodTint, extraVariants, exclusiveMonument).
+    - `stock.ts` — every previously-hardcoded constant captured as the Stock theme. Identity moodTint (strength: 0) so legacy rendering is byte-equivalent.
+    - `coastalPastel.ts` — free first pack: Aegean-village vibe — whitewashed walls, cobalt + terracotta roofs, turquoise sea, sand-stone roads, olive-grove flora, warm Mediterranean sky with gentle fog haze. 12 additive variant ids (variety never decreases, only grows). Exclusive Lighthouse monument id (renderer hook lands in a follow-up).
+    - `registry.ts` — `getActiveTheme()` / `setActiveTheme(id)` / `onThemeChange(handler)` / `initThemes()`. The `tint(hex)` function applies the active theme's HSL transform + mood blend to any unmigrated colour, so every asset reads as part of the theme.
+  - **Renderer.ts refactor**: top-of-file `TERRAIN_COLORS / TREE_TRUNK / TREE_LEAF / TREE_SHADOW / ROAD_LANE / HIGHWAY_ARROW / STOP_SIGN_COLOR / STOP_SIGN_TEXT / PATH_COLOR / SIDEWALK_COLOR / ZONE_COLORS` all read from `THEME()`. Sky-gradient repaint takes per-theme keyframes; sun/ambient/hemisphere lighting bounds come from `atm`. Fog (Coastal only) installs an `FogExp2` on the scene. Every `colours.push(p.color)` site in `buildBuildingsMesh` and `buildCityBuildingsMesh` is wrapped in `tint()` — long-tail per-variant colours flow through the theme without touching `BuildingVariants.ts`.
+  - **Vehicles.ts + Pedestrians.ts**: civilian / tourist / pedestrian palettes read from `getActiveTheme().vehicles.*` at spawn time.
+  - **Renderer.refreshTheme(grid, …)** rebuilds every world mesh + re-derives clearColor / fog / sky in one call. Wired from the picker's `onApply` so swap-and-see is instant — no reload.
+  - **Settings → Theme** is now the FIRST group in the Settings panel. Card grid auto-renders from the registry (`ThemePicker.ts`). Each card: hero swatch gradient (primary → mid → secondary + accent dot), name, tagline, status pill (`Active` / `Free` / `$X.XX`). Tap a card → swap + repaint.
+  - Active theme persists to `localStorage` under `mqcity-active-theme`. NO save-schema bump — theme is a per-device preference (like UI scale / palette), not city data. Imported saves keep the importer's theme.
+  - Architectural intent for future paid packs (Tokyo Neon, etc.): same `ThemePack` shape + a `sku` field that future Stripe-Edge-Function entitlement checks gate on. Free packs use `priceUsd: 'free'` and skip the entitlement check.
+
 - **Beta 1.1.6 — Legal links into Settings (drop the canvas chip); Ontario governing law** — user feedback on 1.1.5: the floating bottom-left `Terms · Privacy` chip was too easy to miss and cluttered the canvas. So 1.1.6 pulls it out entirely and lands the discoverability inside Settings.
   - Removed `#legal-footer` from `index.html` and its `.legal-footer` CSS block.
   - Added a dedicated **Legal & support** group to the Settings panel with two prominent `.settings__legal-link` rows (Privacy Policy / Terms of Service) and a `hello@mqcity.app` contact line below.

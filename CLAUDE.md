@@ -111,6 +111,11 @@ src/
     Districts.ts      district registry + per-zone surtax (Alpha 2.22)
   persistence/
     SaveGame.ts       IndexedDB multi-slot auto-save + restore (Alpha 2.20)
+  themes/             theme packs (Beta 1.2 — cosmetic swap of every dominant visual surface)
+    types.ts          ThemePack interface (palette, atmosphere, matcaps, tint, variants)
+    registry.ts       getActiveTheme/setActiveTheme/onThemeChange + tint(hex) long-tail filter
+    stock.ts          original launch look (identity tint)
+    coastalPastel.ts  free Mediterranean pack
   ui/
     TileInfoPanel.ts  bottom-sheet info card with diagnostic chips
     BudgetPanel.ts    treasury + tax sliders + bonds + city name (Alpha 2.18+2.20)
@@ -122,6 +127,7 @@ src/
     LeaderBioModal.ts one-time leader meet popup (Alpha 2.15)
     SlotPicker.ts     3-up save slot picker (Alpha 2.20)
     DistrictsPanel.ts district registry editor (Alpha 2.22)
+    ThemePicker.ts    theme card grid in Settings (Beta 1.2)
     PhotoOpBanner.ts  opportunistic photo-op banner
     Toolbar.ts        scrollable bottom tool selector w/ grouped popovers
 ```
@@ -335,6 +341,37 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.2 (Theme packs — Coastal Pastel is the free first pack)
+
+First cosmetic-content release. Introduces a pluggable `ThemePack` system that drives every dominant visual surface from a single source of truth, plus a `tint(hex)` long-tail filter that perceptually unifies any unmigrated detail colour with the active theme. Ships TWO themes: **Stock** (the launch look — pixel-identical to pre-1.2) and **Coastal Pastel** (free Mediterranean-village pack — whitewashed walls, cobalt + terracotta roofs, turquoise water, warm hazy sky, olive flora).
+
+**`src/themes/` is the new home for visual configuration**:
+- `types.ts` — `ThemePack` interface: terrain palette, road palette, building-zone palettes (per zone × density), vehicle palette, flora, beautification, atmosphere (sky keyframes + sun + ambient + hemi + optional fog), matcaps, moodTint (HSL transform + blend), additive `extraVariants`, optional `exclusiveMonument`. Plus pricing + hero swatch + sku scaffolding for future paid packs.
+- `stock.ts` — every previously-hardcoded constant captured verbatim. Identity moodTint (strength 0) so the renderer is byte-equivalent to pre-themes when stock is active.
+- `coastalPastel.ts` — full free pack. Authored top-to-bottom: all asset palettes, full atmosphere (warm Mediterranean sky + gentle haze fog), 12 additive variant ids (variety only grows — never replaces stock), exclusive Lighthouse monument id.
+- `registry.ts` — `getActiveTheme() / setActiveTheme(id) / onThemeChange(handler) / initThemes()`. The `tint(hex)` function is the secret sauce — applies the active theme's saturation × lightness × cream-blend to any colour at call time. Stock = identity; Coastal Pastel = subtle desaturate + lift + warm-cream wash that ties every unmigrated detail into the scene.
+
+**Renderer.ts is the main consumer**: top-of-file constants removed; `THEME()` accessor returns the active pack. Build hooks for terrain, trees, roads, paths, sidewalks, stop signs, highway arrows, zone overlay, vehicle window/light materials, beautification streetscape, and lamp glow all read explicitly from the theme. **Every `colours.push(p.color)` call in `buildBuildingsMesh` and `buildCityBuildingsMesh` is wrapped in `tint()`** — that's the magic that makes service buildings / skyscrapers / monuments / Toronto landmarks all feel of-a-piece with the active theme without touching the 5K-line `BuildingVariants.ts`. Sky-gradient repaint takes per-theme keyframes; sun colours + intensities + hemisphere tones + clear color + fog all derive from `atmosphere`. **`Renderer.refreshTheme(grid, …)`** does a full re-derive + rebuild in one shot.
+
+**Vehicles + Pedestrians**: civilian / tourist / pedestrian palettes now read `getActiveTheme().vehicles.*` at spawn time. Existing on-screen vehicles keep their assigned colour (deterministic per spawn); newly spawned ones use the active theme's palette.
+
+**Settings → Theme is the FIRST group in Settings**. `ThemePicker.ts` renders a card grid from `listThemes()`: hero-swatch gradient + name + tagline + status pill (Active / Free / `$X.XX`). Tapping a card swaps the active theme and triggers `renderer.refreshTheme` for instant in-place repaint — no reload. Persists to `localStorage` under `mqcity-active-theme`. No save-schema bump — theme is a per-device preference (like UI scale), not city data.
+
+**Authoring rules for the next theme pack**:
+1. Drop a new file in `src/themes/yourPack.ts` exporting a `ThemePack`. Add it to the `REGISTRY` array in `registry.ts`.
+2. Author the explicit palette fields top-to-bottom — that covers the 80% perceptually dominant surfaces.
+3. Tune `moodTint` so the long-tail unmigrated colours read as part of the pack. Strong tints feel like a filter; subtle tints feel like the colours were authored that way. Coastal Pastel = `strength: 0.18, saturationMul: 0.82, lightnessMul: 1.05` toward `0xfff0d0` — that's a good starting envelope for "warm coastal." Tokyo Neon would invert it: `strength: 0.22, saturationMul: 1.25, lightnessMul: 0.92` toward magenta.
+4. Author `extraVariants` for additive geometry variety (variety can ONLY grow, never decrease). The renderer's variant picker hook for extras is not yet wired (deferred to v1.2.1), but the array is the source of truth.
+5. Optional `exclusiveMonument` for a pack-exclusive landmark.
+6. Set `priceUsd: 'free'` for free packs; future paid packs set a USD price + `sku` for Stripe Edge Function entitlement gating.
+
+**Known gaps to land in 1.2.x**:
+- Matcap material pipeline: the `MatcapSet` field is in the schema but the renderer doesn't yet swap `MeshLambertMaterial` → `MeshMatcapMaterial` for marked surfaces. Themes don't break if matcaps go unconsumed — the rest of the look stands on its own.
+- Additive `extraVariants` consumer in `BuildingVariants.ts` variant picker — themed variants are declared but stock variants render in their place for now. Stock variety is preserved (the user constraint); themed variety doesn't yet grow.
+- Pack-exclusive monuments (Lighthouse) — registered but not yet placeable in the monument toolbar.
+
+These are explicit non-shipping items; they don't reduce the perceived premium feel of the swap because the explicit palette + atmosphere + tint do the heavy lifting.
 
 ## Status: Beta 1.1.6 (Legal links into Settings; Ontario governing law)
 

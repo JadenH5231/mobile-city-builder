@@ -345,6 +345,77 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.4.1 (Big-box fully modular — any cluster shape is cohesive)
+
+User feedback after Beta 1.3.8 + 1.4 shipped: "the problem with big box
+is when it's non-rectangular. Make FULLY modular. an L shape should
+still make a visually appealing building for example."
+
+The pre-1.4.1 system had two paths in `bigBoxClusterParts`:
+- **Rectangular path:** one big wall slab spanning the cluster bbox.
+  Worked for rectangles only.
+- **Irregular fallback:** per-tile emission where each cluster tile
+  got a full mini-store (wall + fascia + brand stripe + roof + entry).
+  An L-shape rendered as 3 stamped mini-stores, exactly the visual
+  that Beta 1.3.7 had set out to fix.
+
+**The fix:** unify both paths into a single per-tile modular emission
+that uses per-side exterior detection.
+
+For each cluster tile, scan its 4 cardinal neighbours: a side is
+"exterior" if the adjacent tile is NOT in the cluster. Per-side insets:
+- `SIDE_INSET = 0.04` on N/E/W exterior — slim grass margin
+- `BACK_INSET = 0.09` on N exterior — slightly deeper, for the
+  loading-dock band
+- `FRONT_INSET = 0.30` on S exterior — leaves room for the apron +
+  entry vestibule + cart corrals
+- **0 on interior sides** — adjacent cluster tiles' bodies abut at
+  the tile boundary with no seam
+
+Each cluster tile emits its own wall slab, roof slab, loading-dock
+band (if N exterior), and fascia + brand stripe + corner pilasters
+(if S exterior). The union of these per-tile slabs traces the
+cluster's tile-shape outline.
+
+**Inner-corner filler:** at world-grid corners where exactly 3 of 4
+surrounding tiles are in cluster (the cluster wraps around a notch),
+the two perpendicular exterior walls don't quite meet at the corner.
+A small filler box (SIDE_INSET × BACK_INSET, in the missing-TR / TL
+case) bridges the gap. South-notch configs (missing BL / BR) are not
+filled — the resulting facade setback reads as two separate
+storefronts meeting at a structural seam, which is exactly what
+real architecture does for those shapes.
+
+**Per-S-exterior-tile-RUN entries:** Multiple storefronts now possible.
+Tiles with S=exterior are grouped into contiguous horizontal runs.
+Each run gets one entry (length 1) or two entries spaced 1/3-in
+from each end (length ≥ 2). The primary entry — the one that gets
+brand-signature accents like the Target bullseye — lands on the
+east-end of the longest run. An L-shape with two front arms gets
+TWO storefronts, each properly anchored, with the primary entry on
+the larger of the two.
+
+**Per-tile archetype accents:** warehouse-discount yellow corner
+blocks, electronics window strips, home-improvement garden display
+all emit per S-exterior tile so every front face of any cluster
+gets the archetype signature.
+
+**Lamps + side service door + garden centre wing** all re-derived
+from S-exterior runs / E-exterior tiles instead of the bbox. An L
+gets lamps on each of its two front arms; the side service door
+lands on the east-most E-exterior tile.
+
+When extending big_box (or any future modular industry), the
+**principle from this release**: emit geometry per tile, parameterised
+by which cardinal sides are exterior. Group exterior tiles into
+runs / faces for cluster-wide features (entries, lamps, signage).
+Avoid bbox-based emission unless the shape is guaranteed rectangular
+— the moment a player paints a non-rectangular cluster, the bbox
+approach either overhangs into empty tiles or falls back to N
+stamped mini-stores.
+
+Bundle 1,015 KB raw / 270 KB gzipped. Save schema unchanged.
+
 ## Status: Beta 1.4 (Highway redesign — bidirectional divided multi-lane)
 
 Substantial highway rework in response to direct user feedback: "Highways

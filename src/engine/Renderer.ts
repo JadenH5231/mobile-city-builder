@@ -5199,102 +5199,219 @@ function bigBoxClusterParts(
     out.push({ makeGeom: () => box(1.02, 0.018, 1.02), color: asphalt, dx: cx, dy: 0.009, dz: cz });
   }
 
-  // Cluster bbox + rectangularity (Beta 1.3.7). For rectangular
-  // clusters we emit ONE cohesive building spanning the bbox — a 2×2
-  // big_box becomes one ~2-tile-wide warehouse, not 4 stamped stores.
-  // For irregular clusters (L-shape, etc.) we fall back to per-tile
-  // emission so the rectangular shell doesn't overhang non-cluster
-  // tiles. Rectangular check: size === width × depth.
+  // Cluster bbox + per-tile exterior-side metadata (Beta 1.4.1). The
+  // pre-1.4.1 system branched between an "isRectangular" cohesive path
+  // and an "irregular" per-tile fallback that produced N stamped mini-
+  // stores. The new system is fully modular: every cluster — rect, L,
+  // T, U, plus, etc — emits ONE cohesive building whose outline traces
+  // the cluster's tile shape. The trick is per-tile body slabs that
+  // share their interior walls with neighbours and inset only on
+  // exterior sides.
   const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
   const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
   const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
   const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
   const widthTiles = maxX - minX + 1;
   const depthTiles = maxY - minY + 1;
-  const isRectangular = sorted.length === widthTiles * depthTiles;
+  // Build a fast cluster lookup for adjacency checks.
+  const clusterKey = (x: number, y: number) => x + ',' + y;
+  const clusterSet = new Set(sorted.map((c) => clusterKey(c.x, c.y)));
+  const inCluster = (x: number, y: number) => clusterSet.has(clusterKey(x, y));
+  // Per-tile metadata: which of the 4 cardinal sides is exterior?
+  type TileMeta = { x: number; y: number; N: boolean; E: boolean; S: boolean; W: boolean };
+  const tileMeta: TileMeta[] = sorted.map((c) => ({
+    x: c.x, y: c.y,
+    N: !inCluster(c.x, c.y - 1),
+    E: !inCluster(c.x + 1, c.y),
+    S: !inCluster(c.x, c.y + 1),
+    W: !inCluster(c.x - 1, c.y)
+  }));
 
   // Body height — archetype-tweaked. Membership-club + home-improvement
-  // are warehouse-tall; the others sit at the standard 0.30.
-  //
-  // Beta 1.3.8 — height scales with footprint. A 1-tile big-box was
-  // ~1/3 as tall as wide; a 2x2 with the same height read as a
-  // squashed pancake. We grow height by 0.05 per tile-extent above
-  // 1, capped at +0.20 so even a 5x5 doesn't tower over residential
-  // — the visual identity stays "wide low-rise warehouse," not
-  // "skyscraper." Min(W, D) so a long thin 1xN strip stays at its
-  // baseline height (a single-bay store, not a warehouse).
+  // are warehouse-tall; the others sit at the standard 0.30. Height
+  // scales with the cluster's smallest bbox dimension (capped at +0.20)
+  // so a 2x2 reads as a proportionate warehouse instead of a pancake.
   const sizeBonus = Math.min(0.20, Math.max(0, Math.min(widthTiles, depthTiles) - 1) * 0.05);
   const bodyHeight = (archetype === 'home-improvement' ? 0.36
                    : archetype === 'membership-club' ? 0.34
                    : 0.30) + sizeBonus;
 
-  // Building footprint (world units). Derived from bbox so a 1-tile
-  // cluster keeps the original 0.92 × 0.62 shell; multi-tile clusters
-  // grow proportionally with 1.0 unit per added tile (since TILE_SIZE
-  // = 1). The 0.08 / 0.38 baked-in margins are the original single-
-  // tile lateral and depth insets.
-  const buildingW = isRectangular ? widthTiles - 0.08 : 0.92;
-  const buildingD = isRectangular ? depthTiles - 0.38 : 0.62;
-  // Centroid of the building — bbox centre in X, slightly back-shifted
-  // in Z so the building leaves room for the front apron (where the
-  // entry + parking visually live). Matches the un-rotated single-tile
-  // convention of `cz - 0.10` for a single tile.
-  const buildingCX = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
-  const buildingCZ = isRectangular
-    ? ((minY + maxY) / 2 + 0.40) * TILE_SIZE
-    : ((primary.y + 0.5) - 0.10) * TILE_SIZE;
-  const frontZ = isRectangular ? (maxY + 0.71) * TILE_SIZE : (primary.y + 0.71) * TILE_SIZE;
-  const backZ = isRectangular ? (minY + 0.09) * TILE_SIZE : (primary.y + 0.09) * TILE_SIZE;
+  // Per-side body insets. SIDE_INSET on east/west exteriors creates a
+  // thin grass margin between the wall and the tile edge. BACK_INSET
+  // is slightly deeper to leave room for the loading-dock band on the
+  // north face. FRONT_INSET is the big one — leaves room for the
+  // entry vestibule + cart corrals + apron on the south face. Interior
+  // sides have NO inset, so adjacent cluster tiles' bodies abut at
+  // the tile boundary with no seam.
+  const SIDE_INSET = 0.04;
+  const BACK_INSET = 0.09;
+  const FRONT_INSET = 0.30;
 
-  // 2. Cohesive store body. ONE wall slab + ONE loading-dock band +
-  // ONE fascia + ONE brand stripe + ONE roof slab spanning the cluster.
-  if (isRectangular) {
-    // Wall.
-    out.push({ makeGeom: () => box(buildingW, bodyHeight, buildingD), color: pal.wall, dx: buildingCX, dy: bodyHeight / 2 + 0.03, dz: buildingCZ });
-    // Loading-dock band along the back face.
-    out.push({ makeGeom: () => box(buildingW, 0.10, 0.06), color: pal.wallDark, dx: buildingCX, dy: 0.05, dz: backZ + 0.03 });
-    // White parapet fascia along the full front.
-    out.push({ makeGeom: () => box(buildingW, 0.06, 0.04), color: pal.fascia, dx: buildingCX, dy: bodyHeight + 0.06, dz: frontZ - 0.02 });
-    // Brand-coloured stripe just under the fascia.
-    out.push({ makeGeom: () => box(buildingW, 0.025, 0.03), color: pal.brandStripe, dx: buildingCX, dy: bodyHeight + 0.01, dz: frontZ - 0.025 });
-    // Flat tar roof slab spanning the cluster.
-    out.push({ makeGeom: () => box(buildingW + 0.02, 0.02, buildingD + 0.02), color: pal.roof, dx: buildingCX, dy: bodyHeight + 0.04, dz: buildingCZ });
+  /** Per-tile body extent given its exterior-side metadata. */
+  const tileExtent = (m: TileMeta) => {
+    const insetN = m.N ? BACK_INSET : 0;
+    const insetS = m.S ? FRONT_INSET : 0;
+    const insetE = m.E ? SIDE_INSET : 0;
+    const insetW = m.W ? SIDE_INSET : 0;
+    const w = TILE_SIZE - insetE - insetW;
+    const d = TILE_SIZE - insetN - insetS;
+    const cx = (m.x + 0.5) * TILE_SIZE + (insetW - insetE) / 2;
+    const cz = (m.y + 0.5) * TILE_SIZE + (insetN - insetS) / 2;
+    // World-coord faces (useful for fascia/dock/lamp placement).
+    const xWest = cx - w / 2;
+    const xEast = cx + w / 2;
+    const zNorth = cz - d / 2;
+    const zSouth = cz + d / 2;
+    return { w, d, cx, cz, xWest, xEast, zNorth, zSouth };
+  };
 
-    // Beta 1.3.8 — vertical pilasters break up the long front facade.
-    // Thicker corner pilasters anchor each end; thin pilasters at
-    // interior tile seams give the building rhythm. Without these a
-    // 2-tile or 3-tile-wide store reads as one blank billboard. The
-    // pilasters are slightly forward (frontZ - 0.015) so they pop
-    // off the wall under the orthographic 3/4 lighting.
-    out.push({ makeGeom: () => box(0.06, bodyHeight + 0.04, 0.06), color: pal.wallDark, dx: buildingCX - buildingW / 2 + 0.03, dy: bodyHeight / 2 + 0.05, dz: frontZ - 0.03 });
-    out.push({ makeGeom: () => box(0.06, bodyHeight + 0.04, 0.06), color: pal.wallDark, dx: buildingCX + buildingW / 2 - 0.03, dy: bodyHeight / 2 + 0.05, dz: frontZ - 0.03 });
-    if (widthTiles >= 2) {
-      for (let i = 1; i < widthTiles; i++) {
-        const seamX = (minX + i) * TILE_SIZE;
-        out.push({ makeGeom: () => box(0.035, bodyHeight * 0.96, 0.035), color: pal.wallDark, dx: seamX, dy: bodyHeight / 2 + 0.03, dz: frontZ - 0.025 });
+  // 2. Cohesive store body — per-tile wall slabs that abut on interior
+  // sides and inset on exterior sides. For any cluster shape, the
+  // union of these slabs traces the cluster outline.
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = tileExtent(m);
+    if (w <= 0 || d <= 0) continue;
+    out.push({
+      makeGeom: () => box(w, bodyHeight, d),
+      color: pal.wall,
+      dx: cx, dy: bodyHeight / 2 + 0.03, dz: cz
+    });
+  }
+
+  // 2a. Inner-corner filler. When the cluster wraps around a NORTH
+  // notch (3 of 4 tiles around a world-grid corner are in cluster,
+  // missing tile is north of the corner), the two perpendicular
+  // exterior walls — both SIDE_INSET/BACK_INSET — don't quite meet at
+  // the inner corner. A small filler box bridges the gap. We only
+  // fill the NORTH-notch case (missing TL or TR) because south-notch
+  // configurations have a FRONT_INSET (0.30) on one side, and the
+  // resulting "gap" is actually a legitimate front-facade setback —
+  // each arm of an L-shaped cluster gets its own storefront facing
+  // its own apron, which is what real architecture would do for that
+  // footprint anyway.
+  for (let gy = minY; gy <= maxY + 1; gy++) {
+    for (let gx = minX; gx <= maxX + 1; gx++) {
+      const tl = inCluster(gx - 1, gy - 1);
+      const tr = inCluster(gx, gy - 1);
+      const bl = inCluster(gx - 1, gy);
+      const br = inCluster(gx, gy);
+      const cnt = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+      if (cnt !== 3) continue;
+      if (!tl) {
+        // Missing TL (north-west of corner). Cluster wraps E/SW.
+        // TR's W exterior (SIDE_INSET) at x = gx + 0.04.
+        // BL's N exterior (BACK_INSET) at z = gy + 0.09.
+        out.push({
+          makeGeom: () => box(SIDE_INSET, bodyHeight, BACK_INSET),
+          color: pal.wall,
+          dx: gx + SIDE_INSET / 2, dy: bodyHeight / 2 + 0.03, dz: gy + BACK_INSET / 2
+        });
+      } else if (!tr) {
+        // Missing TR (north-east of corner). Cluster wraps W/SE.
+        // TL's E exterior (SIDE_INSET) at x = gx - 0.04.
+        // BR's N exterior (BACK_INSET) at z = gy + 0.09.
+        out.push({
+          makeGeom: () => box(SIDE_INSET, bodyHeight, BACK_INSET),
+          color: pal.wall,
+          dx: gx - SIDE_INSET / 2, dy: bodyHeight / 2 + 0.03, dz: gy + BACK_INSET / 2
+        });
       }
+      // Missing BL / BR cases intentionally not filled — the FRONT_INSET
+      // creates a legitimate facade setback at the inner corner, which
+      // reads as two storefronts meeting at a structural seam.
     }
-    // Beta 1.3.8 — side service door on the east flank of multi-tile
-    // clusters (real big-boxes have a side-loading service entrance).
-    // Lives on the east face of the warehouse, halfway back. Reads
-    // as a dark slab against the brand-coloured wall.
-    if (widthTiles >= 2 || depthTiles >= 2) {
-      const sideX = buildingCX + buildingW / 2 - 0.005;
-      const sideZ = buildingCZ + buildingD * 0.20;
-      out.push({ makeGeom: () => box(0.03, bodyHeight * 0.55, 0.18), color: pal.entryFrame, dx: sideX, dy: bodyHeight * 0.30, dz: sideZ });
-    }
-  } else {
-    // Irregular cluster — fall back to per-tile emit so the building
-    // doesn't bleed into non-cluster tiles. Same as the pre-1.3.7
-    // emission path.
-    for (const c of sorted) {
-      const cx = (c.x + 0.5) * TILE_SIZE;
-      const cz = (c.y + 0.5) * TILE_SIZE;
-      out.push({ makeGeom: () => box(0.92, bodyHeight, 0.62), color: pal.wall, dx: cx, dy: bodyHeight / 2 + 0.03, dz: cz - 0.10 });
-      out.push({ makeGeom: () => box(0.92, 0.10, 0.06), color: pal.wallDark, dx: cx, dy: 0.05, dz: cz - 0.40 });
-      out.push({ makeGeom: () => box(0.92, 0.06, 0.04), color: pal.fascia, dx: cx, dy: bodyHeight + 0.06, dz: cz + 0.21 });
-      out.push({ makeGeom: () => box(0.92, 0.025, 0.03), color: pal.brandStripe, dx: cx, dy: bodyHeight + 0.01, dz: cz + 0.205 });
-      out.push({ makeGeom: () => box(0.94, 0.02, 0.64), color: pal.roof, dx: cx, dy: bodyHeight + 0.04, dz: cz - 0.10 });
+  }
+
+  // 3. Per-tile roof slab with overhang on exterior sides only. Adjacent
+  // cluster tiles' roof slabs abut on interior boundaries with no gap.
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = tileExtent(m);
+    if (w <= 0 || d <= 0) continue;
+    const overhang = 0.01;
+    const overE = m.E ? overhang : 0;
+    const overW = m.W ? overhang : 0;
+    const overN = m.N ? overhang : 0;
+    const overS = m.S ? overhang : 0;
+    const overWidth = w + overE + overW;
+    const overDepth = d + overN + overS;
+    const overCX = cx + (overE - overW) / 2;
+    const overCZ = cz + (overS - overN) / 2;
+    out.push({
+      makeGeom: () => box(overWidth, 0.02, overDepth),
+      color: pal.roof,
+      dx: overCX, dy: bodyHeight + 0.04, dz: overCZ
+    });
+  }
+
+  // 4. Loading-dock band on every N-exterior tile's back face.
+  for (const m of tileMeta) {
+    if (!m.N) continue;
+    const { w, cx, zNorth } = tileExtent(m);
+    out.push({
+      makeGeom: () => box(w, 0.10, 0.06),
+      color: pal.wallDark,
+      dx: cx, dy: 0.05, dz: zNorth + 0.03
+    });
+  }
+
+  // 5. Fascia + brand stripe + pilasters on every S-exterior tile's
+  // storefront face. Adjacent S-exterior tiles produce continuous
+  // fascia + stripe along the cluster's south outline.
+  for (const m of tileMeta) {
+    if (!m.S) continue;
+    const { w, cx, zSouth } = tileExtent(m);
+    // White parapet fascia along this tile's south wall.
+    out.push({
+      makeGeom: () => box(w, 0.06, 0.04),
+      color: pal.fascia,
+      dx: cx, dy: bodyHeight + 0.06, dz: zSouth - 0.02
+    });
+    // Brand-coloured stripe just under the fascia.
+    out.push({
+      makeGeom: () => box(w, 0.025, 0.03),
+      color: pal.brandStripe,
+      dx: cx, dy: bodyHeight + 0.01, dz: zSouth - 0.025
+    });
+    // Vertical pilasters at the tile's two front corners. The "outer"
+    // corner (one that's also W or E exterior) gets a thicker
+    // pilaster; the "inner" corner (interior W/E — joins another
+    // S-exterior tile in the cluster) gets a thin tile-seam pilaster
+    // that breaks up the long facade.
+    const westThick = m.W;
+    const eastThick = m.E;
+    out.push({
+      makeGeom: () => box(westThick ? 0.06 : 0.035, bodyHeight + (westThick ? 0.04 : 0), westThick ? 0.06 : 0.035),
+      color: pal.wallDark,
+      dx: cx - w / 2 + (westThick ? 0.03 : 0.018),
+      dy: bodyHeight / 2 + (westThick ? 0.05 : 0.03),
+      dz: zSouth - 0.025
+    });
+    out.push({
+      makeGeom: () => box(eastThick ? 0.06 : 0.035, bodyHeight + (eastThick ? 0.04 : 0), eastThick ? 0.06 : 0.035),
+      color: pal.wallDark,
+      dx: cx + w / 2 - (eastThick ? 0.03 : 0.018),
+      dy: bodyHeight / 2 + (eastThick ? 0.05 : 0.03),
+      dz: zSouth - 0.025
+    });
+  }
+
+  // 6. Side service door on the east-most E-exterior tile (only when
+  // the cluster has more than one tile — single-tile stores don't get
+  // a side door). Picks the tile with the highest x; ties broken by
+  // tile.y closest to the cluster centre so the door sits in the
+  // middle of the east flank.
+  if (sorted.length > 1) {
+    const eExt = tileMeta.filter((m) => m.E);
+    if (eExt.length > 0) {
+      const midY = (minY + maxY) / 2;
+      eExt.sort((a, b) => b.x - a.x || Math.abs(a.y - midY) - Math.abs(b.y - midY));
+      const door = eExt[0]!;
+      const { xEast, cz } = tileExtent(door);
+      out.push({
+        makeGeom: () => box(0.03, bodyHeight * 0.55, 0.18),
+        color: pal.entryFrame,
+        dx: xEast - 0.005, dy: bodyHeight * 0.30, dz: cz
+      });
     }
   }
 
@@ -5355,84 +5472,141 @@ function bigBoxClusterParts(
     }
   }
 
-  // 2c. Archetype-specific facade accents — span the full building
-  // width for the cohesive look (yellow corner blocks at the building
-  // extents, not per-tile; electronics windows along the full front).
-  //
-  // Beta 1.3.8 — pulled the yellow accent blocks slightly INSIDE the
-  // wall (0.07 from edge instead of dead-on the edge) so they don't
-  // sit at the tile-boundary seam, and so they don't fight with the
-  // dark-grey corner pilasters we draw at the same edges.
-  if (isRectangular && archetype === 'warehouse-discount') {
-    out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: buildingCX - buildingW / 2 + 0.08, dy: bodyHeight * 0.30 + 0.03, dz: frontZ - 0.02 });
-    out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: buildingCX + buildingW / 2 - 0.08, dy: bodyHeight * 0.30 + 0.03, dz: frontZ - 0.02 });
-  }
-  if (isRectangular && archetype === 'electronics') {
-    // Vertical glass windows spaced evenly across the entire front.
-    // 4 windows per tile of width — so a 2-tile-wide store gets 8.
-    const windowCount = Math.max(4, widthTiles * 4);
-    const spacing = buildingW / (windowCount + 1);
-    for (let i = 1; i <= windowCount; i++) {
-      const wx = buildingCX - buildingW / 2 + i * spacing;
-      out.push({ makeGeom: () => box(0.06, bodyHeight * 0.45, 0.02), color: pal.entryGlass, dx: wx, dy: bodyHeight * 0.35, dz: frontZ - 0.01 });
+  // 7. Archetype-specific facade accents — apply PER S-EXTERIOR TILE so
+  // every front-facing tile of any cluster shape gets the archetype
+  // signature. Pre-1.4.1 these were only emitted for rectangular
+  // clusters; now an L-shape's two front arms each get the full
+  // signature, making the modular footprint feel intentional rather
+  // than a fallback.
+  for (const m of tileMeta) {
+    if (!m.S) continue;
+    const { w, cx, zSouth } = tileExtent(m);
+    if (archetype === 'warehouse-discount') {
+      // Yellow corner blocks at the tile's outer corners (only when
+      // the corner is a true cluster outer corner — i.e. the adjacent
+      // E/W side is also exterior so this corner faces open ground).
+      if (m.W) {
+        out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: cx - w / 2 + 0.08, dy: bodyHeight * 0.30 + 0.03, dz: zSouth - 0.02 });
+      }
+      if (m.E) {
+        out.push({ makeGeom: () => box(0.04, bodyHeight * 0.6, 0.06), color: pal.brandAccent, dx: cx + w / 2 - 0.08, dy: bodyHeight * 0.30 + 0.03, dz: zSouth - 0.02 });
+      }
+    }
+    if (archetype === 'electronics') {
+      // Vertical glass windows along this S-exterior tile's full
+      // front width (4 windows per tile).
+      const windowCount = 4;
+      const spacing = w / (windowCount + 1);
+      for (let i = 1; i <= windowCount; i++) {
+        const wx = cx - w / 2 + i * spacing;
+        out.push({ makeGeom: () => box(0.06, bodyHeight * 0.45, 0.02), color: pal.entryGlass, dx: wx, dy: bodyHeight * 0.35, dz: zSouth - 0.01 });
+      }
     }
   }
 
-  // 3. Storefront detail — entry doors + cart corrals at the cluster's
-  // FRONT CENTRE.
+  // 8. Storefront entry doors + cart corrals.
   //
-  // Beta 1.3.8 — multi-entry storefronts on wide buildings. A
-  // 1-tile store gets ONE entry centred on the front; a 2+-tile-wide
-  // store gets TWO sets of doors spaced 1/3 in from each side, like
-  // a real Walmart Supercenter. One tiny door on a 2-tile-wide
-  // facade looked badly out of scale. We cap at 2 entries — going
-  // to 3 makes the building read as a strip mall rather than one
-  // big box.
-  const entryCount = isRectangular && widthTiles >= 2 ? 2 : 1;
-  const entryPositions: Array<{ cx: number; cz: number; isPrimary: boolean }> = [];
-  if (entryCount === 2) {
-    const span = buildingW * 0.34;
-    entryPositions.push({ cx: buildingCX - span / 2, cz: frontZ - 0.01, isPrimary: false });
-    entryPositions.push({ cx: buildingCX + span / 2, cz: frontZ - 0.01, isPrimary: true });
-  } else {
-    entryPositions.push({
-      cx: isRectangular ? buildingCX : (primary.x + 0.5) * TILE_SIZE,
-      cz: isRectangular ? frontZ - 0.01 : (primary.y + 0.5) * TILE_SIZE + 0.22,
-      isPrimary: true
-    });
+  // Beta 1.4.1 — entry placement is now per-S-exterior-tile-range
+  // instead of per-bbox. For a rectangular cluster this matches the
+  // pre-1.4.1 behaviour (S-exterior tiles span the full bottom row);
+  // for L/T/U-shapes, entries spread across each contiguous front
+  // segment so every storefront arm of the cluster gets its own door.
+  //
+  // Algorithm:
+  //   1. Group S-exterior tiles into contiguous horizontal runs.
+  //   2. Each run of length 1 → ONE entry at the tile's centre.
+  //   3. Each run of length ≥ 2 → TWO entries spaced 1/3 in from
+  //      each end, like a real Walmart Supercenter.
+  //   4. The cluster's "primary" entry (the one that gets brand
+  //      accents like the Target bullseye) is the run-2 east entry
+  //      of the largest run (matches the pre-1.4.1 single-entry
+  //      "isPrimary" semantics for rectangular clusters).
+  const sExtTiles = tileMeta.filter((m) => m.S).sort((a, b) =>
+    a.y - b.y || a.x - b.x
+  );
+  // Group into horizontal runs (same y, contiguous x).
+  const sRuns: TileMeta[][] = [];
+  for (const m of sExtTiles) {
+    const lastRun = sRuns[sRuns.length - 1];
+    if (lastRun && lastRun[lastRun.length - 1]!.y === m.y &&
+        lastRun[lastRun.length - 1]!.x === m.x - 1) {
+      lastRun.push(m);
+    } else {
+      sRuns.push([m]);
+    }
   }
-  // Cart corrals are tighter when there are two entries so the pairs
-  // don't overlap in the middle of the facade.
-  const corralSpread = entryCount === 1 ? 0.30 : 0.16;
+  // Build the entry list. Track the primary entry (designated
+  // `isPrimary`) — picked as the east-most entry on the longest run.
+  type EntryPos = { cx: number; cz: number; isPrimary: boolean; tile: TileMeta };
+  const entryPositions: EntryPos[] = [];
+  // Find longest run (ties broken by southern-most then western-most)
+  // so the primary always lands on the most prominent front of the
+  // building.
+  const longestRun = sRuns.reduce<TileMeta[] | null>((best, run) => {
+    if (!best) return run;
+    if (run.length > best.length) return run;
+    if (run.length < best.length) return best;
+    const bestY = best[0]!.y, runY = run[0]!.y;
+    if (runY > bestY) return run;
+    if (runY < bestY) return best;
+    return run[0]!.x < best[0]!.x ? run : best;
+  }, null);
+  for (const run of sRuns) {
+    const isLongest = run === longestRun;
+    if (run.length === 1) {
+      const m = run[0]!;
+      const { cx, zSouth } = tileExtent(m);
+      entryPositions.push({ cx, cz: zSouth - 0.01, isPrimary: isLongest, tile: m });
+    } else {
+      // Run length ≥ 2 — spread 2 entries across the run.
+      const leftTile = run[0]!;
+      const rightTile = run[run.length - 1]!;
+      const leftExt = tileExtent(leftTile);
+      const rightExt = tileExtent(rightTile);
+      const leftX = leftExt.xWest;
+      const rightX = rightExt.xEast;
+      const span = rightX - leftX;
+      const entry1X = leftX + span * 0.25;
+      const entry2X = leftX + span * 0.75;
+      // Each entry's z = the south-face z of the tile it lands on.
+      const tileAtX = (worldX: number): TileMeta => {
+        const tx = Math.floor(worldX);
+        return run.find((m) => m.x === tx) ?? run[0]!;
+      };
+      const m1 = tileAtX(entry1X);
+      const m2 = tileAtX(entry2X);
+      const z1 = tileExtent(m1).zSouth - 0.01;
+      const z2 = tileExtent(m2).zSouth - 0.01;
+      entryPositions.push({ cx: entry1X, cz: z1, isPrimary: false, tile: m1 });
+      entryPositions.push({ cx: entry2X, cz: z2, isPrimary: isLongest, tile: m2 });
+    }
+  }
+  // Cart corral spread — tighter when 2 entries share a run so they
+  // don't overlap.
+  const wideRunCount = sRuns.filter((r) => r.length >= 2).length;
+  const corralSpread = wideRunCount === 0 ? 0.30 : 0.16;
 
   for (const entry of entryPositions) {
-    const { cx, cz, isPrimary } = entry;
+    const { cx, cz, isPrimary, tile } = entry;
     // Entry vestibule (delta from front face, in unrotated coords).
     if (archetype === 'mass-merchant') {
-      // Target-style rounded entry portico + bullseye-suggesting
-      // circular accent above the entry. Bullseye only on the
-      // primary entry to keep the silhouette readable.
       if (isPrimary) {
         out.push({ makeGeom: () => cyl(0.18, 0.06, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.10, dz: cz - 0.05 });
         out.push({ makeGeom: () => cyl(0.10, 0.07, 12), color: pal.fascia, dx: cx, dy: bodyHeight + 0.105, dz: cz - 0.05 });
         out.push({ makeGeom: () => cyl(0.05, 0.075, 12), color: pal.brandAccent, dx: cx, dy: bodyHeight + 0.11, dz: cz - 0.05 });
       }
-      // Rounded entry vestibule.
       out.push({ makeGeom: () => box(0.36, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
       out.push({ makeGeom: () => cyl(0.18, 0.04, 14), color: pal.fascia, dx: cx, dy: 0.26, dz: cz + 0.01 });
     } else if (archetype === 'membership-club') {
-      // Costco-style minimal entry + GAS STATION canopy on the apron.
       out.push({ makeGeom: () => box(0.26, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
-      // Canopy lives on the wing of the cluster, not at the entry.
-      // For single-tile this is +0.50 from entry; for multi-tile we
-      // anchor it relative to the cluster east edge so the canopy
-      // ends up beside the building, not in the middle of it.
+      // Gas-station canopy on the apron — only beside the primary
+      // entry. Lives 0.50 east of the entry, on the apron in front
+      // of an adjacent S-exterior tile (or the entry's own tile if
+      // no eastern neighbour).
       if (isPrimary) {
-        const canopyX = isRectangular && sorted.length > 1
-          ? buildingCX + buildingW / 2 + 0.40
-          : cx + 0.50;
-        const canopyZ = isRectangular ? frontZ + 0.25 : cz + 0.25;
+        const canopyX = cx + 0.50;
+        const canopyZ = tileExtent(tile).zSouth + 0.25;
         out.push({ makeGeom: () => box(0.42, 0.012, 0.18), color: pal.brandAccent, dx: canopyX, dy: 0.20, dz: canopyZ });
         for (const [px, pz] of [[-0.18, -0.06], [0.18, -0.06], [-0.18, 0.06], [0.18, 0.06]] as const) {
           out.push({ makeGeom: () => box(0.014, 0.20, 0.014), color: pal.fascia, dx: canopyX + px, dy: 0.10, dz: canopyZ + pz });
@@ -5442,28 +5616,23 @@ function bigBoxClusterParts(
         }
       }
     } else if (archetype === 'home-improvement') {
-      // Home-Depot-style large square entry with a small overhang.
       out.push({ makeGeom: () => box(0.40, 0.24, 0.04), color: pal.entryGlass, dx: cx, dy: 0.15, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.012, 0.24, 0.05), color: pal.entryFrame, dx: cx, dy: 0.15, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.46, 0.012, 0.06), color: pal.brandStripe, dx: cx, dy: 0.28, dz: cz + 0.03 });
-      // Lumber stacks beside the primary entry only.
       if (isPrimary) {
         for (let s = 0; s < 4; s++) {
           out.push({ makeGeom: () => box(0.06, 0.012, 0.22), color: 0x8b6b3a, dx: cx + 0.36, dy: 0.024 + s * 0.013, dz: cz + 0.09 });
         }
       }
     } else if (archetype === 'electronics') {
-      // Best-Buy-style large glass entry vestibule + yellow accent band.
       out.push({ makeGeom: () => box(0.42, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.48, 0.025, 0.04), color: pal.brandStripe, dx: cx, dy: 0.27, dz: cz + 0.01 });
     } else {
-      // warehouse-discount — standard wide glass vestibule.
+      // warehouse-discount.
       out.push({ makeGeom: () => box(0.34, 0.22, 0.04), color: pal.entryGlass, dx: cx, dy: 0.14, dz: cz + 0.01 });
       out.push({ makeGeom: () => box(0.012, 0.22, 0.05), color: pal.entryFrame, dx: cx, dy: 0.14, dz: cz + 0.01 });
     }
-    // Cart corrals — flank each entry. Skip for membership-club
-    // (Costco doesn't have cart corrals out front).
     if (archetype !== 'membership-club') {
       for (const cxOff of [-corralSpread, corralSpread]) {
         out.push({ makeGeom: () => box(0.10, 0.05, 0.18), color: cartCorral, dx: cx + cxOff, dy: 0.025, dz: cz + 0.15 });
@@ -5471,75 +5640,53 @@ function bigBoxClusterParts(
     }
   }
 
-  // 4. Home-improvement garden-centre extension.
+  // 9. Home-improvement garden-centre extension.
   //
-  // Beta 1.3.8 — the pre-1.3.8 wing search found `primary.x + 1` which
-  // on a 2x2 rectangular cluster landed INSIDE the cohesive building
-  // (because primary is lex-smallest = back-left of the cluster),
-  // overlapping the warehouse geometry. Two paths now:
-  //
-  //   - Single-tile or irregular cluster: original wing-on-flank
-  //     geometry (greenhouse + plant racks bolted to a flank tile).
-  //   - Rectangular multi-tile cluster: the cluster IS the warehouse
-  //     in one piece; instead of a separate wing, we add an outdoor
-  //     garden display along the east-side apron + a small
-  //     greenhouse-glass section of the front fascia. Reads as
-  //     "garden centre is the east end of the store" — Home Depot
-  //     does this with their outdoor lumber and plant display.
-  if (archetype === 'home-improvement') {
-    if (isRectangular && sorted.length > 1) {
-      // Outdoor plant display along the east-end of the front apron.
-      const gardenX = buildingCX + buildingW / 2 - 0.18;
-      for (let i = 0; i < 3; i++) {
-        const offX = (i - 1) * 0.10;
-        out.push({ makeGeom: () => box(0.10, 0.06, 0.10), color: planterLeaf, dx: gardenX + offX, dy: 0.030, dz: frontZ + 0.22 });
-        out.push({ makeGeom: () => box(0.10, 0.02, 0.10), color: planter, dx: gardenX + offX, dy: 0.013, dz: frontZ + 0.22 });
-      }
-      // Greenhouse-glass fascia accent on the east end of the front
-      // wall — tints the brand stripe section so the east end reads
-      // as "garden centre" vs warehouse.
-      const greenhouseW = Math.min(buildingW * 0.30, 0.50);
-      out.push({ makeGeom: () => box(greenhouseW, 0.22, 0.02), color: 0xb8d4d6, dx: buildingCX + buildingW / 2 - greenhouseW / 2 - 0.06, dy: bodyHeight * 0.30 + 0.03, dz: frontZ });
-      // Stacked lumber pallets on the apron next to the garden display.
-      for (let s = 0; s < 3; s++) {
-        out.push({ makeGeom: () => box(0.14, 0.012, 0.18), color: 0x8b6b3a, dx: gardenX + 0.26, dy: 0.024 + s * 0.013, dz: frontZ + 0.20 });
-      }
-    } else {
-      // Single-tile or irregular cluster — original wing-on-flank
-      // logic (no risk of overlapping the cohesive building because
-      // there isn't one in this branch).
-      const gardenWing = sorted.find((c) =>
-        (c.x === primary.x + 1 && c.y === primary.y) ||
-        (c.x === primary.x - 1 && c.y === primary.y)
-      );
-      if (gardenWing) {
-        const cx = (gardenWing.x + 0.5) * TILE_SIZE;
-        const cz = (gardenWing.y + 0.5) * TILE_SIZE;
-        out.push({ makeGeom: () => box(0.86, 0.10, 0.56), color: 0xc6c3b4, dx: cx, dy: 0.05, dz: cz - 0.10 });
-        out.push({ makeGeom: () => box(0.86, 0.22, 0.04), color: 0xb8d4d6, dx: cx, dy: 0.21, dz: cz + 0.20 });
-        out.push({ makeGeom: () => box(0.86, 0.22, 0.04), color: 0xb8d4d6, dx: cx, dy: 0.21, dz: cz - 0.20 });
-        for (const px of [-0.30, 0.00, 0.30]) {
-          out.push({ makeGeom: () => box(0.18, 0.06, 0.10), color: planterLeaf, dx: cx + px, dy: 0.030, dz: cz + 0.36 });
-          out.push({ makeGeom: () => box(0.18, 0.02, 0.10), color: planter, dx: cx + px, dy: 0.013, dz: cz + 0.36 });
-        }
-      }
+  // Beta 1.4.1 — modular. Garden display lands on the east end of
+  // whichever S-exterior run is the longest, on its apron. For
+  // single-tile / irregular clusters this still puts the garden at
+  // the right "front-east" spot regardless of cluster shape.
+  if (archetype === 'home-improvement' && sorted.length > 1 && longestRun) {
+    // East-most tile of the longest run.
+    const eastTile = longestRun[longestRun.length - 1]!;
+    const { xEast, zSouth } = tileExtent(eastTile);
+    const gardenX = xEast - 0.18;
+    for (let i = 0; i < 3; i++) {
+      const offX = (i - 1) * 0.10;
+      out.push({ makeGeom: () => box(0.10, 0.06, 0.10), color: planterLeaf, dx: gardenX + offX, dy: 0.030, dz: zSouth + 0.22 });
+      out.push({ makeGeom: () => box(0.10, 0.02, 0.10), color: planter, dx: gardenX + offX, dy: 0.013, dz: zSouth + 0.22 });
+    }
+    // Greenhouse-glass accent on the east-end fascia of this tile.
+    const greenhouseW = Math.min(tileExtent(eastTile).w * 0.40, 0.40);
+    out.push({
+      makeGeom: () => box(greenhouseW, 0.22, 0.02),
+      color: 0xb8d4d6,
+      dx: xEast - greenhouseW / 2 - 0.06,
+      dy: bodyHeight * 0.30 + 0.03,
+      dz: zSouth
+    });
+    for (let s = 0; s < 3; s++) {
+      out.push({ makeGeom: () => box(0.14, 0.012, 0.18), color: 0x8b6b3a, dx: gardenX + 0.26, dy: 0.024 + s * 0.013, dz: zSouth + 0.20 });
     }
   }
 
-  // 5. Lamp posts — at the FRONT of the cohesive building. Beta 1.3.8
-  // pulled lamps slightly INSIDE the cluster boundary (was at edge +
-  // 0.04, now at edge - 0.08) so they don't float at the road/
-  // parking seam. For widthTiles >= 3 we also add a middle lamp so
-  // very wide stores aren't dark in the centre apron.
-  {
+  // 10. Lamp posts — one pair per S-exterior run, with an extra middle
+  // lamp on runs of length ≥ 3 so wide storefronts aren't dark in
+  // the centre. Pulled slightly INSIDE the run boundary so they don't
+  // float at the road/parking seam.
+  for (const run of sRuns) {
     const lampInset = 0.08;
-    const lampZ = frontZ + 0.10;
+    const leftTile = run[0]!;
+    const rightTile = run[run.length - 1]!;
+    const leftExt = tileExtent(leftTile);
+    const rightExt = tileExtent(rightTile);
+    const lampZ = leftExt.zSouth + 0.10;
     const lampXs: number[] = [
-      buildingCX - buildingW / 2 + lampInset,
-      buildingCX + buildingW / 2 - lampInset
+      leftExt.xWest + lampInset,
+      rightExt.xEast - lampInset
     ];
-    if (isRectangular && widthTiles >= 3) {
-      lampXs.push(buildingCX);
+    if (run.length >= 3) {
+      lampXs.push((leftExt.xWest + rightExt.xEast) / 2);
     }
     for (const x of lampXs) {
       out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: x, dy: 0.11, dz: lampZ });

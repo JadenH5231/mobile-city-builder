@@ -345,6 +345,52 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.5.2 (Portrait toolbar — tighter, less HUD inflation)
+
+New beta-user feedback: "Playing on my phone on portrait mode doesn't
+give enough space for the building menu. The bottom menu UI is too
+restrictive for vertical play."
+
+**CSS-only fix** (no JS, no schema). Three new media query blocks in
+`src/styles.css`:
+
+1. `@media (max-width: 480px) and (orientation: portrait)` (toolbar):
+   Drop the inline label expansion on the active group button. Pre-fix
+   this expanded "Roads" / "C" / etc inline when the group's member
+   was selected — inflating that pill pushed every other pill
+   sideways and forced horizontal scroll just to reach what you'd
+   selected. Replaced with a small yellow underline accent that
+   marks the active group without consuming layout space.
+
+2. `@media (max-width: 360px)` (iPhone SE / smaller Androids):
+   Tightened outer toolbar padding (6px margin instead of 12),
+   shrank group buttons (34px min-width, 6px padding, 11px font),
+   compressed popover buttons to 60 × 38 (was 76 × 42) so multi-tier
+   groups (R / C / I / MU with 4-5 density tiers each) fit in a
+   single row instead of wrapping. Popover sheet width expanded to
+   `100vw - 12px`.
+
+3. `@media (max-width: 480px) and (orientation: portrait)` (HUD):
+   Tighter HUD pill padding + smaller font + tighter gap so the HUD
+   stays single-row at 390px+ widths. Pre-fix the HUD wrapped to
+   2-3 rows and pushed the toolbar further from the bottom edge,
+   crowding the play area.
+
+**Net effect on a 390px iPhone in portrait:**
+- HUD pill row: 2-3 rows → 1 row (frees ~30-40px of vertical play area)
+- 13 toolbar entries fit without horizontal scroll
+- Multi-tier popovers show all density tiers in a single row
+
+When tuning the toolbar for portrait phones in the future, **the
+principle from this release**: inline-label-expansion-on-active is
+the layout-shift devil. Mark the active state with bottom-border /
+background / outline instead — anything that doesn't consume
+horizontal layout space. Otherwise selecting a tool will shove
+neighbouring tools offscreen, requiring the player to scroll just to
+reach the very thing they just selected.
+
+SW cache `mq-city-v12` → `mq-city-v13`. Save schema unchanged.
+
 ## Status: Beta 1.5.1 (Shoppers walk PathGraph instead of cutting straight)
 
 User feedback: "When people fan out from parking lots they still need

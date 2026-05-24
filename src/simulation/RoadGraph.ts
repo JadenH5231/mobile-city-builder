@@ -1,5 +1,5 @@
 import type { Grid } from '../world/Grid';
-import { ROAD_PATH_WEIGHT, dirBetween } from '../types';
+import { ROAD_PATH_WEIGHT } from '../types';
 
 export interface Neighbor {
   /** Flat tile index = y * width + x. */
@@ -15,16 +15,19 @@ const SQRT2 = Math.SQRT2;
  * change — full sweeps are sub-millisecond up to Medium maps and the
  * alternative (incremental edits) doubles the surface area to test.
  *
- * Highway one-way semantics (post-alpha pass 4): a directed traversal X → Y
- * is added only if every endpoint that's a highway-tier tile has its
- * `highwayDir` matching the X→Y direction. So a highway flowing east
- * exposes east-bound edges only; west-bound traversal of the same edge is
- * silently dropped from the adjacency. Local/avenue tiles impose no
- * direction constraint, so connections between a highway and a local act
- * as on/off ramps in the natural direction.
- *
  * Edge weight = base × ROAD_PATH_WEIGHT[destTile.roadType]. Lower for
  * higher-tier roads, so A* prefers highways and avenues for long trips.
+ *
+ * Beta 1.4 — All road tiers are BIDIRECTIONAL. Pre-1.4 highways were
+ * one-way per-tile via a `highwayDir` stamp imprinted at paint time,
+ * but playtest feedback made it clear that the direction-stamp model
+ * was the single biggest source of "highways don't work" frustration
+ * (dead-end direction mismatches, silent routing failures, confused
+ * dual-carriageway auto-paint, no paint-time preview, etc). The
+ * field `Tile.highwayDir` is kept for save back-compat but ignored
+ * at runtime. Highways are now visibly divided multi-lane roads
+ * (median + edge lines + ramp flares at non-highway adjacencies)
+ * that work in both directions on a single tile.
  */
 export class RoadGraph {
   /** Empty until {@link rebuild} runs. */
@@ -41,19 +44,13 @@ export class RoadGraph {
       const bi = e.by * w + e.bx;
       const isDiag = e.ax !== e.bx && e.ay !== e.by;
       const base = isDiag ? SQRT2 : 1;
-
-      // Direction A→B
-      if (canTraverse(grid, e.ax, e.ay, e.bx, e.by)) {
-        const tb = grid.get(e.bx, e.by);
-        const tier = tb?.roadType ?? 'local';
-        this.push(ai, bi, base * ROAD_PATH_WEIGHT[tier]);
-      }
-      // Direction B→A
-      if (canTraverse(grid, e.bx, e.by, e.ax, e.ay)) {
-        const ta = grid.get(e.ax, e.ay);
-        const tier = ta?.roadType ?? 'local';
-        this.push(bi, ai, base * ROAD_PATH_WEIGHT[tier]);
-      }
+      const ta = grid.get(e.ax, e.ay);
+      const tb = grid.get(e.bx, e.by);
+      if (!ta || !tb) continue;
+      // Bidirectional in both directions — edge cost uses the destination
+      // tile's tier so A* still prefers highways for long trips.
+      this.push(ai, bi, base * ROAD_PATH_WEIGHT[tb.roadType]);
+      this.push(bi, ai, base * ROAD_PATH_WEIGHT[ta.roadType]);
     }
   }
 
@@ -74,37 +71,4 @@ export class RoadGraph {
   *roadTiles(): IterableIterator<number> {
     for (const k of this.adj.keys()) yield k;
   }
-}
-
-/**
- * Is traversal `from → to` allowed under highway one-way rules?
- *
- * - If neither endpoint is a highway: always.
- * - If a highway tile has `highwayDir === -1` (Alpha 4.22.2): the lane
- *   is UNCLAIMED — bidirectional, allow either direction. The first
- *   car to enter the tile claims it via dynamic direction in
- *   `Vehicles.update`. When the last car leaves (trafficLoad → 0)
- *   the tile resets to -1 and is bidirectional again. This is the
- *   "highways figure out direction by themselves" model the user
- *   asked for: paint highways without thinking about direction;
- *   first cars to drive each lane set it.
- * - Otherwise (claimed): the highway endpoint's `highwayDir` must
- *   match the from→to offset (one-way per claim).
- *
- * At a boundary with a local road, only the highway tile's direction
- * is checked → cars enter and exit in the highway's claimed direction.
- */
-function canTraverse(
-  grid: Grid,
-  fromX: number, fromY: number,
-  toX: number, toY: number
-): boolean {
-  const offset = dirBetween(fromX, fromY, toX, toY);
-  if (offset === -1) return false;
-  const from = grid.get(fromX, fromY);
-  const to = grid.get(toX, toY);
-  if (!from || !to) return false;
-  if (from.roadType === 'highway' && from.highwayDir !== -1 && from.highwayDir !== offset) return false;
-  if (to.roadType === 'highway' && to.highwayDir !== -1 && to.highwayDir !== offset) return false;
-  return true;
 }

@@ -7017,36 +7017,52 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
         bx - opx, yStripeB, bz - opz
       );
     } else {
-      // Highway (Beta 1.1.2) — three layers of striping so it reads as
-      // a real motorway:
-      //   1. Solid white edge stripes just inside each shoulder
-      //   2. Dashed white centerline running the length of the tile
-      //      (suggests two travel lanes within the carriageway —
-      //      players read this as "this is the big road")
-      //   3. (Concrete shoulder band rendered later as part of the
-      //      asphalt geometry — see commented section below)
-      const inset = 0.05;
-      const sx = px - (px / half) * inset;
-      const sz = pz - (pz / half) * inset;
+      // Highway (Beta 1.4) — bidirectional divided multi-lane look:
+      //   1. Solid WHITE edge stripes near each shoulder (outer
+      //      boundary of the carriageway)
+      //   2. Solid WHITE inner lane lines slightly inside the edge
+      //      stripes (suggests one travel lane on each side of the
+      //      median)
+      //   3. Double-YELLOW median running down the centre (separates
+      //      the two opposing directions — the dominant visual cue
+      //      that this is a real divided highway, not a wide local)
+      //
+      // Pre-1.4 highways were one-way per tile and rendered a single
+      // dashed white centerline. The new bidirectional model uses a
+      // yellow median to signal "two-way" at a glance.
+      const edgeInset = 0.05;
+      const laneInset = 0.16;
+      const sxEdge = px - (px / half) * edgeInset;
+      const szEdge = pz - (pz / half) * edgeInset;
+      const sxLane = px - (px / half) * laneInset;
+      const szLane = pz - (pz / half) * laneInset;
       // Solid edge stripes, both shoulders.
       whiteLanePositions.push(
-        ax + sx, yStripeA, az + sz,
-        bx + sx, yStripeB, bz + sz,
-        ax - sx, yStripeA, az - sz,
-        bx - sx, yStripeB, bz - sz
+        ax + sxEdge, yStripeA, az + szEdge,
+        bx + sxEdge, yStripeB, bz + szEdge,
+        ax - sxEdge, yStripeA, az - szEdge,
+        bx - sxEdge, yStripeB, bz - szEdge
       );
-      // Dashed white centerline — 4 dashes per edge alternating
-      // dash/gap/dash/gap (positions 0.05-0.20, 0.30-0.45,
-      // 0.55-0.70, 0.80-0.95 along the segment).
-      const dashSpans: Array<[number, number]> = [
-        [0.06, 0.21], [0.30, 0.45], [0.55, 0.70], [0.79, 0.94]
-      ];
-      for (const [t0, t1] of dashSpans) {
-        whiteLanePositions.push(
-          ax + dx * t0, yStripeA + (yStripeB - yStripeA) * t0, az + dz * t0,
-          ax + dx * t1, yStripeA + (yStripeB - yStripeA) * t1, az + dz * t1
-        );
-      }
+      // Inner lane lines (one per direction-of-travel).
+      whiteLanePositions.push(
+        ax + sxLane, yStripeA, az + szLane,
+        bx + sxLane, yStripeB, bz + szLane,
+        ax - sxLane, yStripeA, az - szLane,
+        bx - sxLane, yStripeB, bz - szLane
+      );
+      // Double-yellow median — two parallel solid lines straddling
+      // the centreline by 0.03 tiles each (same convention as the
+      // avenue double-yellow, slightly tighter spacing to fit the
+      // narrower lane width).
+      const medianOff = 0.03;
+      const mopx = px / half * medianOff;
+      const mopz = pz / half * medianOff;
+      yellowLanePositions.push(
+        ax + mopx, yStripeA, az + mopz,
+        bx + mopx, yStripeB, bz + mopz,
+        ax - mopx, yStripeA, az - mopz,
+        bx - mopx, yStripeB, bz - mopz
+      );
     }
   }
 
@@ -7280,59 +7296,102 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
 }
 
 /**
- * Highway flow arrows + stop sign markers, batched into a single Group. Both
- * are visually small and rebuilt with the road mesh on every paint event.
+ * Stop sign markers + (Beta 1.4) highway on/off-ramp asphalt flares
+ * + (legacy) highway arrows for any save-loaded tile that still has a
+ * non-default highwayDir.
+ *
+ * Beta 1.4: highway direction arrows no longer render for newly-painted
+ * highways (the highwayDir field is unused on fresh paints). Old saves
+ * with painted directions DO still render a faded chevron — players who
+ * loaded a Beta 1.3 save get a visual hint that those tiles used to be
+ * one-way, but the simulation treats them as bidirectional.
  */
 function buildRoadOrnamentsGroup(grid: Grid): Group | null {
   const arrows: BufferGeometry[] = [];
   const arrowColours: number[] = [];
   const stops: BufferGeometry[] = [];
   const stopColours: number[] = [];
+  const rampFlares: BufferGeometry[] = [];
+  const rampFlareColours: number[] = [];
 
   for (const t of grid.iter()) {
     if (!t.road) continue;
     // Bridge tiles override elevation: their deck floats over water at
     // BRIDGE_LIFT regardless of the (negative) underlying elevation.
     const tileY = t.bridge ? BRIDGE_LIFT : ROAD_LIFT + t.elevation;
-    // Highway direction arrows (Beta 1.1.0 restored, Beta 1.1.2 redesigned).
-    // Direction is player-set: paint-time imprint + `highway_flip`
-    // tool. Bidirectional tiles (`highwayDir === -1`) skip the arrow.
-    //
-    // Two stacked chevrons per tile (instead of the old single
-    // triangle) reads as "highway flow direction" much more clearly
-    // at any zoom level — the repeat pattern resembles real freeway
-    // chevron pavement markings.
+    // Beta 1.4 — legacy highway arrows render only for non-default
+    // highwayDir on existing save data. New paints leave highwayDir
+    // at -1 (the default), so this branch is skipped.
     if (t.roadType === 'highway' && t.highwayDir >= 0 && t.highwayDir < 8) {
       const cx = (t.x + 0.5) * TILE_SIZE;
       const cz = (t.y + 0.5) * TILE_SIZE;
       const offset = DIR_OFFSETS[t.highwayDir]!;
       const yaw = Math.atan2(offset[0], offset[1]);
-      // Two chevrons spaced 0.20 apart along the flow direction. The
-      // forward chevron is brighter (full HIGHWAY_ARROW_COLOR), the
-      // trailing one is slightly dimmer for depth.
-      for (const [chevronOffset, brightnessAlpha] of [[ 0.10, 1.0], [-0.14, 0.70]] as const) {
-        const chevron = makeChevronGeom(0.22, 0.16);
-        chevron.rotateY(yaw);
-        // Push the chevron forward/back along the flow direction.
-        const fx = offset[0] / Math.hypot(offset[0], offset[1] || 1);
-        const fz = offset[1] / Math.hypot(offset[0], offset[1] || 1);
-        chevron.translate(
-          cx + fx * chevronOffset,
-          tileY + 0.005,
-          cz + fz * chevronOffset
-        );
-        arrows.push(chevron);
-        // Dim the trailing chevron by interpolating toward the asphalt.
-        const _arrowHex = THEME().roads.highwayArrow;
-        const ar = ((_arrowHex >> 16) & 0xff) / 255;
-        const ag = ((_arrowHex >> 8) & 0xff) / 255;
-        const ab = (_arrowHex & 0xff) / 255;
-        const aspR = 0x25 / 255;
-        const dimmedR = aspR + (ar - aspR) * brightnessAlpha;
-        const dimmedG = aspR + (ag - aspR) * brightnessAlpha;
-        const dimmedB = aspR + (ab - aspR) * brightnessAlpha;
-        const packed = (Math.round(dimmedR * 255) << 16) | (Math.round(dimmedG * 255) << 8) | Math.round(dimmedB * 255);
-        arrowColours.push(packed);
+      const chevron = makeChevronGeom(0.16, 0.12);
+      chevron.rotateY(yaw);
+      chevron.translate(cx, tileY + 0.004, cz);
+      arrows.push(chevron);
+      // Dim grey — these are legacy hints, not active directional cues.
+      arrowColours.push(0x5a5a5a);
+    }
+    // Beta 1.4 — on/off-ramp flares at every highway↔non-highway
+    // adjacency. Renders a slim trapezoidal asphalt extension into
+    // the neighbouring non-highway tile so the connection visually
+    // reads as a merge ramp, not an abrupt seam. The merge cue helps
+    // the player understand "this is where cars enter and leave the
+    // big road" without any one-way arrow.
+    if (t.roadType === 'highway') {
+      for (let d = 0; d < 8; d += 2) {     // cardinals only
+        const off = DIR_OFFSETS[d]!;
+        const nx = t.x + off[0];
+        const ny = t.y + off[1];
+        const n = grid.get(nx, ny);
+        if (!n || !n.road) continue;
+        if (n.roadType === 'highway') continue;   // highway↔highway: no ramp
+        if (!grid.hasRoadEdge(t.x, t.y, nx, ny)) continue;
+        // Trapezoidal flare: wide at the highway side, tapering down to
+        // the local-road width on the neighbour's side. Lives just above
+        // the asphalt so it reads as a merge lane painted onto the road.
+        const cxA = (t.x + 0.5) * TILE_SIZE;
+        const czA = (t.y + 0.5) * TILE_SIZE;
+        const cxB = (nx + 0.5) * TILE_SIZE;
+        const czB = (ny + 0.5) * TILE_SIZE;
+        const hwHalf = ROAD_TIER.highway.width / 2;
+        const localHalf = ROAD_TIER[n.roadType].width / 2;
+        // Perpendicular to the highway→local direction.
+        const dxAB = cxB - cxA;
+        const dzAB = czB - czA;
+        const lenAB = Math.hypot(dxAB, dzAB) || 1;
+        const ppx = -dzAB / lenAB;
+        const ppz = dxAB / lenAB;
+        // Endpoints of the flare: full highway width at the boundary
+        // between A and B, tapering to local-road width at B's centre.
+        const boundaryX = (cxA + cxB) / 2;
+        const boundaryZ = (czA + czB) / 2;
+        // Stretch 0.30 into the highway tile + 0.45 into the local
+        // tile so the flare bridges the seam clearly. (Pure boundary
+        // flares were too short to read at zoom-out.)
+        const intoHwX = cxA + dxAB * (-0.30) / lenAB * lenAB;
+        const intoHwZ = czA + dzAB * (-0.30) / lenAB * lenAB;
+        void intoHwX; void intoHwZ;
+        const startX = boundaryX - dxAB / lenAB * 0.20;
+        const startZ = boundaryZ - dzAB / lenAB * 0.20;
+        const endX = boundaryX + dxAB / lenAB * 0.30;
+        const endZ = boundaryZ + dzAB / lenAB * 0.30;
+        const flareHalfStart = hwHalf * 0.95;
+        const flareHalfEnd = Math.max(localHalf, hwHalf * 0.45);
+        const flarePositions = new Float32Array([
+          startX + ppx * flareHalfStart, tileY + 0.0015, startZ + ppz * flareHalfStart,
+          endX   + ppx * flareHalfEnd,   tileY + 0.0015, endZ   + ppz * flareHalfEnd,
+          endX   - ppx * flareHalfEnd,   tileY + 0.0015, endZ   - ppz * flareHalfEnd,
+          startX - ppx * flareHalfStart, tileY + 0.0015, startZ - ppz * flareHalfStart
+        ]);
+        const flareIndices = new Uint32Array([0, 1, 2, 0, 2, 3]);
+        const flareGeom = new BufferGeometry();
+        flareGeom.setAttribute('position', new BufferAttribute(flarePositions, 3));
+        flareGeom.setIndex(new BufferAttribute(flareIndices, 1));
+        rampFlares.push(flareGeom);
+        rampFlareColours.push(0x2a2a2a);
       }
     }
     if (t.stopSign) {
@@ -7821,8 +7880,17 @@ function buildRoadOrnamentsGroup(grid: Grid): Group | null {
     }
   }
 
-  if (arrows.length === 0 && stops.length === 0 && lights.length === 0 && pillars.length === 0) return null;
+  if (
+    arrows.length === 0 && stops.length === 0 && lights.length === 0 &&
+    pillars.length === 0 && rampFlares.length === 0
+  ) return null;
   const group = new Group();
+  if (rampFlares.length > 0) {
+    // Render BEFORE arrows/stops so they sit under any other ornaments.
+    const merged = mergeGeoms(rampFlares, rampFlareColours);
+    const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+    group.add(mesh);
+  }
   if (arrows.length > 0) {
     const merged = mergeGeoms(arrows, arrowColours);
     const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true }));

@@ -806,6 +806,23 @@ const settingsPanel = bindSettingsPanel(settings, {
     // After resetting settings to defaults, the CSS side effects have
     // already been applied by Settings.applyCssSideEffects. We don't
     // touch the game's sim state — defaults only affects future cities.
+  },
+  onClearGhosts: () => {
+    // Beta 1.6.1 — Diagnostics "Clear visual ghosts" button. Triggers
+    // the same full renderer-mesh rebuild path the theme picker uses:
+    // drops every cached world mesh (terrain, zones, paths, roads
+    // INCLUDING bridges, ornaments, buildings, services,
+    // beautification) and re-derives them from the current grid
+    // state. Cures the "bridge bulldozed but visual sticks around"
+    // class of bug + similar orphan-mesh artifacts.
+    game.renderer.refreshTheme(
+      game.grid,
+      game.cityMood(),
+      game.economy.monthsElapsed,
+      game.forestryHealth(),
+      game.farmHealth()
+    );
+    game.onStatusMessage?.('Visual artifacts cleared');
   }
 });
 const settingsBtn = document.getElementById('hud-settings');

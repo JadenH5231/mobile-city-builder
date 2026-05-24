@@ -152,7 +152,15 @@ export class Settings {
  */
 export function bindSettingsPanel(
   settings: Settings,
-  hooks: { onShowTutorial: () => void; onResetAll: () => void; }
+  hooks: {
+    onShowTutorial: () => void;
+    onResetAll: () => void;
+    /** Beta 1.6.1 — Diagnostics "Clear visual ghosts" button.
+     *  Triggers a full Renderer mesh rebuild from the current grid
+     *  state to clear leftover visuals (bridges that didn't unrender,
+     *  ghost buildings, etc). Optional — defaults to no-op. */
+    onClearGhosts?: () => void;
+  }
 ): { show(): void; hide(): void } {
   const panel = document.getElementById('settings-panel');
   if (!panel) return { show() {/* noop */}, hide() {/* noop */} };
@@ -222,6 +230,12 @@ export function bindSettingsPanel(
   document.getElementById('setting-show-tutorial')?.addEventListener('click', () => {
     hooks.onShowTutorial();
     panel.classList.add('hidden');
+  });
+  document.getElementById('setting-clear-ghosts')?.addEventListener('click', () => {
+    hooks.onClearGhosts?.();
+    // Don't auto-close the panel — player may want to read the
+    // confirmation toast / try it again if the first attempt didn't
+    // fully clear the artifact.
   });
   document.getElementById('setting-reset-all')?.addEventListener('click', () => {
     settings.resetToDefaults();

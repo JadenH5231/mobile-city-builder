@@ -1269,7 +1269,14 @@ export class Game {
       // Motorcade per-frame pump (Alpha 4.14) — drains its 3-vehicle
       // spawn queue as each spawn timestamp fires.
       this.motorcade.tick(this.grid, this.vehicles);
-      this.vehicles.update(dt, this.grid, this.grid.width, this.trafficLights, this.parking, this.shoppers);
+      this.vehicles.update(
+        dt, this.grid, this.grid.width,
+        this.trafficLights, this.parking, this.shoppers,
+        // Beta 1.5.1 — pass the pedestrian path graph + pathfinder so
+        // shoppers spawned on car-parking can plan a sidewalk route
+        // to the destination instead of cutting straight across grass.
+        this.pathGraph, this.walkPathfinder
+      );
       // Beta 1.3.4 (Phase 2.1) — tick shoppers each render frame.
       // Cheap O(N) where N is current shoppers list (capped at MAX_SHOPPERS).
       this.shoppers.update(dt);

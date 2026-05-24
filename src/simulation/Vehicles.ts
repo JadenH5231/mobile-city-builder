@@ -764,7 +764,9 @@ export class Vehicles {
     gridWidth: number,
     trafficLights?: TrafficLights,
     parking?: import('./Parking').Parking,
-    shoppers?: import('./Shoppers').Shoppers
+    shoppers?: import('./Shoppers').Shoppers,
+    pathGraph?: PathGraph,
+    walkPathfinder?: Pathfinding
   ): void {
     this.crashesThisFrame.length = 0;
     const now = performance.now();
@@ -1101,13 +1103,21 @@ export class Vehicles {
               // height proxy — sidewalk lift + tile elevation.
               const stallTile = grid.get(car.parking.tileX, car.parking.tileY);
               const yBase = (stallTile?.elevation ?? 0) + 0.009;
+              // Beta 1.5.1 — pass grid + pathGraph + walkPathfinder so
+              // the shopper plans a PathGraph route along sidewalks
+              // instead of cutting straight across grass. Falls back
+              // to straight-line internally when any of these are
+              // missing or the pathfind fails.
               shoppers.spawnForParkedCar(
                 car.parking,
                 car.destX,
                 car.destY,
                 visitMs,
                 car.color,
-                yBase
+                yBase,
+                grid,
+                pathGraph,
+                walkPathfinder
               );
             }
             despawned = false;  // car stays alive, just parked

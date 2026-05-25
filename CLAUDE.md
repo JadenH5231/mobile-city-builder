@@ -345,6 +345,60 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.2 (Discord Activities integration — code scaffold)
+
+User feedback: "I would like to host this game as an app on discord.
+How do I do that? … you do all of the things that you can do and
+tell me what's left that i have to do and how to do it."
+
+**Code side is shipped** — Discord Embedded App SDK is wired and
+activates automatically when the build was deployed with the
+`VITE_DISCORD_CLIENT_ID` env var AND the page was loaded inside
+Discord's iframe (frame_id query param present). When either
+condition is absent (default for mqcity.app), the Discord path is
+**fully inert** and the standalone build is byte-equivalent to
+pre-1.6.2.
+
+**User's manual side documented in `docs/DISCORD_SETUP.md`** — six
+~5-minute steps in the Discord Developer Portal + a GitHub Actions
+secret. Total ~30 min the first time.
+
+**Beta 1.6.2 code changes:**
+- `package.json` — `@discord/embedded-app-sdk` dep
+- `src/discord/DiscordContext.ts` — new isolated module:
+  `isDiscordActivity()` runtime check (env var + frame_id), async
+  `initDiscord()` that handshakes the SDK + reads the user identity,
+  `getDiscordContext()` sync accessor for the cached context
+- `src/main.ts` — kicks off `initDiscord()` after auth init;
+  fire-and-forget so a slow Discord handshake doesn't block Game.init.
+  When Discord context resolves, seeds default city name with
+  `<DiscordDisplayName>'s City` on fresh saves
+- `.github/workflows/deploy.yml` — passes `VITE_DISCORD_CLIENT_ID`
+  secret to the Vite build (same pattern as `VITE_SUPABASE_URL`)
+- `docs/DISCORD_SETUP.md` — full 6-step user guide (create Discord
+  app → enable Activities → add URL Mappings → add GitHub secret →
+  submit for Shelf review → test)
+
+**Verified for Discord's CSP sandbox:** `dist/index.html` ships with
+ZERO inline `<script>` or `<style>` tags. Legal pages
+(privacy.html, terms.html) have inline `<style>` but those open in
+new tabs outside the iframe so don't conflict.
+
+**Future hooks the SDK is now ready for** (not implemented in 1.6.2,
+documented in DISCORD_SETUP.md):
+- Shared-session multiplayer (Supabase Realtime is already a dep)
+- Voice-channel member list in the HUD
+- Per-user save slots keyed to Discord user ID
+
+When extending the Discord integration, the **principle from this
+release**: the Discord path stays *fully opt-in via build env*. A
+visitor at mqcity.app must never receive Discord SDK code or
+behaviour. The integration is a distribution channel, not a
+behaviour change for the standalone build.
+
+SW cache `mq-city-v17` → `mq-city-v18`. Bundle +~50 KB raw / +~15 KB
+gzipped (one-time cost of the Discord SDK). Save schema unchanged.
+
 ## Status: Beta 1.6.1 ("Clear visual ghosts" debug button)
 
 User feedback: "Is there a way to add a debug button that removes

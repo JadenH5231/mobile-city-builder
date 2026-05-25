@@ -1246,7 +1246,7 @@ export class Game {
         // then queue a return trip back to their industrial origin.
         // Spawn rate scales with developed industrial tile count;
         // capped by MAX_TRUCKS.
-        this.vehicles.spawnTruckTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder);
+        this.vehicles.spawnTruckTick(SIM_STEP_MS, this.grid, this.roadGraph, this.pathfinder, this.supplyChain);
         // Beta 1.6 — outside-connection import trucks. When the city
         // is connected AND a developed commercial tile is critically
         // low on supplies AND no domestic truck is en-route to it,

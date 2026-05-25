@@ -30,12 +30,18 @@
 import type { Grid } from '../world/Grid';
 import type { Tile } from '../world/Tile';
 
-/** Per-month supply consumption rate on developed commercial tiles.
- *  At 0.18, a fully-stocked tile (supplies = 1.0) runs dry after ~5.5
- *  months without resupply — enough buffer that a temporary truck
- *  shortage isn't an immediate revenue cliff, but a chronic industry
- *  deficit will starve the commercial layer in under half a year. */
-const MONTHLY_CONSUMPTION = 0.18;
+/** Per-month supply consumption rate on developed commercial tiles —
+ *  baseline. Beta 1.6.4 made this softer (was 0.18) AND added per-tile
+ *  jitter so different stores hit empty at staggered times instead of
+ *  every commercial tile drying up on the same month. Net effect: a
+ *  fully-stocked tile lasts ~7-12 sim months on the consumption
+ *  curve, never less than ~5. */
+const MONTHLY_CONSUMPTION_BASE = 0.10;
+/** Per-tile jitter window. Final consumption rate per tile =
+ *  BASE + (deterministic hash of tile coords) × JITTER. Range
+ *  [0.10, 0.18]. The tile-hash keeps it stable across save/load —
+ *  the same tile drains at the same rate every month. */
+const MONTHLY_CONSUMPTION_JITTER = 0.08;
 
 /** Per-month consumption on warehouse tiles (slower than commercial —
  *  warehouses are buffers, they bleed into delivery trucks not direct
@@ -57,6 +63,24 @@ export const PAYLOAD_IMPORT = 0.40;
  *  the store open but cost the city margin. Cleared on next domestic
  *  delivery. */
 export const IMPORT_REVENUE_MULTIPLIER = 0.75;
+
+/** Beta 1.6.4 — "Purchase order" threshold. When a commercial tile's
+ *  supplies dip below this value, it joins the city-wide priority
+ *  queue that `Vehicles.attemptTruckSpawn` consults FIRST. So a store
+ *  at 50% supplies will get a delivery dispatched proactively, well
+ *  before it hits zero. The previous behaviour (random destination
+ *  rolling) effectively only restocked tiles by chance, which meant
+ *  some unlucky tiles starved while others sat at near-full. */
+export const RESTOCK_REQUEST_THRESHOLD = 0.55;
+
+/** Per-tile consumption rate, deterministically jittered from tile
+ *  coords so different stores drain at staggered rates. Cheap
+ *  bit-mix hash → fraction in [0, 1] → scaled to JITTER. */
+function consumptionRate(x: number, y: number): number {
+  const h = ((x * 374761393) ^ (y * 668265263)) >>> 0;
+  const frac = (h & 0xffff) / 0xffff;     // [0, 1]
+  return MONTHLY_CONSUMPTION_BASE + frac * MONTHLY_CONSUMPTION_JITTER;
+}
 
 /** Source-kind passed to `deliver()` so the SupplyChain knows whether
  *  this delivery counts as an "import" (penalty applies) or domestic
@@ -90,16 +114,52 @@ export class SupplyChain {
   tickMonth(grid: Grid): void {
     for (const t of grid.iter()) {
       if (this.isCommercialConsumer(t)) {
-        t.supplies = Math.max(0, t.supplies - MONTHLY_CONSUMPTION);
+        // Beta 1.6.4 — per-tile jittered consumption. Different stores
+        // hit empty at staggered times instead of all dropping
+        // together.
+        const rate = consumptionRate(t.x, t.y);
+        t.supplies = Math.max(0, t.supplies - rate);
         if (t.supplies === 0) {
-          // Out of stock — clear the import flag so the next delivery
-          // (whatever its source) resets the penalty state cleanly.
           t.importSource = false;
         }
       } else if (t.building === 'warehouse') {
         t.supplies = Math.max(0, t.supplies - WAREHOUSE_CONSUMPTION);
       }
     }
+  }
+
+  /**
+   * Beta 1.6.4 — list of commercial tiles that have dropped below the
+   * "purchase order" threshold and should be prioritised by the next
+   * truck dispatch. The truck spawn picker consults this BEFORE doing
+   * a random pick, so a store at 50% supplies gets a delivery
+   * proactively — they have a real chance of being restocked before
+   * they hit zero.
+   *
+   * Reservoir-sampled to keep the call O(grid) per spawn. Returns up
+   * to one tile per call (truck spawn only routes one truck at a time
+   * anyway). When no tile is below the threshold, returns null and
+   * the truck spawn falls through to its random pick.
+   */
+  pickRestockNeedingCommercialTile(grid: Grid): { x: number; y: number } | null {
+    let chosen: { x: number; y: number } | null = null;
+    let chosenSupplies = Infinity;
+    let count = 0;
+    for (const t of grid.iter()) {
+      if (!this.isCommercialConsumer(t)) continue;
+      if (t.supplies >= RESTOCK_REQUEST_THRESHOLD) continue;
+      // Weighted-reservoir: prefer LOWER-supply tiles (more urgent).
+      // Each candidate has weight = (1 - supplies); near-empty tiles
+      // are much more likely to win. Tie-breaks favour lower supplies
+      // explicitly via chosenSupplies comparison.
+      const weight = 1 - t.supplies;
+      count += weight;
+      if (Math.random() * count < weight || t.supplies < chosenSupplies) {
+        chosen = { x: t.x, y: t.y };
+        chosenSupplies = t.supplies;
+      }
+    }
+    return chosen;
   }
 
   /**

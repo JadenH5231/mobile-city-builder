@@ -345,6 +345,84 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.5 (Discord revert + supply chain forgiveness + warehouse parking)
+
+Three bundled changes shipped in one release:
+
+### Beta 1.6.3 — Discord revert
+
+User: "Canada isn't eligible for monetization, please reverse any
+discord connection." Rolled back Beta 1.6.2 entirely — uninstalled
+`@discord/embedded-app-sdk`, deleted `src/discord/`, removed the
+init call + import from `src/main.ts`, removed `VITE_DISCORD_CLIENT_ID`
+from `deploy.yml`, deleted `docs/DISCORD_SETUP.md`. No Discord traces
+remain in the codebase.
+
+### Beta 1.6.4 — Forgiving supply chain
+
+User: "Make the supplychain system more forgiving. Start off with
+commercial spaces having supplies and have them run lower at differing
+random times so that not every building runs out at once. Have the
+businesses make a PO before they run out so they have a chance to not
+run out first."
+
+Two changes in `src/simulation/SupplyChain.ts`:
+
+1. **Per-tile consumption jitter.** Pre-1.6.4 every commercial tile
+   drained at `MONTHLY_CONSUMPTION = 0.18` — so when supply trucks
+   couldn't keep up, every tile hit zero on roughly the same month
+   creating a hard revenue cliff. Now consumption =
+   `MONTHLY_CONSUMPTION_BASE (0.10) + jitter(0.08) × hash(x, y)` —
+   final per-tile rate is in [0.10, 0.18]. Same tile always drains
+   at the same speed (hash is deterministic) so it's stable across
+   save/load. Net effect: a fully-stocked city goes from "all dry
+   in month 5" to "stores trickle empty over months 6-12".
+
+2. **Purchase-order priority** (`RESTOCK_REQUEST_THRESHOLD = 0.55`).
+   New `SupplyChain.pickRestockNeedingCommercialTile(grid)` returns
+   the most-needy below-threshold commercial tile (weighted-
+   reservoir, lower supplies = higher weight). `Vehicles.attemptTruckSpawn`
+   consults this BEFORE the random destination roll, so a store at
+   50% supplies gets a delivery proactively dispatched. Stores
+   making POs at half-full have a real chance to be restocked
+   before they hit zero, instead of the pre-1.6.4 model where
+   only random chance saved them.
+
+### Beta 1.6.5 — Warehouse parking fills up
+
+User: "no one uses the parking lots near warehouses, please fix."
+Warehouses had no commute traffic — only freight trucks visited them,
+and trucks deliver curbside. So warehouse-adjacent parking lots stayed
+empty.
+
+Added warehouses to the resident-car destination roll in
+`Vehicles.attemptSpawn` — 6% of resident trips now route to a
+warehouse tile (as employment destination, like the existing
+forestry/farm branches). The 1.4.2 `findStallNearDest` auto-detects
+warehouse-adjacent parking lots and reserves stalls. Cars park,
+shopper walks to the warehouse, dwells briefly (employee shift),
+returns home — exact same flow big_box uses.
+
+Spawn distribution rebalanced: 42% commercial (was 45%), 28%
+industrial (was 30%), 16% forestry (was 17%), 8% farm (was 8%),
+6% warehouse (new). Total still 100%.
+
+### Other notes for the next session
+
+The next session should know:
+- Discord integration is FULLY reverted. Do not re-add unless the
+  user specifically requests it AND Canada becomes eligible.
+- Supply chain consumption is now per-tile-jittered + PO-prioritised.
+  If you want to add more forgiveness, the levers are
+  `MONTHLY_CONSUMPTION_BASE`, `MONTHLY_CONSUMPTION_JITTER`, and
+  `RESTOCK_REQUEST_THRESHOLD` in `SupplyChain.ts`.
+- Resident-car destinations include warehouses (6%). If you add
+  more employment destinations (subway maintenance, port, etc),
+  the pattern is to extend the chain in `Vehicles.attemptSpawn`
+  with `pickRandomBuildingTile(grid, kind)`.
+
+SW cache `mq-city-v18` → `mq-city-v19`. Save schema unchanged.
+
 ## Status: Beta 1.6.2 (Discord Activities integration — code scaffold)
 
 User feedback: "I would like to host this game as an app on discord.

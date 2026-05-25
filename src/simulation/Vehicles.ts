@@ -317,7 +317,8 @@ export class Vehicles {
     stepMs: number,
     grid: Grid,
     roadGraph: RoadGraph,
-    pathfinder: Pathfinding
+    pathfinder: Pathfinding,
+    supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
     // Count developed industrial tiles cheaply — gates the spawn rate
     // to "how much industry exists" without per-frame iteration when
@@ -335,7 +336,7 @@ export class Vehicles {
         this.truckSpawnAccumulator = 0;
         break;
       }
-      this.attemptTruckSpawn(grid, roadGraph, pathfinder);
+      this.attemptTruckSpawn(grid, roadGraph, pathfinder, supplyChain);
     }
   }
 
@@ -359,30 +360,61 @@ export class Vehicles {
   private attemptTruckSpawn(
     grid: Grid,
     roadGraph: RoadGraph,
-    pathfinder: Pathfinding
+    pathfinder: Pathfinding,
+    supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
-    const roll = Math.random();
+    // Beta 1.6.4 — purchase-order priority. Before random destination
+    // picking, ask SupplyChain for the most-needy commercial tile
+    // (one below RESTOCK_REQUEST_THRESHOLD = 55%). If there is one,
+    // dispatch this spawn to that tile from the best available source:
+    //   - Warehouse with supplies > 0  (most efficient)
+    //   - Industrial tile (direct, smaller payload)
+    // Else fall through to the random routing below.
     let origin: { x: number; y: number } | null = null;
     let dest: { x: number; y: number } | null = null;
     let source: import('./SupplyChain').DeliverySource = 'industry-direct';
 
-    if (roll < 0.40) {
-      // Industry → warehouse (restock).
-      origin = pickRandomDevelopedTile(grid, 'industrial');
-      dest = pickRandomWarehouseTile(grid, /* prefer non-full */ true);
-      source = 'industry-to-warehouse';
-    } else if (roll < 0.80) {
-      // Warehouse → commercial (deliver).
-      origin = pickRandomWarehouseTile(grid, /* require supplies > 0 */ false);
-      dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-      source = 'warehouse';
+    if (supplyChain) {
+      const needy = supplyChain.pickRestockNeedingCommercialTile(grid);
+      if (needy) {
+        const wh = pickRandomWarehouseTile(grid, /* require supplies > 0 */ false);
+        if (wh) {
+          origin = wh;
+          dest = needy;
+          source = 'warehouse';
+        } else {
+          const ind = pickRandomDevelopedTile(grid, 'industrial');
+          if (ind) {
+            origin = ind;
+            dest = needy;
+            source = 'industry-direct';
+          }
+        }
+      }
     }
-    // Fallback when any of the above failed — direct industry to
-    // commercial (the pre-1.6 path).
+
+    // Fall back to the original random routing when no needy tile
+    // exists (all commercial above the threshold) OR no usable source
+    // existed (no warehouse + no industrial).
     if (!origin || !dest) {
-      origin = pickRandomDevelopedTile(grid, 'industrial');
-      dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-      source = 'industry-direct';
+      const roll = Math.random();
+      if (roll < 0.40) {
+        // Industry → warehouse (restock).
+        origin = pickRandomDevelopedTile(grid, 'industrial');
+        dest = pickRandomWarehouseTile(grid, /* prefer non-full */ true);
+        source = 'industry-to-warehouse';
+      } else if (roll < 0.80) {
+        // Warehouse → commercial (deliver).
+        origin = pickRandomWarehouseTile(grid, /* require supplies > 0 */ false);
+        dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+        source = 'warehouse';
+      }
+      // Final fallback — direct industry to commercial.
+      if (!origin || !dest) {
+        origin = pickRandomDevelopedTile(grid, 'industrial');
+        dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+        source = 'industry-direct';
+      }
     }
     if (!origin || !dest) return;
 
@@ -578,15 +610,23 @@ export class Vehicles {
     // instead of mostly empty asphalt with one car parked.
     const roll = Math.random();
     let dest: { x: number; y: number } | null = null;
-    if (roll < 0.45) {
+    if (roll < 0.42) {
       dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else if (roll < 0.75) {
+    } else if (roll < 0.70) {
       dest = pickRandomDevelopedTile(grid, 'industrial');
-    } else if (roll < 0.92) {
+    } else if (roll < 0.86) {
       dest = pickRandomBuildingTile(grid, 'forestry');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else {
+    } else if (roll < 0.94) {
       dest = pickRandomBuildingTile(grid, 'farm');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+    } else {
+      // Beta 1.6.5 — warehouses are employment destinations too.
+      // Residents drive to warehouses for shifts; the 1.4.2
+      // `findStallNearDest` then automatically routes them through
+      // the adjacent parking lot, fills the stalls, and spawns a
+      // walking shopper for the final leg. Was 0% pre-1.6.5 → 6%.
+      dest = pickRandomBuildingTile(grid, 'warehouse');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     }
     if (!dest) return;

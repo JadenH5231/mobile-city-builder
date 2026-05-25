@@ -40,14 +40,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # Discord Activities integration (Beta 1.6.2). Optional —
-          # set this when you want the same build to also be
-          # launchable from Discord's Activities Shelf. Unset = the
-          # iframe-detection path stays inert; standalone mqcity.app
-          # is byte-equivalent to pre-1.6.2. See docs/DISCORD_SETUP.md
-          # for how to obtain this value (Discord Developer Portal →
-          # Applications → MQ City Builder → Application ID).
-          VITE_DISCORD_CLIENT_ID: ${{ secrets.VITE_DISCORD_CLIENT_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

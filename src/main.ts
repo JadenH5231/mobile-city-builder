@@ -9,7 +9,6 @@ import { isCloudEnabled, getSupabase } from './auth/SupabaseClient';
 import { AuthModal } from './ui/AuthModal';
 import { initThemes } from './themes/registry';
 import { bindThemePicker } from './ui/ThemePicker';
-import { initDiscord } from './discord/DiscordContext';
 import './styles.css';
 
 // Theme pack init (Beta 1.2). Restores the player's active theme from
@@ -22,16 +21,6 @@ initThemes();
 // when a user is already signed in. No-op when Supabase isn't configured
 // (the auth pill stays hidden, save flow falls back to IndexedDB only).
 await initAuth();
-
-// Discord Activity init (Beta 1.6.2). When the page was loaded inside a
-// Discord voice-channel iframe (frame_id query param present) AND the
-// build was deployed with VITE_DISCORD_CLIENT_ID set, this resolves the
-// active Discord user's identity (used as default city name on fresh
-// saves). No-op otherwise — direct mqcity.app visits stay byte-equivalent
-// to pre-1.6.2 behaviour. We don't AWAIT this because the Discord SDK
-// can take 1-2 sec to handshake and there's no reason to block Game.init
-// on it; consumers read getDiscordContext() lazily.
-const discordReady = initDiscord();
 
 const appEl = document.getElementById('app');
 if (!appEl) throw new Error('Missing #app element');
@@ -66,18 +55,6 @@ settings.load();
 
 const game = new Game();
 await game.init(appEl, MAP_SIZES.small, activeSlot);
-
-// Beta 1.6.2 — if Discord init completed AND this is a freshly-loaded
-// city (empty cityName from the save loader), seed the city name with
-// the player's Discord display name so it reads "Alex's City" instead
-// of "MetroQuest" by default. Fire-and-forget so a slow Discord
-// handshake doesn't block startup.
-void discordReady.then((ctx) => {
-  if (!ctx) return;
-  if (!game.cityName || game.cityName === '') {
-    game.cityName = `${ctx.displayName}'s City`;
-  }
-});
 
 // If the just-loaded slot was empty (treasury still at the default
 // pre-load Economy seed of $15K) and a non-Normal difficulty was

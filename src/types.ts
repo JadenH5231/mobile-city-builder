@@ -327,15 +327,18 @@ export const MAX_TOURIST_VEHICLES = 50;
  */
 export const MAX_SERVICE_VEHICLES = 20;
 /**
- * Freight truck cap (Beta 1.5). Transport trucks spawn from industrial
- * tiles, deliver to commercial tiles, then queue a return trip back to
- * their origin. Bigger than cars (visually) and contribute 2× to per-
- * tile trafficLoad so a fleet of trucks measurably slows car traffic.
- * Counts SEPARATELY from MAX_VEHICLES — trucks are freight, not
- * commuters, so the city's resident-car cap is unaffected by industrial
- * growth.
+ * Freight truck cap (Beta 1.5, bumped 30 → 50 in 1.6.7). Transport
+ * trucks spawn from industrial tiles, deliver to commercial tiles,
+ * then queue a return trip back to their origin. Bigger than cars
+ * (visually) and contribute 2× to per-tile trafficLoad so a fleet of
+ * trucks measurably slows car traffic. Counts SEPARATELY from
+ * MAX_VEHICLES — trucks are freight, not commuters. The 1.6.7 bump
+ * pairs with `TRUCK_SPAWN_PER_DEMAND_PER_SEC` now scaling with
+ * commercial + industrial + warehouse count; a mid-game retail city
+ * needs ~30-40 active trucks to keep its stores stocked, so 30 was
+ * a cap that bit before the supply chain reached steady state.
  */
-export const MAX_TRUCKS = 30;
+export const MAX_TRUCKS = 50;
 /**
  * Farm tractor visual polish (Alpha 4.19). A contiguous cluster of this
  * many farm tiles or more gets ONE animated tractor that drives a

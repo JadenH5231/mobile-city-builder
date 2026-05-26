@@ -345,6 +345,55 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.6 (Warehouse / farm / forestry generate proportional resident demand)
+
+User feedback: "The bigger the warehouse/farm/bigbox the more demand
+for jobs and other things there should be. Is this how it works?"
+
+The honest answer was: **mostly yes, with one specific gap.**
+Audit of `pickRandomDevelopedTile` / `pickRandomBuildingTile` confirmed
+that destination-pick reservoir sampling already scales linearly with
+cluster size (a 6-tile cluster = 6 reservoir entries = 6× pick rate).
+Supply consumption is per-tile (1.6.4 jitter), big_box adds `+2 cJobs`
+per tile (Population.ts:123), and farm/forestry export revenue is
+explicitly `tiles × BASE × price` in Economy.ts.
+
+**The gap:** pre-1.6.6, `warehouse` / `farm` / `forestry` tiles
+contributed ZERO to the city's recorded `totalCommercialJobs` /
+`totalIndustrialJobs`. They were employment destinations for the
+resident-car spawn picker (cars commute to them visibly) but didn't
+register in the job totals that drive residential demand
+(`r = (iJobs + cJobs - totalResidents + 20) / 50` in Population.ts).
+So a 12-tile warehouse cluster generated visible commute traffic but
+didn't pull more residents into the city the way an equivalent zoned-I
+area would.
+
+**The fix:** one-line additions in `Population.tick` job-counting loop:
+
+```ts
+if (t.building === 'warehouse') iJobs += 1;
+else if (t.building === 'farm') iJobs += 1;
+else if (t.building === 'forestry') iJobs += 1;
+```
+
+Same pattern as the existing `if (t.building === 'big_box') cJobs += 2;`
+line. Each tile credits one industrial job (deliberately small — these
+are entry-level logistics / agricultural / logging positions, not
+high-density factory employment). Cluster size now flows through to
+residential demand naturally: a 12-tile warehouse = 12 iJobs, which
+shifts the R demand bar up the same way a 12-tile zoned-I area would.
+
+When adding a future standalone "employment destination" building
+(port, subway maintenance yard, fish farm, etc.), the **principle from
+this release**: if the building is a resident-car destination, it
+should also credit jobs in `Population.tick`. The pattern is one
+`+= N` line in the per-tile loop, placed before the `t.zone === 'none'`
+early-out so non-zoned buildings can contribute. Match the per-tile
+value to the building's "implied workforce" (warehouse / farm /
+forestry = 1; big_box = 2 because retail has more frontline staff).
+
+SW cache `mq-city-v19` → `mq-city-v20`. Save schema unchanged.
+
 ## Status: Beta 1.6.5 (Discord revert + supply chain forgiveness + warehouse parking)
 
 Three bundled changes shipped in one release:

@@ -847,6 +847,14 @@ export const MILESTONES: readonly Milestone[] = [
       'commercial_high', 'industrial_high', 'mixed_high',
       'place_school', 'place_fire_station', 'place_police_station',
       'place_museum',
+      // Beta 1.6.30 — Traffic lights moved from City (1000) → Town
+      // (500). Playtest finding: at 500 pop with only stop signs
+      // available, busy 4-way intersections gridlock because every
+      // car has to FIFO-yield. Traffic lights' adaptive 2-phase
+      // controller (Alpha 2.0) clears the same junction 2-3× faster.
+      // Promoting the unlock to Town gives the player the right tool
+      // for the traffic level they're already generating.
+      'place_traffic_light',
       // Architect Mode entry tier (Alpha 4.0) — cheap basics so any
       // Town+ city can plant a tree, pour a flower bed, lay a plaza.
       'terra_tree', 'terra_meadow', 'terra_smooth',
@@ -866,7 +874,7 @@ export const MILESTONES: readonly Milestone[] = [
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
     unlocks: [
-      'road_highway', 'place_traffic_light', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
+      'road_highway', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
       // (Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1
       //  — kept in code for backwards-compat with existing saves but
       //  no longer unlockable.)

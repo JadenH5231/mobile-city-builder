@@ -85,7 +85,7 @@ function consumptionRate(x: number, y: number): number {
 /** Source-kind passed to `deliver()` so the SupplyChain knows whether
  *  this delivery counts as an "import" (penalty applies) or domestic
  *  (penalty cleared). */
-export type DeliverySource = 'industry-direct' | 'warehouse' | 'import' | 'industry-to-warehouse';
+export type DeliverySource = 'industry-direct' | 'warehouse' | 'import' | 'industry-to-warehouse' | 'import-to-warehouse';
 
 /** Returned from `commercialSupplyState` — used by Economy.ts to scale
  *  the totalCommercialJobs-based revenue line. `multiplier` is the
@@ -200,6 +200,15 @@ export class SupplyChain {
       case 'industry-to-warehouse':
         if (t.building !== 'warehouse') return;
         payload = PAYLOAD_INDUSTRY_TO_W;
+        break;
+      case 'import-to-warehouse':
+        // Beta 1.6.22 — outside-edge imports can also feed warehouses,
+        // not just commercial. Lets the player keep a warehouse-based
+        // supply network running even with little/no in-city industry.
+        // Slightly smaller payload than I→W (0.40 vs 0.50) so domestic
+        // industry is still the preferred warehouse source.
+        if (t.building !== 'warehouse') return;
+        payload = PAYLOAD_IMPORT;
         break;
     }
     t.supplies = Math.min(1, t.supplies + payload);

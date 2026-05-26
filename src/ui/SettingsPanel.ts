@@ -160,6 +160,13 @@ export function bindSettingsPanel(
      *  state to clear leftover visuals (bridges that didn't unrender,
      *  ghost buildings, etc). Optional — defaults to no-op. */
     onClearGhosts?: () => void;
+    /** Beta 1.6.22 — debug "Restock all supplies" button. Sets every
+     *  commercial / mixed / big_box / warehouse tile's `supplies` field
+     *  to 1.0 (100%) so the player can reset the chain and observe
+     *  where genuine backlogs reappear. Useful for diagnosing whether
+     *  a chronic 0% is supply-chain throughput vs an unreachable city
+     *  configuration. Optional — defaults to no-op. */
+    onRestockSupplies?: () => void;
   }
 ): { show(): void; hide(): void } {
   const panel = document.getElementById('settings-panel');
@@ -236,6 +243,11 @@ export function bindSettingsPanel(
     // Don't auto-close the panel — player may want to read the
     // confirmation toast / try it again if the first attempt didn't
     // fully clear the artifact.
+  });
+  document.getElementById('setting-restock-supplies')?.addEventListener('click', () => {
+    hooks.onRestockSupplies?.();
+    // Keep panel open — player is debugging and may want to verify
+    // the change in the tile-info chips before continuing.
   });
   document.getElementById('setting-reset-all')?.addEventListener('click', () => {
     settings.resetToDefaults();

@@ -355,8 +355,15 @@ if (crimeBtn) {
   });
 }
 
-// Bridge Mode (Alpha 2.12) — toggle paint to upper-layer overpasses.
-const bridgeBtn = document.getElementById('hud-bridge');
+// Bridge Mode (Beta 1.6.23, re-homed from Alpha 2.12). Pre-1.6.23 the
+// Bridge pill lived in the More-popover Layers group, where it looked
+// like a heatmap toggle and players couldn't find it. Now it's a
+// contextual floating pill that only appears while a road tool is
+// armed — same affordance pattern as the Rotate-monument button.
+// Selecting a non-road tool auto-drops bridge mode (Game.setTool
+// handles this) so the next paint stroke doesn't accidentally land
+// on the upper layer.
+const bridgeBtn = document.getElementById('bridge-toggle-btn');
 if (bridgeBtn) {
   bridgeBtn.addEventListener('click', () => {
     const next = !game.bridgeMode;
@@ -364,6 +371,15 @@ if (bridgeBtn) {
     bridgeBtn.setAttribute('aria-pressed', String(next));
   });
 }
+const refreshBridgePill = (tool: import('./types').Tool): void => {
+  if (!bridgeBtn) return;
+  const visible = game.isRoadTool(tool);
+  bridgeBtn.classList.toggle('hidden', !visible);
+  bridgeBtn.setAttribute('aria-pressed', String(game.bridgeMode));
+};
+game.onToolChange = (tool) => refreshBridgePill(tool);
+// Set initial visibility based on current tool (defaults to 'pan').
+refreshBridgePill(game.tool);
 
 const undoBtn = document.getElementById('hud-undo') as HTMLButtonElement | null;
 if (undoBtn) {

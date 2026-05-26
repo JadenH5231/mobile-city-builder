@@ -225,6 +225,12 @@ export class Game {
    */
   onMilestoneEarned?: (m: import('../types').Milestone) => void;
 
+  /** Fired whenever {@link setTool} actually changes the active tool
+   *  (no-op self-selects don't fire). main.ts wires this to show/hide
+   *  contextual HUD affordances — e.g. the Bridge-mode pill that only
+   *  makes sense while a road tool is armed (Beta 1.6.23). */
+  onToolChange?: (tool: Tool) => void;
+
   /**
    * Random / crisis event fired (Alpha 2.9). main.ts wires this to a
    * modal — for `severity: 'choice'` events the modal blocks until the
@@ -828,6 +834,17 @@ export class Game {
     this.tool = tool;
     this.input.setMode(tool === 'pan' ? 'navigate' : 'paint');
     this.toolbar.setTool(tool);
+    // Beta 1.6.23 — bridge mode is contextual: it only makes sense
+    // while a road tool is selected. Picking a non-road tool drops
+    // bridge mode so the next paint stroke doesn't land on the upper
+    // layer by accident (the old "settings toggle" model had this
+    // exact bug). Reset happens BEFORE the onToolChange callback so
+    // the bridge pill picks up the new aria-pressed state.
+    if (this.bridgeMode && !this.isRoadTool(tool)) {
+      this.bridgeMode = false;
+    }
+    // Surface contextual HUD pills (Bridge toggle visibility / state).
+    this.onToolChange?.(tool);
     if (tool !== 'pan') {
       this.renderer.clearSelection();
       this.selected = null;
@@ -842,6 +859,12 @@ export class Game {
     // Per-block ghost web (Alpha 4.15) — show the unpaid blocks of
     // any in-progress big-build reservation matching the new tool.
     this.refreshMonumentGhostWeb();
+  }
+
+  /** Beta 1.6.23 — tools that paint roads. Used to gate the contextual
+   *  Bridge-mode pill (only meaningful while road-painting is armed). */
+  isRoadTool(tool: Tool): boolean {
+    return tool === 'road_local' || tool === 'road_avenue' || tool === 'road_highway';
   }
 
   /**
@@ -3455,6 +3478,16 @@ export class Game {
         tile.stopSign = snap.stopSign;
         tile.trafficLight = snap.trafficLight;
       }
+      // Beta 1.6.23 — restore upper-layer bridge-road state on retreat.
+      for (const ek of snap.bridgeRoadEdges ?? []) {
+        const e = this.grid.unpackEdgeKey(ek);
+        if (this.grid.setBridgeRoadEdge(e.ax, e.ay, e.bx, e.by, true, snap.bridgeRoadType)) roadsChanged = true;
+      }
+      if (snap.wasBridgeRoad && tile && !tile.bridgeRoad) {
+        tile.bridgeRoad = true;
+        tile.bridgeRoadType = snap.bridgeRoadType;
+        roadsChanged = true;
+      }
     }
     // PHASE 2 — restore zones + density + buildings (bypasses setZone /
     // setBuilding validation since the snapshot was a previously-valid state).
@@ -3496,7 +3529,25 @@ export class Game {
       const { x, y } = this.unpackTile(idx);
       const tile = this.grid.get(x, y);
       if (!tile) continue;
-      if (!tile.road && tile.zone === 'none' && tile.building === 'none' && !tile.path) continue;
+      // Beta 1.6.23 — bridge-road (upper-layer overpass) tiles are now
+      // recognised by bulldoze. Pre-1.6.23 the early-out below skipped
+      // any tile whose only non-default state was `bridgeRoad`, so a
+      // player who painted an overpass had no way to delete it — even
+      // toggling bridge mode off didn't help because the bulldoze
+      // path itself never touched the upper layer.
+      if (!tile.road && !tile.bridgeRoad && tile.zone === 'none' && tile.building === 'none' && !tile.path) continue;
+
+      // Collect bridge-road edges incident to this tile, then snapshot.
+      const bridgeEdgesHere: number[] = [];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx, ny = y + dy;
+          if (this.grid.hasBridgeRoadEdge(x, y, nx, ny)) {
+            bridgeEdgesHere.push(this.grid.edgeKey(x, y, nx, ny));
+          }
+        }
+      }
 
       const snap: BulldozedSnapshot = {
         wasRoad: tile.road,
@@ -3510,7 +3561,10 @@ export class Game {
         developmentPressure: tile.developmentPressure,
         edges: this.grid.incidentRoadEdges(x, y),
         building: tile.building,
-        path: tile.path
+        path: tile.path,
+        wasBridgeRoad: tile.bridgeRoad,
+        bridgeRoadType: tile.bridgeRoadType,
+        bridgeRoadEdges: bridgeEdgesHere
       };
       this.strokeBulldozed.set(idx, snap);
 
@@ -3519,6 +3573,20 @@ export class Game {
         if (this.grid.setRoadEdgeByKey(ek, false)) roadsChanged = true;
       }
       if (this.grid.setRoad(x, y, false)) roadsChanged = true;
+      // Beta 1.6.23 — clear upper-layer bridge-road state too. Drop
+      // all incident bridge edges, then clear the tile's bridgeRoad
+      // bit. setBridgeRoadEdge auto-demotes the endpoint tile's
+      // bridgeRoad flag when the last incident edge goes.
+      for (const ek of snap.bridgeRoadEdges) {
+        const e = this.grid.unpackEdgeKey(ek);
+        if (this.grid.setBridgeRoadEdge(e.ax, e.ay, e.bx, e.by, false)) roadsChanged = true;
+      }
+      if (tile.bridgeRoad) {
+        tile.bridgeRoad = false;
+        tile.bridgeRoadType = 'local';
+        tile.bridgeHighwayDir = -1;
+        roadsChanged = true;
+      }
       if (tile.zone !== 'none') {
         if (this.grid.setZone(x, y, 'none')) zonesChanged = true;
       }
@@ -3722,6 +3790,12 @@ interface BulldozedSnapshot {
   building: Building;
   /** Walking-path bit at bulldoze time. */
   path: boolean;
+  /** Beta 1.6.23 — upper-layer (overpass) road state at bulldoze time.
+   *  Pre-1.6.23 the bulldoze loop didn't touch the bridge-road layer
+   *  at all, so painted overpasses were stuck on the map forever. */
+  wasBridgeRoad: boolean;
+  bridgeRoadType: RoadType;
+  bridgeRoadEdges: number[];
 }
 
 /**

@@ -4,7 +4,7 @@
 // Skips hashed Vite asset URLs (they're immutable; standard cache
 // rules apply). Indexed-DB save data is untouched by the SW.
 
-const CACHE = 'mq-city-v26';
+const CACHE = 'mq-city-v27';
 const SHELL = [
   './',
   './index.html',
@@ -15,7 +15,11 @@ const SHELL = [
   // privacy disclosures stay reachable offline. Important for
   // GDPR/CCPA: users must be able to read the policy any time.
   './privacy.html',
-  './terms.html'
+  './terms.html',
+  // Beta 1.6.32 — wiki cached so the reference docs are reachable
+  // offline (same justification as the legal pages).
+  './wiki/',
+  './wiki/index.html'
 ];
 
 self.addEventListener('install', (event) => {

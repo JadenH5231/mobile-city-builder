@@ -245,6 +245,50 @@ export interface CrashEvent {
  * yet. Stored so {@link Vehicles.scheduleReturnTrips} can spawn a return
  * car after a randomised "visit" delay.
  */
+/** Beta 1.6.25 — serializable car snapshot. Time-relative fields are
+ *  stored as REMAINING ms (relative to the saving session's sim-clock)
+ *  rather than absolute timestamps, since sim-clock resets each load. */
+export interface CarSnapshot {
+  pathTiles: number[];
+  segmentIdx: number;
+  segmentT: number;
+  speed: number;
+  color: number;
+  loadedTile: number;
+  pauseRemaining: number;
+  yielding: boolean;
+  yieldSince: number;
+  destX: number;
+  destY: number;
+  originRoadIdx?: number;
+  originHomeX?: number;
+  originHomeY?: number;
+  kind?: CarKind;
+  isParked?: boolean;
+  /** Remaining ms until unpark, NOT an absolute timestamp. */
+  parkedRemainingMs?: number;
+  truckSource?: import('./SupplyChain').DeliverySource;
+}
+
+/** Snapshot wrapper carrying both active cars and the queued return
+ *  trips. PendingReturn.readyAt is stored as `remainingMs` for the
+ *  same sim-clock-reset reason. */
+export interface VehiclesSnapshot {
+  cars: CarSnapshot[];
+  pendingReturns: PendingReturnSnapshot[];
+}
+
+export interface PendingReturnSnapshot {
+  /** Remaining ms until the return car spawns. */
+  remainingMs: number;
+  originRoadIdx: number;
+  destRoadIdx: number;
+  originHomeX: number;
+  originHomeY: number;
+  kind?: CarKind;
+  color?: number;
+}
+
 export interface PendingReturn {
   /** performance.now() timestamp at which the return car should spawn. */
   readyAt: number;
@@ -275,6 +319,124 @@ export class Vehicles {
   /** Outbound trips whose driver is "visiting" the destination, waiting to
    *  drive back. Drained by {@link scheduleReturnTrips}. */
   readonly pendingReturns: PendingReturn[] = [];
+
+  /** Beta 1.6.25 — serialize every active car + pending-return so a
+   *  refresh doesn't wipe in-flight traffic. Time-relative fields
+   *  (`parkedUntil`, `readyAt`) are stored as REMAINING sim-ms rather
+   *  than absolute simNowMs values, since simNowMs resets to 0 each
+   *  session. Restore re-bases them against the new sim-clock.
+   *
+   *  Skipped: cars currently parked at a `parking_lot` stall — those
+   *  hold a reference to a Parking.ParkingStall object that would
+   *  need round-tripping through the parking registry. They're a
+   *  small fraction; let them respawn naturally.
+   *
+   *  Skipped: motorcade vehicles — they're tied to a one-shot
+   *  Motorcade.spawnQueue; restoring them mid-route without the
+   *  queue context would orphan their callbacks. */
+  serialize(simNowMs: number): VehiclesSnapshot {
+    const cars: CarSnapshot[] = [];
+    for (const c of this.cars) {
+      if (c.parking) continue;
+      const k = c.kind ?? 'resident';
+      if (k === 'motorcade_lead' || k === 'motorcade_limo' || k === 'motorcade_tail') continue;
+      cars.push({
+        pathTiles: c.pathTiles.slice(),
+        segmentIdx: c.segmentIdx,
+        segmentT: c.segmentT,
+        speed: c.speed,
+        color: c.color,
+        loadedTile: c.loadedTile,
+        pauseRemaining: c.pauseRemaining,
+        yielding: c.yielding,
+        yieldSince: c.yieldSince,
+        destX: c.destX,
+        destY: c.destY,
+        originRoadIdx: c.originRoadIdx,
+        originHomeX: c.originHomeX,
+        originHomeY: c.originHomeY,
+        kind: c.kind,
+        isParked: c.isParked,
+        parkedRemainingMs: c.parkedUntil !== undefined ? Math.max(0, c.parkedUntil - simNowMs) : undefined,
+        truckSource: c.truckSource
+      });
+    }
+    const pending: PendingReturnSnapshot[] = this.pendingReturns.map((r) => ({
+      remainingMs: Math.max(0, r.readyAt - simNowMs),
+      originRoadIdx: r.originRoadIdx,
+      destRoadIdx: r.destRoadIdx,
+      originHomeX: r.originHomeX,
+      originHomeY: r.originHomeY,
+      kind: r.kind,
+      color: r.color
+    }));
+    return { cars, pendingReturns: pending };
+  }
+
+  /** Restore from a snapshot. Re-bases time-relative fields against
+   *  the new session's simNowMs (= 0 at load time). Validates each
+   *  car's path against the current grid — any car whose pathTiles
+   *  reference non-road tiles (road was bulldozed between save and
+   *  load) is dropped silently. */
+  restore(snap: VehiclesSnapshot, grid: Grid, simNowMs: number): void {
+    this.cars.length = 0;
+    this.pendingReturns.length = 0;
+    const validRoad = (idx: number): boolean => {
+      const x = idx % grid.width;
+      const y = (idx - x) / grid.width;
+      const t = grid.get(x, y);
+      return !!(t && t.road);
+    };
+    for (const c of snap.cars) {
+      // Drop cars whose path crosses a bulldozed tile.
+      let ok = true;
+      for (const idx of c.pathTiles) { if (!validRoad(idx)) { ok = false; break; } }
+      if (!ok) continue;
+      // Drop cars past their path's end (defensive).
+      if (c.segmentIdx >= c.pathTiles.length - 1 && !c.isParked) continue;
+      this.cars.push({
+        pathTiles: c.pathTiles.slice(),
+        segmentIdx: c.segmentIdx,
+        segmentT: c.segmentT,
+        speed: c.speed,
+        color: c.color,
+        loadedTile: c.loadedTile,
+        pauseRemaining: c.pauseRemaining,
+        yielding: c.yielding,
+        yieldSince: c.yieldSince,
+        destX: c.destX,
+        destY: c.destY,
+        originRoadIdx: c.originRoadIdx,
+        originHomeX: c.originHomeX,
+        originHomeY: c.originHomeY,
+        kind: c.kind,
+        isParked: c.isParked,
+        parkedUntil: c.parkedRemainingMs !== undefined ? simNowMs + c.parkedRemainingMs : undefined,
+        truckSource: c.truckSource
+      });
+      // Re-stamp the traffic load this car contributed (Vehicles.update
+      // expects loadedTile to be a tile that already counts this car
+      // in its trafficLoad; restoring without re-incrementing would
+      // mean update() then decrements past 0 next frame).
+      const lx = c.loadedTile % grid.width;
+      const ly = (c.loadedTile - lx) / grid.width;
+      const lt = grid.get(lx, ly);
+      if (lt) lt.trafficLoad += (c.kind === 'truck') ? TRUCK_LOAD_WEIGHT : 1;
+    }
+    for (const r of snap.pendingReturns) {
+      // Drop returns whose endpoints are no longer roads.
+      if (!validRoad(r.originRoadIdx) || !validRoad(r.destRoadIdx)) continue;
+      this.pendingReturns.push({
+        readyAt: simNowMs + r.remainingMs,
+        originRoadIdx: r.originRoadIdx,
+        destRoadIdx: r.destRoadIdx,
+        originHomeX: r.originHomeX,
+        originHomeY: r.originHomeY,
+        kind: r.kind,
+        color: r.color
+      });
+    }
+  }
 
   /**
    * @param residents Total residents in the city — drives spawn rate.

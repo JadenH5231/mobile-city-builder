@@ -4036,6 +4036,17 @@ body.photo-mode .tutorial-banner {
 .settings__button:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+/* Beta 1.6.29 — armed state for the Settings Reset-city button.
+   Mirrors .budget__reset--armed (same pulse animation, same colour
+   palette) so the two reset buttons read as the same control. */
+.settings__button--armed {
+  background: rgba(255, 100, 100, 0.30);
+  border-color: rgba(255, 120, 120, 0.65);
+  color: #ffe1e1;
+  font-weight: 600;
+  animation: budget-reset-pulse 0.9s ease-in-out infinite alternate;
+}
+
 .settings__button--danger {
   color: #ff9e9e;
   border-color: rgba(216, 69, 69, 0.40);

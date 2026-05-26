@@ -1037,28 +1037,29 @@ bindThemePicker({
 // Reason: iOS Safari standalone mode (page added to home screen via the
 // apple-mobile-web-app-capable meta tag) silently no-ops confirm/alert/prompt,
 // so the previous flow looked broken on a phone-installed copy of the game.
-const resetBtn = document.getElementById('budget-reset') as HTMLButtonElement | null;
-if (resetBtn) {
+// Beta 1.6.29 — wire the same arming pattern to BOTH `#budget-reset`
+// (lives in the budget panel) and `#setting-reset-city` (lives in
+// Settings → General). Helper keeps the two in lockstep.
+function wireResetButton(btn: HTMLButtonElement, armedClass: string): void {
   const RESET_LABEL = 'Reset city';
   const ARMED_LABEL = 'Tap again to RESET — wipes your save';
-  const ARMED_CLASS = 'budget__reset--armed';
   const ARM_WINDOW_MS = 3000;
   let armed = false;
   let armTimer: number | undefined;
   const disarm = (): void => {
     armed = false;
-    resetBtn.textContent = RESET_LABEL;
-    resetBtn.classList.remove(ARMED_CLASS);
+    btn.textContent = RESET_LABEL;
+    btn.classList.remove(armedClass);
     if (armTimer !== undefined) {
       clearTimeout(armTimer);
       armTimer = undefined;
     }
   };
-  resetBtn.addEventListener('click', () => {
+  btn.addEventListener('click', () => {
     if (!armed) {
       armed = true;
-      resetBtn.textContent = ARMED_LABEL;
-      resetBtn.classList.add(ARMED_CLASS);
+      btn.textContent = ARMED_LABEL;
+      btn.classList.add(armedClass);
       armTimer = window.setTimeout(disarm, ARM_WINDOW_MS);
       return;
     }
@@ -1066,6 +1067,10 @@ if (resetBtn) {
     void game.resetCity();
   });
 }
+const resetBtn = document.getElementById('budget-reset') as HTMLButtonElement | null;
+if (resetBtn) wireResetButton(resetBtn, 'budget__reset--armed');
+const settingsResetCityBtn = document.getElementById('setting-reset-city') as HTMLButtonElement | null;
+if (settingsResetCityBtn) wireResetButton(settingsResetCityBtn, 'settings__button--armed');
 
 if (fpsEl) {
   let frames = 0;

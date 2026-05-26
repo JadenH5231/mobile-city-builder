@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wiki — MQ City Builder</title>
+  <meta name="description" content="Complete reference for MQ City Builder — every system, building, faction, and mechanic." />
+  <link rel="icon" type="image/svg+xml" href="../mansion-icon.svg" />
+  <style>
+    :root {
+      --bg: #0e1014;
+      --bg-card: #181b21;
+      --bg-elev: #1f232a;
+      --line: #2a2e36;
+      --ink: #f3efe6;
+      --ink-soft: #b8b4ab;
+      --ink-faint: #6a6f78;
+      --orange: #ff8030;
+      --orange-deep: #d6651b;
+      --gold: #ffd84d;
+      --green: #5fcf6f;
+      --red: #ff7070;
+      --blue: #6cb0ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
+    a:hover { color: #ffa860; }
+
+    .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+    @media (max-width: 720px) { .wrap { padding: 40px 16px 80px; } }
+
+    .crumbs { font-size: 13px; color: var(--ink-faint); margin-bottom: 28px; }
+    .crumbs a { color: var(--ink-faint); }
+    .crumbs a:hover { color: var(--orange); }
+
+    h1 {
+      font-size: clamp(30px, 5vw, 44px);
+      line-height: 1.15;
+      margin: 0 0 6px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .lede { color: var(--ink-soft); font-size: 16px; margin: 0 0 36px; max-width: 60ch; }
+
+    h2 {
+      font-size: clamp(22px, 3vw, 28px);
+      margin: 56px 0 12px;
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+    }
+    h3 {
+      font-size: 18px;
+      margin: 28px 0 8px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    h4 {
+      font-size: 15px;
+      margin: 18px 0 6px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    p { margin: 0 0 14px; color: var(--ink); }
+    p.small { font-size: 14px; color: var(--ink-soft); }
+    ul, ol { padding-left: 22px; margin: 0 0 14px; }
+    li { margin: 4px 0; }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--bg-elev);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--gold);
+    }
+    strong { color: var(--ink); font-weight: 700; }
+    em { color: var(--ink-soft); font-style: italic; }
+
+    .toc {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin: 0 0 48px;
+    }
+    .toc h2 { margin: 0 0 10px; border: none; padding: 0; font-size: 16px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; }
+    .toc ul { columns: 2; column-gap: 28px; padding: 0; list-style: none; margin: 0; }
+    @media (max-width: 560px) { .toc ul { columns: 1; } }
+    .toc li { margin: 5px 0; break-inside: avoid; }
+    .toc a { color: var(--ink); text-decoration: none; font-size: 14px; }
+    .toc a:hover { color: var(--orange); }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin: 14px 0;
+    }
+    .card.tip {
+      border-color: rgba(255, 216, 77, 0.35);
+      background: rgba(255, 216, 77, 0.06);
+    }
+    .card.warn {
+      border-color: rgba(255, 112, 112, 0.35);
+      background: rgba(255, 112, 112, 0.06);
+    }
+    .card.info {
+      border-color: rgba(108, 176, 255, 0.35);
+      background: rgba(108, 176, 255, 0.06);
+    }
+    .card h4 { margin-top: 0; }
+    .card h4.tip-title { color: var(--gold); }
+    .card h4.warn-title { color: var(--red); }
+    .card h4.info-title { color: var(--blue); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+    table th, table td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    table th {
+      color: var(--ink-soft);
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    table td.num { font-variant-numeric: tabular-nums; }
+
+    .stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin: 2px 4px 2px 0;
+    }
+    .stat.gold { color: var(--gold); border-color: rgba(255, 216, 77, 0.35); }
+    .stat.green { color: var(--green); border-color: rgba(95, 207, 111, 0.35); }
+    .stat.red { color: var(--red); border-color: rgba(255, 112, 112, 0.35); }
+
+    .faction-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+    .faction {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .faction h4 { margin: 0 0 4px; color: var(--ink); }
+    .faction p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+    .faction .leader { display: block; font-size: 12px; color: var(--gold); margin-bottom: 8px; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 40px 0;
+    }
+
+    .footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-faint);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <nav class="crumbs">
+      <a href="../">← Back to the game</a>
+    </nav>
+
+    <h1>MQ City Builder — Wiki</h1>
+    <p class="lede">Complete reference for every system, building, faction, and mechanic. Bookmark this page; the game is deep enough that you'll want to come back.</p>
+
+    <div class="toc">
+      <h2>Contents</h2>
+      <ul>
+        <li><a href="#getting-started">Getting started</a></li>
+        <li><a href="#controls">Controls</a></li>
+        <li><a href="#population">Population &amp; demand</a></li>
+        <li><a href="#economy">Economy &amp; taxes</a></li>
+        <li><a href="#factions">Factions &amp; happiness</a></li>
+        <li><a href="#council">Council &amp; elections</a></li>
+        <li><a href="#civic-actions">Civic actions</a></li>
+        <li><a href="#milestones">Milestones</a></li>
+        <li><a href="#roads">Roads &amp; traffic</a></li>
+        <li><a href="#zoning">Zoning &amp; density</a></li>
+        <li><a href="#luxury">Luxury residential</a></li>
+        <li><a href="#services">Services</a></li>
+        <li><a href="#transit">Transit</a></li>
+        <li><a href="#supply-chain">Supply chain</a></li>
+        <li><a href="#industry">Industry buildings</a></li>
+        <li><a href="#architect">Architect mode</a></li>
+        <li><a href="#monuments">Civic monuments</a></li>
+        <li><a href="#crime">Crime</a></li>
+        <li><a href="#bonds">Bonds &amp; surtax</a></li>
+        <li><a href="#districts">Districts</a></li>
+        <li><a href="#day-night">Day / night cycle</a></li>
+        <li><a href="#themes">Themes</a></li>
+        <li><a href="#saves">Save slots</a></li>
+        <li><a href="#debug">Debug &amp; diagnostics</a></li>
+        <li><a href="#strategy">Strategy tips</a></li>
+        <li><a href="#glossary">Glossary</a></li>
+      </ul>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="getting-started">Getting started</h2>
+
+    <p>MQ City Builder is a mobile-first low-poly city sim that plays like a premium Steam title. There are no microtransactions, no energy timers, no "wait 4 hours for your factory" mechanics. Build cities; build well; learn the loop.</p>
+
+    <p>A fresh save spawns you on a procedurally-generated map with lakes, rivers, forests, and elevation. You start with $5,000,000 in the treasury, a small starter toolkit (roads, low-density zones, parks, walking paths, districts, buy-land), and a city wide open for design.</p>
+
+    <h3>The core loop</h3>
+    <ol>
+      <li><strong>Paint roads</strong> on grass. Drag-to-place 8-connected, diagonal-first.</li>
+      <li><strong>Zone</strong> next to those roads — R for residential, C for commercial, I for industrial, MU for mixed-use.</li>
+      <li>Buildings spawn on a 10 Hz development tick. Watch them grow.</li>
+      <li><strong>Manage demand</strong> (RCI) via taxes, services, and faction happiness.</li>
+      <li>Hit milestones to unlock new tools (avenues, services, schools, hospitals, monuments, etc).</li>
+    </ol>
+
+    <h3>Tutorial</h3>
+    <p>The first time you launch, a 9-step play-as-you-learn tutorial walks you through paving a road, zoning, dropping a park, opening the Population and Treasury panels, growing to 200, and placing power + water. Elections and unlocks past Hamlet are silenced during onboarding so popups don't crowd you. You can re-launch it any time from <strong>Settings → "Show tutorial again"</strong>.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="controls">Controls</h2>
+
+    <h3>Touch (mobile / tablet)</h3>
+    <ul>
+      <li><strong>One-finger drag</strong> on the map: pan camera.</li>
+      <li><strong>Two-finger pinch</strong>: zoom.</li>
+      <li><strong>One-finger drag</strong> with a paint tool active: paint a road / zone / etc.</li>
+      <li><strong>Tap</strong> a tile: select.</li>
+      <li><strong>Long-press</strong> a tile: open the tile info panel with diagnostic chips (zone, density, services, supplies, crime, age).</li>
+    </ul>
+
+    <h3>Desktop (mouse + keyboard)</h3>
+    <ul>
+      <li><strong>WASD</strong> or <strong>arrow keys</strong>: pan camera (continuous while held). Movement model is genre-standard: right key = camera goes right.</li>
+      <li><strong>Q / E</strong>: zoom out / in (continuous).</li>
+      <li><strong>Mouse wheel</strong> over the toolbar: scroll the tool strip horizontally.</li>
+      <li><strong>Middle-mouse drag</strong> on the map: pan.</li>
+      <li><strong>Space</strong>: pause / resume.</li>
+      <li><strong>0 / 1 / 2 / 3</strong>: sim speed (0 = pause, 1× / 2× / 3×).</li>
+      <li><strong>Z</strong> (or Ctrl+Z / Cmd+Z): undo last paint or placement.</li>
+      <li><strong>Esc</strong>: drop the active tool back to Pan.</li>
+      <li><strong>R</strong>: rotate an armed monument (visible while big-build placement is active).</li>
+    </ul>
+
+    <div class="card tip">
+      <h4 class="tip-title">📐 Camera rotation</h4>
+      <p>Tap the rotate pill on the HUD (or use the HUD rotate button) to snap the camera 90° clockwise. The map can be viewed from any of four cardinal iso angles — useful for seeing behind tall buildings.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="population">Population &amp; demand</h2>
+
+    <p>Population is the primary milestone-driving stat. It's the sum of residents living on developed residential and mixed-use tiles, distributed across <a href="#factions">10 factions</a>.</p>
+
+    <h3>Resident capacity by tier</h3>
+    <table>
+      <thead><tr><th>Tier</th><th>Residential</th><th>Mixed-use (half-rate)</th></tr></thead>
+      <tbody>
+        <tr><td>L1 (Low)</td><td class="num">4 residents</td><td class="num">2</td></tr>
+        <tr><td>L2 (Medium)</td><td class="num">16</td><td class="num">8</td></tr>
+        <tr><td>L3 (High)</td><td class="num">64</td><td class="num">32</td></tr>
+      </tbody>
+    </table>
+
+    <h3>RCI demand</h3>
+    <p>Three bars on the HUD show city-wide demand for Residential, Commercial, and Industrial. Demand is in [−1, +1]:</p>
+    <ul>
+      <li><strong>Positive demand</strong>: zoned tiles of that kind develop and densify.</li>
+      <li><strong>Negative demand</strong>: development stalls; existing buildings can decay if conditions get bad enough.</li>
+    </ul>
+    <p>Demand is driven by:</p>
+    <ul>
+      <li>Population vs jobs balance (more residents than jobs → C/I demand climbs; more jobs than residents → R demand climbs).</li>
+      <li>Per-zone <strong>tax rate</strong> (higher tax = lower demand for that zone).</li>
+      <li>City-wide <strong>traffic stress</strong> (cars stuck → R/C demand drops).</li>
+      <li>Active <strong>events</strong> (recessions, booms, lawsuits, etc).</li>
+      <li>Council pop-share <strong>boost</strong> for the elected factions (+10% target share per seat).</li>
+    </ul>
+
+    <h3>Mood</h3>
+    <p>A weighted-average happiness score across the 10 factions, in [−1, +1]. Modulates building colour saturation (happy cities look vibrant, unhappy cities look drab) and feeds back into demand.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="economy">Economy &amp; taxes</h2>
+
+    <p>The Treasury pill at the top of the HUD shows current cash. Open the Budget panel by tapping it.</p>
+
+    <h3>Income sources</h3>
+    <ul>
+      <li><strong>Monthly tax settlement</strong> — once per sim month, the city collects taxes from every developed tile based on its zone, tier, and tax-rate slider.</li>
+      <li><strong>Export industries</strong> — forestry and farm tiles earn export revenue based on their global market prices (which oscillate over time) when connected to the map edge by road.</li>
+      <li><strong>Landmarks</strong> — museum, stadium, observatory each earn monthly tourism revenue scaled by city population.</li>
+      <li><strong>Milestone rewards</strong> — each milestone payouts $5k–$50k in cash + 3–10 political capital.</li>
+    </ul>
+
+    <h3>Expense sources</h3>
+    <ul>
+      <li><strong>Up-front placement cost</strong> — roads, services, monuments. Modified by council cost multipliers.</li>
+      <li><strong>Per-capita "city services"</strong> — grows with population; the cost of running the city.</li>
+      <li><strong>Beautification budget</strong> — council picks a tier each term (None / Light / Standard / Grand / Opulent); monthly bill ranges $0–$12k.</li>
+      <li><strong>Bond interest</strong> — if you have active bonds.</li>
+      <li><strong>Crash penalties</strong> — uncontrolled intersections plus city-wide traffic stress occasionally produce collisions that cost cash + demand.</li>
+    </ul>
+
+    <h3>Tax sliders</h3>
+    <p>R / C / I tax rates are independently adjustable. Each tier (low / medium / high) of each zone has a base tax rate; the slider modifies it.</p>
+
+    <div class="card warn">
+      <h4 class="warn-title">⚠ Tax rate feedback</h4>
+      <p>Tax sliders affect demand AND mood. Pushing R-tax above 0.5 angers <em>Working Families First</em> and <em>Taxpayers' Alliance</em>; cutting taxes drops city revenue. There's no "right" answer — find the slider that keeps both happiness and treasury sustainable.</p>
+    </div>
+
+    <h3>Wealth surtax</h3>
+    <p>A separate slider in the Budget panel adds a top-up tax on L3 R/C buildings + luxury homes. Up to 30%. Hated by <em>Taxpayers</em> and <em>Chamber of Commerce</em>; loved by <em>Working Families First</em>.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="factions">Factions &amp; happiness</h2>
+
+    <p>Ten named-leader factions watch every move you make. Each has a personality, a happiness score in [−1, +1] derived from current city state, and a natural share of city population. <strong>This is the keystone feature of the game.</strong></p>
+
+    <p>Tap the Population pill to open the Community Sentiment panel. Each faction's row shows their leader's name, current happiness, and a Facebook-style comment in their voice. Tap a row to see their preferred policies + civic-action levers.</p>
+
+    <div class="faction-grid">
+      <div class="faction">
+        <h4>NIMBY Coalition</h4>
+        <span class="leader">Karen Whitfield</span>
+        <p>Anti-density-near-them, anti-industry, pro-park. Loves luxury homes. Loud at hearings.</p>
+      </div>
+      <div class="faction">
+        <h4>YIMBYs United</h4>
+        <span class="leader">Marcus Chen</span>
+        <p>Pro-density, pro-transit, anti-sprawl. Wants you to build up, not out.</p>
+      </div>
+      <div class="faction">
+        <h4>Greenleaf Environmental Council</h4>
+        <span class="leader">Dr. Linda Greenfield</span>
+        <p>Anti-industry, anti-deforestation, pro-park. Furious whenever a power plant lights up.</p>
+      </div>
+      <div class="faction">
+        <h4>Hometown Heritage Society</h4>
+        <span class="leader">Bud Hargrove</span>
+        <p>Pro-rural-feel, anti-skyscraper, anti-large-network. Wants the town to stay a town.</p>
+      </div>
+      <div class="faction">
+        <h4>Chamber of Commerce</h4>
+        <span class="leader">Chad Donaldson</span>
+        <p>Pro-business, pro-low-business-tax. Bankrolls every campaign that promises a tax cut.</p>
+      </div>
+      <div class="faction">
+        <h4>Transit Riders Union</h4>
+        <span class="leader">Priya Patel</span>
+        <p>Pro-bus, pro-density-with-transit, anti-stroad. Wants bus lanes, not arterials.</p>
+      </div>
+      <div class="faction">
+        <h4>Drivers' Association</h4>
+        <span class="leader">Frank Mahoney</span>
+        <p>Pro-road, anti-bus-stop-near-R, pro-easy-driving. Hates traffic; hates buses more.</p>
+      </div>
+      <div class="faction">
+        <h4>Taxpayers' Alliance</h4>
+        <span class="leader">Eleanor Vance</span>
+        <p>Pro-surplus, anti-deficit, anti-high-tax. Holds the strings; tightens them when you blow the budget.</p>
+      </div>
+      <div class="faction">
+        <h4>Safer Streets Coalition</h4>
+        <span class="leader">Dr. Marcus Tate</span>
+        <p>Pro-stop-signs, anti-accidents, pro-services. Will rally on the courthouse steps.</p>
+      </div>
+      <div class="faction">
+        <h4>Working Families First</h4>
+        <span class="leader">Maria Rodriguez</span>
+        <p>Pro-jobs, anti-high-R-tax, pro-services. The breadwinner block.</p>
+      </div>
+    </div>
+
+    <div class="card info">
+      <h4 class="info-title">💡 Rule of thumb</h4>
+      <p>Every decision touches at least one faction. Bus-only lanes please Transit and Safer Streets; they enrage Drivers. A power plant helps Working Families (jobs) and furious Greenleaf. Plan for the angry side, not just the happy side — angry factions vote, mobilize, and run candidates against you.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="council">Council &amp; elections</h2>
+
+    <p>Every <strong>12 sim months</strong>, the city holds an election. The mayor (you) always wins ≥50.0001%; the 2nd-most-angry faction's leader runs as your opponent and is excluded from council that term. Of the remaining 9, <strong>4 take council seats</strong>, ranked by vote score where <code>vote = factionPop × turnout</code> and turnout climbs with anger.</p>
+
+    <h3>What council does</h3>
+    <ol>
+      <li><strong>Cost multipliers on buildables</strong>. Each councillor has a <code>stance</code> on every buildable; if they oppose, your cost goes up. <code>mult = 1 − Σ stances × 0.25</code>, clamped [0.20, 2.50]. If every councillor strongly opposes (all stances ≤ −0.4), the action is <strong>banned</strong> for the term.</li>
+      <li><strong>Zoning-change gate</strong>. Re-zoning an already-zoned tile to a different (zone, tier) needs ≥ 2 councillors with stance ≥ 0 for the new combination. Fresh zoning is always allowed.</li>
+      <li><strong>Population boost</strong>. Each councillor's faction gets +10% on its target share of city population, normalised so total stays ≤ capacity.</li>
+      <li><strong>Beautification budget</strong>. The council elects a tier each term (None / Light / Standard / Grand / Opulent). Mayor cannot override this lever (except via Mayoral Override).</li>
+    </ol>
+
+    <h3>Election result modal</h3>
+    <p>When an election fires, a modal shows the vote split, the 4 winning council seats, the opponent, and a sortable vote-share table. New leaders appear in a one-time bio popup so you "meet" them.</p>
+
+    <h3>Toolbar visual feedback</h3>
+    <p>Banned tools show a strikethrough + 🚫 marker in the toolbar. Group buttons show partial-ban state when only some of their members are banned. After every election the toolbar re-derives the ban set.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="civic-actions">Civic actions</h2>
+
+    <p>Civic actions let you actively influence the next election. They cost <strong>Political Capital (PC)</strong>, a slow-accumulating resource earned monthly based on faction happiness. Cap at 50 PC.</p>
+
+    <table>
+      <thead><tr><th>Action</th><th>Cost</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Endorse leader</strong></td>
+          <td class="num">5 PC</td>
+          <td>Boosts a faction's vote share. They can't be picked as opponent. Slight happiness penalty for everyone else.</td>
+        </tr>
+        <tr>
+          <td><strong>Form coalition</strong></td>
+          <td class="num">10 PC</td>
+          <td>Pick two factions. Allies gain happiness; their <em>rivals</em> (per the rival matrix) lose happiness.</td>
+        </tr>
+        <tr>
+          <td><strong>Photo-op</strong></td>
+          <td class="num">2 PC + $200</td>
+          <td>Triggered opportunistically after placing a building strongly favoured by a faction. Boosts that faction's turnout; the building's opponents lose happiness. Per-term cap — can only photo-op each faction once.</td>
+        </tr>
+        <tr>
+          <td><strong>Mayoral Override</strong></td>
+          <td class="num">40 PC</td>
+          <td>Activates at the next election for one term. Bypasses cost multipliers, zoning gate, and bans entirely. Also lets you set the Beautification Budget tier directly.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <h4 class="tip-title">🎯 Photo-op timing</h4>
+      <p>Photo-ops fire automatically as a banner after you place a building a faction strongly supports. Tap it to claim. Don't claim if you can't afford it — it disappears after a few seconds. The right photo-op can swing a tight election.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="milestones">Milestones</h2>
+
+    <p>Population milestones gate the toolbar. Each unlock adds buildings + tools to your kit, fires a celebration banner (with the milestone leader's voice), and pays out cash + PC.</p>
+
+    <table>
+      <thead><tr><th>Name</th><th>Pop</th><th>Cash</th><th>PC</th><th>Unlocks</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Hamlet</strong></td>
+          <td class="num">50</td>
+          <td class="num">$2,000</td>
+          <td class="num">2</td>
+          <td>Medium R / C / I / MU zoning</td>
+        </tr>
+        <tr>
+          <td><strong>Village</strong></td>
+          <td class="num">200</td>
+          <td class="num">$5,000</td>
+          <td class="num">3</td>
+          <td>Power plant, water tower, avenue, stop sign, walking path</td>
+        </tr>
+        <tr>
+          <td><strong>Town</strong></td>
+          <td class="num">500</td>
+          <td class="num">$5,000</td>
+          <td class="num">3</td>
+          <td>Bus stop, bus depot, traffic light, high-density C/I/MU, schools, fire + police stations, museum, City Hall, basic Architect tools, plazas, piers</td>
+        </tr>
+        <tr>
+          <td><strong>City</strong></td>
+          <td class="num">1,000</td>
+          <td class="num">$10,000</td>
+          <td class="num">5</td>
+          <td>Highway, high-density R, hospital, stadium, ferry dock, skyscrapers</td>
+        </tr>
+        <tr>
+          <td><strong>Metropolis</strong></td>
+          <td class="num">2,500</td>
+          <td class="num">$20,000</td>
+          <td class="num">7</td>
+          <td>Observatory, subway entrance, Provincial Capital, advanced Architect tools (fountain, reflecting pool, memorial garden)</td>
+        </tr>
+        <tr>
+          <td><strong>Capital</strong></td>
+          <td class="num">5,000</td>
+          <td class="num">$50,000</td>
+          <td class="num">10</td>
+          <td>Mayor's Mansion, National Capital, premium monuments (clock tower, triumphal arch), full Architect kit</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="roads">Roads &amp; traffic</h2>
+
+    <h3>Three road tiers</h3>
+    <table>
+      <thead><tr><th>Tier</th><th>Cost / tile</th><th>Speed</th><th>Capacity</th><th>Stripes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Local</strong></td><td class="num">$10</td><td>1.0×</td><td>Low</td><td>Dashed yellow centerline</td></tr>
+        <tr><td><strong>Avenue</strong></td><td class="num">$30</td><td>1.4×</td><td>Medium</td><td>Solid double-yellow median</td></tr>
+        <tr><td><strong>Highway</strong></td><td class="num">$80</td><td>1.8×</td><td>High</td><td>White shoulder + inner-lane stripes + double-yellow median (bidirectional, divided)</td></tr>
+      </tbody>
+    </table>
+
+    <p>Roads are 8-connected: diagonal paint is supported and produces proper diagonal road meshes (not stair-stepped tiles). Drag-to-paint, drag to extend, retract the rubber band to undo within a stroke.</p>
+
+    <h3>Bridges</h3>
+    <p>A road painted over a water tile auto-becomes a bridge — the renderer lifts the deck and drops pillars from the water surface.</p>
+    <p>For <strong>overpasses</strong> (upper-layer roads that cross at-grade roads without intersection), select a road tool and tap the contextual <strong>Bridge</strong> pill that appears above the toolbar. Paint as normal. Bridge mode auto-clears when you switch to a non-road tool.</p>
+
+    <h3>Traffic control</h3>
+    <ul>
+      <li><strong>Stop signs</strong> ($300, Village+): FIFO yielding handshake. Every car at the intersection pauses, then advances in arrival order. Good at low-traffic 3-way and 4-way junctions; gridlocks under heavy load.</li>
+      <li><strong>Traffic lights</strong> ($1,500, Town+): adaptive 2-phase controller. Phase length 4–12 seconds, allocated by queue demand. 2–3× the throughput of stop signs at busy junctions.</li>
+    </ul>
+
+    <div class="card warn">
+      <h4 class="warn-title">⚠ Uncontrolled intersections</h4>
+      <p>Intersections (3+ incident road edges) with NO stop sign or traffic light occasionally produce collisions — destination tile loses development pressure, treasury takes a small hit. Cover busy junctions.</p>
+    </div>
+
+    <h3>Cars + trucks</h3>
+    <ul>
+      <li><strong>Resident cars</strong>: spawn from R tiles, A* to a random C or I tile, dwell 8–22 sec, return home. Drive on the right.</li>
+      <li><strong>Tourist cars</strong>: spawn near landmarks, longer dwell.</li>
+      <li><strong>Buses</strong>: auto-cycle through every depot's stops; pull over onto the sidewalk to dwell ~1.6 sec per stop so they don't block traffic.</li>
+      <li><strong>Freight trucks</strong>: 15% slower than cars, take up 2× traffic load. Multi-stop routes: one truck hits up to 3 commercial stores per outbound leg before returning.</li>
+    </ul>
+
+    <h3>Path coverage suppresses car spawns</h3>
+    <p>If both the origin and destination are within walking distance of a path or sidewalk, the trip has a 55% chance of converting to a pedestrian walker instead of a car. Build paths to keep car traffic manageable.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="zoning">Zoning &amp; density</h2>
+
+    <p>Four zone kinds, each with three density tiers + a luxury subtype for residential.</p>
+
+    <table>
+      <thead><tr><th>Zone</th><th>Color</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Residential (R)</strong></td><td>Green</td><td>People live here. Generates resident-cars and supplies labour. Tax revenue from rent.</td></tr>
+        <tr><td><strong>Commercial (C)</strong></td><td>Blue</td><td>Retail + services. Generates jobs. Tax revenue from sales — gated by the supply chain.</td></tr>
+        <tr><td><strong>Industrial (I)</strong></td><td>Yellow</td><td>Factories. Generates jobs + spawns freight trucks. Tax revenue from production.</td></tr>
+        <tr><td><strong>Mixed-use (MU)</strong></td><td>Olive</td><td>Half R + half C on the same tile. Cheaper land use; loved by YIMBYs / Transit, hated by Hometown / NIMBYs.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Density tiers</h3>
+    <p>When you paint a zone, you pick the <strong>cap</strong>: Low (L1), Medium (L2), or High (L3). The cap is a permission — buildings still need demand + services to actually reach a tier.</p>
+
+    <ul>
+      <li><strong>L1 (Low)</strong>: cottages, corner stores, sheds. No services needed.</li>
+      <li><strong>L2 (Medium)</strong>: 3-5 storey buildings. Needs Power + Water + a Park within range.</li>
+      <li><strong>L3 (High)</strong>: 6-8 storey buildings. Needs services + L3 cap painted.</li>
+      <li><strong>Skyscrapers</strong> (2×2): unlocked at City. Separate tool — paint a 2×2 footprint of R, C, or MU and a tall tower builds in 4 visible construction stages over 12 sim months.</li>
+    </ul>
+
+    <h3>Service coverage for L2+</h3>
+    <ul>
+      <li><strong>Power</strong>: city-wide if any power plant exists.</li>
+      <li><strong>Water</strong>: city-wide if any water tower exists.</li>
+      <li><strong>Park</strong>: radius 6 tiles from any park.</li>
+    </ul>
+
+    <h3>Building variety</h3>
+    <p>Each (zone, density) cell has multiple visual variants (3-5 per combo). A tile picks a variant deterministically from its (x, y) hash so neighbouring buildings look different but a tile keeps the same appearance across save/load.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="luxury">Luxury residential</h2>
+
+    <p>The <strong>Lux</strong> tool (R group) places a single grand home that spans a 2-tile pair. Tap an R-eligible tile; the game finds a free road-adjacent partner and marks both. The renderer emits one mansion per pair.</p>
+
+    <ul>
+      <li><strong>Cost</strong>: $800 up-front.</li>
+      <li><strong>Capacity</strong>: fixed (premium, not density-driven).</li>
+      <li><strong>Tax</strong>: 2.5× the base R rate (premium rate + luxury bonus).</li>
+      <li><strong>Faction draw</strong>: heavy NIMBY love, Hometown love, Taxpayers happy. Hated by YIMBYs and Working Families.</li>
+    </ul>
+
+    <p>Three deterministic visual variants per pair: <em>mansion</em>, <em>ranch</em>, <em>modern-glass</em>. Each gets a pitched roof, attached garage, twin chimneys, ornamental shrubs, paved walkway, and a manicured lawn.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="services">Services</h2>
+
+    <p>Services unlock density caps and modulate faction happiness. Most have a coverage radius.</p>
+
+    <table>
+      <thead><tr><th>Service</th><th>Cost</th><th>Unlock</th><th>Coverage</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Power plant</td><td class="num">$25,000</td><td>Village (200)</td><td>City-wide</td><td>Allows L2+ buildings. Furious Greenleaf.</td></tr>
+        <tr><td>Water tower</td><td class="num">$15,000</td><td>Village (200)</td><td>City-wide</td><td>Allows L2+. Pleases Working Families.</td></tr>
+        <tr><td>Park</td><td class="num">$1,200</td><td>From start</td><td>6 tiles</td><td>L3 unlock + happiness boost. Pleases NIMBYs / Greenleaf.</td></tr>
+        <tr><td>School</td><td class="num">$30,000</td><td>Town (500)</td><td>8 tiles</td><td>Boosts surrounding R demand. Pleases Working Families.</td></tr>
+        <tr><td>Hospital</td><td class="num">$80,000</td><td>City (1k)</td><td>10 tiles</td><td>Productivity bonus on covered C / I jobs. Pleases Safer Streets.</td></tr>
+        <tr><td>Fire station</td><td class="num">$25,000</td><td>Town (500)</td><td>10 tiles</td><td>Reduces fire-event severity in covered tiles.</td></tr>
+        <tr><td>Police station</td><td class="num">$30,000</td><td>Town (500)</td><td>10 tiles</td><td>Lowers <a href="#crime">crime score</a> on covered tiles. Pleases Safer Streets, NIMBYs.</td></tr>
+      </tbody>
+    </table>
+
+    <p>Parks come in 8 visual variants depending on cluster size: 1-tile cottage layout, 2-tile playground + pond, 3-tile pavilion, 4+ tile grand bandstand, etc. Park clusters look like real parks.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="transit">Transit</h2>
+
+    <h3>Buses</h3>
+    <ul>
+      <li><strong>Bus stops</strong> ($800, Town+): placed on non-highway road tiles. Render as a bench + sign on the sidewalk pad. Buses pull over (perpendicular to road) for ~1.6 sec per stop. Within radius, residential car-spawns are <strong>suppressed</strong> with probability 0.85.</li>
+      <li><strong>Bus depots</strong> ($10,000, Town+): placed on grass, requires road adjacency. Acts as the home base — visible buses cycle out of the depot, hit every bus stop in roughly geographic order, then return.</li>
+    </ul>
+
+    <h3>Ferries</h3>
+    <p><strong>Ferry docks</strong> ($8,000, City+): place on land tiles with at least one adjacent water tile. Pair with their nearest partner across water; visible boats run between them with ~3-sec dwell at each end.</p>
+
+    <h3>Subway entrances</h3>
+    <p><strong>Subway entrance</strong> ($15,000, Metropolis+): radius 6. Within radius, car spawns are <strong>suppressed</strong> at P=0.85. Subterranean network is not visualized — these are surface station markers that just suppress congestion.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="supply-chain">Supply chain</h2>
+
+    <p>Commercial buildings need <strong>supplies</strong> to earn tax revenue. Every developed commercial / mixed-use / big-box tile holds a supplies value in [0, 1]. Warehouses also hold supplies as a buffer.</p>
+
+    <h3>Flow</h3>
+    <pre style="background: var(--bg-elev); padding: 14px 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; overflow-x: auto;">                       every sim month
+                        each tile −0.10..0.18
+                                ↓
+  ┌──────────┐   I→W    ┌───────────┐   W→C   ┌────────────┐
+  │ Industry │ ───────→ │ Warehouse │ ──────→ │ Commercial │
+  └──────────┘   +0.50  └───────────┘  +0.55  └────────────┘
+                                ↑              ↑   drain → 0% = $0 revenue
+                                │              │
+                       outside-edge imports
+                       +0.40  (−25% rev penalty for direct-to-C)</pre>
+
+    <h3>Mechanics</h3>
+    <ul>
+      <li><strong>Consumption</strong>: each commercial tile drains 0.10–0.18 supplies / sim month (per-tile jittered so stores don't all empty together). A fully-stocked tile lasts 5–10 sim months.</li>
+      <li><strong>Truck spawn rate</strong>: <code>0.010 × (industry + warehouse + commercial)</code> tiles/sec, capped at <code>MAX_TRUCKS = 50</code>.</li>
+      <li><strong>Purchase-order priority</strong>: every spawn first checks for any commercial tile below 55% — if found, the truck is dispatched to that tile.</li>
+      <li><strong>Multi-stop routes</strong>: a single truck visits <strong>up to 3 stores</strong> per outbound leg before returning home. Intermediate drops are zero-dwell — the truck delivers in transit.</li>
+      <li><strong>Imports</strong>: if your city is connected to the map edge by a road, import trucks fire at 0.60/sec whenever any commercial or warehouse tile drops below 55%. Direct-to-commercial imports apply a −25% revenue penalty until a domestic delivery clears the import flag.</li>
+    </ul>
+
+    <h3>Reading the chip</h3>
+    <p>Long-press a commercial or warehouse tile. The tile-info panel shows <strong>📦 Supplies NN%</strong> colour-coded — green ≥ 60%, blue 30–60%, yellow 5–30%, red ≤ 5%. The 🌐 chip shows when a tile is import-sourced and taking the revenue penalty.</p>
+
+    <div class="card tip">
+      <h4 class="tip-title">🛠 Debug</h4>
+      <p>Settings → Diagnostics has a <strong>"Restock all supplies"</strong> button that refills every commercial / mixed / big-box / warehouse tile to 100%. Use this to reset the chain and observe where genuine backlogs reappear vs an unreachable city configuration.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="industry">Industry buildings</h2>
+
+    <h3>Forestry</h3>
+    <p><strong>Forestry</strong> tool ($1,500, available from start): only places on forest tiles. Each tile generates monthly lumber-export revenue based on the current global lumber price, with a connection-to-edge bonus. Lumber price oscillates over time — the Stats panel graph shows the curve. Furious Greenleaf.</p>
+
+    <h3>Farms</h3>
+    <p><strong>Farm</strong> tool ($800, from start): only places on grass tiles. Same export model as forestry but on the produce-price curve. Loved by Hometown + Working Families.</p>
+
+    <h3>Warehouses</h3>
+    <p><strong>Warehouse</strong> tool ($3,500, Town+): modular building — paint any cluster shape (1×N, 2×N, L, T, U, +). Each tile holds its own supplies buffer. Industry trucks drop here at 0.50 payload; warehouse trucks ship to commercial at 0.55 payload (most efficient route). Requires a parking-lot tile adjacent to function. Also credits 1 industrial job per tile.</p>
+
+    <h3>Big-box stores</h3>
+    <p><strong>Big-box</strong> ($2,500, Town+): modular commercial. Each tile contributes 2 commercial jobs (warehouse-discount, electronics, home-improvement, garden-centre archetypes). Requires parking-lot adjacency. Major resident-car destination.</p>
+
+    <h3>Parking lots</h3>
+    <p><strong>Parking lot</strong> ($600, from start): modular, paint any shape. Each tile has 6 stalls. Big-box and warehouse require an adjacent parking lot. Any commercial or industrial destination within 3 tiles of a parking lot may use its stalls — cars park, then walkers ("shoppers") complete the final leg to the destination on foot via the pedestrian path graph.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="architect">Architect mode</h2>
+
+    <p>Toggle the leading toolbar pill from <strong>🏗 Build</strong> to <strong>🎨 Architect</strong>. The toolbar swaps to terraforming + decorative tools. Pan + Bulldoze stay pinned in both modes.</p>
+
+    <h3>Terra</h3>
+    <ul>
+      <li><strong>Tree</strong> ($200/tile): paints a forest tile.</li>
+      <li><strong>Meadow</strong> ($400/tile): grass terrain.</li>
+      <li><strong>Pond</strong> ($1,500/tile): water terrain.</li>
+      <li><strong>Smooth</strong> ($50/tile): resets elevation + clears terrain.</li>
+    </ul>
+
+    <h3>Plaza group (Town+)</h3>
+    <ul>
+      <li><strong>Plaza</strong> ($5,000): paved gathering space with planters.</li>
+      <li><strong>Pergola</strong> ($6,000): wooden arbor.</li>
+      <li><strong>Reflecting Pool</strong> ($20,000, Metro+): rectangular pool with bronze statues.</li>
+      <li><strong>Pier</strong> ($3,000): water-only, requires shore neighbour. Decorative deck.</li>
+    </ul>
+
+    <h3>Garden group (Town+)</h3>
+    <ul>
+      <li><strong>Flower bed</strong> ($2,000): planter row.</li>
+      <li><strong>Topiary</strong> ($8,000): sculpted hedge.</li>
+      <li><strong>Memorial garden</strong> ($30,000, Metro+): civic-grade plot.</li>
+    </ul>
+
+    <h3>Monuments (Mon group)</h3>
+    <p>Premium end-game decorative builds. All glow at night with custom lit-overlay geometry and lamp-glow halos.</p>
+    <ul>
+      <li><strong>Statue</strong> ($15,000, Town+): heroic figure on a pedestal.</li>
+      <li><strong>Fountain</strong> ($25,000, Metro+): four-tier water feature.</li>
+      <li><strong>Clock tower</strong> ($50,000, Capital+): clock-faced spire visible across the map.</li>
+      <li><strong>Triumphal arch</strong> ($75,000, Capital+): most expensive single-tile placement in the game.</li>
+    </ul>
+
+    <h3>Beautification budget</h3>
+    <p>Independent of placed monuments. Council elects a tier each term:</p>
+    <table>
+      <thead><tr><th>Tier</th><th>Cost / mo</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>None</td><td>$0</td><td>No flair.</td></tr>
+        <tr><td>Light</td><td>$500</td><td>Corner planters on developed C / MU.</td></tr>
+        <tr><td>Standard</td><td>$2,000</td><td>+ outdoor café tables.</td></tr>
+        <tr><td>Grand</td><td>$5,000</td><td>+ streetlamps + flag banners. Reaches L3 R / luxury.</td></tr>
+        <tr><td>Opulent</td><td>$12,000</td><td>+ public-art pedestals + flower spillover.</td></tr>
+      </tbody>
+    </table>
+    <p>If treasury can't cover the monthly bill, the effective tier drops to None for that month and the streetscape strips down city-wide. Mayoral Override can let you set the tier directly (one-term-only).</p>
+
+    <!-- ============================================================ -->
+    <h2 id="monuments">Civic monuments</h2>
+
+    <p>Multi-tile prestige builds. Each tile of a multi-tile build must be on owned grass; the lex-smallest tile is the <em>anchor</em>. Bulldozing any tile tears down the whole footprint.</p>
+
+    <table>
+      <thead><tr><th>Build</th><th>Footprint</th><th>Cost</th><th>Upkeep / mo</th><th>Unlock</th></tr></thead>
+      <tbody>
+        <tr><td><strong>City Hall</strong></td><td class="num">3×2</td><td class="num">$150,000</td><td class="num">$500</td><td>Town (500)</td></tr>
+        <tr><td><strong>Mayor's Mansion</strong></td><td class="num">4×2</td><td class="num">$500,000</td><td class="num">$1,500</td><td>Capital (5k)</td></tr>
+        <tr><td><strong>Provincial Capital</strong></td><td class="num">5×3</td><td class="num">$1,200,000</td><td class="num">$3,000</td><td>Metro (2.5k)</td></tr>
+        <tr><td><strong>National Capital</strong></td><td class="num">6×4</td><td class="num">$3,000,000</td><td class="num">$8,000</td><td>Capital (5k)</td></tr>
+      </tbody>
+    </table>
+
+    <p>Each is one-per-city — placing a second is refused. Each is also a massive political event: huge stance bonuses for <em>NIMBYs / Hometown / Chamber</em>, big penalties from <em>YIMBYs / Working Families / Taxpayers</em>.</p>
+
+    <h3>Landmarks (tourism)</h3>
+    <p>Single-tile placeable landmarks that generate monthly tourism revenue scaled by city population. Visible from afar.</p>
+    <ul>
+      <li><strong>Museum</strong> ($60,000, Town+): base revenue + per-resident bonus.</li>
+      <li><strong>Stadium</strong> ($150,000, City+): higher base, scales with crowd.</li>
+      <li><strong>Observatory</strong> ($200,000, Metro+): highest base, scales smaller per-resident.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="crime">Crime</h2>
+
+    <p>Every developed tile has a <strong>crime score</strong> in [0, 1] recomputed monthly from:</p>
+    <ul>
+      <li>Density (more residents = more potential crime).</li>
+      <li>Service coverage (school + hospital + police drops it).</li>
+      <li>City mood (unhappy → higher crime).</li>
+      <li>Police radius coverage (10 tiles).</li>
+    </ul>
+    <p>Tiles above 0.55 crime score show a <strong>🛡 Crime NN%</strong> chip on the long-press info panel. City-wide crime drives a <strong>commercial revenue penalty</strong>: high crime → fewer customers → less tax.</p>
+    <p>Toggle the <strong>Crime heatmap</strong> from the More-menu HUD popover (purple gradient over developed tiles, mutually exclusive with the traffic heatmap).</p>
+    <p>Faction effects: high crime makes <em>Safer Streets</em> furious and <em>Working Families</em> unhappy. Drop police stations to compensate.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="bonds">Bonds &amp; surtax</h2>
+
+    <h3>Bonds</h3>
+    <p>Open the Budget panel → Bonds tab. Three bond tiers, all 24-month terms:</p>
+    <table>
+      <thead><tr><th>Tier</th><th>Principal</th><th>Monthly payment</th><th>Total cost</th></tr></thead>
+      <tbody>
+        <tr><td>Small</td><td class="num">$100,000</td><td class="num">~$4,500</td><td class="num">~$108,000</td></tr>
+        <tr><td>Mid</td><td class="num">$500,000</td><td class="num">~$22,500</td><td class="num">~$540,000</td></tr>
+        <tr><td>Large</td><td class="num">$2,000,000</td><td class="num">~$90,000</td><td class="num">~$2,160,000</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warn">
+      <h4 class="warn-title">⚠ Default penalty</h4>
+      <p>If you can't make a monthly payment, the bond <strong>defaults</strong>. Taxpayers + Chamber become furious; you lose 5 PC. Repeated defaults compound the mood hit.</p>
+    </div>
+
+    <h3>Wealth surtax</h3>
+    <p>Slider in the Budget panel: 0–30%. Adds to the tax rate on L3 R, L3 C, and luxury R buildings. Loved by <em>Working Families</em>, hated by <em>Taxpayers / Chamber / NIMBYs</em>.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="districts">Districts</h2>
+
+    <p>The <strong>Districts</strong> tool group lets you paint coloured overlays on tiles. Each district has a name, colour, and per-zone surtax sliders.</p>
+
+    <ol>
+      <li><strong>Paint district</strong> on tiles to mark them as part of a district.</li>
+      <li>Open the Districts panel from the HUD More-menu.</li>
+      <li>Name + colour + set per-zone surtaxes (R / C / I, 0–25% each).</li>
+    </ol>
+
+    <p>Surtaxes <strong>stack on top</strong> of the base R/C/I rate. Use this to tax a wealthy enclave more without raising city-wide taxes, or to give an industrial district a temporary break. Up to 8 districts; tile can only belong to one.</p>
+
+    <p>The <strong>Erase district</strong> tool removes the membership without disturbing the district config.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="day-night">Day / night cycle</h2>
+
+    <p>An 8-minute real-time day cycle. The sun arcs across the sky; sky gradient repaints from dawn → noon → dusk → midnight; ambient and directional light dim at night. About 70% of the cycle is day, 30% is night.</p>
+
+    <p>At night:</p>
+    <ul>
+      <li><strong>Street lamps</strong> light up on every avenue tile, on bridges, in parks, along walking paths, around parking lots and big-box stores.</li>
+      <li><strong>Window lights</strong> appear on L2+ residential / commercial / mixed buildings. Skyscrapers and L3+ buildings get the densest grids (~87.5% lit windows) with apex beacons.</li>
+      <li><strong>Lit storefronts</strong> on commercial podium glass.</li>
+      <li><strong>Architectural decoratives</strong> (statues, fountains, clock tower, etc.) glow with custom emissive geometry + lamp-glow halos.</li>
+    </ul>
+
+    <p>Sim speed multiplies the day cycle — fast-forwarding the city also speeds the sun. Paused = sun freezes. The day/night phase position persists across reload via the save (also via a synchronous localStorage backup, so even a refresh within seconds of pausing restores the exact time).</p>
+
+    <p>Tap the <strong>Day / Night</strong> pill at the top of the HUD to manually jump to dawn or midnight (cycle continues forward from there).</p>
+
+    <!-- ============================================================ -->
+    <h2 id="themes">Themes</h2>
+
+    <p>Settings → Theme has a card grid of cosmetic theme packs. Tapping a card swaps every dominant visual surface in-place (no reload required).</p>
+
+    <ul>
+      <li><strong>Stock</strong>: the original launch look. Identity tint.</li>
+      <li><strong>Coastal Pastel</strong> (free): Mediterranean village. Whitewashed walls, cobalt + terracotta roofs, turquoise water, warm hazy sky, olive flora.</li>
+    </ul>
+
+    <p>Theme is a per-device preference — it persists in <code>localStorage</code>, not in the save. So three save slots all use the same active theme; switching theme doesn't disturb city data.</p>
+
+    <p>Future paid theme packs will plug into the same registry; the renderer drives every dominant surface from the theme object at call time.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="saves">Save slots</h2>
+
+    <p><strong>Three save slots</strong>. Open from the 🏙 Cities pill on the HUD (or from the More menu). Each slot persists independently.</p>
+
+    <h3>What persists</h3>
+    <ul>
+      <li>Every tile's state (terrain, road, zone, density, building, supplies, crime, district, etc.)</li>
+      <li>Treasury, tax sliders, monthly tick count.</li>
+      <li>Council state (seats, opponent, term, political capital, civic-action queue, beautification tier).</li>
+      <li>Milestones (highest pop, earned set).</li>
+      <li>Events (active modifiers, modal queue).</li>
+      <li>Stats history (240-month ring buffer for line graphs).</li>
+      <li>Achievements (28 lifetime).</li>
+      <li>Active bonds + lifetime issuance.</li>
+      <li>Districts + per-zone surtaxes.</li>
+      <li>Time-of-day position.</li>
+      <li>Active vehicles (cars + trucks + pending return trips) + their multi-stop routes.</li>
+      <li>City name, cheat toggles, last-played timestamp.</li>
+    </ul>
+
+    <h3>Autosave</h3>
+    <p>Every 30 sim seconds (and on visibility-change / page-hide / before-unload). IndexedDB; survives offline.</p>
+    <p>Optional <strong>cloud save</strong>: sign in via Settings → Account & data. Saves push to Supabase per-slot; on a new device, the cloud version takes over if it's newer than local.</p>
+
+    <h3>City code (portable export)</h3>
+    <p>Settings → Backup &amp; sync → <strong>Export city code</strong> outputs a single text blob that round-trips the entire current slot. <strong>Import city code</strong> overwrites the active slot. No merge — single snapshot pipeline.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="debug">Debug &amp; diagnostics</h2>
+
+    <p>Settings → Diagnostics has four debug actions for getting unstuck.</p>
+
+    <table>
+      <thead><tr><th>Button</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Clear visual ghosts</strong></td>
+          <td>Drops every cached world mesh and re-derives them from current tile state. Cures the "I bulldozed a bridge but the visual stuck around" class of bug.</td>
+        </tr>
+        <tr>
+          <td><strong>Restock all supplies</strong></td>
+          <td>Sets every commercial / mixed / big-box / warehouse tile's supplies to 100%. Use to reset the chain and observe where genuine backlogs reappear.</td>
+        </tr>
+        <tr>
+          <td><strong>Clear traffic</strong></td>
+          <td>Wipes every active car / truck / bus / pedestrian / shopper / ferry + per-tile trafficLoad counters. Use when the city has gridlocked into a stuck state. New vehicles spawn naturally on the next tick.</td>
+        </tr>
+        <tr>
+          <td><strong>Reset city</strong></td>
+          <td>Two-tap arming. Second tap wipes the current slot back to a fresh map. <strong>Destructive — no undo.</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Settings cheats</h3>
+    <p>Settings → Cheats (for playtesting):</p>
+    <ul>
+      <li><strong>Unlimited money</strong>: treasury auto-tops to $1B after every monthly settlement.</li>
+      <li><strong>Unlimited demand</strong>: RCI demand bars pinned at +1 every tick.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="strategy">Strategy tips</h2>
+
+    <div class="card tip">
+      <h4 class="tip-title">🚦 Manage traffic early</h4>
+      <p>Stop signs gridlock fast. The moment you hit Town (500 pop), start placing traffic lights at busy junctions — 2-3× the throughput of stop signs at a 4-way. Set bus stops on busy R blocks to convert resident car-trips into bus trips. Paint walking paths between adjacent R / C blocks so the path-coverage system suppresses 55% of short-distance car spawns.</p>
+    </div>
+
+    <div class="card tip">
+      <h4 class="tip-title">🏛 Watch the council, not just the polls</h4>
+      <p>The 2nd-most-angry faction runs against you — but the 4 NEXT-most-angry factions take council seats. A faction you've been ignoring can ban half your toolbar for an entire term. Read the Community Sentiment panel every few sim months and intervene with Endorse or Coalition before things tilt.</p>
+    </div>
+
+    <div class="card tip">
+      <h4 class="tip-title">📦 Plan industry geography</h4>
+      <p>Trucks A* to commercial. If your industry is on one side of the map and commercial on the other, every truck makes a long trip. Better: cluster industry near a warehouse, warehouse near commercial. Multi-stop trucks hit up to 3 stores per leg, so warehouses near retail clusters maximize throughput.</p>
+    </div>
+
+    <div class="card tip">
+      <h4 class="tip-title">⚖ Tax sweet-spot</h4>
+      <p>Aggressive low taxes maxes demand but starves city services. Aggressive high taxes maxes income but kills demand. Start at the middle; nudge ±2% based on the demand bars. When you blow the budget, raise rates briefly, then lower them once you're solvent — don't sit at high rates forever.</p>
+    </div>
+
+    <div class="card tip">
+      <h4 class="tip-title">🎨 Use Mayoral Override sparingly</h4>
+      <p>40 PC is a lot. Save Override for terms where the council banned something critical (e.g., banned <em>all</em> service buildings). Don't burn it for vanity. If the next council is even slightly friendly, just live with the cost multiplier.</p>
+    </div>
+
+    <div class="card tip">
+      <h4 class="tip-title">🌳 Don't skip parks</h4>
+      <p>Parks unlock L3 density within a 6-tile radius. Drop one in the centre of every R block before painting Medium zoning. Parks also raise the mood of <em>NIMBYs / Greenleaf / Working Families</em> simultaneously — one of the few buildings the whole council might agree on.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="glossary">Glossary</h2>
+
+    <dl>
+      <dt><strong>L1 / L2 / L3 / L4</strong></dt>
+      <dd>Density tiers. L1 = single-storey, L2 = mid-rise, L3 = high-rise, L4 = max (skyscraper / mega-density, where supported). Each tier has different resident / job capacities.</dd>
+
+      <dt><strong>RCI</strong></dt>
+      <dd>Residential / Commercial / Industrial. The three primary zone kinds + the three demand bars on the HUD.</dd>
+
+      <dt><strong>MU</strong></dt>
+      <dd>Mixed-use. A zone kind that contributes half residents + half commercial jobs on the same tile.</dd>
+
+      <dt><strong>PC</strong></dt>
+      <dd>Political Capital. The currency for civic actions (Endorse, Coalition, Photo-op, Mayoral Override). Capped at 50.</dd>
+
+      <dt><strong>Anchor (tile)</strong></dt>
+      <dd>For multi-tile builds (skyscraper, luxury, City Hall, Mayor's Mansion, etc.), the lex-smallest tile carries the building data; the others are marked with a flag bit. Bulldozing any tile of the footprint tears down the whole reservation.</dd>
+
+      <dt><strong>Path graph</strong></dt>
+      <dd>The pedestrian network — paths + all non-highway road tiles (sidewalks). Used by walkers, shoppers, and the path-coverage car-spawn suppressor.</dd>
+
+      <dt><strong>Stub</strong></dt>
+      <dd>A road tile with no connected neighbours (e.g., a single tap on grass without a drag). Renders as a small square; cars can't use it until you connect it.</dd>
+
+      <dt><strong>Import-sourced</strong></dt>
+      <dd>A commercial tile whose most recent supply delivery came from an outside-edge import truck. Takes a −25% revenue penalty until a domestic truck re-supplies it.</dd>
+
+      <dt><strong>Service radius</strong></dt>
+      <dd>The Chebyshev-distance reach of a service building. Parks: 6. Schools: 8. Hospitals / fire / police: 10. Power / water: city-wide.</dd>
+
+      <dt><strong>Effective beautification tier</strong></dt>
+      <dd>What the renderer actually paints. Equal to the council-elected tier when the budget can cover the monthly bill; drops to 'none' on shortfall.</dd>
+
+      <dt><strong>Adjacency</strong></dt>
+      <dd>For zoning: a tile must be 4-adjacent to a road to develop. For service coverage: Chebyshev (8-direction) distance.</dd>
+
+      <dt><strong>Stance matrix</strong></dt>
+      <dd>The per-faction opinion (in [−1, +1]) on every buildable. Drives the council's cost multipliers + ban gate.</dd>
+    </dl>
+
+    <div class="footer">
+      <p>This wiki is part of MQ City Builder. The full release log lives in <code>docs/PROGRESS.md</code> in the repo. Feedback: <a href="mailto:hello@mqcity.app">hello@mqcity.app</a>.</p>
+      <p><a href="../">← Back to the game</a> · <a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a></p>
+    </div>
+
+  </div>
+</body>
+</html>

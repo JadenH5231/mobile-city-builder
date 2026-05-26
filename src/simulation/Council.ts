@@ -986,4 +986,69 @@ export class Council {
     if (elected) this.beautificationTier = elected;
     if (effective) this.effectiveBeautificationTier = effective;
   }
+
+  /**
+   * Beta 1.6.26 — full council snapshot. Pre-1.6.26 only
+   * politicalCapital + beautification tier round-tripped through saves;
+   * the elected seats, the opponent, the running term counter, all the
+   * civic-action state (endorsement, coalition, photo-op cap, campaign
+   * boosts, override state), and the lastElectionMonth bookkeeping all
+   * reset on reload. That meant every refresh effectively wiped the
+   * current term and the next election ran fresh — totally un-sim-like.
+   */
+  serialize(): CouncilSnapshot {
+    return {
+      councillors: this.councillors.slice(),
+      opponent: this.opponent,
+      term: this.term,
+      lastElectionMonth: this.lastElectionMonth,
+      politicalCapital: this.politicalCapital,
+      endorsedFaction: this.endorsedFaction,
+      coalition: this.coalition ? { a: this.coalition.a, b: this.coalition.b } : null,
+      photoOpsThisTerm: Array.from(this.photoOpsThisTerm),
+      campaignBoost: Array.from(this.campaignBoost.entries()),
+      campaignHappinessDelta: Array.from(this.campaignHappinessDelta.entries()),
+      overridePending: this.overridePending,
+      overrideTerm: this.overrideTerm,
+      beautificationTier: this.beautificationTier,
+      effectiveBeautificationTier: this.effectiveBeautificationTier
+    };
+  }
+
+  restore(snap: CouncilSnapshot): void {
+    this.councillors = snap.councillors.slice();
+    this.opponent = snap.opponent;
+    this.term = snap.term;
+    this.lastElectionMonth = snap.lastElectionMonth;
+    this.politicalCapital = snap.politicalCapital;
+    this.endorsedFaction = snap.endorsedFaction;
+    this.coalition = snap.coalition ? { a: snap.coalition.a, b: snap.coalition.b } : null;
+    this.photoOpsThisTerm.clear();
+    for (const f of snap.photoOpsThisTerm) this.photoOpsThisTerm.add(f);
+    this.campaignBoost.clear();
+    for (const [f, v] of snap.campaignBoost) this.campaignBoost.set(f, v);
+    this.campaignHappinessDelta.clear();
+    for (const [f, v] of snap.campaignHappinessDelta) this.campaignHappinessDelta.set(f, v);
+    this.overridePending = snap.overridePending;
+    this.overrideTerm = snap.overrideTerm;
+    this.beautificationTier = snap.beautificationTier;
+    this.effectiveBeautificationTier = snap.effectiveBeautificationTier;
+  }
+}
+
+export interface CouncilSnapshot {
+  councillors: FactionId[];
+  opponent: FactionId | null;
+  term: number;
+  lastElectionMonth: number;
+  politicalCapital: number;
+  endorsedFaction: FactionId | null;
+  coalition: { a: FactionId; b: FactionId } | null;
+  photoOpsThisTerm: FactionId[];
+  campaignBoost: Array<[FactionId, number]>;
+  campaignHappinessDelta: Array<[FactionId, number]>;
+  overridePending: boolean;
+  overrideTerm: number;
+  beautificationTier: BeautificationTier;
+  effectiveBeautificationTier: BeautificationTier;
 }

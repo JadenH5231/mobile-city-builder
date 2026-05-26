@@ -40,7 +40,7 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * Older saves load identically since neither building can have been
  * placed in them. No structural schema change.
  */
-const SCHEMA = 31;
+const SCHEMA = 32;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -205,6 +205,15 @@ export interface SaveData {
    *  origin. Pre-31 saves load with empty vehicles (the old default;
    *  cars respawn from scratch). */
   vehiclesSnapshot?: import('../simulation/Vehicles').VehiclesSnapshot;
+  /** Full Council state (Beta 1.6.26 / schema 32+). Pre-32 only the
+   *  politicalCapital + beautification tier round-tripped, so the
+   *  elected councillors / opponent / term / civic-action state / last
+   *  election month all reset on reload — effectively wiping the
+   *  current term every refresh. The newer field carries everything;
+   *  the old flat fields stay as a back-compat fallback for pre-32
+   *  saves (applySave reads councilSnapshot if present, else falls
+   *  through to the legacy fields). */
+  councilSnapshot?: import('../simulation/Council').CouncilSnapshot;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -491,7 +500,11 @@ export function serialize(
     cityBoundsY1: grid.cityBoundsY1,
     // Council Beautification Budget (Alpha 4.0 / schema 20+).
     beautificationTier: council?.beautificationTier ?? 'none',
-    effectiveBeautificationTier: council?.effectiveBeautificationTier ?? 'none'
+    effectiveBeautificationTier: council?.effectiveBeautificationTier ?? 'none',
+    // Full council snapshot (Beta 1.6.26 / schema 32+). Carries the
+    // elected seats / opponent / term counter / civic-action state /
+    // lastElectionMonth so a refresh doesn't wipe the current term.
+    councilSnapshot: council?.serialize()
   };
 }
 
@@ -514,14 +527,21 @@ export function applySave(
     grid.resizeForLoad(data.width, data.height);
   }
   if (council) {
-    council.politicalCapital = data.politicalCapital ?? 0;
-    // Beautification Budget (Alpha 4.0 / schema 20+). Pre-4.0 saves
-    // default both to 'none' — those cities boot back into a
-    // pre-elected state and the next election picks a fresh tier.
-    council.restoreBeautification(
-      data.beautificationTier,
-      data.effectiveBeautificationTier
-    );
+    // Beta 1.6.26 — prefer the full councilSnapshot when present
+    // (schema 32+); falls through to the legacy flat fields for
+    // older saves.
+    if (data.councilSnapshot) {
+      council.restore(data.councilSnapshot);
+    } else {
+      council.politicalCapital = data.politicalCapital ?? 0;
+      // Beautification Budget (Alpha 4.0 / schema 20+). Pre-4.0 saves
+      // default both to 'none' — those cities boot back into a
+      // pre-elected state and the next election picks a fresh tier.
+      council.restoreBeautification(
+        data.beautificationTier,
+        data.effectiveBeautificationTier
+      );
+    }
   }
   if (milestones) {
     milestones.applyHighestPop(data.highestPop ?? 0);

@@ -1976,7 +1976,9 @@ export class Renderer {
     if (this.litWindowsMesh) {
       const mat = this.litWindowsMesh.material as MeshBasicMaterial;
       // Lit windows are subtle in twilight, full at deep night.
-      mat.opacity = nightOpacity * 0.85;
+      // Beta 1.6.8: bumped 0.85 → 0.95 so the high-density skyline
+      // reads as alive from across the map.
+      mat.opacity = nightOpacity * 0.95;
       this.litWindowsMesh.visible = nightOpacity > 0.01;
     }
   }
@@ -3180,6 +3182,34 @@ function buildLampGlowMesh(grid: Grid, texture: import('three').Texture): Mesh |
         break;
       }
     }
+    // Beta 1.6.8 — interior spillover halo under L3+ (high + max
+    // density) buildings of any zone. Reads as warm light leaking from
+    // the ground floor onto the sidewalk. Mid-density (L2) buildings
+    // stay halo-less so there's a clear visual hierarchy: low+medium
+    // density blocks are subdued at night, high-density blocks shine.
+    if (
+      t.density >= 3
+      && (t.zone === 'residential' || t.zone === 'commercial' || t.zone === 'mixed' || t.zone === 'industrial')
+      && !t.skyscraper
+      && !t.bridge
+    ) {
+      lamps.push({ cx, cz, y: baseY, r: 1.10 });
+    }
+    // Skyscrapers — single bigger halo per anchor tile that covers the
+    // 2×2 footprint. Higher radius (1.80) because the building is taller
+    // and the spill physically reaches further. Anchor logic mirrors
+    // buildLitWindowsMesh's skyscraper detection.
+    if (t.skyscraper && t.skyscraperStage >= 4) {
+      const cmp = (px: number, py: number): boolean => {
+        const p = grid.get(px, py);
+        return !!(p && p.skyscraper && p.zone === t.zone && p.skyscraperVariant === t.skyscraperVariant);
+      };
+      const isAnchor = !cmp(t.x - 1, t.y) && !cmp(t.x, t.y - 1) && !cmp(t.x - 1, t.y - 1)
+        && cmp(t.x + 1, t.y) && cmp(t.x, t.y + 1) && cmp(t.x + 1, t.y + 1);
+      if (isAnchor) {
+        lamps.push({ cx: t.x + 1.0, cz: t.y + 1.0, y: baseY, r: 1.80 });
+      }
+    }
   }
   if (lamps.length === 0) return null;
 
@@ -3342,23 +3372,184 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           }
         }
       }
+      // Beta 1.6.8 — skyscraper crown band + apex beacon. Pushes the
+      // skyline from "lit windows on tall boxes" to "iconic city silhouette."
+      //
+      // Crown band: a thin emissive ring near the body apex (below the
+      // crown geometry). Zone-coloured so a financial district reads
+      // cyan-blue while residential towers glow warm gold and mixed-use
+      // splits the difference. Width matches whichever body section the
+      // crown lives at (above or below the setback).
+      //
+      // Apex beacon: small red emissive cube (FAA aviation-warning
+      // colour) at the very top. Identifies tall structures from across
+      // the map and reads as a real-world skyline marker.
+      const crownColor = t.zone === 'commercial' ? 0x80e0ff
+        : t.zone === 'residential' ? 0xfff0a0
+        : 0xfff0d0; // mixed
+      const crownY = Math.max(0.30, design.height - 0.35);
+      const crownHalf = crownY < setbackY ? baseHalfW : towerHalfW;
+      if (crownHalf >= 0.18) {
+        const crownBand = new BoxGeometry(crownHalf * 2 - 0.04, 0.05, crownHalf * 2 - 0.04);
+        crownBand.translate(acx, crownY, acz);
+        // Inline push: replicate the pushLit pattern from
+        // addArchitecturalLights (we don't have the helper in scope here).
+        const cb = crownBand.getAttribute('position');
+        const cbIdx = crownBand.getIndex();
+        const cbR = ((crownColor >> 16) & 0xff) / 255;
+        const cbG = ((crownColor >> 8) & 0xff) / 255;
+        const cbB = (crownColor & 0xff) / 255;
+        const cbBase = v;
+        for (let i = 0; i < cb.count; i++) {
+          positions.push(cb.getX(i), cb.getY(i), cb.getZ(i));
+          colours.push(cbR, cbG, cbB);
+        }
+        if (cbIdx) {
+          for (let i = 0; i < cbIdx.count; i++) indices.push(cbBase + cbIdx.getX(i));
+        }
+        v += cb.count;
+        crownBand.dispose();
+      }
+      // Apex beacon — red aviation warning light at the tower top.
+      const beacon = new BoxGeometry(0.07, 0.07, 0.07);
+      beacon.translate(acx, design.height + 0.05, acz);
+      const bp = beacon.getAttribute('position');
+      const bIdx = beacon.getIndex();
+      const beaconBase = v;
+      for (let i = 0; i < bp.count; i++) {
+        positions.push(bp.getX(i), bp.getY(i), bp.getZ(i));
+        // 0xff4040 — bright red beacon. R=1.0, G=0.25, B=0.25.
+        colours.push(1.0, 0.25, 0.25);
+      }
+      if (bIdx) {
+        for (let i = 0; i < bIdx.count; i++) indices.push(beaconBase + bIdx.getX(i));
+      }
+      v += bp.count;
+      beacon.dispose();
       continue;
     }
     // Medium+ commercial / mixed-use — lit windows on the front face only.
     if (t.density >= 2 && (t.zone === 'commercial' || t.zone === 'mixed')) {
       // Approximate body height + width per density.
-      const h = t.density === 2 ? 0.78 : 1.35;
+      const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
       const halfW = 0.30;
-      // Two rows of windows on the south face.
-      const rows = t.density === 2 ? 2 : 4;
+      // Two rows of windows on the south face. Beta 1.6.8: L3+ extends
+      // to all four faces (offices catch evening + downtown light from
+      // any direction) and bumps to ~50% lit pattern for visibility.
+      const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
+      const allFaces = t.density >= 3;
+      const litMask = t.density >= 3 ? 1 : 2; // L3+ lit ~50%, L2 lit ~25%
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
         for (let col = 0; col < 3; col++) {
-          if (((row * 5 + col + palIdx) & 2) === 0) continue;
+          if (((row * 5 + col + palIdx) & litMask) === 0) continue;
           const offset = -halfW * 0.7 + col * (halfW * 0.7);
           addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
+          if (allFaces) {
+            addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
+            addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+            addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          }
         }
+      }
+      // Apex beacon for L3+ commercial / mixed.
+      if (t.density >= 3) {
+        const b = new BoxGeometry(0.06, 0.06, 0.06);
+        b.translate(cx, h + 0.04, cz);
+        const bp = b.getAttribute('position');
+        const bIdx = b.getIndex();
+        const beaconBase = v;
+        for (let i = 0; i < bp.count; i++) {
+          positions.push(bp.getX(i), bp.getY(i), bp.getZ(i));
+          colours.push(1.0, 0.25, 0.25);
+        }
+        if (bIdx) {
+          for (let i = 0; i < bIdx.count; i++) indices.push(beaconBase + bIdx.getX(i));
+        }
+        v += bp.count;
+        b.dispose();
+      }
+    }
+    // Beta 1.6.8 — Medium+ residential lit windows. Pre-1.6.8 only C/MU
+    // got window overlays; an apartment block on the same street stayed
+    // visually dark while the offices next door glowed. Now L2 and L3+
+    // residential emit warm-yellow windows that read as "people are
+    // home". Higher "lit" density (~70% on) than commercial because
+    // homes have lights on at night while offices are mostly empty.
+    if (t.density >= 2 && t.zone === 'residential' && !t.luxury && !t.skyscraper) {
+      const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
+      const halfW = 0.30;
+      const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
+      const allFaces = t.density >= 3;
+      for (let row = 0; row < rows; row++) {
+        const wy = 0.30 + row * 0.30;
+        if (wy > h - 0.10) break;
+        for (let col = 0; col < 3; col++) {
+          // Mostly-on pattern: skip ~30% (every 3rd-ish window is dark).
+          if (((row * 5 + col + palIdx) & 3) === 3) continue;
+          const offset = -halfW * 0.7 + col * (halfW * 0.7);
+          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
+          if (allFaces) {
+            addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
+            addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+            addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          }
+        }
+      }
+      // Apex beacon for L3+ residential.
+      if (t.density >= 3) {
+        const b = new BoxGeometry(0.06, 0.06, 0.06);
+        b.translate(cx, h + 0.04, cz);
+        const bp = b.getAttribute('position');
+        const bIdx = b.getIndex();
+        const beaconBase = v;
+        for (let i = 0; i < bp.count; i++) {
+          positions.push(bp.getX(i), bp.getY(i), bp.getZ(i));
+          colours.push(1.0, 0.25, 0.25);
+        }
+        if (bIdx) {
+          for (let i = 0; i < bIdx.count; i++) indices.push(beaconBase + bIdx.getX(i));
+        }
+        v += bp.count;
+        b.dispose();
+      }
+    }
+    // Beta 1.6.8 — Medium+ industrial lit windows. Sparse cool-white
+    // utility/security lighting on the front face. Reads as factory
+    // floor work lights or shipping-dock floods rather than home/office
+    // warmth. Industrial L3+ also gets the apex beacon so the skyline
+    // is consistent regardless of zone.
+    if (t.density >= 2 && t.zone === 'industrial' && !t.skyscraper) {
+      const INDUSTRIAL_LIT = 0xddeaff; // cool blue-white floodlight
+      const h = t.density === 2 ? 0.60 : t.density === 3 ? 0.85 : 1.05;
+      const halfW = 0.30;
+      const rows = t.density === 2 ? 1 : t.density === 3 ? 2 : 3;
+      for (let row = 0; row < rows; row++) {
+        const wy = 0.25 + row * 0.30;
+        if (wy > h - 0.05) break;
+        for (let col = 0; col < 2; col++) {
+          // Sparse — only ~30% on (security lighting feel).
+          if (((row * 7 + col + palIdx * 3) & 3) !== 0) continue;
+          const offset = -halfW * 0.4 + col * (halfW * 0.8);
+          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
+        }
+      }
+      if (t.density >= 3) {
+        const b = new BoxGeometry(0.06, 0.06, 0.06);
+        b.translate(cx, h + 0.04, cz);
+        const bp = b.getAttribute('position');
+        const bIdx = b.getIndex();
+        const beaconBase = v;
+        for (let i = 0; i < bp.count; i++) {
+          positions.push(bp.getX(i), bp.getY(i), bp.getZ(i));
+          colours.push(1.0, 0.25, 0.25);
+        }
+        if (bIdx) {
+          for (let i = 0; i < bIdx.count; i++) indices.push(beaconBase + bIdx.getX(i));
+        }
+        v += bp.count;
+        b.dispose();
       }
     }
     // Architectural decoratives (Alpha 4.2.1) — every plaza / fountain /

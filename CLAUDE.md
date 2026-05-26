@@ -345,6 +345,40 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.11 (Flip keyboard pan to genre-standard movement model)
+
+User feedback: "arrow keys are inverse make them to right arrow goes
+right up goes up down goes down."
+
+**Diagnosis** — Beta 1.6.9 wired WASD + arrow keys to `Camera.panBy`
+with the same sign convention pointer drag uses ("drag finger right
+slides world right under your finger, so camera target moves left").
+That's the right model for touch / mouse-drag, but for keyboard the
+genre-standard is the **movement model**: press right → camera moves
+right. Cities: Skylines, SimCity, Civilization all use this.
+
+So the keys felt inverted because the player's mental model was
+"WASD moves the camera in the key's direction" but the code was
+treating them as "WASD drags the world in the key's direction."
+The two produce opposite results.
+
+**Fix** — flip the dx/dy sign assignments in the rAF camera loop in
+`src/main.ts`. WASD AND arrow keys both flipped so they stay
+consistent with each other (asymmetric WASD-vs-arrow behaviour
+would be more confusing than either convention alone). Mouse drag
+panning is unchanged — it still uses the natural drag direction
+via `Input.ts`. Q / E zoom unchanged (Q out / E in was already
+correct).
+
+Net effect:
+- D / Right → camera moves right (was: left)
+- A / Left → camera moves left (was: right)
+- W / Up → camera moves up (was: down)
+- S / Down → camera moves down (was: up)
+
+SW cache `mq-city-v24` → `mq-city-v25`. Save schema unchanged. One-
+file diff (`src/main.ts`), four-line sign flip.
+
 ## Status: Beta 1.6.10 (Fix stale toolbar lock state on save load)
 
 User feedback: "the UI says certain things are locked when they're

@@ -651,12 +651,25 @@ function keyboardCameraLoop(): void {
   // Translation. Diagonal motion intentionally not normalised — the
   // small speed-up on WD/SD diagonals feels right because the camera
   // is isometric (diagonals trace shorter map distance per pixel).
+  //
+  // Beta 1.6.11 — sign convention is "press direction → camera moves
+  // that direction" (genre-standard for desktop builders: Cities:
+  // Skylines, SimCity, Civilization). The underlying `panBy(dx, dy)`
+  // method models a finger-drag — passing positive dx moves the
+  // camera target LEFT (because dragging finger right slides the
+  // world right, which is the camera looking further left).
+  //
+  // So for the keyboard's movement model we pass the NEGATIVE of the
+  // intuitive pixel delta: D / Right means "camera goes right", so
+  // we pass dx < 0 to panBy. Same logic for the vertical axis.
+  // Mouse-drag panning is unchanged — it still uses the natural
+  // drag direction via Input.ts.
   let dx = 0;
   let dy = 0;
-  if (pressedNavKeys.has('a') || pressedNavKeys.has('arrowleft')) dx -= PAN_PIXELS_PER_SEC * dt;
-  if (pressedNavKeys.has('d') || pressedNavKeys.has('arrowright')) dx += PAN_PIXELS_PER_SEC * dt;
-  if (pressedNavKeys.has('w') || pressedNavKeys.has('arrowup')) dy -= PAN_PIXELS_PER_SEC * dt;
-  if (pressedNavKeys.has('s') || pressedNavKeys.has('arrowdown')) dy += PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('a') || pressedNavKeys.has('arrowleft')) dx += PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('d') || pressedNavKeys.has('arrowright')) dx -= PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('w') || pressedNavKeys.has('arrowup')) dy += PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('s') || pressedNavKeys.has('arrowdown')) dy -= PAN_PIXELS_PER_SEC * dt;
   if (dx !== 0 || dy !== 0) {
     game.camera.panBy(dx, dy);
   }

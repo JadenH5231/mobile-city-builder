@@ -2457,8 +2457,15 @@ function emitDetailedTowerSection(
   // it so we don't z-fight on the surface.
   const innerW = w - 0.04;
   const innerD = dpth - 0.04;
-  const body = new BoxGeometry(innerW, height, innerD);
-  body.translate(cx, yBase + height / 2, cz);
+  // Beta 1.6.19 — shrink body height by 0.02 so its top face sits below
+  // any crown geometry (which sits at y ∈ [top - crownH, top] on every
+  // crownStyle). Pre-1.6.19 body's top face was at y=top, same as the
+  // crown's top face → coplanar → z-fighting that flickered with camera
+  // movement. The 0.02 reduction is invisible at gameplay zoom but
+  // gives the depth buffer a clear winner.
+  const bodyH = height - 0.02;
+  const body = new BoxGeometry(innerW, bodyH, innerD);
+  body.translate(cx, yBase + bodyH / 2, cz);
   out.push({ geom: body, color: d.bodyColor });
 
   // Window banding: thin slabs of glassColor ringing the body every

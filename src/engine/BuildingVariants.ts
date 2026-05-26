@@ -155,6 +155,49 @@ export function buildVariantParts(
 }
 
 /**
+ * World-space body footprint for the variant a given tile will actually
+ * render. Used by Renderer's lit-windows pass (Beta 1.6.17) so the
+ * night-time window quads sit exactly on the building's faces — pre-
+ * 1.6.17 they used a hardcoded halfW=0.30 that didn't match variant
+ * body dimensions, so windows floated 0.02–0.10 tile off small variants
+ * and hid 0.06+ inside large ones (especially L3+ where body.w grows
+ * to 0.80).
+ *
+ * Duplicates the same `pickVariant` / jitter / yaw resolution as
+ * `buildVariantParts` so a window placement query always agrees with the
+ * actual body that emitBody pushes for the same tile. Returns `null` for
+ * tiles that have no variant (zone=none, density=0, or no variants
+ * registered for the zone/density pair).
+ */
+export function getVariantBodyFootprint(
+  zone: Zone, density: number, tileX: number, tileY: number,
+  yawOverride?: number
+): { cx: number; cz: number; halfX: number; halfZ: number; height: number } | null {
+  if (zone === 'none' || density <= 0) return null;
+  const variants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
+  if (!variants || variants.length === 0) return null;
+  const variantIdx = pickVariant(tileX, tileY, variants.length);
+  const spec = variants[variantIdx]!;
+  // Same hash + jitter formula as buildVariantParts above.
+  const r = Math.abs(((tileX * 374761393) ^ (tileY * 668265263)) | 0);
+  const ox = ((r % 1000) / 1000 - 0.5) * 0.05;
+  const oz = (((r >> 10) % 1000) / 1000 - 0.5) * 0.05;
+  const yaw = yawOverride !== undefined
+    ? yawOverride
+    : ((r >> 20) & 3) * (Math.PI / 2);
+  // Quantised yaw: 0/2 → body's w runs along world-X; 1/3 → swapped.
+  const yawIdx = Math.round(yaw / (Math.PI / 2)) & 3;
+  const halfX = (yawIdx & 1) ? spec.body.d / 2 : spec.body.w / 2;
+  const halfZ = (yawIdx & 1) ? spec.body.w / 2 : spec.body.d / 2;
+  return {
+    cx: tileX + 0.5 + ox,
+    cz: tileY + 0.5 + oz,
+    halfX, halfZ,
+    height: spec.body.h
+  };
+}
+
+/**
  * Curb appeal — every zoned tile gets a ground pad, a walkway to the
  * "front" face (chosen by the body's yaw), and zone-appropriate accents:
  *   - Residential L1/L2: hedge along back, shrubs flanking entrance

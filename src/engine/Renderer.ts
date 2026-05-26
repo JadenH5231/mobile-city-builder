@@ -40,6 +40,7 @@ import {
   buildSkyscraperParts,
   buildVariantParts,
   getSkyscraperDesign,
+  getVariantBodyFootprint,
   type VariantPart
 } from './BuildingVariants';
 import {
@@ -3295,8 +3296,10 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
   };
 
   for (const t of grid.iter()) {
-    const cx = t.x + 0.5;
-    const cz = t.y + 0.5;
+    // Beta 1.6.17 — cx/cz no longer computed here; each developed-tile
+    // branch fetches its variant's actual centre (which includes the
+    // deterministic ±0.025 jitter) via getVariantBodyFootprint, so a
+    // shared tile-centre value would only mislead.
     const palIdx = (Math.abs(t.x * 73856093) ^ Math.abs(t.y * 19349663)) % PALETTE.length;
     const litColor = PALETTE[palIdx]!;
     // Skyscrapers — emit lit windows up the height of the tower at the
@@ -3433,32 +3436,41 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
     }
     // Medium+ commercial / mixed-use — lit windows on all four faces.
     if (t.density >= 2 && (t.zone === 'commercial' || t.zone === 'mixed')) {
-      // Approximate body height + width per density.
-      const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
-      const halfW = 0.30;
-      // Beta 1.6.12 — windows on every face. Pre-1.6.12 L2 emitted
-      // only the south face; with the Alpha 4.7 camera 90°-rotation
-      // those buildings went dark from N/E/W angles. Now all densities
-      // wrap windows around the body so the city stays alive from any
-      // camera yaw. L3+ stays denser (~50% lit) than L2 (~25% lit).
+      // Beta 1.6.17 — fetch the variant's actual world-space footprint
+      // and centre instead of using a hardcoded halfW + tile centre.
+      // Pre-1.6.17 used cx=t.x+0.5, halfW=0.30 — variant bodies range
+      // ~0.45..0.85 wide and have a ±0.025 deterministic jitter on the
+      // centre, so lit windows floated 0.02–0.10 off small bodies and
+      // hid inside the larger ones (L3 body.w grows to ~0.80).
+      const fp = getVariantBodyFootprint(t.zone, t.density, t.x, t.y);
+      if (!fp) continue;
+      const { cx: bcx, cz: bcz, halfX, halfZ, height: h } = fp;
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
       const litMask = t.density >= 3 ? 1 : 2; // L3+ lit ~50%, L2 lit ~25%
+      // 3 columns across each face — spread across the shorter of the
+      // two half-extents so the row reads as evenly spaced regardless
+      // of which face we're painting.
+      const colSpreadX = halfX * 0.7;
+      const colSpreadZ = halfZ * 0.7;
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
         for (let col = 0; col < 3; col++) {
           if (((row * 5 + col + palIdx) & litMask) === 0) continue;
-          const offset = -halfW * 0.7 + col * (halfW * 0.7);
-          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          // Windows on the +Z and -Z faces span across X — use halfX spread.
+          const offsetX = -colSpreadX + col * colSpreadX;
+          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.08, 0.14, 'X', litColor);
+          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.08, 0.14, 'X', litColor);
+          // Windows on the +X and -X faces span across Z — use halfZ spread.
+          const offsetZ = -colSpreadZ + col * colSpreadZ;
+          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
+          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ commercial / mixed.
       if (t.density >= 3) {
         const b = new BoxGeometry(0.06, 0.06, 0.06);
-        b.translate(cx, h + 0.04, cz);
+        b.translate(bcx, h + 0.04, bcz);
         const bp = b.getAttribute('position');
         const bIdx = b.getIndex();
         const beaconBase = v;
@@ -3480,29 +3492,31 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
     // home". Higher "lit" density (~70% on) than commercial because
     // homes have lights on at night while offices are mostly empty.
     if (t.density >= 2 && t.zone === 'residential' && !t.luxury && !t.skyscraper) {
-      const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
-      const halfW = 0.30;
+      // Beta 1.6.17 — fetch variant footprint (see commercial branch above).
+      const fp = getVariantBodyFootprint(t.zone, t.density, t.x, t.y);
+      if (!fp) continue;
+      const { cx: bcx, cz: bcz, halfX, halfZ, height: h } = fp;
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
-      // Beta 1.6.12 — windows on every face for all densities so the
-      // apartment block reads as lit-from-within from any camera yaw
-      // after a 90° rotation. The ~70% lit pattern stays consistent.
+      const colSpreadX = halfX * 0.7;
+      const colSpreadZ = halfZ * 0.7;
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
         for (let col = 0; col < 3; col++) {
           // Mostly-on pattern: skip ~30% (every 3rd-ish window is dark).
           if (((row * 5 + col + palIdx) & 3) === 3) continue;
-          const offset = -halfW * 0.7 + col * (halfW * 0.7);
-          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          const offsetX = -colSpreadX + col * colSpreadX;
+          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.08, 0.14, 'X', litColor);
+          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.08, 0.14, 'X', litColor);
+          const offsetZ = -colSpreadZ + col * colSpreadZ;
+          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
+          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ residential.
       if (t.density >= 3) {
         const b = new BoxGeometry(0.06, 0.06, 0.06);
-        b.translate(cx, h + 0.04, cz);
+        b.translate(bcx, h + 0.04, bcz);
         const bp = b.getAttribute('position');
         const bIdx = b.getIndex();
         const beaconBase = v;
@@ -3524,30 +3538,32 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
     // is consistent regardless of zone.
     if (t.density >= 2 && t.zone === 'industrial' && !t.skyscraper) {
       const INDUSTRIAL_LIT = 0xddeaff; // cool blue-white floodlight
-      const h = t.density === 2 ? 0.60 : t.density === 3 ? 0.85 : 1.05;
-      const halfW = 0.30;
+      // Beta 1.6.17 — fetch variant footprint (see commercial branch above).
+      const fp = getVariantBodyFootprint(t.zone, t.density, t.x, t.y);
+      if (!fp) continue;
+      const { cx: bcx, cz: bcz, halfX, halfZ, height: h } = fp;
       const rows = t.density === 2 ? 1 : t.density === 3 ? 2 : 3;
-      // Beta 1.6.12 — wrap security floodlights around all four faces.
-      // Pre-1.6.12 only the south face had any lights; with the 360°
-      // rotateable camera the back / sides of factories looked dead.
-      // Pattern stays sparse (~30%) on each face — these are utility
-      // lights, not full window banks.
+      // Sparser column spread (industrial security lights aren't window
+      // banks — keep them clustered around the entrance area).
+      const colSpreadX = halfX * 0.8;
+      const colSpreadZ = halfZ * 0.8;
       for (let row = 0; row < rows; row++) {
         const wy = 0.25 + row * 0.30;
         if (wy > h - 0.05) break;
         for (let col = 0; col < 2; col++) {
           // Sparse — only ~30% on (security lighting feel).
           if (((row * 7 + col + palIdx * 3) & 3) !== 0) continue;
-          const offset = -halfW * 0.4 + col * (halfW * 0.8);
-          addWindow(cx + offset, wy, cz + halfW + 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
-          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
-          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
-          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
+          const offsetX = -colSpreadX * 0.5 + col * colSpreadX;
+          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
+          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
+          const offsetZ = -colSpreadZ * 0.5 + col * colSpreadZ;
+          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
+          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
         }
       }
       if (t.density >= 3) {
         const b = new BoxGeometry(0.06, 0.06, 0.06);
-        b.translate(cx, h + 0.04, cz);
+        b.translate(bcx, h + 0.04, bcz);
         const bp = b.getAttribute('position');
         const bIdx = b.getIndex();
         const beaconBase = v;

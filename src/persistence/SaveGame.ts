@@ -40,7 +40,7 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * Older saves load identically since neither building can have been
  * placed in them. No structural schema change.
  */
-const SCHEMA = 29;
+const SCHEMA = 30;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -192,6 +192,12 @@ export interface SaveData {
   /** Effective beautification tier last month (may differ from elected
    *  if the bill defunded). v19-and-earlier saves default to 'none'. */
   effectiveBeautificationTier?: import('../types').BeautificationTier;
+  /** Day/night cycle position in [0, 1] (Beta 1.6.21 / schema 30+). 0 =
+   *  midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk. Persisted so a paused
+   *  city restores at the exact time-of-day the player left it. Pre-30
+   *  saves load with the default 0.40 (mid-afternoon) — the same value a
+   *  fresh game starts on. */
+  timeOfDay?: number;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -315,13 +321,16 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }, timeOfDay?: number): Promise<void> {
     const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds, districts);
     if (cityName !== undefined) data.cityName = cityName;
     if (cheats) {
       data.cheatUnlimitedMoney = cheats.unlimitedMoney;
       data.cheatUnlimitedDemand = cheats.unlimitedDemand;
     }
+    // Beta 1.6.21 — persist day/night cycle position so a paused city
+    // restores at the exact time-of-day the player left it on reload.
+    if (timeOfDay !== undefined) data.timeOfDay = timeOfDay;
     data.lastPlayedISO = new Date().toISOString();
     // Fire-and-forget cloud push (Alpha 4.25). Any network/auth error is
     // logged inside CloudSaveStore; we don't want a flaky connection to

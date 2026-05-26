@@ -604,9 +604,17 @@ export class Grid {
     const key = this.edgeKey(ax, ay, bx, by);
     if (on) {
       // Always (re)set tier on both endpoints — paint always wins.
-      this.setRoad(ax, ay, true, type);
-      this.setRoad(bx, by, true, type);
-      if (this.roadEdges.has(key)) return false;
+      // Beta 1.6.16 — capture each setRoad's return value so a tier
+      // upgrade on an already-connected pair (e.g. painting avenue over
+      // an existing local edge) propagates "state changed" upward. Pre-
+      // 1.6.16 this short-circuited to `return false` whenever the edge
+      // bit was already set, so the caller's roadsChanged flag stayed
+      // false and the renderer never rebuilt — players saw their freshly
+      // upgraded tier only after some unrelated next placement triggered
+      // a redraw.
+      const aChanged = this.setRoad(ax, ay, true, type);
+      const bChanged = this.setRoad(bx, by, true, type);
+      if (this.roadEdges.has(key)) return aChanged || bChanged;
       this.roadEdges.add(key);
       return true;
     } else {
@@ -680,9 +688,22 @@ export class Grid {
     const ta = this.get(ax, ay);
     const tb = this.get(bx, by);
     if (on) {
-      if (ta) { ta.bridgeRoad = true; ta.bridgeRoadType = type; }
-      if (tb) { tb.bridgeRoad = true; tb.bridgeRoadType = type; }
-      if (this.bridgeRoadEdges.has(key)) return false;
+      // Beta 1.6.16 — track per-endpoint tier change so a tier upgrade on
+      // an already-connected bridge edge still reports "state changed"
+      // and the caller rebuilds the bridge-road mesh (same fix as
+      // setRoadEdge above).
+      let tierChanged = false;
+      if (ta) {
+        if (!ta.bridgeRoad || ta.bridgeRoadType !== type) tierChanged = true;
+        ta.bridgeRoad = true;
+        ta.bridgeRoadType = type;
+      }
+      if (tb) {
+        if (!tb.bridgeRoad || tb.bridgeRoadType !== type) tierChanged = true;
+        tb.bridgeRoad = true;
+        tb.bridgeRoadType = type;
+      }
+      if (this.bridgeRoadEdges.has(key)) return tierChanged;
       this.bridgeRoadEdges.add(key);
       return true;
     } else {

@@ -368,8 +368,9 @@ export class Game {
    *  relative to in-game time, not wall-clock time — most importantly
    *  the truck `parkedUntil` and pendingReturns `readyAt` timers, which
    *  previously kept advancing during pause and caused every parked
-   *  truck to flush home at once on resume. */
-  private simNowMs = 0;
+   *  truck to flush home at once on resume. Beta 1.6.25 — readable so
+   *  SaveGame can re-base sim-clock-relative timers across reload. */
+  simNowMs = 0;
 
   // Fixed-rate sim systems run inside `startLoop` via an accumulator clock.
   // Population must tick before Development since the latter reads demand;
@@ -602,6 +603,14 @@ export class Game {
           // Beta 1.6.21 — restore the day/night cycle position. Pre-30
           // saves load with the class default (0.40, mid-afternoon).
           if (typeof data.timeOfDay === 'number') this.timeOfDay = data.timeOfDay;
+          // Beta 1.6.25 — restore active vehicles + pending-return
+          // queue. simNowMs is still 0 here (fresh session); the
+          // restore call re-bases parkedUntil / readyAt against it.
+          // Cars whose pathTiles cross a now-bulldozed road are
+          // silently dropped — better than spawning ghosts on grass.
+          if (data.vehiclesSnapshot) {
+            this.vehicles.restore(data.vehiclesSnapshot, this.grid, this.simNowMs);
+          }
           // Beta 1.6.10 — re-derive toolbar lock + ban state after restore.
           // The original `refreshToolbarLocks` / `refreshToolbarBans` calls
           // above ran BEFORE `applySave`, so they used the empty starter
@@ -1620,7 +1629,8 @@ export class Game {
       this.grid, this.economy, this.council, this.milestones, this.events,
       this.stats, this.achievements, this.bonds, this.cityName, this.districts,
       { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand },
-      this.timeOfDay
+      this.timeOfDay,
+      this.vehicles, this.simNowMs
     ).catch(() => {});
   }
 

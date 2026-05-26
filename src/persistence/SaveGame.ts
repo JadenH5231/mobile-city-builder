@@ -40,7 +40,7 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * Older saves load identically since neither building can have been
  * placed in them. No structural schema change.
  */
-const SCHEMA = 30;
+const SCHEMA = 31;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -198,6 +198,13 @@ export interface SaveData {
    *  saves load with the default 0.40 (mid-afternoon) — the same value a
    *  fresh game starts on. */
   timeOfDay?: number;
+  /** Active vehicles + pending-return queue (Beta 1.6.25 / schema 31+).
+   *  Persisted so a refresh keeps cars exactly where they were, which
+   *  is critical for the supply chain — a truck halfway to a store on
+   *  save needs to finish that delivery on reload, not respawn from
+   *  origin. Pre-31 saves load with empty vehicles (the old default;
+   *  cars respawn from scratch). */
+  vehiclesSnapshot?: import('../simulation/Vehicles').VehiclesSnapshot;
 }
 
 /** Slim slot-summary shape rendered in the slot picker. */
@@ -321,7 +328,7 @@ export class SaveGame {
     });
   }
 
-  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }, timeOfDay?: number): Promise<void> {
+  async save(grid: Grid, economy: Economy, council?: Council, milestones?: Milestones, events?: Events, stats?: Stats, achievements?: Achievements, bonds?: Bonds, cityName?: string, districts?: Districts, cheats?: { unlimitedMoney: boolean; unlimitedDemand: boolean }, timeOfDay?: number, vehicles?: import('../simulation/Vehicles').Vehicles, simNowMs?: number): Promise<void> {
     const data = serialize(grid, economy, council, milestones, events, stats, achievements, bonds, districts);
     if (cityName !== undefined) data.cityName = cityName;
     if (cheats) {
@@ -331,6 +338,12 @@ export class SaveGame {
     // Beta 1.6.21 — persist day/night cycle position so a paused city
     // restores at the exact time-of-day the player left it on reload.
     if (timeOfDay !== undefined) data.timeOfDay = timeOfDay;
+    // Beta 1.6.25 — snapshot active cars + pending-return queue so the
+    // supply chain truly survives a refresh. Trucks mid-delivery
+    // finish their delivery instead of respawning from origin.
+    if (vehicles && typeof simNowMs === 'number') {
+      data.vehiclesSnapshot = vehicles.serialize(simNowMs);
+    }
     data.lastPlayedISO = new Date().toISOString();
     // Fire-and-forget cloud push (Alpha 4.25). Any network/auth error is
     // logged inside CloudSaveStore; we don't want a flaky connection to

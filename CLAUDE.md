@@ -345,6 +345,81 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.9 (WASD mobility + desktop keyboard shortcuts)
+
+User feedback: "add wasd mobility and some basic keyboard shortcuts
+to make the game a little more desktop optimized."
+
+The game was mobile-first by design (pointer events, touch + pinch),
+but on desktop the navigation experience was middle-mouse-drag-only.
+Adding keyboard shortcuts brings it to parity with the genre baseline
+without touching the mobile path.
+
+**Shortcuts implemented** (all in `src/main.ts`):
+
+| Key                  | Action                                              |
+|----------------------|-----------------------------------------------------|
+| **W / A / S / D**    | Pan camera (continuous while held)                  |
+| **Arrow keys**       | Pan camera (alias for WASD)                         |
+| **Q / E**            | Zoom out / in (continuous while held)               |
+| **Space**            | Pause / resume                                      |
+| **0 / 1 / 2 / 3**    | Set sim speed (0 = pause, 1× / 2× / 3×)             |
+| **Z**                | Undo (also accepts Ctrl+Z / Cmd+Z)                  |
+| **Esc**              | Drop back to Pan tool (cancels active paint)        |
+| **R**                | Rotate armed monument (pre-existing Alpha 4.21)     |
+
+**Implementation pattern:**
+
+- Continuous-motion keys (WASD / Arrows / Q / E) are tracked in a
+  module-scoped `Set<string>`. Added on `keydown`, removed on `keyup`.
+- A small `rAF` loop polls the set each frame and calls
+  `game.camera.panBy(dx, dy)` / `zoomAt(factor, halfW, halfH)`.
+  `dt` clamped to 50ms so a stutter doesn't produce a giant jump.
+- One-shot keys (Space, 0–3, Z, Esc, R) live in the existing
+  `window.keydown` handler. Auto-repeat suppressed so holding Space
+  doesn't toggle pause every frame.
+- All shortcuts skip when an input / textarea / contenteditable is
+  focused (city-name field, import-code paste, etc.) — typing isn't
+  hijacked.
+- `window.blur` and `visibilitychange` events clear all held keys so
+  the camera doesn't drift forever if the user Cmd-Tabs away mid-pan.
+- `SPEED_GLYPHS` + `renderSpeedHud` hoisted to module scope so the
+  HUD pill glyph stays in sync with keyboard-driven speed changes.
+
+**Speed tuning:**
+- `PAN_PIXELS_PER_SEC = 700` — covers ~half a viewport per second at
+  default zoom; feels natural without being twitchy. Diagonal motion
+  intentionally not normalised — the slight speed-up on WD/SD feels
+  right under iso projection (diagonals trace shorter map distance).
+- `ZOOM_FACTOR_PER_SEC = 1.8` — full range in ~2.5 sec of held key.
+
+**Anchor for zoom:**
+- Wheel-zoom stays cursor-anchored (unchanged).
+- Q/E keyboard zoom anchors on viewport centre — there's no cursor
+  position to anchor on for a keyboard event. Mouse-zoom remains the
+  precise-anchor path; keyboard is the cruise-zoom path.
+
+**What's intentionally left out:**
+- No camera 90° rotation shortcuts (`<` / `>`) — the HUD rotate
+  button stays the only entry. Adding more risks key bingo.
+- No tool-select number keys — the toolbar is grouped with popovers,
+  so 1–9 mapping to specific tools would be brittle and confusing.
+  1–3 are taken by sim speed.
+- No `?` help overlay — shortcuts documented here and in the next
+  README sweep. Player discovery is via WASD as the universal
+  primitive every player will try.
+
+When extending the keyboard model in the future (e.g. tool shortcuts,
+camera rotation keys, multi-modifier combos), the **principle from
+this release**: continuous-motion keys go in the rAF loop with a
+held-state `Set`; one-shot keys go in the `keydown` handler with
+`e.repeat` guard; always skip via `isTypingInInput()` so input
+fields stay typeable.
+
+SW cache `mq-city-v22` → `mq-city-v23`. Save schema unchanged. No
+mobile behaviour changes — touch / pinch / pointer paths are
+byte-equivalent. Bundle <1 KB diff.
+
 ## Status: Beta 1.6.8 (High + max density buildings come alive at night)
 
 User feedback: "the high and Max density buildings need to give some

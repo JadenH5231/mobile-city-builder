@@ -452,24 +452,30 @@ if (districtsBtn) {
 // Glyphs read at-a-glance even in a 12px pill: triangle for play, double
 // for 2x, triple for 3x, the standard pause bars for 0.
 const speedBtn = document.getElementById('hud-speed') as HTMLButtonElement | null;
+// Hoisted to module scope (Beta 1.6.9) so keyboard shortcuts that mutate
+// game.simSpeed (Space / 0 / 1 / 2 / 3) can refresh the HUD pill glyph
+// in lock-step. The local `renderSpeed` closure used to live inside the
+// `if (speedBtn)` block; pulling it out costs nothing and avoids three
+// duplicated SPEED_GLYPHS tables across handlers.
+const SPEED_GLYPHS: Record<0 | 1 | 2 | 3, string> = {
+  0: '⏸',
+  1: '▶',
+  2: '▶▶',
+  3: '▶▶▶'
+};
+const renderSpeedHud = (): void => {
+  if (!speedBtn) return;
+  speedBtn.textContent = SPEED_GLYPHS[game.simSpeed];
+  speedBtn.setAttribute('aria-label',
+    game.simSpeed === 0 ? 'Resume simulation' : `Sim speed ${game.simSpeed}× — tap to cycle`);
+  speedBtn.classList.toggle('speed--paused', game.simSpeed === 0);
+};
 if (speedBtn) {
-  const SPEED_GLYPHS: Record<0 | 1 | 2 | 3, string> = {
-    0: '⏸',
-    1: '▶',
-    2: '▶▶',
-    3: '▶▶▶'
-  };
-  const renderSpeed = (): void => {
-    speedBtn.textContent = SPEED_GLYPHS[game.simSpeed];
-    speedBtn.setAttribute('aria-label',
-      game.simSpeed === 0 ? 'Resume simulation' : `Sim speed ${game.simSpeed}× — tap to cycle`);
-    speedBtn.classList.toggle('speed--paused', game.simSpeed === 0);
-  };
-  renderSpeed();
+  renderSpeedHud();
   speedBtn.addEventListener('click', () => {
     const next = game.simSpeed === 1 ? 2 : game.simSpeed === 2 ? 3 : game.simSpeed === 3 ? 0 : 1;
     game.simSpeed = next as 0 | 1 | 2 | 3;
-    renderSpeed();
+    renderSpeedHud();
   });
 }
 
@@ -539,18 +545,138 @@ game.onPendingMonumentChange = (state) => {
   if (state) rotateMonumentBtn.classList.remove('hidden');
   else rotateMonumentBtn.classList.add('hidden');
 };
+// Beta 1.6.9 — desktop keyboard shortcuts.
+//
+// Pan with WASD / Arrows, zoom with Q / E (continuous while held).
+// One-shot shortcuts:
+//   Space — pause / resume
+//   1 / 2 / 3 — set sim speed (1× / 2× / 3×); 0 — pause
+//   Z — undo (also accepts Ctrl+Z / Cmd+Z)
+//   R — rotate armed monument (Alpha 4.21 — preserved)
+//   Esc — exit paint tool (back to Pan)
+//
+// We don't gate on sim speed — pan and zoom work even when paused, so
+// the player can compose photo-mode shots without resuming sim.
+// All shortcuts are skipped when an input/textarea/contenteditable is
+// focused so typing into the city-name field or import-code textarea
+// isn't hijacked.
+
+const pressedNavKeys = new Set<string>();
+const isTypingInInput = (): boolean => {
+  const a = document.activeElement as HTMLElement | null;
+  if (!a) return false;
+  if (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') return true;
+  if (a.isContentEditable) return true;
+  return false;
+};
+const NAV_KEYS = new Set([
+  'w', 'a', 's', 'd', 'q', 'e',
+  'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
+]);
+
 window.addEventListener('keydown', (e) => {
-  // R = rotate the armed monument. Skip when typing in an input
-  // (e.g. city name field on the budget panel) so the player can
-  // type "r" without triggering a rotation.
+  if (isTypingInInput()) return;
+  const k = e.key.toLowerCase();
+  // Continuous-movement keys — record and let the rAF loop drive motion.
+  // We add to the set on every event (even auto-repeat) so a stuck-down
+  // state stays stuck even if browser key-repeat fires extra keydowns.
+  if (NAV_KEYS.has(k)) {
+    pressedNavKeys.add(k);
+    e.preventDefault();
+    return;
+  }
+  // Below: one-shot keys. Ignore auto-repeat so holding Space doesn't
+  // toggle pause every frame.
   if (e.repeat) return;
-  const target = e.target as HTMLElement | null;
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-  if (e.key === 'r' || e.key === 'R') {
+  // Pause / resume (Space). Toggles sim speed between 0 and the last
+  // non-zero value the player had. We don't try to remember "what was
+  // the speed before pause" — most players want plain 1× after resume.
+  if (k === ' ' || k === 'spacebar') {
+    e.preventDefault();
+    game.simSpeed = game.simSpeed === 0 ? 1 : 0;
+    renderSpeedHud();
+    return;
+  }
+  // Direct sim speed select: 0 pause, 1 / 2 / 3 = speed multiplier.
+  if (k === '0') { e.preventDefault(); game.simSpeed = 0; renderSpeedHud(); return; }
+  if (k === '1') { e.preventDefault(); game.simSpeed = 1; renderSpeedHud(); return; }
+  if (k === '2') { e.preventDefault(); game.simSpeed = 2; renderSpeedHud(); return; }
+  if (k === '3') { e.preventDefault(); game.simSpeed = 3; renderSpeedHud(); return; }
+  // Undo. Plain Z or Cmd/Ctrl+Z; Shift+Z reserved for future redo.
+  if (k === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    if (game.canUndo()) game.undo();
+    return;
+  }
+  // Escape — drop back to Pan tool so the player can navigate without
+  // a paint stroke triggering. (Panels handle their own close affordances.)
+  if (k === 'escape') {
+    e.preventDefault();
+    game.setTool('pan');
+    return;
+  }
+  // R — rotate the armed monument (Alpha 4.21).
+  if (k === 'r') {
     e.preventDefault();
     game.cyclePendingRotation();
+    return;
   }
 });
+
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (NAV_KEYS.has(k)) {
+    pressedNavKeys.delete(k);
+  }
+});
+
+// Window-blur / page-hidden — clear all held keys so the camera doesn't
+// keep drifting if the user Cmd-Tabs away mid-pan and never sends the
+// keyup that would otherwise stop it.
+window.addEventListener('blur', () => pressedNavKeys.clear());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pressedNavKeys.clear();
+});
+
+// Continuous-motion rAF loop. Polls pressedNavKeys each frame and
+// applies camera deltas. dt clamped to 50ms so a stutter doesn't
+// produce a giant pan jump on the next frame.
+const PAN_PIXELS_PER_SEC = 700;
+const ZOOM_FACTOR_PER_SEC = 1.8; // continuous zoom (Q out / E in)
+let lastKeyboardCameraT = performance.now();
+function keyboardCameraLoop(): void {
+  const now = performance.now();
+  const dt = Math.min(50, now - lastKeyboardCameraT) / 1000;
+  lastKeyboardCameraT = now;
+  // Translation. Diagonal motion intentionally not normalised — the
+  // small speed-up on WD/SD diagonals feels right because the camera
+  // is isometric (diagonals trace shorter map distance per pixel).
+  let dx = 0;
+  let dy = 0;
+  if (pressedNavKeys.has('a') || pressedNavKeys.has('arrowleft')) dx -= PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('d') || pressedNavKeys.has('arrowright')) dx += PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('w') || pressedNavKeys.has('arrowup')) dy -= PAN_PIXELS_PER_SEC * dt;
+  if (pressedNavKeys.has('s') || pressedNavKeys.has('arrowdown')) dy += PAN_PIXELS_PER_SEC * dt;
+  if (dx !== 0 || dy !== 0) {
+    game.camera.panBy(dx, dy);
+  }
+  // Zoom — anchored on the viewport centre (we don't have a cursor
+  // position for keyboard zoom). Q zooms out, E zooms in — matches
+  // the "Q is back / E is forward" convention from many isometric
+  // builders. Wheel-zoom keeps its cursor-anchored behaviour.
+  if (pressedNavKeys.has('q') || pressedNavKeys.has('e')) {
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+    if (pressedNavKeys.has('q')) {
+      game.camera.zoomAt(Math.pow(1 / ZOOM_FACTOR_PER_SEC, dt), halfW, halfH);
+    }
+    if (pressedNavKeys.has('e')) {
+      game.camera.zoomAt(Math.pow(ZOOM_FACTOR_PER_SEC, dt), halfW, halfH);
+    }
+  }
+  requestAnimationFrame(keyboardCameraLoop);
+}
+requestAnimationFrame(keyboardCameraLoop);
 
 // Random / crisis events modal (Alpha 2.9). Game queues events;
 // EventModal handles display, severity styling, queue ordering, and

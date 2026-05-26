@@ -356,6 +356,14 @@ export class Game {
    *  1×. The renderer additionally warps the phase so ~70% of the cycle
    *  is day and ~30% is night — see Renderer.applyTimeOfDay. */
   static readonly DAY_SECONDS = 720;
+  /** Sim-time clock (Beta 1.6.22). Advances by `simDt` each frame, so it
+   *  freezes when `simSpeed === 0` and runs 2×/3× during fast-forward.
+   *  Replaces `performance.now()` for any deadline that should be
+   *  relative to in-game time, not wall-clock time — most importantly
+   *  the truck `parkedUntil` and pendingReturns `readyAt` timers, which
+   *  previously kept advancing during pause and caused every parked
+   *  truck to flush home at once on resume. */
+  private simNowMs = 0;
 
   // Fixed-rate sim systems run inside `startLoop` via an accumulator clock.
   // Population must tick before Development since the latter reads demand;
@@ -1027,6 +1035,12 @@ export class Game {
       // proportionally faster on screen too.
       const simDt = dtMs * this.simSpeed;
       this.simAccumulatorMs += simDt;
+      // Beta 1.6.22 — sim-clock advances with simDt so vehicle parking
+      // timers and pending-return timers don't keep advancing during
+      // pause. Pre-1.6.22 used performance.now() which made every
+      // parked truck "expire" during pause; on resume they all flushed
+      // home at once.
+      this.simNowMs += simDt;
       let steps = 0;
       let buildingsDirty = false;
       while (this.simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS_PER_FRAME) {
@@ -1246,7 +1260,7 @@ export class Game {
           // purely decorative.
           this.parkingStrictness === 'off' ? undefined : this.parking
         );
-        this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder);
+        this.vehicles.scheduleReturnTrips(this.grid, this.roadGraph, this.pathfinder, this.simNowMs);
         // Tourist arrivals (Alpha 4.14) — only fire when the city is
         // connected to the outside world (any edge road tile exists).
         this.vehicles.spawnTouristTick(
@@ -1314,7 +1328,10 @@ export class Game {
         // Beta 1.6 — pass the supply chain so truck arrivals refill
         // commercial supplies / warehouse buffers / apply import
         // penalties on the destination tile.
-        this.supplyChain
+        this.supplyChain,
+        // Beta 1.6.22 — sim-clock for parking / return timers so pause
+        // freezes them properly.
+        this.simNowMs
       );
       // Beta 1.3.4 (Phase 2.1) — tick shoppers each render frame.
       // Cheap O(N) where N is current shoppers list (capped at MAX_SHOPPERS).
@@ -1376,12 +1393,7 @@ export class Game {
       this.autosaveAccumMs += dtMs;
       if (this.autosaveAccumMs >= AUTOSAVE_MS && !this.resetting) {
         this.autosaveAccumMs = 0;
-        void this.saveGame.save(
-          this.grid, this.economy, this.council, this.milestones, this.events,
-          this.stats, this.achievements, this.bonds, this.cityName, this.districts,
-          { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand },
-          this.timeOfDay
-        ).catch(() => {});
+        this.flushSave();
       }
 
       for (const cb of this.tickCallbacks) cb(dt);
@@ -1527,6 +1539,23 @@ export class Game {
       importSource: t.importSource
     };
     this.panel.show({ ...baseInfo, reasons: diagnoseTile(baseInfo) });
+  }
+
+  /** Beta 1.6.22 — immediate (fire-and-forget) flush of the autosave.
+   *  Called from the autosave timer at AUTOSAVE_MS cadence, AND from
+   *  main.ts on visibilitychange / pagehide so the player's paused
+   *  state — most importantly the time-of-day position — is captured
+   *  before the tab is backgrounded. Pre-1.6.22 the only save trigger
+   *  was the 30s timer, so a player who paused and refreshed within
+   *  30s lost their time-of-day. */
+  flushSave(): void {
+    if (this.resetting) return;
+    void this.saveGame.save(
+      this.grid, this.economy, this.council, this.milestones, this.events,
+      this.stats, this.achievements, this.bonds, this.cityName, this.districts,
+      { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand },
+      this.timeOfDay
+    ).catch(() => {});
   }
 
   // --- Undo --------------------------------------------------------------
@@ -2147,13 +2176,19 @@ export class Game {
     this.importTruckAccumulator -= 1;
 
     if (!this.globalMarket.isConnected()) return;
-    // Find the most supply-starved commercial tile.
-    let worst: { x: number; y: number; supplies: number } | null = null;
+    // Beta 1.6.22 — find the most supply-starved tile across BOTH
+    // commercial consumers AND warehouses. Warehouses can now receive
+    // imports too, so a city with no industry but with warehouses can
+    // still maintain a buffer that ships outward via I→C trucks.
+    // Whichever tile is most starved gets the next import truck.
+    let worst: { x: number; y: number; isWarehouse: boolean; supplies: number } | null = null;
     for (const t of this.grid.iter()) {
-      if (!this.supplyChain.isCommercialConsumer(t)) continue;
+      const isCommercial = this.supplyChain.isCommercialConsumer(t);
+      const isWarehouse = t.building === 'warehouse';
+      if (!isCommercial && !isWarehouse) continue;
       if (t.supplies >= CRITICAL_SUPPLY) continue;
       if (!worst || t.supplies < worst.supplies) {
-        worst = { x: t.x, y: t.y, supplies: t.supplies };
+        worst = { x: t.x, y: t.y, isWarehouse, supplies: t.supplies };
       }
     }
     if (!worst) return;
@@ -2170,7 +2205,8 @@ export class Game {
     const edgeRoad = edges[Math.floor(Math.random() * edges.length)]!;
     this.vehicles.spawnImportTruck(
       this.grid, this.roadGraph, this.pathfinder, edgeRoad,
-      { x: worst.x, y: worst.y }
+      { x: worst.x, y: worst.y },
+      worst.isWarehouse ? 'import-to-warehouse' : 'import'
     );
   }
 

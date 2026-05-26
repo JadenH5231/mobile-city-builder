@@ -487,7 +487,13 @@ export class Vehicles {
     roadGraph: RoadGraph,
     pathfinder: Pathfinding,
     edgeRoad: { x: number; y: number },
-    dest: { x: number; y: number }
+    dest: { x: number; y: number },
+    // Beta 1.6.22 — caller picks whether this import targets a
+    // commercial tile (default, applies -25% revenue penalty) or a
+    // warehouse buffer (no penalty since warehouses just store; the
+    // commercial side picks up the import flag if it pulls from a
+    // warehouse holding imported stock).
+    source: import('./SupplyChain').DeliverySource = 'import'
   ): boolean {
     if (this.countByKind('truck') >= MAX_TRUCKS) return false;
     const endRoad = nearestRoadTile(grid, dest.x, dest.y);
@@ -521,7 +527,7 @@ export class Vehicles {
       originHomeX: edgeRoad.x,
       originHomeY: edgeRoad.y,
       kind: 'truck',
-      truckSource: 'import'
+      truckSource: source
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile, TRUCK_LOAD_WEIGHT);
@@ -545,9 +551,12 @@ export class Vehicles {
    * If the return path can't be found (road got bulldozed mid-visit, etc.),
    * the entry is dropped silently.
    */
-  scheduleReturnTrips(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding): void {
+  scheduleReturnTrips(grid: Grid, roadGraph: RoadGraph, pathfinder: Pathfinding, simNowMs?: number): void {
     if (this.pendingReturns.length === 0) return;
-    const now = performance.now();
+    // Beta 1.6.22 — caller passes the sim-clock so pause freezes the
+    // return timers. Fallback to wall clock for any leftover call site
+    // we missed (kept for safety; all internal call sites pass simNow).
+    const now = simNowMs ?? performance.now();
     for (let i = this.pendingReturns.length - 1; i >= 0; i--) {
       const r = this.pendingReturns[i]!;
       if (r.readyAt > now) continue;
@@ -915,10 +924,16 @@ export class Vehicles {
     shoppers?: import('./Shoppers').Shoppers,
     pathGraph?: PathGraph,
     walkPathfinder?: Pathfinding,
-    supplyChain?: import('./SupplyChain').SupplyChain
+    supplyChain?: import('./SupplyChain').SupplyChain,
+    simNowMs?: number
   ): void {
     this.crashesThisFrame.length = 0;
-    const now = performance.now();
+    // Beta 1.6.22 — use the caller's sim-clock so parked-truck timers
+    // and pendingReturn readyAt timers freeze when the player pauses
+    // the sim. Pre-1.6.22 used `performance.now()` which kept advancing
+    // through pause, so every parked truck "expired" during pause and
+    // flushed home in a single frame on resume.
+    const now = simNowMs ?? performance.now();
 
     // Motorcade pullover pre-pass (Alpha 4.14): for each non-motorcade
     // car within MOTORCADE_PULLOVER_RADIUS (Manhattan distance) of any

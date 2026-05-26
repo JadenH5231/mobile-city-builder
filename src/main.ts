@@ -633,10 +633,19 @@ window.addEventListener('keyup', (e) => {
 // Window-blur / page-hidden — clear all held keys so the camera doesn't
 // keep drifting if the user Cmd-Tabs away mid-pan and never sends the
 // keyup that would otherwise stop it.
+// Beta 1.6.22 — also flush an immediate save when the page is hidden
+// or backgrounded. Pre-1.6.22 the only save trigger was the 30s
+// autosave timer, so a player who paused at midnight and refreshed
+// within 30s lost their time-of-day position (which is the user-
+// reported "pause doesn't persist" bug from the same release).
 window.addEventListener('blur', () => pressedNavKeys.clear());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) pressedNavKeys.clear();
+  if (document.hidden) {
+    pressedNavKeys.clear();
+    game.flushSave();
+  }
 });
+window.addEventListener('pagehide', () => game.flushSave());
 
 // Continuous-motion rAF loop. Polls pressedNavKeys each frame and
 // applies camera deltas. dt clamped to 50ms so a stutter doesn't
@@ -962,6 +971,22 @@ const settingsPanel = bindSettingsPanel(settings, {
       game.farmHealth()
     );
     game.onStatusMessage?.('Visual artifacts cleared');
+  },
+  onRestockSupplies: () => {
+    // Beta 1.6.22 — debug button to refill every commercial / mixed /
+    // big_box / warehouse tile to 100% supplies. Lets the player reset
+    // the supply chain and observe where genuine backlogs reappear,
+    // rather than living with a chronic 0% that may have been caused
+    // by an earlier truck shortage that has since been fixed.
+    let n = 0;
+    for (const t of game.grid.iter()) {
+      if (game.supplyChain.isCommercialConsumer(t) || t.building === 'warehouse') {
+        t.supplies = 1;
+        t.importSource = false;
+        n++;
+      }
+    }
+    game.onStatusMessage?.(`Restocked ${n} supply-chain tiles to 100%`);
   }
 });
 const settingsBtn = document.getElementById('hud-settings');

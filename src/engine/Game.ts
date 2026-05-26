@@ -371,6 +371,13 @@ export class Game {
    *  truck to flush home at once on resume. Beta 1.6.25 — readable so
    *  SaveGame can re-base sim-clock-relative timers across reload. */
   simNowMs = 0;
+  /** Beta 1.6.28 — set by main.ts to mirror Tutorial.phase === 'active'.
+   *  When true, the sim suppresses popup-triggering events (elections,
+   *  milestone celebrations) so the tutorial banner has the player's
+   *  full attention. The underlying state still updates — Village still
+   *  unlocks Power/Water/Avenue at 200 pop because the tutorial needs
+   *  that to work — only the celebratory chrome is silenced. */
+  tutorialActive = false;
 
   // Fixed-rate sim systems run inside `startLoop` via an accumulator clock.
   // Population must tick before Development since the latter reads demand;
@@ -1144,7 +1151,17 @@ export class Game {
               this.council.politicalCapital + m.rewardPC,
               50  // PC_CAP — keep in sync with Council.ts
             );
-            this.onMilestoneEarned?.(m);
+            // Beta 1.6.28 — only Village is announced during the
+            // tutorial (step 6 is "Grow to 200 → reach Village"). Earlier
+            // milestones (Hamlet at 50 pop) silently unlock their tools
+            // without firing the celebration banner, so the player isn't
+            // shown a popup for an unlock the tutorial doesn't reference.
+            // Later milestones can't fire during the tutorial because
+            // their thresholds are above 200.
+            const isVillage = m.id === 'village';
+            if (!this.tutorialActive || isVillage) {
+              this.onMilestoneEarned?.(m);
+            }
           }
           this.refreshToolbarLocks();
         }
@@ -1198,11 +1215,19 @@ export class Game {
             cur.set('chamber', (cur.get('chamber') ?? 0) - 0.20);
             this.onStatusMessage?.('Bond defaulted — taxpayers + Chamber are furious');
           }
-          const fired = this.council.maybeRunElection(
-            this.economy.monthsElapsed,
-            this.happiness,
-            this.population
-          );
+          // Beta 1.6.28 — suppress elections entirely while the tutorial
+          // is active. The election modal overlaps the tutorial banner
+          // and the player isn't introduced to the council mechanic
+          // until they've finished the loop. The 12-month timer keeps
+          // ticking in the background; first election runs at the next
+          // 12-month boundary AFTER the tutorial is finished or skipped.
+          const fired = this.tutorialActive
+            ? null
+            : this.council.maybeRunElection(
+                this.economy.monthsElapsed,
+                this.happiness,
+                this.population
+              );
           if (fired) {
             this.councilPanel.show();
             this.refreshToolbarBans();

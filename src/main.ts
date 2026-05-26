@@ -872,6 +872,10 @@ const showPrompt = (visible: boolean): void => {
 const renderBanner = (): void => {
   if (!tutorialBanner) return;
   const visible = tutorial.phase === 'active';
+  // Beta 1.6.28 — mirror tutorial state onto Game so the sim layer
+  // (elections, milestone banners) can suppress popup-triggering
+  // events while the banner is on screen.
+  game.tutorialActive = visible;
   tutorialBanner.classList.toggle('hidden', !visible);
   tutorialBanner.setAttribute('aria-hidden', String(!visible));
   if (!visible) return;

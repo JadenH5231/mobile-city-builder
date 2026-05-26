@@ -121,6 +121,19 @@ export class Population {
       // zoned L1 commercial tile's 3 jobs so big-box clusters add
       // entry-level retail capacity without competing with downtown.
       if (t.building === 'big_box') cJobs += 2;
+      // Per-tile employment for standalone industrial-class buildings
+      // (Beta 1.6.6). Pre-1.6.6 these were employment destinations for
+      // the resident-car spawn picker but contributed ZERO to the city's
+      // recorded job totals — so a 12-tile warehouse / farm / forestry
+      // cluster didn't push residential demand the way an equivalent
+      // zoned-I area would. Each tile now credits iJobs += 1 so bigger
+      // clusters generate proportional R demand. Numbers deliberately
+      // small (matching big_box's scale) — these are entry-level
+      // logistics / agricultural / logging jobs, not high-density
+      // factory employment.
+      if (t.building === 'warehouse') iJobs += 1;
+      else if (t.building === 'farm') iJobs += 1;
+      else if (t.building === 'forestry') iJobs += 1;
       if (t.zone === 'none' || t.road) continue;
       // Luxury tiles count even at density 0 — they're permanent placement
       // (not demand-driven growth), so capacity is fixed per tile.

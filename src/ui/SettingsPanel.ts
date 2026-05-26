@@ -167,6 +167,11 @@ export function bindSettingsPanel(
      *  a chronic 0% is supply-chain throughput vs an unreachable city
      *  configuration. Optional — defaults to no-op. */
     onRestockSupplies?: () => void;
+    /** Beta 1.6.31 — debug "Clear traffic" button. Wipes every active
+     *  vehicle + walker + per-tile trafficLoad counter so a gridlocked
+     *  city can recover. New cars start spawning naturally on the next
+     *  tick. Optional — defaults to no-op. */
+    onClearTraffic?: () => void;
   }
 ): { show(): void; hide(): void } {
   const panel = document.getElementById('settings-panel');
@@ -248,6 +253,11 @@ export function bindSettingsPanel(
     hooks.onRestockSupplies?.();
     // Keep panel open — player is debugging and may want to verify
     // the change in the tile-info chips before continuing.
+  });
+  document.getElementById('setting-clear-traffic')?.addEventListener('click', () => {
+    hooks.onClearTraffic?.();
+    // Keep panel open so the player can watch the roads through the
+    // (now-transparent) panel and confirm vehicles actually cleared.
   });
   document.getElementById('setting-reset-all')?.addEventListener('click', () => {
     settings.resetToDefaults();

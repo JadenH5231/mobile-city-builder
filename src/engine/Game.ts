@@ -1637,6 +1637,38 @@ export class Game {
     this.panel.show({ ...baseInfo, reasons: diagnoseTile(baseInfo) });
   }
 
+  /** Beta 1.6.31 — debug "clear traffic" button. Wipes every active
+   *  car / truck / bus / pedestrian / shopper / ferry plus the
+   *  pending-return queue plus per-tile trafficLoad counters. Used
+   *  when the city has gridlocked into a stuck-traffic state that
+   *  the sim can't recover from on its own (e.g. so many cars
+   *  yielding at the same junction that nothing advances). Empties
+   *  the roads — new cars start spawning naturally on the next
+   *  tick. */
+  clearTraffic(): void {
+    let cleared = 0;
+    cleared += this.vehicles.cars.length;
+    cleared += this.buses.buses.length;
+    cleared += this.pedestrians.walkers.length;
+    cleared += this.shoppers.list.length;
+    cleared += this.ferries.active.length;
+    this.vehicles.cars.length = 0;
+    this.vehicles.pendingReturns.length = 0;
+    this.buses.buses.length = 0;
+    this.pedestrians.walkers.length = 0;
+    this.shoppers.list.length = 0;
+    this.ferries.active.length = 0;
+    // Per-tile trafficLoad counters used to drive crash rolls + the
+    // congestion heatmap. Reset both the instantaneous count and the
+    // EMA so the heatmap doesn't show ghost congestion after the
+    // wipe.
+    for (const t of this.grid.iter()) {
+      t.trafficLoad = 0;
+      t.trafficLoadAvg = 0;
+    }
+    this.onStatusMessage?.(`Traffic cleared — ${cleared} vehicles + walkers removed`);
+  }
+
   /** Beta 1.6.22 — immediate (fire-and-forget) flush of the autosave.
    *  Called from the autosave timer at AUTOSAVE_MS cadence, AND from
    *  main.ts on visibilitychange / pagehide so the player's paused

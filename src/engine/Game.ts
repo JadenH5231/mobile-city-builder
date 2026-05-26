@@ -580,6 +580,18 @@ export class Game {
           if (data.cityName) this.cityName = data.cityName;
           this.cheatUnlimitedMoney = data.cheatUnlimitedMoney ?? false;
           this.cheatUnlimitedDemand = data.cheatUnlimitedDemand ?? false;
+          // Beta 1.6.10 — re-derive toolbar lock + ban state after restore.
+          // The original `refreshToolbarLocks` / `refreshToolbarBans` calls
+          // above ran BEFORE `applySave`, so they used the empty starter
+          // state. Without this follow-up, milestones / council seats from
+          // the loaded save are correct in data but the toolbar visual
+          // still showed everything past Hamlet as 🔒 — and the defensive
+          // catch in `onLocked` would refresh on the first tap, snapping
+          // every item to its actual state at once. That looked like a
+          // "tap one locked thing and they all unlock" bug. Now the
+          // toolbar matches the save state from the first frame.
+          this.refreshToolbarLocks();
+          this.refreshToolbarBans();
         }
       }
     } catch {

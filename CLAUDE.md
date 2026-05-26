@@ -345,6 +345,48 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.10 (Fix stale toolbar lock state on save load)
+
+User feedback: "the UI says certain things are locked when they're
+not actually locked. When you press one 'locked' item it unlocks them
+all for you."
+
+**Diagnosis** — `Game.init()` was running `refreshToolbarBans()` +
+`refreshToolbarLocks()` BEFORE `applySave()` populated the milestones
++ council from the save. After the load, the underlying data was
+correct but the toolbar visual still reflected the empty starter
+state. The defensive catch in `toolbar.onLocked` (Alpha 2.12.1) then
+fired on the first tap: it noticed the milestone was actually
+earned, called `refreshToolbarLocks()`, and every item snapped to
+its true unlocked state at once — looking like "tap one to unlock
+all".
+
+This was harmless in terms of game state (the underlying data was
+correct), but visually it was a clear "this menu is broken" bug for
+returning players: every save load showed everything past the
+starter set as 🔒, even though the player had milestones up through
+Capital. Tapping anything proved the lie.
+
+**Fix** — one line, two calls. After `applySave()` succeeds in
+`init()`, re-run `refreshToolbarLocks()` and `refreshToolbarBans()`
+so the toolbar visual matches the restored state from the first
+frame. The pre-load calls at lines 542-543 stay for the no-save /
+fresh-city case (and the `justReset` branch where save was
+deliberately cleared).
+
+The other `applySave` callsite (undo's `restoreFromSnapshot` at line
+1539) was already correct — `afterStateRestore()` ran
+`refreshToolbarLocks()` (line 1557). Init was the single missing
+hook.
+
+**Defensive `onLocked` catch stays** — it's load-bearing for the
+rare cases where state changes outside the known paths (mid-restore
+race, future undo flows, etc.). Now it should fire zero times in
+normal play instead of "every first tap after load."
+
+SW cache `mq-city-v23` → `mq-city-v24`. Save schema unchanged. One-
+file diff (`src/engine/Game.ts`), two-line fix.
+
 ## Status: Beta 1.6.9 (WASD mobility + desktop keyboard shortcuts)
 
 User feedback: "add wasd mobility and some basic keyboard shortcuts

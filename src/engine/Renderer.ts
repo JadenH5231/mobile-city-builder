@@ -2892,10 +2892,14 @@ function buildNightLightsMesh(grid: Grid): Mesh | null {
   for (const t of grid.iter()) {
     const cx = t.x + 0.5;
     const cz = t.y + 0.5;
-    if (t.road && t.roadType === 'avenue' && !t.bridge) {
+    if (t.road && t.roadType === 'avenue') {
       // Two sidewalk-side lamps along the long-ish axis. Use the
       // sidewalk lift so the lamp base sits on the sidewalk surface.
-      const baseY = SIDEWALK_LIFT + t.elevation;
+      // Beta 1.6.18 — bridge tiles get lamps too, lifted to the bridge
+      // deck height. Pre-1.6.18 the `!t.bridge` filter skipped bridges
+      // entirely, so an avenue crossing water went dark for one segment
+      // and the rest of the avenue looked oddly luminous in contrast.
+      const baseY = t.bridge ? BRIDGE_LIFT : SIDEWALK_LIFT + t.elevation;
       addLamp(cx, cz - 0.36, baseY, LAMP_GLOW);
       addLamp(cx, cz + 0.36, baseY, LAMP_GLOW);
     }
@@ -3030,8 +3034,9 @@ function buildLampGlowMesh(grid: Grid, texture: import('three').Texture): Mesh |
   for (const t of grid.iter()) {
     const cx = t.x + 0.5;
     const cz = t.y + 0.5;
-    if (t.road && t.roadType === 'avenue' && !t.bridge) {
-      const baseY = SIDEWALK_LIFT + t.elevation + 0.01;
+    if (t.road && t.roadType === 'avenue') {
+      // Beta 1.6.18 — bridge tiles get glow pools too, lifted to deck.
+      const baseY = t.bridge ? BRIDGE_LIFT + 0.01 : SIDEWALK_LIFT + t.elevation + 0.01;
       lamps.push({ cx, cz: cz - 0.36, y: baseY, r: 1.20 });
       lamps.push({ cx, cz: cz + 0.36, y: baseY, r: 1.20 });
     }
@@ -7801,15 +7806,19 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     //  - Local: dashed yellow centreline (two short dashes per edge).
     //  - Avenue: solid double-yellow centreline (two parallel solid lines).
     //  - Highway: white solid edge stripes near each shoulder.
-    // Bridges keep stripes if both ends are land-level; if either end is
-    // bridge we skip stripes (they'd float in mid-air on the ramp).
-    // Cross-tier edges (Beta 1.6.14) skip stripes — the width step at
-    // the boundary is the visual cue, and a half-length stripe at one
-    // tier's style would read as a stub. Same-tier edges keep the
-    // existing center-to-center stripe pattern unchanged.
-    if (ta?.bridge || tb?.bridge) {
-      // Skip stripes on bridge segments; deck colour is enough.
-    } else if (tierA !== tierB) {
+    // Beta 1.6.18 — bridge tiles now get stripes too. Pre-1.6.18 they
+    // were skipped on the theory that ramp stripes would "float in
+    // mid-air", but the yStripe values follow the per-endpoint y
+    // (which already accounts for bridge vs land), so a line segment
+    // running from a land y to a bridge y naturally follows the ramp
+    // surface. Without stripes, highway-over-water tiles went dark
+    // mid-road and the lit-highway segments on either side looked
+    // weirdly luminous in contrast.
+    // Cross-tier edges (Beta 1.6.14) still skip stripes — the width
+    // step at the boundary is the visual cue, and a half-length stripe
+    // at one tier's style would read as a stub. Same-tier edges keep
+    // the existing center-to-center stripe pattern unchanged.
+    if (tierA !== tierB) {
       // Skip stripes on cross-tier edges.
     } else {
     // Use the shared tier; back-compat with the existing per-tier branches.

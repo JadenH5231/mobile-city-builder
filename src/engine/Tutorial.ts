@@ -33,61 +33,65 @@ export interface TutorialStep {
 }
 
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
-  // Steps 1-5 use ONLY tools available in STARTING_TOOLS (types.ts).
-  // Power / water / avenue / stop sign all unlock at Village (200 pop)
-  // and the tutorial reaches them via the Village milestone in step 6.
+  // Beta 1.6.28 rewrite: hints reference only the tools the player can
+  // currently see (other tools are visually locked while tutorial
+  // active — see Game.isTutorialActive gating). Milestone celebrations
+  // and elections are suppressed during the tutorial so surprise
+  // unlocks + popups don't crowd the screen mid-step. Each step's
+  // predicate is fuzzy on purpose — "any road exists" — so the player
+  // builds however they want and still progresses.
   {
     title: 'Paint your first road',
     hint:
-      'Tap the Roads tool, pick Local, then drag on grass. Diagonals work — try a curve.',
+      'Open the Roads group, tap Local, then drag on grass. Diagonals work — try a curve.',
     check: (g) => g.grid.roadEdgeCount > 0
   },
   {
-    title: 'Zone next to that road',
+    title: 'Zone next to your road',
     hint:
-      'Pick R Zoning (low density) and drag on grass that touches a road. Buildings will sprout in a few seconds.',
+      'Pick R Low (residential) and drag on grass touching the road. Small homes will sprout in a few seconds.',
     check: (g) => anyTileWithZone(g, 'residential')
   },
   {
-    title: 'Add a Park',
+    title: 'Drop a Park nearby',
     hint:
-      'Tap the Park tool, drop one inside your neighborhood. Parks lift the mood + help your zones grow.',
+      'Tap the Park tool, place one within 4 tiles of your homes — parks broadcast their mood boost in a radius, no path required.',
     check: (g) => anyBuilding(g, 'park')
   },
   {
-    title: 'Meet the factions',
+    title: 'Meet your factions',
     hint:
-      'Tap the Population pill at the top. Ten factions watch every move you make — see their mood here.',
+      'Tap the Population pill at the top. Ten factions watch every move you make — their mood drives everything from voting to growth.',
     check: (g) => g.happinessPanelOpenedOnce
   },
   {
-    title: 'Open the Budget',
+    title: 'Check the Treasury',
     hint:
-      'Tap the $ Treasury pill. R/C/I tax sliders drive both your income AND demand — find the sweet spot.',
+      'Tap the $ pill. Watch your cash — services and roads cost money up-front. The tax sliders drive both income AND demand.',
     check: (g) => g.budgetPanelOpenedOnce
   },
   {
     title: 'Grow to 200 residents',
     hint:
-      'Paint more roads + R zones until population hits 200. At 200 you reach Village — unlocking power, water, avenues, and stop signs.',
+      'Keep paving + R-zoning. Watch the Pop pill climb. Hitting 200 reaches Village — unlocks Power, Water, Avenues, Stop signs.',
     check: (g) => g.population.totalResidents >= 200
   },
   {
     title: 'Place a Power Plant',
     hint:
-      'Services → Power (just unlocked). Tap a free grass tile. Power lifts your density cap above Low.',
+      'Open Services → Power. Glance at $ before tapping — it costs a chunk of your treasury. Drop it on grass; coverage is city-wide.',
     check: (g) => anyBuilding(g, 'power_plant')
   },
   {
     title: 'Place a Water Tower',
     hint:
-      'Services → Water. Power + Water + a Park nearby together unlock Medium density on your zones.',
+      'Services → Water. Power + Water + a Park together unlock Medium density. Your homes can now grow taller.',
     check: (g) => anyBuilding(g, 'water_tower')
   },
   {
-    title: 'Build a real city',
+    title: "You're ready — build a city",
     hint:
-      'You know the loop. Mix in commercial near roads, add bus stops, hit milestones to unlock more.',
+      'Tutorial complete. Now mix in C zones along roads, add bus stops, paint Avenues for higher capacity, watch the milestones unlock more tools.',
     // Last step never auto-completes — player taps Got It to finish.
     check: () => false
   }

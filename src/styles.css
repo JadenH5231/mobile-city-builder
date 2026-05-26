@@ -1476,7 +1476,11 @@ body.photo-mode .photo-exit {
   top: calc(env(safe-area-inset-top, 0) + 64px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 105;
+  /* Beta 1.6.28 — z-index 90 (was 105) sits BELOW the .modal layer
+     (z-index 100), so the milestone / event / council modals fully
+     overlay it. Pre-1.6.28 the banner sat on top of every modal and
+     ate the top third of the election-day popup. */
+  z-index: 90;
   background: var(--pill-bg);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);

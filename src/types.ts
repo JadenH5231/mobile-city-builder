@@ -733,19 +733,19 @@ export const SERVICE_RADIUS = {
   // original 3 — so a single park covers a big chunk of a neighbourhood.
   park: 10,
   // Alpha 2.10 services pack — bigger reach than parks since each is
-  // pricier and there are fewer per city. Beta 1.6.34 — doubled
-  // hospital / fire / police based on playtest: emergency-service
-  // coverage at radius 6-8 left big chunks of the map underprotected
-  // because each station is expensive ($25-80k) and the player needs
-  // 3-4 of each kind to cover a Town-tier city. Doubling means
-  // 1 station for a starter neighbourhood, 2-3 for a Metro-tier city,
-  // which matches the cost / count budget. Park / school left alone:
-  // park 10 is already generous; school 6 is a "walking distance"
-  // intent rather than a "coverage" intent.
+  // pricier and there are fewer per city. Beta 1.6.34 doubled
+  // hospital / fire / police; Beta 1.6.35 bumped them another 50%
+  // on playtest feedback. Net vs the 2.10 baseline: hospital ×3,
+  // fire / police ×3. One emergency station now covers a small
+  // city; a Metro needs 2-3 of each to fully blanket coverage,
+  // which still leaves the player a real planning decision but
+  // doesn't punish them for missing edge tiles.
+  // Park / school left alone: park 10 is already generous; school 6
+  // is a "walking distance" intent rather than a "coverage" intent.
   school: 6,
-  hospital: 16,
-  fire: 12,
-  police: 12
+  hospital: 24,
+  fire: 18,
+  police: 18
 } as const;
 
 /**

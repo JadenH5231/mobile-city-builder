@@ -345,6 +345,52 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.12 (All four faces lit on every developed building)
+
+User feedback: "all sides of the buildings need lights because you
+can go 360 now."
+
+The Alpha 4.7 camera rotation (`Camera.rotateBy90`) lets the player
+snap-rotate the view 90° clockwise via the HUD rotate button. With
+keyboard nav landed in 1.6.9–1.6.11, players are now actively using
+all four camera yaws — and Beta 1.6.8's lit-window pass only put
+windows on the **south face** of:
+
+- L2 residential (L3+ already had all four)
+- L2 commercial / mixed (L3+ already had all four)
+- All industrial densities
+
+So from N / E / W yaws those buildings looked dead at night.
+
+**Fix** — extend window emission to all four faces in every density
+branch of `buildLitWindowsMesh`. Three branches, each one drops the
+`allFaces` guard (or in industrial's case, adds the three extra
+emissions). Per-face lit pattern stays the same:
+
+- Residential: ~70% lit (homes have lights on, mostly-on pattern)
+- Commercial / Mixed: ~25% lit at L2, ~50% at L3+ (offices mostly empty)
+- Industrial: ~30% lit (sparse security floodlights)
+
+**Perf:** vertex count goes up roughly 4× for L2 + industrial lit
+windows (each tile now emits N + S + E + W instead of S only). For
+a 500-building city: ~14K → ~32K vertices on `litWindowsMesh`.
+Still a single Mesh with single MeshBasicMaterial — no new draw
+calls, no new materials. Modern mobile GPUs handle 100K+ vertex
+single meshes without breaking 60fps.
+
+**The principle this exposes:** when you ship a directional visual
+detail (front face, asymmetric ornament, single-side lamp), ask
+"does the player ever see this from a non-default yaw?" If yes,
+the directional shortcut becomes a visual bug the moment they
+rotate. The original front-face-only choice made sense pre-Alpha
+4.7 when the camera was locked. Now rotation is a real input, so
+visual systems need to cover all four yaws by default. Same logic
+applies to any future facade detail (signs, awnings, balconies):
+emit per-tile-exterior-side, not just S.
+
+SW cache `mq-city-v25` → `mq-city-v26`. Save schema unchanged. One-
+file diff (`src/engine/Renderer.ts`).
+
 ## Status: Beta 1.6.11 (Flip keyboard pan to genre-standard movement model)
 
 User feedback: "arrow keys are inverse make them to right arrow goes

@@ -345,6 +345,82 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.8 (High + max density buildings come alive at night)
+
+User feedback: "the high and Max density buildings need to give some
+more light to them so the city feels alive at night. Don't go
+overboard, make it visually appealing, push what this game can do
+with lighting without breaking it."
+
+**Diagnosis** — auditing `buildLitWindowsMesh` and `buildLampGlowMesh`:
+
+- Skyscrapers had lit windows (Alpha 3.1.6) but no rooftop beacons
+  or zone-coloured crown — they read as "tall boxes with some lights
+  on" rather than "iconic city silhouette."
+- **Residential L2+ had ZERO lit windows.** Only commercial / mixed
+  L2+ and skyscrapers got the overlay. A downtown apartment block
+  next to a glowing office tower stayed visually dark at night.
+- **Industrial L2+ had ZERO lit windows** for the same reason.
+- No "interior spillover" halo under L3+ buildings; the lamp-glow
+  layer covered roads, paths, parks, parking lots, big_box, and
+  architectural decoratives — high-density buildings themselves
+  weren't included.
+- Lit-window opacity capped at 0.85, slightly muted at full night.
+
+**Six additive changes** in `src/engine/Renderer.ts`:
+
+1. **Skyscraper crown band** — thin emissive horizontal slab near the
+   body apex, zone-coloured (cyan-blue for commercial / cool finance
+   district, warm gold for residential, warm white for mixed-use).
+   Width follows the body geometry (setback-aware).
+
+2. **Red aviation beacons** — single small red emissive cube at the
+   apex of every L3+ R/C/I/MU building AND every skyscraper. FAA-style
+   warning light reads as a real skyline marker, identifies tall
+   structures from across the map.
+
+3. **Residential L2+ lit windows** — warm yellow palette, mostly-on
+   pattern (~70% lit, homes have lights on). L3+ extends to all four
+   faces; L2 stays single-face like commercial L2.
+
+4. **Industrial L2+ lit windows** — cool blue-white floodlight palette
+   (`0xddeaff`), sparse pattern (~30% on, security/utility feel),
+   single S face only at all densities. L3+ also gets the apex beacon.
+
+5. **Commercial / mixed L3+ bump** — extends from S face only to all
+   four faces; lit density bumped from ~25% → ~50%. L3 / L4 commercial
+   now reads as a real office tower at night instead of a single-face
+   panel.
+
+6. **L3+ interior spillover halos** in `buildLampGlowMesh` — soft
+   warm halo (radius 1.10) at the centre of every L3+ R/C/I/MU tile.
+   Skyscrapers get a bigger halo (radius 1.80) per anchor covering
+   the 2×2 footprint. Reads as ground-floor light leaking onto the
+   sidewalk.
+
+7. **Opacity bump** — lit-window mesh opacity at full night 0.85 →
+   0.95 in `Renderer.applyTimeOfDay`. Tiny but the cumulative effect
+   is noticeable at zoomed-out city scale.
+
+**Perf:** all additions ride the same `litWindowsMesh` (single Mesh,
+single MeshBasicMaterial, vertex-coloured) and `lampGlowMesh` (single
+additive-blended quad mesh) that already exist — zero new draw calls.
+Vertex count grows by ~24 per L3+ building (beacon cube) + ~24 per
+skyscraper (beacon cube + crown band quads) + ~4 per L3+ tile (halo
+quad). A 500-building city adds ~12K vertices to lit-windows and
+~2K to lamp-glow — trivial for the GPU.
+
+**Tuning principle for future lighting work:** the day/night opacity
+ramp (`nightOpacity = clamp(1 - dayMix * 2.5, 0, 1)`) is the single
+source of truth. New emissive geometry should funnel into one of the
+existing meshes (`litWindowsMesh` for "facade glow", `lampGlowMesh`
+for "ground spillover") rather than spawning new materials that need
+parallel opacity wiring. Both mesh builders accept arbitrary
+BufferGeometry via the inline push pattern — see the skyscraper
+crown band code in `buildLitWindowsMesh` for the boilerplate.
+
+SW cache `mq-city-v21` → `mq-city-v22`. Save schema unchanged.
+
 ## Status: Beta 1.6.7 (Truck throughput catches up to commercial demand)
 
 User feedback (post-1.6.6): "there are still supply problems for

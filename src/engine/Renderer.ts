@@ -3340,8 +3340,10 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
         const halfW = wy < setbackY ? baseHalfW : towerHalfW;
         if (halfW < 0.20) continue; // tower too narrow for windows at this height
         for (let col = 0; col < cols; col++) {
-          // Deterministic dim pattern — about half the windows lit at a time.
-          if (((row * 7 + col + palIdx) & 1) === 0) continue;
+          // Beta 1.6.13 — bump from ~50% to ~75% lit so skyscrapers read
+          // as the iconic glittering downtown silhouette they should be.
+          // Skip only when both low bits set (25% dark).
+          if (((row * 7 + col + palIdx) & 3) === 3) continue;
           const t01 = (col + 0.5) / cols;
           const offset = -halfW * 0.85 + t01 * halfW * 1.7;
           // Inset windows just outside the body face so they don't
@@ -3361,7 +3363,8 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           const sx = acx + s.offsetX;
           const sz = acz + s.offsetZ;
           for (let col = 0; col < cols; col++) {
-            if (((row * 11 + col + palIdx + 3) & 1) === 0) continue;
+            // Beta 1.6.13 — match main-tower ~75% lit ratio.
+            if (((row * 11 + col + palIdx + 3) & 3) === 3) continue;
             const t01 = (col + 0.5) / cols;
             const offset = -sHalf * 0.85 + t01 * sHalf * 1.7;
             const surfaceOffset = sHalf + 0.008;
@@ -3597,7 +3600,15 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
     vertexColors: true,
     transparent: true,
     opacity: 0,
-    depthWrite: false
+    depthWrite: false,
+    // Beta 1.6.13 — DoubleSide so windows on the +Z and -X faces aren't
+    // back-face culled. addWindow's vertex winding gives every quad a
+    // fixed front-face normal (X-quads face -z, Z-quads face +x), so the
+    // wrap-around windows added in 1.6.12 were only visible on two of the
+    // four faces — buildings looked half-lit depending on camera yaw.
+    // Depth-write is off and the building body still depth-occludes any
+    // far-side window, so DoubleSide adds no overdraw cost in practice.
+    side: DoubleSide
   });
   const mesh = new Mesh(geom, mat);
   mesh.visible = false;
@@ -7686,9 +7697,15 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
 
   if (edges.length === 0 && stubs.length === 0) return null;
 
-  // Per-edge tier drives width + colour (post-alpha pass 4). Each edge gets
-  // a vertex-coloured quad, all merged into one mesh / one draw call.
-  const totalQuads = edges.length + stubs.length;
+  // Beta 1.6.14 — each edge is split into TWO half-quads, one per side,
+  // each rendered at its OWN tile's tier width and colour. Same-tier
+  // halves visually merge into one continuous edge; cross-tier halves
+  // produce a width step at the tile boundary (avenue stays avenue-width
+  // up to the boundary, local stays local-width from the boundary on),
+  // so neither road's width changes where they meet. Pre-1.6.14 picked
+  // a single tier per edge (first MAX, then MIN) — both schemes pushed
+  // one road's width onto the other at intersections.
+  const totalQuads = edges.length * 2 + stubs.length;
   const positions = new Float32Array(totalQuads * 4 * 3);
   const colours = new Float32Array(totalQuads * 4 * 3);
   const indices = new Uint32Array(totalQuads * 6);
@@ -7700,22 +7717,38 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
   let v = 0;
   const yLift = ROAD_LIFT;
 
-  // --- edge quads ---
+  // --- edge half-quads ---
   // Yellow stripes: local dashed centerline + avenue solid double-yellow.
   const yellowLanePositions: number[] = [];
   // White stripes: highway shoulder lines.
   const whiteLanePositions: number[] = [];
+
+  // Emit one half-edge quad: a rectangle from `sx,sz` to `ex,ez` at the
+  // given perpendicular half-width and colour. y interpolates linearly
+  // between the two endpoint elevations so the road ramps over hills.
+  const emitHalf = (
+    sx: number, sz: number, ex: number, ez: number,
+    ys: number, ye: number,
+    px: number, pz: number, hex: number
+  ): void => {
+    c.setHex(hex);
+    positions[vi++] = sx + px; positions[vi++] = ys; positions[vi++] = sz + pz;
+    positions[vi++] = ex + px; positions[vi++] = ye; positions[vi++] = ez + pz;
+    positions[vi++] = ex - px; positions[vi++] = ye; positions[vi++] = ez - pz;
+    positions[vi++] = sx - px; positions[vi++] = ys; positions[vi++] = sz - pz;
+    for (let k = 0; k < 4; k++) {
+      colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
+    }
+    indices[ii++] = v; indices[ii++] = v + 1; indices[ii++] = v + 2;
+    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 3;
+    v += 4;
+  };
+
   for (const e of edges) {
     const ta = grid.get(e.ax, e.ay);
     const tb = grid.get(e.bx, e.by);
-    // Use the wider/faster of the two endpoint tiers — visually consistent
-    // when a highway abuts a local at a ramp.
     const tierA = ta?.roadType ?? 'local';
     const tierB = tb?.roadType ?? 'local';
-    const tier = tierIndex(tierA) >= tierIndex(tierB) ? tierA : tierB;
-    const tierProps = ROAD_TIER[tier];
-    const half = tierProps.width / 2;
-    c.setHex(tierProps.color);
 
     const ax = (e.ax + 0.5) * TILE_SIZE;
     const az = (e.ay + 0.5) * TILE_SIZE;
@@ -7724,27 +7757,29 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const dx = bx - ax;
     const dz = bz - az;
     const len = Math.hypot(dx, dz);
-    const px = -dz / len * half;
-    const pz = dx / len * half;
+    const nx = -dz / len; // unit perpendicular x
+    const nz = dx / len;  // unit perpendicular z
+    const mx = (ax + bx) / 2;
+    const mz = (az + bz) / 2;
 
     // Per-endpoint elevation (Alpha 2.3+): bridge tiles lift the road
     // deck to BRIDGE_LIFT; land roads stay at ROAD_LIFT plus the tile's
     // terrain elevation so the road sits ON the hill instead of being
-    // buried in it. A bridge tile next to a land tile naturally
-    // produces a ramp because the two endpoint y values differ along
-    // the segment, and a road climbing a hill ramps the same way.
+    // buried in it. The midpoint y is the average — same linear ramp
+    // profile the original full-edge quad produced.
     const yA = ta?.bridge ? BRIDGE_LIFT : (yLift + (ta?.elevation ?? 0));
     const yB = tb?.bridge ? BRIDGE_LIFT : (yLift + (tb?.elevation ?? 0));
-    positions[vi++] = ax + px; positions[vi++] = yA; positions[vi++] = az + pz;
-    positions[vi++] = bx + px; positions[vi++] = yB; positions[vi++] = bz + pz;
-    positions[vi++] = bx - px; positions[vi++] = yB; positions[vi++] = bz - pz;
-    positions[vi++] = ax - px; positions[vi++] = yA; positions[vi++] = az - pz;
-    for (let k = 0; k < 4; k++) {
-      colours[ci++] = c.r; colours[ci++] = c.g; colours[ci++] = c.b;
-    }
-    indices[ii++] = v; indices[ii++] = v + 1; indices[ii++] = v + 2;
-    indices[ii++] = v; indices[ii++] = v + 2; indices[ii++] = v + 3;
-    v += 4;
+    const yMid = (yA + yB) / 2;
+
+    // A's half: tile A center → midpoint at A's tier width.
+    const propsA = ROAD_TIER[tierA];
+    const halfA = propsA.width / 2;
+    emitHalf(ax, az, mx, mz, yA, yMid, nx * halfA, nz * halfA, propsA.color);
+
+    // B's half: midpoint → tile B center at B's tier width.
+    const propsB = ROAD_TIER[tierB];
+    const halfB = propsB.width / 2;
+    emitHalf(mx, mz, bx, bz, yMid, yB, nx * halfB, nz * halfB, propsB.color);
 
     // Lane stripes (Alpha 2.2 polish):
     //  - Local: dashed yellow centreline (two short dashes per edge).
@@ -7752,14 +7787,22 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
     //  - Highway: white solid edge stripes near each shoulder.
     // Bridges keep stripes if both ends are land-level; if either end is
     // bridge we skip stripes (they'd float in mid-air on the ramp).
-    // Lane stripes lift to slightly above the road deck per-endpoint
-    // (Alpha 2.4 — was a single yStripe constant; now stripes follow
-    // the road as it ramps over hills).
-    const yStripeA = yA + 0.001;
-    const yStripeB = yB + 0.001;
+    // Cross-tier edges (Beta 1.6.14) skip stripes — the width step at
+    // the boundary is the visual cue, and a half-length stripe at one
+    // tier's style would read as a stub. Same-tier edges keep the
+    // existing center-to-center stripe pattern unchanged.
     if (ta?.bridge || tb?.bridge) {
       // Skip stripes on bridge segments; deck colour is enough.
-    } else
+    } else if (tierA !== tierB) {
+      // Skip stripes on cross-tier edges.
+    } else {
+    // Use the shared tier; back-compat with the existing per-tier branches.
+    const tier = tierA;
+    const half = halfA;
+    const px = nx * half;
+    const pz = nz * half;
+    const yStripeA = yA + 0.001;
+    const yStripeB = yB + 0.001;
     if (tier === 'local') {
       yellowLanePositions.push(
         ax + dx * 0.18, yStripeA + (yStripeB - yStripeA) * 0.18, az + dz * 0.18,
@@ -7825,6 +7868,7 @@ function buildRoadMesh(grid: Grid): BuiltRoads | null {
         ax - mopx, yStripeA, az - mopz,
         bx - mopx, yStripeB, bz - mopz
       );
+    }
     }
   }
 
@@ -7924,7 +7968,12 @@ function buildBridgeRoadMesh(grid: Grid): Group | null {
     const tb = grid.get(e.bx, e.by);
     const tierA = ta?.bridgeRoadType ?? 'local';
     const tierB = tb?.bridgeRoadType ?? 'local';
-    const tier = tierIndex(tierA) >= tierIndex(tierB) ? tierA : tierB;
+    // Beta 1.6.14 — bridges still use the lower tier (simple single-quad
+    // edge). Ground roads got the full half-edge split because cross-tier
+    // T-junctions on the ground are common; on bridges the same scenario
+    // is rare enough that the wider rail/pillar refactor isn't worth the
+    // complexity yet. Revisit if bridges grow real cross-tier junctions.
+    const tier = tierIndex(tierA) <= tierIndex(tierB) ? tierA : tierB;
     const tierProps = ROAD_TIER[tier];
     const half = tierProps.width / 2;
     const ax = (e.ax + 0.5) * TILE_SIZE;

@@ -444,11 +444,16 @@ body[data-show-fps="true"] #hud-fps {
 
 /* Floating Rotate button (Alpha 4.21). Sits just above the toolbar
    centred horizontally; visible only when a big civic build is armed
-   for placement. The placement-ghost preview re-renders each tap. */
+   for placement. The placement-ghost preview re-renders each tap.
+   Beta 1.6.15: bumped from 84px to 120px so it clears the tool-cost
+   pill at 72px (~34px tall, top edge at ~106px) — both are shown at
+   the same time when placing a paid big build like City Hall, and at
+   84px the orange Rotate button sat on top of the cost pill, hiding
+   the price tag the player needed to see before tapping. */
 .rotate-monument-btn {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 84px);
+  bottom: calc(env(safe-area-inset-bottom, 0) + 120px);
   transform: translateX(-50%);
   z-index: 16;
   display: flex;

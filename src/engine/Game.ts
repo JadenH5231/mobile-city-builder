@@ -901,6 +901,15 @@ export class Game {
     this.clearMonumentPreview();
     this.refreshToolCostPill();
     this.refreshServiceRadiusPreview();
+    // Beta 1.6.33 — armed service-placement preview drops whenever
+    // the active tool changes (so an armed Park doesn't stay armed
+    // after a tool swap).
+    this.pendingServicePlace = null;
+    // Beta 1.6.33 — re-derive the "existing radii" overlay for the
+    // service kind matching the new tool. Selecting Police shows
+    // every police station's radius; selecting a non-service tool
+    // hides the overlay.
+    this.refreshExistingServiceRadii();
     // Per-block ghost web (Alpha 4.15) — show the unpaid blocks of
     // any in-progress big-build reservation matching the new tool.
     this.refreshMonumentGhostWeb();
@@ -961,14 +970,54 @@ export class Game {
    */
   private refreshServiceRadiusPreview(): void {
     const spec = SERVICE_RADIUS_PREVIEW[this.tool];
-    if (!spec || !this.selected) {
+    // Beta 1.6.33 — anchor the gold preview disc to whichever is more
+    // specific: the armed `pendingServicePlace` (first-tap location)
+    // wins, else the regular `selected` tile (for the legacy Pan-tap
+    // inspect path). Service tools without either show no preview.
+    const anchor: { x: number; y: number } | null =
+      this.pendingServicePlace ? { x: this.pendingServicePlace.x, y: this.pendingServicePlace.y }
+      : this.selected ? { x: this.selected.x, y: this.selected.y }
+      : null;
+    if (!spec || !anchor) {
       this.renderer.clearServiceRadiusPreview();
       return;
     }
     const radius = SERVICE_RADIUS[spec.key];
-    const tile = this.grid.get(this.selected.x, this.selected.y);
+    const tile = this.grid.get(anchor.x, anchor.y);
     const elevation = tile ? tile.elevation : 0;
-    this.renderer.showServiceRadiusPreview(this.selected.x, this.selected.y, radius, elevation);
+    this.renderer.showServiceRadiusPreview(anchor.x, anchor.y, radius, elevation);
+  }
+
+  /** Beta 1.6.33 — armed first-tap state for service placement.
+   *  Tap once → arms (preview shown). Tap same tile again → places.
+   *  Tap a different tile → preview moves to that tile. Tool change
+   *  or Esc clears. Same UX pattern as monument arming, just for
+   *  the single-tile service buildings (park / school / hospital /
+   *  fire / police / power / water / bus stop / bus depot / etc). */
+  private pendingServicePlace: { tool: Tool; x: number; y: number } | null = null;
+
+  /** Beta 1.6.33 — paint a cyan disc at every existing placement of
+   *  the service kind matching the active tool. So the player can
+   *  see their coverage map BEFORE they tap. Hospital tool? Every
+   *  hospital lights up. Fire? Every fire station. Etc. */
+  private refreshExistingServiceRadii(): void {
+    const spec = SERVICE_RADIUS_PREVIEW[this.tool];
+    if (!spec) {
+      this.renderer.clearExistingServiceRadii();
+      return;
+    }
+    const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
+    if (!placeKind) {
+      this.renderer.clearExistingServiceRadii();
+      return;
+    }
+    const radius = SERVICE_RADIUS[spec.key];
+    const discs: Array<{ x: number; y: number; radius: number; elevation: number }> = [];
+    for (const t of this.grid.iter()) {
+      if (t.building !== placeKind) continue;
+      discs.push({ x: t.x, y: t.y, radius, elevation: t.elevation });
+    }
+    this.renderer.showExistingServiceRadii(discs);
   }
 
   /** Inspect the active tool and return its display label + cost.
@@ -2051,12 +2100,39 @@ export class Game {
     // band entirely so a stationary touch doesn't keep dropping buildings.
     const placeKind = PLACE_TOOL_TO_BUILDING.get(this.tool);
     if (placeKind) {
+      // Beta 1.6.33 — service-radius tools use tap-arm-then-tap-place
+      // so the player sees the coverage disc at the proposed spot
+      // before committing. First tap on a fresh tile arms; second tap
+      // on the SAME tile commits. Tapping a different tile while
+      // armed re-aims the preview at the new tile.
+      const spec = SERVICE_RADIUS_PREVIEW[this.tool];
+      if (spec) {
+        const armed = this.pendingServicePlace;
+        if (!armed || armed.tool !== this.tool || armed.x !== tile.x || armed.y !== tile.y) {
+          // Arm at new tile — drop any previous arming, show preview.
+          this.pendingServicePlace = { tool: this.tool, x: tile.x, y: tile.y };
+          this.refreshServiceRadiusPreview();
+          // Tap-to-arm doesn't push an undo snapshot — pop the one
+          // applyPaintStart added at the top of this stroke.
+          this.undoStack.pop();
+          this.strokeDidSnapshot = false;
+          this.strokeOrigin = null;
+          return;
+        }
+        // Same tile, second tap — commit.
+        this.pendingServicePlace = null;
+      }
       const placed = this.placeBuilding(tile.x, tile.y, placeKind);
       if (!placed) {
         // Place failed (insufficient funds / occupied tile) — keep the
         // undo stack clean.
         this.undoStack.pop();
         this.strokeDidSnapshot = false;
+      } else if (spec) {
+        // Successful service placement — refresh the "existing
+        // radii" overlay so the new building's disc joins the
+        // coverage map immediately.
+        this.refreshExistingServiceRadii();
       }
       this.strokeOrigin = null;
       return;
@@ -3897,6 +3973,10 @@ export class Game {
       // reservation matching the active tool — refresh the ghost web so
       // it reflects the new state (Alpha 4.15).
       this.refreshMonumentGhostWeb();
+      // Beta 1.6.33 — bulldozed a service of the kind the active tool
+      // covers? Re-derive the existing-radii overlay so its disc
+      // disappears from the coverage map.
+      this.refreshExistingServiceRadii();
     }
     if (pathsChanged) {
       this.renderer.drawPaths(this.grid);

@@ -1698,6 +1698,13 @@ export class Renderer {
    * or when no tile is selected.
    */
   private radiusPreviewMesh: Mesh | null = null;
+  /** Beta 1.6.33 — group holding existing-building radius discs.
+   *  Drawn whenever a service tool is active so the player can see
+   *  their current coverage and where the gaps are at a glance.
+   *  Separate from radiusPreviewMesh (the gold cursor preview) so
+   *  the two can coexist. */
+  private radiusExistingGroup: Group | null = null;
+
   showServiceRadiusPreview(gx: number, gy: number, radius: number, elevation: number): void {
     if (this.radiusPreviewMesh) {
       this.worldGroup.remove(this.radiusPreviewMesh);
@@ -1711,13 +1718,13 @@ export class Renderer {
     const mat = new MeshBasicMaterial({
       color: 0xffd84d,
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.28,
       depthWrite: false
     });
     const mesh = new Mesh(geom, mat);
     mesh.position.set(
       (gx + 0.5) * TILE_SIZE,
-      elevation + 0.018,
+      elevation + 0.020,
       (gy + 0.5) * TILE_SIZE
     );
     this.radiusPreviewMesh = mesh;
@@ -1729,6 +1736,50 @@ export class Renderer {
       this.radiusPreviewMesh.geometry.dispose();
       (this.radiusPreviewMesh.material as MeshBasicMaterial).dispose();
       this.radiusPreviewMesh = null;
+    }
+  }
+
+  /** Beta 1.6.33 — draw a disc for every existing service of a given
+   *  kind so the player sees their current coverage map. Discs are
+   *  rendered in a cooler colour at lower opacity than the gold
+   *  cursor preview so the two layers read as distinct: "already
+   *  placed" vs "would place here". */
+  showExistingServiceRadii(
+    discs: ReadonlyArray<{ x: number; y: number; radius: number; elevation: number }>
+  ): void {
+    this.clearExistingServiceRadii();
+    if (discs.length === 0) return;
+    const group = new Group();
+    for (const d of discs) {
+      if (d.radius <= 0 || !isFinite(d.radius)) continue;
+      const r = d.radius * TILE_SIZE;
+      const geom = new CylinderGeometry(r, r, 0.010, 36);
+      const mat = new MeshBasicMaterial({
+        color: 0x6cb0ff,         // cyan — readable on grass + road + sand alike
+        transparent: true,
+        opacity: 0.12,
+        depthWrite: false
+      });
+      const mesh = new Mesh(geom, mat);
+      mesh.position.set(
+        (d.x + 0.5) * TILE_SIZE,
+        d.elevation + 0.016,
+        (d.y + 0.5) * TILE_SIZE
+      );
+      group.add(mesh);
+    }
+    this.radiusExistingGroup = group;
+    this.worldGroup.add(group);
+  }
+  clearExistingServiceRadii(): void {
+    if (this.radiusExistingGroup) {
+      this.worldGroup.remove(this.radiusExistingGroup);
+      for (const child of this.radiusExistingGroup.children) {
+        const mesh = child as Mesh;
+        mesh.geometry.dispose();
+        (mesh.material as MeshBasicMaterial).dispose();
+      }
+      this.radiusExistingGroup = null;
     }
   }
 

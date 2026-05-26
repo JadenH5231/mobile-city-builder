@@ -569,7 +569,7 @@ export class Grid {
     return n;
   }
 
-  private unpackEdgeKey(key: number): { ax: number; ay: number; bx: number; by: number } {
+  unpackEdgeKey(key: number): { ax: number; ay: number; bx: number; by: number } {
     const lo = key % PACK_SHIFT;
     const hi = Math.floor(key / PACK_SHIFT);
     return {
@@ -801,7 +801,7 @@ export class Grid {
     return false;
   }
 
-  private edgeKey(ax: number, ay: number, bx: number, by: number): number {
+  edgeKey(ax: number, ay: number, bx: number, by: number): number {
     const ai = ay * this.width + ax;
     const bi = by * this.width + bx;
     const lo = ai < bi ? ai : bi;

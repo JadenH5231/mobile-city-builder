@@ -495,6 +495,22 @@ body[data-show-fps="true"] #hud-fps {
   50%      { transform: rotate(90deg); }
 }
 
+/* Bridge-mode toggle (Beta 1.6.23). Shares the floating-above-toolbar
+   geometry of .rotate-monument-btn but never rotates its icon and has
+   a distinct active-state colour so the player can tell at a glance
+   whether bridge mode is currently engaged. Both buttons are
+   mutually exclusive in practice (rotate is for big-build placement,
+   bridge is for road painting), so sharing the same anchor position
+   is fine. */
+#bridge-toggle-btn .rotate-monument-btn__icon { animation: none; }
+#bridge-toggle-btn[aria-pressed="true"] {
+  background: rgba(120, 200, 255, 0.96);
+  color: #04263a;
+  box-shadow: 0 4px 14px rgba(40, 140, 220, 0.55),
+              0 2px 4px rgba(0, 0, 0, 0.20),
+              inset 0 0 0 2px rgba(255, 255, 255, 0.30);
+}
+
 /* Bottom toolbar — always visible. Two sections (Alpha 2.7.3): a pinned
    cluster on the left (Pan + Bulldoze, never scrolls) and a horizontally
    scrollable strip on the right with everything else. */

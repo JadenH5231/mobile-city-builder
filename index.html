@@ -76,7 +76,6 @@
         <div class="hud-more-popover__group-label">Layers</div>
         <button id="hud-heatmap" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle traffic heatmap">Heat</button>
         <button id="hud-crime" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle crime heatmap">Crime</button>
-        <button id="hud-bridge" type="button" class="pill toggle" aria-pressed="false" aria-label="Toggle bridge mode (overpasses)">Bridge</button>
       </div>
       <div class="hud-more-popover__group">
         <div class="hud-more-popover__group-label">Panels</div>
@@ -759,6 +758,25 @@
     >
       <span class="rotate-monument-btn__icon" aria-hidden="true">↻</span>
       <span class="rotate-monument-btn__label">Rotate</span>
+    </button>
+    <!-- Bridge-mode toggle (Beta 1.6.23). Visible only while a road
+         tool is armed. Replaces the older "Bridge" pill that lived in
+         the More-popover Layers group — that placement was confusing
+         (it looked like a heatmap layer toggle) and bridges painted
+         in that mode were impossible to delete because bulldoze
+         didn't recognise the upper layer (also fixed in 1.6.23).
+         Reuses the rotate-monument-btn styling for an identical
+         floating-above-the-toolbar affordance. -->
+    <button
+      type="button"
+      id="bridge-toggle-btn"
+      class="rotate-monument-btn hidden"
+      aria-pressed="false"
+      aria-label="Toggle bridge / overpass painting"
+      title="Paint upper-layer overpass"
+    >
+      <span class="rotate-monument-btn__icon" aria-hidden="true">⤴</span>
+      <span class="rotate-monument-btn__label">Bridge</span>
     </button>
     <nav id="toolbar" class="toolbar" aria-label="Tools"></nav>
 

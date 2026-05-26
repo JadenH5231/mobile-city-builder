@@ -1013,6 +1013,14 @@ const settingsPanel = bindSettingsPanel(settings, {
       }
     }
     game.onStatusMessage?.(`Restocked ${n} supply-chain tiles to 100%`);
+  },
+  onClearTraffic: () => {
+    // Beta 1.6.31 — debug "Clear traffic" button. Single-shot wipe
+    // of every active car/truck/bus/pedestrian/shopper/ferry plus
+    // the per-tile trafficLoad counters. Used when the city has
+    // gridlocked into a stuck-traffic state that the sim can't
+    // recover from on its own.
+    game.clearTraffic();
   }
 });
 const settingsBtn = document.getElementById('hud-settings');

@@ -3305,7 +3305,16 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
     // branch fetches its variant's actual centre (which includes the
     // deterministic ±0.025 jitter) via getVariantBodyFootprint, so a
     // shared tile-centre value would only mislead.
-    const palIdx = (Math.abs(t.x * 73856093) ^ Math.abs(t.y * 19349663)) % PALETTE.length;
+    // Beta 1.6.19 — `>>> 0` forces unsigned int32 BEFORE the modulo,
+    // so a large XOR result that overflows int32 to a negative number
+    // no longer makes `palIdx` negative. Pre-1.6.19 a 32-bit-overflow
+    // tile (e.g. coords like (36, 39)) got `palIdx = -2`, looked up
+    // `PALETTE[-2] = undefined`, and addWindow's `(hex >> 16) & 0xff`
+    // produced 0 for every channel — every lit window on that tile
+    // rendered as a pitch-black quad invisible against the night sky.
+    // This was the actual root cause of "skyscrapers don't pop at
+    // night": the windows WERE there, just painted with no colour.
+    const palIdx = ((Math.abs(t.x * 73856093) ^ Math.abs(t.y * 19349663)) >>> 0) % PALETTE.length;
     const litColor = PALETTE[palIdx]!;
     // Skyscrapers — emit lit windows up the height of the tower at the
     // anchor tile only (we let the renderer's anchor check exclude
@@ -3337,31 +3346,34 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       // Skip the ground-level zone where podium glass already paints a
       // dark band (avoids overlap that washes out the glass).
       const startY = design.hasPodiumGlass ? 0.65 : 0.30;
-      // Window pitch matches the building band spacing (0.55) so windows
-      // sit cleanly between the dark glass bands rather than crashing
-      // into them. End just below the crown band.
+      // Beta 1.6.19 — denser, brighter window grid so skyscrapers actually
+      // pop at night. Pre-1.6.19: 3 columns at 0.10×0.18, ~75% lit. Now:
+      // 5 columns at 0.13×0.22, ~87.5% lit. Pitch still matches the body's
+      // 0.55 band spacing so windows sit cleanly between the dark glass
+      // bands; end just below the crown band.
       const pitch = 0.55;
-      const cols = 3;
+      const cols = 5;
+      const winW = 0.13;
+      const winH = 0.22;
       for (let row = 0; ; row++) {
         const wy = startY + row * pitch;
         if (wy > design.height - 0.45) break;
         const halfW = wy < setbackY ? baseHalfW : towerHalfW;
         if (halfW < 0.20) continue; // tower too narrow for windows at this height
         for (let col = 0; col < cols; col++) {
-          // Beta 1.6.13 — bump from ~50% to ~75% lit so skyscrapers read
-          // as the iconic glittering downtown silhouette they should be.
-          // Skip only when both low bits set (25% dark).
-          if (((row * 7 + col + palIdx) & 3) === 3) continue;
+          // ~87.5% lit (skip only when low 3 bits all set) — only 1 in 8
+          // windows dark, reads as a fully-occupied tower at night.
+          if (((row * 7 + col + palIdx) & 7) === 7) continue;
           const t01 = (col + 0.5) / cols;
-          const offset = -halfW * 0.85 + t01 * halfW * 1.7;
+          const offset = -halfW * 0.88 + t01 * halfW * 1.76;
           // Inset windows just outside the body face so they don't
           // z-fight with the dark glass band geometry. The body face is
           // at ±halfW; windows sit at ±(halfW + 0.008).
           const surfaceOffset = halfW + 0.008;
-          addWindow(acx + offset, wy, acz - surfaceOffset, 0.10, 0.18, 'X', litColor);
-          addWindow(acx + offset, wy, acz + surfaceOffset, 0.10, 0.18, 'X', litColor);
-          addWindow(acx + surfaceOffset, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
-          addWindow(acx - surfaceOffset, wy, acz + offset, 0.10, 0.18, 'Z', litColor);
+          addWindow(acx + offset, wy, acz - surfaceOffset, winW, winH, 'X', litColor);
+          addWindow(acx + offset, wy, acz + surfaceOffset, winW, winH, 'X', litColor);
+          addWindow(acx + surfaceOffset, wy, acz + offset, winW, winH, 'Z', litColor);
+          addWindow(acx - surfaceOffset, wy, acz + offset, winW, winH, 'Z', litColor);
         }
         // Second tower (twin designs) — emit windows on it too.
         if (design.secondTower) {
@@ -3371,15 +3383,15 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           const sx = acx + s.offsetX;
           const sz = acz + s.offsetZ;
           for (let col = 0; col < cols; col++) {
-            // Beta 1.6.13 — match main-tower ~75% lit ratio.
-            if (((row * 11 + col + palIdx + 3) & 3) === 3) continue;
+            // Match main-tower ~87.5% lit.
+            if (((row * 11 + col + palIdx + 3) & 7) === 7) continue;
             const t01 = (col + 0.5) / cols;
-            const offset = -sHalf * 0.85 + t01 * sHalf * 1.7;
+            const offset = -sHalf * 0.88 + t01 * sHalf * 1.76;
             const surfaceOffset = sHalf + 0.008;
-            addWindow(sx + offset, wy, sz - surfaceOffset, 0.10, 0.18, 'X', litColor);
-            addWindow(sx + offset, wy, sz + surfaceOffset, 0.10, 0.18, 'X', litColor);
-            addWindow(sx + surfaceOffset, wy, sz + offset, 0.10, 0.18, 'Z', litColor);
-            addWindow(sx - surfaceOffset, wy, sz + offset, 0.10, 0.18, 'Z', litColor);
+            addWindow(sx + offset, wy, sz - surfaceOffset, winW, winH, 'X', litColor);
+            addWindow(sx + offset, wy, sz + surfaceOffset, winW, winH, 'X', litColor);
+            addWindow(sx + surfaceOffset, wy, sz + offset, winW, winH, 'Z', litColor);
+            addWindow(sx - surfaceOffset, wy, sz + offset, winW, winH, 'Z', litColor);
           }
         }
       }
@@ -3450,26 +3462,37 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       const fp = getVariantBodyFootprint(t.zone, t.density, t.x, t.y);
       if (!fp) continue;
       const { cx: bcx, cz: bcz, halfX, halfZ, height: h } = fp;
+      // Beta 1.6.19 — denser grid on max-density tiles so L3+ commercial
+      // towers pop at night like real downtown blocks. L2 stays 2×3 with
+      // a sparse pattern; L3+ gets 4 rows × 4 cols at slightly larger
+      // window quads and ~87.5% lit. The result is roughly 50 visible
+      // lit windows per max-density tile (up from ~9) — enough to read
+      // as a fully-occupied office.
+      const isMaxDensity = t.density >= 3;
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
-      const litMask = t.density >= 3 ? 1 : 2; // L3+ lit ~50%, L2 lit ~25%
-      // 3 columns across each face — spread across the shorter of the
-      // two half-extents so the row reads as evenly spaced regardless
-      // of which face we're painting.
-      const colSpreadX = halfX * 0.7;
-      const colSpreadZ = halfZ * 0.7;
+      const cols = isMaxDensity ? 4 : 3;
+      const winW = isMaxDensity ? 0.11 : 0.08;
+      const winH = isMaxDensity ? 0.18 : 0.14;
+      const colSpreadX = halfX * (isMaxDensity ? 0.85 : 0.7);
+      const colSpreadZ = halfZ * (isMaxDensity ? 0.85 : 0.7);
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
-        for (let col = 0; col < 3; col++) {
-          if (((row * 5 + col + palIdx) & litMask) === 0) continue;
+        for (let col = 0; col < cols; col++) {
+          // L3+ ~87.5% lit (skip when low 3 bits set); L2 ~50% (mask=2).
+          const skip = isMaxDensity
+            ? ((row * 7 + col + palIdx) & 7) === 7
+            : ((row * 5 + col + palIdx) & 2) === 0;
+          if (skip) continue;
           // Windows on the +Z and -Z faces span across X — use halfX spread.
-          const offsetX = -colSpreadX + col * colSpreadX;
-          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.08, 0.14, 'X', litColor);
+          const t01 = (col + 0.5) / cols;
+          const offsetX = -colSpreadX + t01 * (colSpreadX * 2);
+          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, winW, winH, 'X', litColor);
+          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, winW, winH, 'X', litColor);
           // Windows on the +X and -X faces span across Z — use halfZ spread.
-          const offsetZ = -colSpreadZ + col * colSpreadZ;
-          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
-          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
+          const offsetZ = -colSpreadZ + t01 * (colSpreadZ * 2);
+          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, winW, winH, 'Z', litColor);
+          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, winW, winH, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ commercial / mixed.
@@ -3501,21 +3524,33 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       const fp = getVariantBodyFootprint(t.zone, t.density, t.x, t.y);
       if (!fp) continue;
       const { cx: bcx, cz: bcz, halfX, halfZ, height: h } = fp;
+      // Beta 1.6.19 — denser grid on max-density apartments so L3+
+      // residential reads as a fully-occupied building (lights in
+      // most windows). L2 keeps its 3-col mostly-on pattern.
+      const isMaxDensity = t.density >= 3;
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
-      const colSpreadX = halfX * 0.7;
-      const colSpreadZ = halfZ * 0.7;
+      const cols = isMaxDensity ? 4 : 3;
+      const winW = isMaxDensity ? 0.11 : 0.08;
+      const winH = isMaxDensity ? 0.18 : 0.14;
+      const colSpreadX = halfX * (isMaxDensity ? 0.85 : 0.7);
+      const colSpreadZ = halfZ * (isMaxDensity ? 0.85 : 0.7);
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
-        for (let col = 0; col < 3; col++) {
-          // Mostly-on pattern: skip ~30% (every 3rd-ish window is dark).
-          if (((row * 5 + col + palIdx) & 3) === 3) continue;
-          const offsetX = -colSpreadX + col * colSpreadX;
-          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.08, 0.14, 'X', litColor);
-          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.08, 0.14, 'X', litColor);
-          const offsetZ = -colSpreadZ + col * colSpreadZ;
-          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
-          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, 0.08, 0.14, 'Z', litColor);
+        for (let col = 0; col < cols; col++) {
+          // L3+ ~87.5% lit. L2 keeps the existing ~75% (skip only when
+          // both low bits set).
+          const skip = isMaxDensity
+            ? ((row * 7 + col + palIdx) & 7) === 7
+            : ((row * 5 + col + palIdx) & 3) === 3;
+          if (skip) continue;
+          const t01 = (col + 0.5) / cols;
+          const offsetX = -colSpreadX + t01 * (colSpreadX * 2);
+          addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, winW, winH, 'X', litColor);
+          addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, winW, winH, 'X', litColor);
+          const offsetZ = -colSpreadZ + t01 * (colSpreadZ * 2);
+          addWindow(bcx + halfX + 0.005, wy, bcz + offsetZ, winW, winH, 'Z', litColor);
+          addWindow(bcx - halfX - 0.005, wy, bcz + offsetZ, winW, winH, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ residential.

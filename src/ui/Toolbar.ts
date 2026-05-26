@@ -799,6 +799,24 @@ export class Toolbar {
       this.closePopovers();
       this.updateScrollState();
     }, { passive: true });
+    // Beta 1.6.20 — desktop wheel scrolling. Mac trackpads emit deltaX
+    // on a two-finger horizontal swipe and the browser auto-scrolls the
+    // overflow:auto container, so trackpad users were fine. A standard
+    // mouse wheel only emits deltaY, which the browser tries to apply
+    // to the page (no effect — body isn't scrollable) instead of the
+    // toolbar — desktop-mouse users saw the chevron hint but had no way
+    // to actually pan the strip. Fix: when there's horizontal overflow
+    // AND the input is wheel-only (no horizontal component), translate
+    // deltaY into scrollLeft. Shift+wheel still works because it already
+    // produces deltaX in browsers, so we skip our handler in that case
+    // and let the native behaviour win.
+    scroll.addEventListener('wheel', (e) => {
+      if (scroll.scrollWidth <= scroll.clientWidth) return;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      scroll.scrollLeft += e.deltaY;
+    }, { passive: false });
     this.el.appendChild(modeWrap);
     this.el.appendChild(pinned);
     this.el.appendChild(scroll);

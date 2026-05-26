@@ -2113,10 +2113,19 @@ export class Game {
    */
   private importTruckAccumulator = 0;
   private tickImportTrucks(stepMs: number): void {
-    // ~1 import-truck spawn attempt every 4 sim seconds. Caps the
-    // visual chaos so imports trickle in rather than convoying.
-    const RATE_PER_SEC = 0.25;
-    const CRITICAL_SUPPLY = 0.30;
+    // Beta 1.6.7 — bumped imports to actually keep up with demand.
+    // Pre-1.6.7 was 0.25/sec at 30% supplies. That meant imports
+    // arrived AFTER stores had already mostly dried, and at a rate
+    // that couldn't match consumption (50 commercial tiles consume
+    // ~0.35 supplies/sec — at 0.25 imports/sec × 0.40 payload = 0.10
+    // supplies/sec delivered, a 3.5× deficit). Now 0.60/sec at 55%
+    // supplies — imports kick in proactively (matching the 1.6.4 PO
+    // threshold for domestic trucks) and arrive 2.4× faster so the
+    // city actually catches up. Penalty stays −25%; players still
+    // want domestic delivery, just don't get punished as severely
+    // for relying on imports in the meantime.
+    const RATE_PER_SEC = 0.60;
+    const CRITICAL_SUPPLY = 0.55;
     this.importTruckAccumulator += (stepMs / 1000) * RATE_PER_SEC;
     if (this.importTruckAccumulator < 1) return;
     this.importTruckAccumulator -= 1;

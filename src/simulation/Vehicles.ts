@@ -81,12 +81,16 @@ const MOTORCADE_PULLOVER_PAUSE_SEC = 0.7;
  */
 const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
 /**
- * Truck spawn rate per developed industrial tile per real-time second
- * (Beta 1.5). With ~40 industrial tiles that's ~0.4 trucks/sec attempted,
- * naturally throttled by the MAX_TRUCKS = 30 cap. Tuned low so trucks
- * read as occasional freight, not constant convoys.
+ * Truck spawn rate per supply-chain participant per real-time second
+ * (Beta 1.6.7 — was per industrial tile in 1.5, fixed in 1.6.7 because
+ * trucks SERVE commercial; gating spawn rate on supply-side starved
+ * any commercial-heavy city). Counts industrial + warehouse +
+ * commercial tiles — each consumer drives demand, each supplier
+ * enables it. With ~30 commercial + ~10 industrial + a few warehouses
+ * that's ~0.45 trucks/sec attempted, throttled by the MAX_TRUCKS = 50
+ * cap (also bumped in 1.6.7 from 30).
  */
-const TRUCK_SPAWN_PER_INDUSTRY_PER_SEC = 0.010;
+const TRUCK_SPAWN_PER_DEMAND_PER_SEC = 0.010;
 /** Truck speed multiplier vs cars (Beta 1.5). Trucks are heavier and
  *  accelerate / cruise slower than cars on the same road tier. */
 const TRUCK_SPEED_MULT = 0.85;
@@ -320,16 +324,29 @@ export class Vehicles {
     pathfinder: Pathfinding,
     supplyChain?: import('./SupplyChain').SupplyChain
   ): void {
-    // Count developed industrial tiles cheaply — gates the spawn rate
-    // to "how much industry exists" without per-frame iteration when
-    // industry is tiny / absent.
+    // Count supply-chain participants (Beta 1.6.7). Industry +
+    // warehouses are SUPPLIERS (can be a truck origin); commercial
+    // tiles + big_box are CONSUMERS (drive demand). Spawn rate now
+    // tracks total chain activity so a commercial-heavy city gets
+    // enough trucks to keep stores stocked instead of running on
+    // imports only. Pre-1.6.7 the gate was industry count alone, so a
+    // city with lots of stores and a handful of factories produced
+    // truck spawns at 5-10× lower rate than commercial demand.
     let industryCount = 0;
+    let warehouseCount = 0;
+    let commercialCount = 0;
     for (const t of grid.iter()) {
       if (t.density > 0 && tileMatchesRole(t.zone, 'industrial')) industryCount++;
+      else if (t.building === 'warehouse') warehouseCount++;
+      if (t.density > 0 && tileMatchesRole(t.zone, 'commercial')) commercialCount++;
+      else if (t.building === 'big_box') commercialCount++;
     }
-    if (industryCount === 0) return;
+    // No suppliers AND no consumers → nothing to do. (If consumers
+    // exist but no suppliers, imports cover it via Game.tickImportTrucks.)
+    if (industryCount === 0 && warehouseCount === 0) return;
+    const demandCount = industryCount + warehouseCount + commercialCount;
     const seconds = stepMs / 1000;
-    this.truckSpawnAccumulator += industryCount * TRUCK_SPAWN_PER_INDUSTRY_PER_SEC * seconds;
+    this.truckSpawnAccumulator += demandCount * TRUCK_SPAWN_PER_DEMAND_PER_SEC * seconds;
     while (this.truckSpawnAccumulator >= 1) {
       this.truckSpawnAccumulator -= 1;
       if (this.countByKind('truck') >= MAX_TRUCKS) {

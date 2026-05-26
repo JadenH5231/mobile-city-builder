@@ -345,6 +345,83 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.6.7 (Truck throughput catches up to commercial demand)
+
+User feedback (post-1.6.6): "there are still supply problems for
+commercial."
+
+The 1.6.4 forgiveness pass (per-tile consumption jitter + PO priority)
+softened the symptom but didn't fix the underlying throughput
+deficit. The math, audited in 1.6.7:
+
+- Sim month = 20 sec (Economy.MONTH_MS).
+- Per-tile commercial consumption: 0.10–0.18 supplies / month
+  = ~0.007 supplies / sec.
+- A 50-commercial / 20-industrial city demands ~0.35 supplies / sec.
+- Truck spawn rate was `industryCount × 0.010 /sec` = 0.20 spawns / sec.
+  Of those, ~60% reach commercial × 0.45 avg payload = **0.054 supplies
+  / sec delivered**. **6× deficit** — no PO logic could close it.
+- Import fallback was 0.25 /sec at 30% supplies. Too slow + too late:
+  imports kicked in after stores had already dried, and at 0.10
+  supplies/sec delivered (0.25 × 0.40 payload) couldn't match the
+  0.35/sec drain either.
+
+**The fix — three tuning levers:**
+
+1. **Truck spawn rate now scales with total supply-chain activity**
+   (`industryCount + warehouseCount + commercialCount`), not industry
+   alone. `TRUCK_SPAWN_PER_INDUSTRY_PER_SEC` → `TRUCK_SPAWN_PER_DEMAND_
+   PER_SEC = 0.010` in `src/simulation/Vehicles.ts`. A 50-C / 20-I
+   city now spawns at ~0.70 trucks / sec (3.5× pre-1.6.7). The PO
+   priority dispatcher already routes these correctly — they were
+   just being throttled.
+
+2. **`MAX_TRUCKS` 30 → 50** in `src/types.ts`. The higher spawn rate
+   needs somewhere to go; 30 was a cap that bit before steady state.
+   The truck visual is sized + coloured to stay legible at 50.
+
+3. **Import threshold 30% → 55%; import rate 0.25 → 0.60 /sec** in
+   `src/engine/Game.ts.tickImportTrucks`. Imports now kick in
+   proactively at the SAME threshold (`RESTOCK_REQUEST_THRESHOLD =
+   0.55`) the PO logic uses for domestic trucks — so an industry-less
+   city stops being a pure cliff-and-pray model. 2.4× faster spawn
+   rate keeps up with the 0.35 supplies/sec drain. The −25% revenue
+   penalty stays so domestic delivery is still preferred when
+   available.
+
+**Net effect for a 50-C / 20-I city:**
+
+| Metric                   | Pre-1.6.7         | Post-1.6.7           |
+|--------------------------|-------------------|----------------------|
+| Truck spawn rate         | 0.20 /sec         | 0.70 /sec            |
+| Throughput to commercial | 0.054 supplies/sec| 0.19 supplies/sec    |
+| Import threshold         | 30% (cliff)       | 55% (proactive)      |
+| Import throughput        | 0.10 supplies/sec | 0.24 supplies/sec    |
+| Total supply available   | 0.15 supplies/sec | 0.43 supplies/sec    |
+| Demand                   | 0.35 supplies/sec | 0.35 supplies/sec    |
+| **Balance**              | **−0.20 deficit** | **+0.08 surplus**    |
+
+Industry-less cities also work now — at 0 industry + 30 commercial,
+demand = 0.21 supplies/sec, imports alone deliver 0.24 supplies/sec.
+No more "store empty / can't fix" trap.
+
+When tuning further (e.g. if cities are over-stocked now and players
+want more challenge), the relative levers are:
+
+- **Less truck supply:** lower `TRUCK_SPAWN_PER_DEMAND_PER_SEC` (now 0.010).
+- **Less import safety net:** lower import `RATE_PER_SEC` (now 0.60)
+  OR drop the threshold back toward 0.30.
+- **More demand per tile:** raise `MONTHLY_CONSUMPTION_BASE` (now 0.10)
+  or `MONTHLY_CONSUMPTION_JITTER` (now 0.08) in `SupplyChain.ts`.
+
+The right place to tune is whichever lever's effect the player would
+attribute correctly — "trucks too crowded" → spawn rate; "stores
+never empty" → consumption; "imports OP" → threshold.
+
+SW cache `mq-city-v20` → `mq-city-v21`. Save schema unchanged. No
+typecheck or behaviour changes elsewhere — purely numeric retuning
+on three constants.
+
 ## Status: Beta 1.6.6 (Warehouse / farm / forestry generate proportional resident demand)
 
 User feedback: "The bigger the warehouse/farm/bigbox the more demand

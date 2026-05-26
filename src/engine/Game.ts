@@ -580,6 +580,9 @@ export class Game {
           if (data.cityName) this.cityName = data.cityName;
           this.cheatUnlimitedMoney = data.cheatUnlimitedMoney ?? false;
           this.cheatUnlimitedDemand = data.cheatUnlimitedDemand ?? false;
+          // Beta 1.6.21 — restore the day/night cycle position. Pre-30
+          // saves load with the class default (0.40, mid-afternoon).
+          if (typeof data.timeOfDay === 'number') this.timeOfDay = data.timeOfDay;
           // Beta 1.6.10 — re-derive toolbar lock + ban state after restore.
           // The original `refreshToolbarLocks` / `refreshToolbarBans` calls
           // above ran BEFORE `applySave`, so they used the empty starter
@@ -1376,7 +1379,8 @@ export class Game {
         void this.saveGame.save(
           this.grid, this.economy, this.council, this.milestones, this.events,
           this.stats, this.achievements, this.bonds, this.cityName, this.districts,
-          { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand }
+          { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand },
+          this.timeOfDay
         ).catch(() => {});
       }
 

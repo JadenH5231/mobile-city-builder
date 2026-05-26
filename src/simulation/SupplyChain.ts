@@ -253,6 +253,40 @@ export class SupplyChain {
     };
   }
 
+  /** Beta 1.6.27 — find the nearest below-threshold commercial tile
+   *  to a reference point, optionally excluding a set of already-
+   *  picked tile coords. Used by Vehicles.attemptTruckSpawn to chain
+   *  multi-stop delivery routes so one truck can hit several stores
+   *  per outbound leg instead of returning home after every drop.
+   *
+   *  Returns null when no eligible tile is within `maxChebyshev` of
+   *  `from` (1 step = 1 tile; 6 is roughly "a short detour" on a
+   *  Medium map). */
+  pickNearbyRestockTile(
+    grid: Grid,
+    from: { x: number; y: number },
+    maxChebyshev: number,
+    exclude: ReadonlySet<number>
+  ): { x: number; y: number } | null {
+    const fromKey = from.y * grid.width + from.x;
+    let best: { x: number; y: number; supplies: number; dist: number } | null = null;
+    for (const t of grid.iter()) {
+      if (!this.isCommercialConsumer(t)) continue;
+      if (t.supplies >= RESTOCK_REQUEST_THRESHOLD) continue;
+      const key = t.y * grid.width + t.x;
+      if (exclude.has(key) || key === fromKey) continue;
+      const d = Math.max(Math.abs(t.x - from.x), Math.abs(t.y - from.y));
+      if (d > maxChebyshev) continue;
+      // Prefer LOWER supplies; tie-break on closer distance.
+      if (!best
+          || t.supplies < best.supplies
+          || (t.supplies === best.supplies && d < best.dist)) {
+        best = { x: t.x, y: t.y, supplies: t.supplies, dist: d };
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
   /** True if this tile counts as a "commercial consumer" for the
    *  supply chain. Includes developed C and MU zoning plus the
    *  big_box building (a single-tile retail destination). */

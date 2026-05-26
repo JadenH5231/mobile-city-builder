@@ -208,6 +208,20 @@ export interface Car {
    *  receiving tile (commercial or warehouse) refills correctly. Only
    *  set for kind === 'truck'. */
   truckSource?: import('./SupplyChain').DeliverySource;
+  /** Beta 1.6.27 — intermediate multi-stop deliveries. Each entry has
+   *  the ROAD tile index the truck passes through (so the per-frame
+   *  check can match against pathTiles[segmentIdx]) plus the commercial
+   *  tile coords + source kind that get fed to SupplyChain.deliver()
+   *  on arrival. The final destination (destX/destY) is still
+   *  delivered at the existing end-of-path branch in vehicles.update;
+   *  this field carries only the intermediate stops the truck visits
+   *  on its way there. Empty / undefined = single-stop truck. */
+  deliveryStops?: Array<{
+    atRoadIdx: number;
+    x: number;
+    y: number;
+    source: import('./SupplyChain').DeliverySource;
+  }>;
 }
 
 /**
@@ -268,6 +282,13 @@ export interface CarSnapshot {
   /** Remaining ms until unpark, NOT an absolute timestamp. */
   parkedRemainingMs?: number;
   truckSource?: import('./SupplyChain').DeliverySource;
+  /** Beta 1.6.27 — pending intermediate multi-stop deliveries. */
+  deliveryStops?: Array<{
+    atRoadIdx: number;
+    x: number;
+    y: number;
+    source: import('./SupplyChain').DeliverySource;
+  }>;
 }
 
 /** Snapshot wrapper carrying both active cars and the queued return
@@ -358,7 +379,8 @@ export class Vehicles {
         kind: c.kind,
         isParked: c.isParked,
         parkedRemainingMs: c.parkedUntil !== undefined ? Math.max(0, c.parkedUntil - simNowMs) : undefined,
-        truckSource: c.truckSource
+        truckSource: c.truckSource,
+        deliveryStops: c.deliveryStops ? c.deliveryStops.map((s) => ({ ...s })) : undefined
       });
     }
     const pending: PendingReturnSnapshot[] = this.pendingReturns.map((r) => ({
@@ -412,7 +434,8 @@ export class Vehicles {
         kind: c.kind,
         isParked: c.isParked,
         parkedUntil: c.parkedRemainingMs !== undefined ? simNowMs + c.parkedRemainingMs : undefined,
-        truckSource: c.truckSource
+        truckSource: c.truckSource,
+        deliveryStops: c.deliveryStops ? c.deliveryStops.map((s) => ({ ...s })) : undefined
       });
       // Re-stamp the traffic load this car contributed (Vehicles.update
       // expects loadedTile to be a tile that already counts this car
@@ -613,8 +636,74 @@ export class Vehicles {
       if (!t) return base;
       return base * (1 + t.trafficLoadAvg * CONGESTION_PATH_COEF);
     };
-    const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost);
-    if (!path || path.length < 2) return;
+
+    // Beta 1.6.27 — multi-stop chaining. A real delivery truck hits
+    // several stores per outbound leg instead of returning home after
+    // each drop. Only chain when the source is commercial-bound
+    // (warehouse / industry-direct) AND we have a supply chain that
+    // can tell us which other tiles are below threshold. Up to two
+    // ADDITIONAL stops are chained off the initial dest (so a truck
+    // visits up to 3 stores total before returning). The intermediate
+    // stops get delivered mid-path by vehicles.update reading
+    // car.deliveryStops; the final stop is destX/destY as before.
+    // intermediateStops carries the commercial tile coords; atRoadIdx
+    // is filled in once we know each leg's road tile (assigned below).
+    const intermediateStops: Array<{ atRoadIdx: number; x: number; y: number; source: import('./SupplyChain').DeliverySource }> = [];
+    const usedKeys = new Set<number>([dest.y * grid.width + dest.x]);
+    if (supplyChain && (source === 'warehouse' || source === 'industry-direct')) {
+      // Chain from the most-recently-picked stop so each subsequent
+      // detour is a short hop, not a re-cross of the city.
+      let last: { x: number; y: number } = dest;
+      for (let i = 0; i < 2; i++) {
+        const nextStop = supplyChain.pickNearbyRestockTile(grid, last, 6, usedKeys);
+        if (!nextStop) break;
+        // intermediateStops accumulates everything EXCEPT the final stop.
+        // The first chained pick becomes the new final dest (last
+        // segment); the original `dest` shifts into intermediateStops.
+        intermediateStops.push({ atRoadIdx: -1, x: last.x, y: last.y, source });
+        last = nextStop;
+        usedKeys.add(nextStop.y * grid.width + nextStop.x);
+      }
+      // If we chained any, the new final destination is the LAST
+      // stop we picked; pre-chain `dest` is now an intermediate.
+      if (intermediateStops.length > 0) {
+        dest = last;
+      }
+    }
+
+    // Build the path as a concatenation of A* segments through every
+    // stop in order. Skip the first element of each subsequent leg to
+    // avoid duplicating junction tiles. For each intermediate stop we
+    // also record the road-tile index it landed on, so vehicles.update
+    // can detect "we're passing through stop k" by comparing pathTiles
+    // [segmentIdx] to that recorded road index.
+    const stopRoads: Array<{ x: number; y: number }> = [{ x: startRoad.x, y: startRoad.y }];
+    for (const s of intermediateStops) {
+      const r = nearestRoadTile(grid, s.x, s.y) ?? { x: s.x, y: s.y };
+      stopRoads.push(r);
+      s.atRoadIdx = r.y * grid.width + r.x;
+    }
+    stopRoads.push({ x: endRoad.x, y: endRoad.y });
+
+    let path: number[] = [];
+    for (let i = 0; i < stopRoads.length - 1; i++) {
+      const a = stopRoads[i]!;
+      const b = stopRoads[i + 1]!;
+      const aIdx = a.y * grid.width + a.x;
+      const bIdx = b.y * grid.width + b.x;
+      if (aIdx === bIdx) continue;
+      const leg = pathfinder.findPath(roadGraph, aIdx, bIdx, grid.width, edgeCost);
+      if (!leg || leg.length < 2) {
+        // A leg failed — fall back to single-stop spawn (drop chained
+        // stops). Better than spawning a stuck truck.
+        intermediateStops.length = 0;
+        path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width, edgeCost) ?? [];
+        break;
+      }
+      if (i === 0) path.push(...leg);
+      else path.push(...leg.slice(1));
+    }
+    if (path.length < 2) return;
 
     const color = TRUCK_PALETTE[Math.floor(Math.random() * TRUCK_PALETTE.length)] ?? 0xe8e6dc;
     const car: Car = {
@@ -633,7 +722,8 @@ export class Vehicles {
       originHomeX: origin.x,
       originHomeY: origin.y,
       kind: 'truck',
-      truckSource: source
+      truckSource: source,
+      deliveryStops: intermediateStops.length > 0 ? intermediateStops : undefined
     };
     this.cars.push(car);
     this.incrementLoad(grid, car.loadedTile, TRUCK_LOAD_WEIGHT);
@@ -1392,6 +1482,27 @@ export class Vehicles {
 
         car.segmentT -= 1;
         car.segmentIdx++;
+
+        // Beta 1.6.27 — multi-stop delivery drop. If the truck just
+        // entered a tile that matches the next intermediate
+        // delivery-stop's road tile, fire SupplyChain.deliver for
+        // that stop and pop it off the queue. The truck keeps driving
+        // toward the final destX/destY — no dwell. Real delivery
+        // trucks don't park for 10 seconds per stop; a quick drop is
+        // enough.
+        if (
+          car.kind === 'truck'
+          && car.deliveryStops
+          && car.deliveryStops.length > 0
+          && supplyChain
+        ) {
+          const here = car.pathTiles[car.segmentIdx]!;
+          const nextStop = car.deliveryStops[0]!;
+          if (here === nextStop.atRoadIdx) {
+            supplyChain.deliver(grid, nextStop.x, nextStop.y, nextStop.source);
+            car.deliveryStops.shift();
+          }
+        }
 
         // End of path — trip completed cleanly.
         if (car.segmentIdx >= car.pathTiles.length - 1) {

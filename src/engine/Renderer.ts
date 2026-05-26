@@ -3428,16 +3428,17 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       beacon.dispose();
       continue;
     }
-    // Medium+ commercial / mixed-use — lit windows on the front face only.
+    // Medium+ commercial / mixed-use — lit windows on all four faces.
     if (t.density >= 2 && (t.zone === 'commercial' || t.zone === 'mixed')) {
       // Approximate body height + width per density.
       const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
       const halfW = 0.30;
-      // Two rows of windows on the south face. Beta 1.6.8: L3+ extends
-      // to all four faces (offices catch evening + downtown light from
-      // any direction) and bumps to ~50% lit pattern for visibility.
+      // Beta 1.6.12 — windows on every face. Pre-1.6.12 L2 emitted
+      // only the south face; with the Alpha 4.7 camera 90°-rotation
+      // those buildings went dark from N/E/W angles. Now all densities
+      // wrap windows around the body so the city stays alive from any
+      // camera yaw. L3+ stays denser (~50% lit) than L2 (~25% lit).
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
-      const allFaces = t.density >= 3;
       const litMask = t.density >= 3 ? 1 : 2; // L3+ lit ~50%, L2 lit ~25%
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
@@ -3446,11 +3447,9 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           if (((row * 5 + col + palIdx) & litMask) === 0) continue;
           const offset = -halfW * 0.7 + col * (halfW * 0.7);
           addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
-          if (allFaces) {
-            addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
-            addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-            addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-          }
+          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
+          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ commercial / mixed.
@@ -3481,7 +3480,9 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       const h = t.density === 2 ? 0.78 : t.density === 3 ? 1.35 : 1.55;
       const halfW = 0.30;
       const rows = t.density === 2 ? 2 : t.density === 3 ? 4 : 5;
-      const allFaces = t.density >= 3;
+      // Beta 1.6.12 — windows on every face for all densities so the
+      // apartment block reads as lit-from-within from any camera yaw
+      // after a 90° rotation. The ~70% lit pattern stays consistent.
       for (let row = 0; row < rows; row++) {
         const wy = 0.30 + row * 0.30;
         if (wy > h - 0.10) break;
@@ -3490,11 +3491,9 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           if (((row * 5 + col + palIdx) & 3) === 3) continue;
           const offset = -halfW * 0.7 + col * (halfW * 0.7);
           addWindow(cx + offset, wy, cz + halfW + 0.005, 0.08, 0.14, 'X', litColor);
-          if (allFaces) {
-            addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
-            addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-            addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
-          }
+          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.08, 0.14, 'X', litColor);
+          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
+          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.08, 0.14, 'Z', litColor);
         }
       }
       // Apex beacon for L3+ residential.
@@ -3525,6 +3524,11 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
       const h = t.density === 2 ? 0.60 : t.density === 3 ? 0.85 : 1.05;
       const halfW = 0.30;
       const rows = t.density === 2 ? 1 : t.density === 3 ? 2 : 3;
+      // Beta 1.6.12 — wrap security floodlights around all four faces.
+      // Pre-1.6.12 only the south face had any lights; with the 360°
+      // rotateable camera the back / sides of factories looked dead.
+      // Pattern stays sparse (~30%) on each face — these are utility
+      // lights, not full window banks.
       for (let row = 0; row < rows; row++) {
         const wy = 0.25 + row * 0.30;
         if (wy > h - 0.05) break;
@@ -3533,6 +3537,9 @@ function buildLitWindowsMesh(grid: Grid): Mesh | null {
           if (((row * 7 + col + palIdx * 3) & 3) !== 0) continue;
           const offset = -halfW * 0.4 + col * (halfW * 0.8);
           addWindow(cx + offset, wy, cz + halfW + 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
+          addWindow(cx + offset, wy, cz - halfW - 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
+          addWindow(cx + halfW + 0.005, wy, cz + offset, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
+          addWindow(cx - halfW - 0.005, wy, cz + offset, 0.10, 0.08, 'Z', INDUSTRIAL_LIT);
         }
       }
       if (t.density >= 3) {

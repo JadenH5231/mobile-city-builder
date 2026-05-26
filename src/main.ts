@@ -662,6 +662,12 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', () => game.flushSave());
+// Beta 1.6.24 — also fire on beforeunload for browsers that don't
+// emit pagehide reliably on hard-refresh (older Safari, some
+// embedded webviews). flushSave does both async IDB + sync
+// localStorage; even if the IDB write gets cancelled mid-flight,
+// the localStorage portion always commits.
+window.addEventListener('beforeunload', () => game.flushSave());
 
 // Continuous-motion rAF loop. Polls pressedNavKeys each frame and
 // applies camera deltas. dt clamped to 50ms so a stutter doesn't

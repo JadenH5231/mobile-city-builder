@@ -468,6 +468,11 @@ export class Game {
   // Persistence — auto-saves every AUTOSAVE_MS, also restores on init.
   readonly saveGame = new SaveGame();
   private autosaveAccumMs = 0;
+  /** Beta 1.6.24 — separate accumulator for the synchronous
+   *  localStorage time-of-day backup. Ticks at ~2 s so the backup is
+   *  never more than 2 s stale, even if the player refreshes without
+   *  triggering visibilitychange / pagehide. */
+  private todBackupAccumMs = 0;
   /** Set true when {@link resetCity} runs OR when an import-from-code is
    *  about to commit (Alpha 4.14.1). Both flows write to IDB then call
    *  `location.reload()` after a brief delay; without this gate the
@@ -631,6 +636,30 @@ export class Game {
     this.pathGraph.rebuild(this.grid);
     this.trafficLights.rebuild(this.grid);
     this.globalMarket.recompute(this.grid);
+    // Beta 1.6.24 — immediate sim-state recount on load. Without this,
+    // population.totalResidents and the RCI demand bars start at their
+    // class-default 0 and only get populated on the next sim tick.
+    // For a PAUSED game on load that tick never fires, so the HUD pop
+    // pill sits at "0" until the player unpauses — and unpaused loads
+    // show a 1-frame flicker from 0 → real count. Mirror the sim tick
+    // order (traffic → happiness → population) once now so the HUD is
+    // accurate from frame 1.
+    this.traffic.tickEma(this.grid);
+    this.happiness.computeAll(
+      this.grid, this.economy, this.population,
+      this.traffic, this.civicModifiers(), this.events
+    );
+    this.population.tick(
+      this.grid, this.economy, this.traffic, this.happiness,
+      this.council, this.events
+    );
+    // Restore time-of-day from the sync localStorage backup (Beta
+    // 1.6.24). IDB autosave only fires every 30 s and isn't guaranteed
+    // to complete before a refresh tears the page down; localStorage
+    // is synchronous and survives refresh reliably. Falls through to
+    // the IDB value (set above by applySave) if localStorage has
+    // nothing for this slot.
+    this.restoreTimeOfDayFromLocalStorage();
     this.fitCameraToGrid();
     this.handleResize();
 
@@ -1418,6 +1447,16 @@ export class Game {
         this.autosaveAccumMs = 0;
         this.flushSave();
       }
+      // Beta 1.6.24 — synchronous localStorage backup of time-of-day
+      // every 2 s. The full IDB save is async and fire-and-forget; on
+      // a hard refresh the page can tear down before the IDB write
+      // completes. localStorage is sync and survives refresh, so the
+      // small but visible time-of-day position always rolls forward.
+      this.todBackupAccumMs += dtMs;
+      if (this.todBackupAccumMs >= 2000 && !this.resetting) {
+        this.todBackupAccumMs = 0;
+        this.persistTimeOfDayToLocalStorage();
+      }
 
       for (const cb of this.tickCallbacks) cb(dt);
       // Day/night advance (Alpha 2.14). Sim-speed multiplies so fast-
@@ -1573,12 +1612,49 @@ export class Game {
    *  30s lost their time-of-day. */
   flushSave(): void {
     if (this.resetting) return;
+    // Sync localStorage backup runs unconditionally — even if the async
+    // IDB save gets cancelled by the page tearing down, localStorage
+    // is sync and always commits before navigation.
+    this.persistTimeOfDayToLocalStorage();
     void this.saveGame.save(
       this.grid, this.economy, this.council, this.milestones, this.events,
       this.stats, this.achievements, this.bonds, this.cityName, this.districts,
       { unlimitedMoney: this.cheatUnlimitedMoney, unlimitedDemand: this.cheatUnlimitedDemand },
       this.timeOfDay
     ).catch(() => {});
+  }
+
+  /** Beta 1.6.24 — synchronous localStorage backup for time-of-day.
+   *  The IDB autosave is async, fire-and-forget, and the page can tear
+   *  down before the write completes (especially on a hard refresh).
+   *  localStorage is sync and survives refresh reliably, so we mirror
+   *  the time-of-day there at every autosave + on visibilitychange.
+   *  Keyed by slot so each of the three cities keeps its own clock. */
+  private localStorageTimeKey(): string {
+    return `mqcity-tod-${this.saveGame.currentSlot()}`;
+  }
+
+  private persistTimeOfDayToLocalStorage(): void {
+    try {
+      localStorage.setItem(this.localStorageTimeKey(), String(this.timeOfDay));
+    } catch {
+      // localStorage can throw in private-mode Safari or when quota
+      // is exhausted. Either way the IDB save is still the primary
+      // path, so swallow the failure.
+    }
+  }
+
+  private restoreTimeOfDayFromLocalStorage(): void {
+    try {
+      const raw = localStorage.getItem(this.localStorageTimeKey());
+      if (raw === null) return; // no backup written yet → keep IDB value
+      const t = parseFloat(raw);
+      if (Number.isFinite(t) && t >= 0 && t <= 1) {
+        this.timeOfDay = t;
+      }
+    } catch {
+      // ignore; IDB-restored value (if any) stands.
+    }
   }
 
   // --- Undo --------------------------------------------------------------

@@ -338,7 +338,25 @@ export function diagnoseTile(info: Omit<TileInfo, 'reasons'>): TileInfo['reasons
     if (info.density === info.zoneCap && info.zoneCap > 0) {
       out.push({ kind: 'good', text: `Fully developed at L${info.density}` });
     }
+    // Supply-chain stockout (Beta 1.6.18) — fires for commercial / mixed
+    // tiles that have run dry. Without this, a player sees the supplies
+    // chip at 0% and no explanation of why or how to fix it; the most
+    // common cause is "no industry + not connected to outside" but the
+    // panel never said that.
+    if ((info.zone === 'commercial' || info.zone === 'mixed') && info.density > 0 && info.supplies >= 0) {
+      if (info.supplies <= 0.05) {
+        out.push({ kind: 'block', text: 'Out of stock — earns no revenue. Build factories, warehouses, or extend a road to the map edge for imports.' });
+      } else if (info.supplies < 0.30) {
+        out.push({ kind: 'warn', text: 'Low stock — waiting on a delivery truck' });
+      }
+    }
     return out;
+  }
+
+  // big_box stockout — same diagnostic, runs in the catch-all path
+  // because big_box is a building, not a zone.
+  if (info.building === 'big_box' && info.supplies >= 0 && info.supplies <= 0.05) {
+    out.push({ kind: 'block', text: 'Out of stock — earns no revenue. Build factories, warehouses, or extend a road to the map edge for imports.' });
   }
 
   // Anything else.

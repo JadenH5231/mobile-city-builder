@@ -197,17 +197,16 @@ function chipsFor(info: TileInfo): Array<{ text: string; tone: 'good' | 'warn' |
       info.crimeScore < 0.55 ? 'warn' : 'block';
     out.push({ text: `🛡 Crime ${(info.crimeScore * 100).toFixed(0)}%`, tone });
   }
-  // Supply-chain chip (Beta 1.6) — shown on commercial / warehouse tiles
-  // that have a supplies value.
+  // Supply-chain chip (Beta 1.6, reframed 1.6.37) — shown on commercial
+  // / warehouse tiles. Supplies are a revenue BONUS now, so low stock
+  // is never an alarm state: it just means "no bonus yet", not "broken".
   if (info.supplies >= 0) {
     const pct = Math.round(info.supplies * 100);
     const tone: 'good' | 'warn' | 'block' | 'info' =
-      info.supplies <= 0.05 ? 'block' :
-      info.supplies < 0.30 ? 'warn' :
-      info.supplies < 0.60 ? 'info' : 'good';
+      info.supplies >= 0.60 ? 'good' : 'info';
     out.push({ text: `📦 Supplies ${pct}%`, tone });
     if (info.importSource) {
-      out.push({ text: '🌐 Import-sourced (−25%)', tone: 'warn' });
+      out.push({ text: '🌐 Imported (half supply bonus)', tone: 'info' });
     }
   }
   return out;
@@ -338,25 +337,26 @@ export function diagnoseTile(info: Omit<TileInfo, 'reasons'>): TileInfo['reasons
     if (info.density === info.zoneCap && info.zoneCap > 0) {
       out.push({ kind: 'good', text: `Fully developed at L${info.density}` });
     }
-    // Supply-chain stockout (Beta 1.6.18) — fires for commercial / mixed
-    // tiles that have run dry. Without this, a player sees the supplies
-    // chip at 0% and no explanation of why or how to fix it; the most
-    // common cause is "no industry + not connected to outside" but the
-    // panel never said that.
+    // Supply-chain bonus (Beta 1.6.18, reframed 1.6.37) — fires for
+    // commercial / mixed tiles. Supplies are a revenue BONUS, not a
+    // gate: an unsupplied store still earns full base revenue, so this
+    // is framed as upside-available, never as "broken".
     if ((info.zone === 'commercial' || info.zone === 'mixed') && info.density > 0 && info.supplies >= 0) {
-      if (info.supplies <= 0.05) {
-        out.push({ kind: 'block', text: 'Out of stock — earns no revenue. Build factories, warehouses, or extend a road to the map edge for imports.' });
-      } else if (info.supplies < 0.30) {
-        out.push({ kind: 'warn', text: 'Low stock — waiting on a delivery truck' });
+      if (info.supplies <= 0.30) {
+        out.push({ kind: 'info', text: 'Low on supplies — earning base revenue. Add industry, warehouses, or an edge road connection for a delivery bonus (up to +35%).' });
+      } else if (info.supplies < 0.60) {
+        out.push({ kind: 'info', text: 'Stocking up — supply bonus is climbing as deliveries arrive.' });
+      } else {
+        out.push({ kind: 'good', text: 'Well stocked — earning the full supply bonus.' });
       }
     }
     return out;
   }
 
-  // big_box stockout — same diagnostic, runs in the catch-all path
+  // big_box supply note — same framing, runs in the catch-all path
   // because big_box is a building, not a zone.
-  if (info.building === 'big_box' && info.supplies >= 0 && info.supplies <= 0.05) {
-    out.push({ kind: 'block', text: 'Out of stock — earns no revenue. Build factories, warehouses, or extend a road to the map edge for imports.' });
+  if (info.building === 'big_box' && info.supplies >= 0 && info.supplies <= 0.30) {
+    out.push({ kind: 'info', text: 'Low on supplies — earning base revenue. Add industry, warehouses, or an edge road connection for a delivery bonus (up to +35%).' });
   }
 
   // Anything else.

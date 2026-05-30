@@ -1,25 +1,34 @@
 /**
- * Supply Chain (Beta 1.6). Layered on top of the existing 1.5 freight
- * truck system. Commercial buildings now hold a per-tile `supplies`
- * inventory in [0, 1]:
+ * Supply Chain (Beta 1.6, reworked Beta 1.6.37). Layered on top of the
+ * existing 1.5 freight truck system. Commercial buildings hold a
+ * per-tile `supplies` inventory in [0, 1]:
  *
  *   - Supplies tick DOWN each sim month (consumption).
  *   - Truck arrivals REFILL supplies (delivery).
- *   - Commercial revenue scales with the city-wide supply level —
- *     tiles at 0 supplies generate no commercial tax revenue at all,
- *     tiles served only by outside imports take a -25% penalty.
+ *   - Supplies are now a REVENUE BONUS, not a gate. A store with zero
+ *     supplies still earns its FULL base commercial tax revenue. A
+ *     well-supplied store earns up to +35% on top. Imports give half
+ *     that bonus (no penalty — just less upside than local industry).
  *
- * Supply sources, in order of preference:
+ * The point of the rework: the supply chain is about getting freight
+ * vehicles moving through the city, NOT a stockout-management chore.
+ * Industry / warehouses / edge connections are all OPTIONAL ways to
+ * push commercial revenue higher — none of them gate it. A city with
+ * zero industry runs fine on base revenue; building the supply network
+ * is a reward (more trucks on the road + a revenue bump), never a
+ * survival requirement.
+ *
+ * Supply sources, in order of bonus efficiency:
  *
  *   1. Industry → Warehouse → Commercial (most efficient, biggest payload)
  *   2. Industry → Commercial (direct, smaller payload, works without
  *      any warehouse)
  *   3. Outside-connection → Commercial (import truck from city edge,
- *      -25% revenue penalty applied to that tile)
+ *      delivers HALF the supply bonus — local industry stays better)
  *
  * The truck routing logic lives in `Vehicles.attemptTruckSpawn` (see
  * Beta 1.6 changes there); this module owns the per-tile state +
- * monthly consumption + revenue-multiplier math.
+ * monthly consumption + revenue-bonus math.
  *
  * Warehouse tiles ALSO carry a supplies value — it's their internal
  * buffer (filled by industry-→-warehouse trucks, drained by warehouse-
@@ -58,11 +67,21 @@ export const PAYLOAD_WAREHOUSE_TO_C = 0.55;
 export const PAYLOAD_INDUSTRY_TO_W = 0.50;
 export const PAYLOAD_IMPORT = 0.40;
 
-/** Revenue multiplier when the most recent delivery to a commercial
- *  tile came from an outside-connection import. -25% — imports keep
- *  the store open but cost the city margin. Cleared on next domestic
- *  delivery. */
-export const IMPORT_REVENUE_MULTIPLIER = 0.75;
+/** Beta 1.6.37 — supplies are now a REVENUE BONUS, not a gate. A
+ *  fully-supplied, domestically-sourced commercial tile earns this
+ *  fraction ON TOP of its base commercial tax revenue (+35%). A tile
+ *  at 0 supplies earns exactly its base revenue (bonus 0) — never a
+ *  penalty. This is the single lever that controls "how much is
+ *  building an industrial supply chain worth?" Raise it to make
+ *  industry more rewarding; lower it to make it more of a polish
+ *  bonus. */
+export const SUPPLY_MAX_BONUS = 0.35;
+
+/** Beta 1.6.37 — import-sourced supplies deliver this fraction of the
+ *  full bonus (half). Imports are never a penalty — they just give
+ *  less upside than local industry, so zoning industry + warehouses
+ *  stays the better play without ever being mandatory. */
+export const IMPORT_BONUS_SCALE = 0.5;
 
 /** Beta 1.6.4 — "Purchase order" threshold. When a commercial tile's
  *  supplies dip below this value, it joins the city-wide priority
@@ -92,13 +111,16 @@ export type DeliverySource = 'industry-direct' | 'warehouse' | 'import' | 'indus
  *  ratio of (supply-weighted jobs / total jobs); 1.0 = perfectly
  *  stocked, 0.0 = every commercial tile is out of stock. */
 export interface SupplyChainState {
-  /** Effective commercial revenue multiplier in [0, 1]. */
+  /** Effective commercial revenue multiplier. Beta 1.6.37: a BONUS
+   *  multiplier in [1.0, 1.0 + SUPPLY_MAX_BONUS]. 1.0 = no supplies
+   *  (full base revenue, no bonus); 1.35 = every commercial tile fully
+   *  supplied by local industry. Imports contribute half the bonus. */
   multiplier: number;
   /** Average supply level across developed commercial tiles in [0, 1].
    *  For UI / debug. NaN if there are no commercial tiles. */
   averageSupplies: number;
   /** Fraction of commercial jobs currently served only by outside
-   *  imports — these tiles take the IMPORT_REVENUE_MULTIPLIER penalty. */
+   *  imports — these tiles earn half the supply bonus (IMPORT_BONUS_SCALE). */
   importedFraction: number;
 }
 
@@ -170,6 +192,8 @@ export class SupplyChain {
    *   - 'industry-direct'  → top up commercial tile, clear import flag
    *   - 'warehouse'        → top up commercial tile, clear import flag
    *   - 'import'           → top up commercial tile, SET import flag
+   *                          (the flag scales that tile's supply bonus
+   *                          to half — see commercialSupplyState)
    *   - 'industry-to-warehouse' → top up warehouse tile (no flag)
    *
    * Tiles that aren't valid receivers for the given source (e.g. an
@@ -220,14 +244,19 @@ export class SupplyChain {
    * into the existing `population.totalCommercialJobs *
    * REV_PER_C_JOB * ...` line.
    *
-   * Weighting: each commercial tile's "supply contribution" is its
-   * supplies value (0..1) × its import-penalty multiplier (0.75 if
-   * import-sourced, 1.0 otherwise) × its commercial-jobs count. We
-   * then divide by the sum of jobs to get a single per-job
-   * multiplier the existing revenue formula can use.
+   * Beta 1.6.37 — supplies are a BONUS, not a gate. Each commercial
+   * tile earns a per-tile bonus of:
+   *
+   *     tileBonus = SUPPLY_MAX_BONUS × supplies × sourceScale
+   *
+   * where sourceScale is 1.0 for domestically-sourced supplies and
+   * IMPORT_BONUS_SCALE (0.5) for import-sourced. Job-weighted across
+   * the city and added to a 1.0 floor, so the returned multiplier is
+   * in [1.0, 1.0 + SUPPLY_MAX_BONUS]. A store with zero supplies
+   * contributes bonus 0 → its base revenue is untouched.
    */
   commercialSupplyState(grid: Grid): SupplyChainState {
-    let weightedJobs = 0;
+    let weightedBonus = 0;
     let totalJobs = 0;
     let supplySum = 0;
     let supplyCount = 0;
@@ -236,8 +265,9 @@ export class SupplyChain {
       if (!this.isCommercialConsumer(t)) continue;
       const jobs = jobsOnTile(t);
       if (jobs <= 0) continue;
-      const importMult = t.importSource ? IMPORT_REVENUE_MULTIPLIER : 1.0;
-      weightedJobs += jobs * t.supplies * importMult;
+      const sourceScale = t.importSource ? IMPORT_BONUS_SCALE : 1.0;
+      const tileBonus = SUPPLY_MAX_BONUS * t.supplies * sourceScale;
+      weightedBonus += jobs * tileBonus;
       totalJobs += jobs;
       supplySum += t.supplies;
       supplyCount += 1;
@@ -247,7 +277,7 @@ export class SupplyChain {
       return { multiplier: 1.0, averageSupplies: NaN, importedFraction: 0 };
     }
     return {
-      multiplier: weightedJobs / totalJobs,
+      multiplier: 1.0 + weightedBonus / totalJobs,
       averageSupplies: supplyCount > 0 ? supplySum / supplyCount : NaN,
       importedFraction: importedJobs / totalJobs
     };

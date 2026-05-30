@@ -167,12 +167,12 @@ export class Economy {
     this.totalAccidents++;
   }
 
-  /** Last commercial supply-chain multiplier (Beta 1.6). Cached for
-   *  the BudgetPanel + diagnostic UI. 1.0 = perfectly stocked,
-   *  0.0 = every commercial tile is out of supplies. */
+  /** Last commercial supply-chain multiplier. Beta 1.6.37: a BONUS in
+   *  [1.0, 1.35]. 1.0 = no supplies (full base revenue, no bonus);
+   *  1.35 = every commercial tile fully supplied by local industry. */
   lastSupplyMultiplier = 1.0;
   /** Last fraction of commercial jobs served by import trucks (Beta 1.6).
-   *  Each of those jobs takes the IMPORT_REVENUE_MULTIPLIER penalty. */
+   *  Those jobs earn half the supply bonus (no penalty). */
   lastImportedFraction = 0;
 
   private runMonth(
@@ -339,11 +339,11 @@ export class Economy {
         parkingMult = 1 - unparkFrac * maxPenalty;
       }
     }
-    // Beta 1.6 — supply-chain multiplier. Each commercial tile's
-    // revenue contribution is scaled by its supplies × import-penalty.
-    // No-supplies tiles drop to 0; import-only tiles take the
-    // IMPORT_REVENUE_MULTIPLIER penalty. Cached on Economy for the
-    // BudgetPanel + tile diagnostic UI.
+    // Beta 1.6.37 — supply-chain BONUS multiplier in [1.0, 1.35].
+    // Supplies are a reward, not a gate: a no-supplies tile keeps its
+    // full base revenue (bonus 0), a well-supplied tile earns up to
+    // +35% (imports give half). Cached on Economy for the BudgetPanel
+    // + tile diagnostic UI.
     const supplyState = supplyChain
       ? supplyChain.commercialSupplyState(grid)
       : { multiplier: 1.0, averageSupplies: NaN, importedFraction: 0 };

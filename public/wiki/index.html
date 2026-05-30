@@ -647,7 +647,7 @@
     <!-- ============================================================ -->
     <h2 id="supply-chain">Supply chain</h2>
 
-    <p>Commercial buildings need <strong>supplies</strong> to earn tax revenue. Every developed commercial / mixed-use / big-box tile holds a supplies value in [0, 1]. Warehouses also hold supplies as a buffer.</p>
+    <p>Supplies are a <strong>revenue bonus</strong>, not a requirement. Every developed commercial / mixed-use / big-box tile holds a supplies value in [0, 1]; warehouses hold supplies as a buffer. A store with <strong>zero supplies still earns its full base tax revenue</strong> — delivering supplies just pushes that revenue <em>up</em> by as much as +35%. The supply chain is about getting freight trucks moving through your city, not a stockout chore you have to babysit.</p>
 
     <h3>Flow</h3>
     <pre style="background: var(--bg-elev); padding: 14px 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; overflow-x: auto;">                       every sim month
@@ -656,22 +656,23 @@
   ┌──────────┐   I→W    ┌───────────┐   W→C   ┌────────────┐
   │ Industry │ ───────→ │ Warehouse │ ──────→ │ Commercial │
   └──────────┘   +0.50  └───────────┘  +0.55  └────────────┘
-                                ↑              ↑   drain → 0% = $0 revenue
-                                │              │
+                                ↑              ↑  full supplies → +35% rev
+                                │              │  zero supplies  → base rev
                        outside-edge imports
-                       +0.40  (−25% rev penalty for direct-to-C)</pre>
+                       +0.40  (half bonus for import-sourced)</pre>
 
     <h3>Mechanics</h3>
     <ul>
-      <li><strong>Consumption</strong>: each commercial tile drains 0.10–0.18 supplies / sim month (per-tile jittered so stores don't all empty together). A fully-stocked tile lasts 5–10 sim months.</li>
+      <li><strong>Revenue bonus</strong>: commercial revenue is multiplied by 1.0 + (up to 0.35) scaled by how well-supplied the city is. Zero supplies = ×1.0 (full base revenue, no bonus); fully supplied by local industry = ×1.35. Import-sourced tiles earn half the bonus.</li>
+      <li><strong>Consumption</strong>: each commercial tile drains 0.10–0.18 supplies / sim month (per-tile jittered so stores don't all empty together). A fully-stocked tile lasts 5–10 sim months. Running dry costs you the bonus, never your base income.</li>
       <li><strong>Truck spawn rate</strong>: <code>0.010 × (industry + warehouse + commercial)</code> tiles/sec, capped at <code>MAX_TRUCKS = 50</code>.</li>
       <li><strong>Purchase-order priority</strong>: every spawn first checks for any commercial tile below 55% — if found, the truck is dispatched to that tile.</li>
       <li><strong>Multi-stop routes</strong>: a single truck visits <strong>up to 3 stores</strong> per outbound leg before returning home. Intermediate drops are zero-dwell — the truck delivers in transit.</li>
-      <li><strong>Imports</strong>: if your city is connected to the map edge by a road, import trucks fire at 0.60/sec whenever any commercial or warehouse tile drops below 55%. Direct-to-commercial imports apply a −25% revenue penalty until a domestic delivery clears the import flag.</li>
+      <li><strong>Imports</strong>: if your city is connected to the map edge by a road, import trucks fire at 0.60/sec whenever any commercial or warehouse tile drops below 55%. Import-sourced tiles earn half the supply bonus (no penalty) until a domestic delivery clears the import flag — local industry is just the better play.</li>
     </ul>
 
     <h3>Reading the chip</h3>
-    <p>Long-press a commercial or warehouse tile. The tile-info panel shows <strong>📦 Supplies NN%</strong> colour-coded — green ≥ 60%, blue 30–60%, yellow 5–30%, red ≤ 5%. The 🌐 chip shows when a tile is import-sourced and taking the revenue penalty.</p>
+    <p>Long-press a commercial or warehouse tile. The tile-info panel shows <strong>📦 Supplies NN%</strong> — green ≥ 60% (earning the full bonus), blue below that (bonus still climbing). Low stock is never an alarm. The 🌐 chip shows when a tile is import-sourced and earning half the supply bonus.</p>
 
     <div class="card tip">
       <h4 class="tip-title">🛠 Debug</h4>
@@ -975,7 +976,7 @@
       <dd>A road tile with no connected neighbours (e.g., a single tap on grass without a drag). Renders as a small square; cars can't use it until you connect it.</dd>
 
       <dt><strong>Import-sourced</strong></dt>
-      <dd>A commercial tile whose most recent supply delivery came from an outside-edge import truck. Takes a −25% revenue penalty until a domestic truck re-supplies it.</dd>
+      <dd>A commercial tile whose most recent supply delivery came from an outside-edge import truck. Earns half the supply bonus (no penalty) until a domestic truck re-supplies it.</dd>
 
       <dt><strong>Service radius</strong></dt>
       <dd>The Chebyshev-distance reach of a service building. Parks: 10. Schools: 6. Hospitals: 24. Fire / police: 18. Power / water: city-wide.</dd>

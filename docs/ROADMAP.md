@@ -17,9 +17,10 @@ when every theme below has landed AND the product is feature-frozen.
 
 ---
 
-## Where we are: Beta 1.6.x — "Playtest polish"
+## Where we are: Beta 1.7.0 shipped — "Performance & memory" (theme open)
 
-**Status**: in progress.
+**Status**: 1.7.0 shipped (see below). 1.6.x playtest-polish track stays
+open in parallel for anything urgent the player notices.
 
 Tactical, playtest-driven fixes. Whatever the user notices, we ship in
 a small PR. No structural changes; this track is meant to stay close
@@ -46,38 +47,47 @@ Bundle is ~1 MB raw / ~270 KB gzipped, which is fine, but the per-frame
 cost on a 2021 mid-range Android has been creeping. Time for the audit
 the spec called for at the alpha mark.
 
-### 1.7.0 scope
-- **Split `Renderer.ts`** into focused modules. Likely cuts: terrain
-  + zone overlay, roads + ornaments, buildings + skyscrapers + variants,
-  vehicles + pedestrians, lighting + atmosphere, debug overlays
-  (heatmaps + radius discs). Keep the public `Renderer` class as the
-  facade so all callers stay unchanged.
-- **Split `BuildingVariants.ts`** by zone (residential / commercial /
-  industrial / mixed-use / civic / monuments). Variant pickers stay in
-  one place; per-variant geometry moves out.
-- **Mesh-disposal audit**. Every `Mesh / Group / Material / Geometry`
-  in the renderer should have a paired disposal path. Currently several
-  rebuild functions dispose materials, others don't — slow memory leak.
-  Catch with a debug counter that tracks live `BufferGeometry` count.
-- **InstancedMesh gaps**. Audit anywhere we're creating one `Mesh` per
-  entity at scale (trees on forest tiles, lamp posts, etc.). Spec said
-  "never one Mesh per entity at scale"; we drifted in a few places.
-- **Per-frame cost profiling**. Add a dev-mode FPS / sim-cost overlay
-  (only when `?dev=1` query param set) so playtesters can report
-  numbers, not vibes.
+### 1.7.0 scope — ✅ SHIPPED (Beta 1.7.0)
+- ✅ **Split `Renderer.ts`** — 9,198 → 2,121 lines. All standalone `build*`
+  functions moved to `src/engine/renderer/builders.ts`; the `Renderer`
+  class stays as the public facade. (Further subdivision of builders.ts
+  into terrain/roads/lighting/debug deferred to 1.7.1 — see below.)
+- ✅ **Split `BuildingVariants.ts`** — 5,264-line monolith → 39-line barrel
+  re-exporting `buildingVariants/{types,core,skyscrapers,construction,
+  monuments}.ts`.
+- ✅ **Mesh-disposal audit** — fixed the real leak: `disposeGroup` now
+  recurses (was direct-Mesh-only), so road-ornament + bridge Groups no
+  longer leak on rebuild. Verified flat live-geometry count.
+- ✅ **InstancedMesh gaps** — audited; no change needed (256 building tiles
+  add 0 draws / 0 geometries — merged meshes + InstancedMesh already
+  satisfy the rule). Documented.
+- ✅ **Per-frame cost profiling** — `?dev=1` overlay (`src/ui/DevOverlay.ts`)
+  with fps / sim ms / render ms + live GPU counts.
 
 ### 1.7.x patches
-- Bundle-size cuts as found during the audit. Target: <240 KB gzipped
-  for the main bundle.
-- Lazy-loading for non-launch surfaces (wiki, achievements panel,
-  stats panel) so initial paint is faster.
-- Texture audit — every CanvasTexture should be regenerated only when
-  inputs change.
-- Memory leak fixes as the debug counter surfaces them.
+- ⏳ **1.7.1 — subdivide `renderer/builders.ts`** into focused concern
+  modules (terrain / roads / buildings / lighting / debug) with a shared
+  `geom` helper module. Deferred from 1.7.0 because the leaf helpers
+  (THEME / mergeGeoms / box / cyl / cone / pushQuad / lerpColor) and the
+  `cityBuildingParts` dispatcher are densely shared across concerns —
+  needs a careful shared-toolkit extraction. The 1.7.0 class↔builders
+  split is the foundation this builds on.
+- ✅ **Bundle-size cuts** — `manualChunks` splits Three into its own 120 KB
+  vendor chunk; main app entry chunk now **155 KB gzipped** (target was
+  <240). DONE in 1.7.0.
+- ✅ **Lazy-loading** for non-launch surfaces — StatsPanel +
+  AchievementsPanel dynamic-imported on first open (the wiki is already a
+  separate static page). DONE in 1.7.0.
+- ✅ **Texture audit** — sky CanvasTexture repaint gated to ~1-2 Hz (was
+  60 Hz); all other textures already create-once-cached. DONE in 1.7.0.
+- Memory leak fixes as the debug counter surfaces them (ongoing — use the
+  `?dev=1` geom counter).
 
 **Exit criteria**: 60fps on a Pixel 7 / iPhone 13 with a fully-developed
 Medium map (the spec's original target). No live-geometry growth over a
-30-minute play session.
+30-minute play session. — Desktop-verified at 60fps / render <0.5 ms with
+a stable live-geometry count across a full session of rebuilds; on-device
+confirmation pending (use `?dev=1` to read the numbers on the phone).
 
 ---
 

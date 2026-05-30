@@ -81,8 +81,17 @@ src/
     Game.ts           bootstraps Three.js, owns the loop, paint logic
     Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
     Input.ts          pointer-events gesture handler (navigate / paint modes)
-    Renderer.ts       Three.js scene: terrain, roads, sidewalks, paths, trees, selection
-    BuildingVariants.ts spec catalogue + builder for 36 zoned variants + buildLuxuryParts (2-tile mansion)
+    Renderer.ts       Three.js scene facade: owns the class (state, draw* methods, update* loops, applyTimeOfDay, disposal). Beta 1.7 split — the ~7K lines of standalone build* mesh-geometry functions now live in renderer/builders.ts; the class imports them.
+    renderer/
+      builders.ts     all standalone build* functions (terrain, roads, buildings, lighting, debug, cluster part-builders + geom helpers). Imported by Renderer.ts. (1.7.1 will subdivide further by concern.)
+    BuildingVariants.ts barrel (Beta 1.7) re-exporting the building-variant kit, split into:
+    buildingVariants/
+      types.ts         shared VariantPart output type
+      core.ts          zoned R/C/I/MU spec table + emit toolkit + buildVariantParts/getVariantBodyFootprint + luxury
+      skyscrapers.ts   skyscraper designs + buildSkyscraperParts
+      construction.ts  4-stage construction-site emitters
+      monuments.ts     civic monuments (mansion / city hall / provincial / national / cloverleaf)
+    DevOverlay.ts (ui/) dev-only ?dev=1 profiling HUD (fps / sim ms / render ms / live geom+texture+draw counts)
   world/
     Grid.ts           tile container + road-edge graph + procedural generator
     Tile.ts           single-tile struct (terrain, road, path, elevation, bridge, luxury…)
@@ -344,6 +353,137 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.7.0 ("Performance & memory" — profiling, leak fix, splits)
+
+First release of the 1.7.x theme from `docs/ROADMAP.md`. No gameplay or
+save-schema change; purely internal perf/memory/structure work. All
+changes verified in-browser with the new dev overlay (60fps, render
+<0.5 ms, live-geometry count stable across a full session of rebuilds).
+
+**What landed:**
+
+1. **Dev profiling overlay (`?dev=1`)** — `src/ui/DevOverlay.ts`, lazy-
+   imported only when the URL has `?dev=1`. Shows fps / frame ms / sim ms
+   (+ sim steps) / render ms and the live GPU-resource counts (geometries
+   / textures / draw calls / triangles). `Game.perf` holds the per-frame
+   sim+render timings (two `performance.now()` pairs in the loop);
+   `Renderer.perfInfo()` reads `three.info` (authoritative live counts).
+   `?dev=1` also exposes `window.game`. This is the measurement tool for
+   the theme's exit criteria.
+
+2. **Disposal-leak fix** — `Renderer.disposeGroup` was only disposing
+   direct `Mesh` children, so nested Groups / `LineSegments` in the road-
+   ornament + bridge groups leaked GPU buffers on every road edit. Now
+   uses `group.traverse()` to dispose geometry + material(s) of every
+   descendant. Verified: 40× `drawRoads` + 20× `refreshTheme` rebuilds
+   leave the live-geometry count flat (was the slow-leak canary).
+
+3. **InstancedMesh audit — no change needed.** Verified empirically:
+   developing 256 building tiles added ZERO draw calls / geometries
+   (everything merges into per-category single-draw meshes; dynamic
+   entities are all InstancedMesh). The spec's "never one Mesh per entity
+   at scale" rule already holds.
+
+4. **CanvasTexture audit + sky-repaint gating** — `applyTimeOfDay` ran
+   every frame and unconditionally repainted the sky CanvasTexture (a GPU
+   re-upload 60×/sec) even though a full day cycle is ~8 min. Now gated on
+   a `lastSkyPhase` epsilon (repaints ~1-2 Hz; invalidated to NaN on theme
+   change). All other textures (`lampGlow`, `plusButton`, sky, clouds)
+   already create-once-and-cache.
+
+5. **Lazy-loaded non-launch panels** — StatsPanel + AchievementsPanel are
+   now dynamic-imported on first open (separate chunks: StatsPanel,
+   AchievementsPanel, Achievements data, DevOverlay).
+
+6. **Bundle split** — `vite.config.ts` `manualChunks` splits Three.js into
+   its own cacheable vendor chunk. **Main app entry chunk: 155 KB gzipped**
+   (was 279 KB) — comfortably under the roadmap's 240 KB target. Three is a
+   separate 120 KB-gzipped chunk (rarely changes → cached across deploys).
+
+7. **BuildingVariants.ts split** — the 5,264-line monolith → a 39-line
+   barrel re-exporting `buildingVariants/{types,core,skyscrapers,
+   construction,monuments}.ts`. DAG: types ← core; types ← construction ←
+   skyscrapers; types ← monuments (the construction↔skyscrapers cycle is
+   types-only). Bundle byte-stable.
+
+8. **Renderer.ts split** — **9,198 → 2,121 lines.** All standalone `build*`
+   mesh functions moved to `src/engine/renderer/builders.ts`; the Renderer
+   class stays as the public facade and imports the 33 builders it calls.
+   Bundle byte-stable, renders identically.
+
+**Deferred to 1.7.1 (per the roadmap's incremental cadence):** subdividing
+`renderer/builders.ts` further into terrain/roads/buildings/lighting/debug
+concern modules. The leaf helpers (THEME, mergeGeoms, box/cyl/cone,
+pushQuad, lerpColor) and the `cityBuildingParts` dispatcher are densely
+shared across concerns, so that subdivision is its own increment — the
+class↔builders separation (the 76% reduction) is the 1.7.0 headline.
+
+**Principle for future renderer work:** standalone geometry builders live
+in `renderer/builders.ts`, NOT on the class. The class owns state + the
+draw*/update* lifecycle + disposal. When adding a new mesh, add a `build*`
+function to builders.ts (export it) and a `draw*` method on the class that
+disposes the old mesh (via `disposeGroup` for Groups) and adds the new one.
+
+SW cache `mq-city-v28` → `mq-city-v29`. Save schema unchanged.
+
+## Status: Beta 1.6.37 (Supply chain reframed — bonus, not a gate)
+
+User feedback: "The supply chain / logistics thing is still too
+difficult. I want the system to be more related to getting vehicles
+moving through the city than it is something that has to be heavily
+managed. It encourages some industrial zoning, but doesn't lock
+needing tons of industry just to make it all work."
+
+**Diagnosis** — the Beta 1.6 supply chain multiplied commercial
+revenue by `supplyState.multiplier ∈ [0, 1]`. A store at 0 supplies
+earned ZERO. Every prior fix (1.6.4 jitter+PO, 1.6.7 throughput, 1.6.22
+warehouse imports) softened the *symptom* but kept the punishing
+gate — so keeping stores stocked stayed a survival chore and industry
+was effectively mandatory.
+
+**Fix** — flip the mapping in `SupplyChain.commercialSupplyState` from
+a gate to a BONUS:
+
+- Multiplier now lives in `[1.0, 1.0 + SUPPLY_MAX_BONUS]` = `[1.0, 1.35]`.
+- A store with **zero supplies earns full base revenue** (bonus 0).
+- A fully truck-supplied store earns **+35%**.
+- Imports give **half** the bonus (`IMPORT_BONUS_SCALE = 0.5`), never
+  a penalty — local industry stays the better play without being
+  required.
+- Per-tile bonus = `SUPPLY_MAX_BONUS × supplies × sourceScale`,
+  job-weighted across the city, added to the 1.0 floor.
+
+New constants `SUPPLY_MAX_BONUS = 0.35` + `IMPORT_BONUS_SCALE = 0.5`
+replace `IMPORT_REVENUE_MULTIPLIER = 0.75`.
+
+**Deliberately unchanged:** freight-truck spawn rates, consumption,
+payloads, the proactive import auto-spawn. The vehicles-moving layer
+the user likes is intact — only the *financial consequence* flipped
+from punishing (revenue zeroed) to rewarding (revenue bonus). Trucks
+still drive the city; now they're chasing upside, not preventing
+bankruptcy.
+
+**UI reframed** (`TileInfoPanel.ts`): supply chip no longer turns
+warn/block at low stock (low = "no bonus yet", not "broken"); import
+chip reads "🌐 Imported (half supply bonus)"; diagnostics say "Low on
+supplies — earning base revenue. Add industry, warehouses, or an edge
+road connection for a delivery bonus (up to +35%)".
+
+**Tuning levers going forward:** `SUPPLY_MAX_BONUS` (how much an
+industrial supply chain is worth), `IMPORT_BONUS_SCALE` (how much
+imports trail local industry), and the unchanged consumption / payload
+/ spawn constants (how much freight is on the road). The principle:
+the supply chain is a *vehicles-on-the-road reward layer*, not a
+resource you must babysit. Any future "consumer" tile should add to
+the bonus, never gate base revenue to zero. (The historical Beta 1.6
+/ 1.6.4 / 1.6.7 sections below describe the old gate model — kept for
+provenance, but this section supersedes their financial-consequence
+description.)
+
+Files: `SupplyChain.ts` (core), `Economy.ts` (comments/docs only),
+`TileInfoPanel.ts` (copy), `Game.ts` (import-truck comments). SW cache
+`mq-city-v27` → `mq-city-v28`. Save schema unchanged.
 
 ## Status: Beta 1.6.12 (All four faces lit on every developed building)
 

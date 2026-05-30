@@ -351,6 +351,20 @@ export class Game {
   /** Per-frame tick callbacks (FPS counter, render-rate things). */
   readonly tickCallbacks: Array<(dt: number) => void> = [];
 
+  /** Beta 1.7 — per-frame profiling samples, read by the dev overlay
+   *  (?dev=1). Cheap to maintain; left running unconditionally because
+   *  the cost is two performance.now() pairs per frame. */
+  perf = {
+    /** Wall-clock ms spent in the fixed-step sim loop this frame. */
+    simMs: 0,
+    /** Wall-clock ms spent in renderer.render() this frame. */
+    renderMs: 0,
+    /** Total frame delta in ms (render-rate). */
+    frameMs: 0,
+    /** Fixed sim steps executed this frame (0 when paused / caught up). */
+    simSteps: 0
+  };
+
   /**
    * Day/night cycle phase ∈ [0, 1] (Alpha 2.14). 0 = midnight, 0.5 =
    * noon, etc. Advanced every render frame at DAY_SECONDS rate. Sim
@@ -1143,6 +1157,8 @@ export class Game {
       const now = performance.now();
       const dtMs = now - last;
       last = now;
+      this.perf.frameMs = dtMs;
+      const simStart = now;
 
       // Fixed-rate sim: accumulate real time, run as many fixed steps as fit.
       // Capped per frame so a long stall doesn't trigger a death-spiral catch-up.
@@ -1432,6 +1448,8 @@ export class Game {
       if (steps >= MAX_SIM_STEPS_PER_FRAME && this.simAccumulatorMs > SIM_STEP_MS) {
         this.simAccumulatorMs = 0;
       }
+      this.perf.simMs = performance.now() - simStart;
+      this.perf.simSteps = steps;
       if (buildingsDirty) {
         // drawBuildings auto-refreshes the beautification overlay via
         // the provider installed in init() — no separate call needed.
@@ -1555,7 +1573,9 @@ export class Game {
       // Push the camera's current ortho size into the renderer so
       // skyscraper opacity tracks zoom (Alpha 3.1.7).
       this.renderer.applyCameraZoom(this.camera.orthoSize);
+      const renderStart = performance.now();
       this.renderer.render(this.camera);
+      this.perf.renderMs = performance.now() - renderStart;
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
@@ -2393,10 +2413,12 @@ export class Game {
    * Then we pick the most-supply-starved commercial tile and spawn
    * an import truck from a randomly chosen edge road tile.
    *
-   * The financial penalty (-25% revenue) is applied per-tile via the
-   * `importSource` flag set in `SupplyChain.deliver('import', ...)`
-   * — that's the "slight financial penalty" the user asked for.
-   * Cleared automatically when the next domestic delivery arrives.
+   * Beta 1.6.37 — imports are no longer a penalty. The `importSource`
+   * flag (set in `SupplyChain.deliver('import', ...)`) scales that
+   * tile's supply BONUS to half — so imports give upside, just less
+   * than local industry. Cleared automatically when the next domestic
+   * delivery arrives. These trucks exist mainly to keep freight moving
+   * through an industry-light city, not to rescue dying stores.
    */
   private importTruckAccumulator = 0;
   private tickImportTrucks(stepMs: number): void {
@@ -2408,9 +2430,9 @@ export class Game {
     // supplies/sec delivered, a 3.5× deficit). Now 0.60/sec at 55%
     // supplies — imports kick in proactively (matching the 1.6.4 PO
     // threshold for domestic trucks) and arrive 2.4× faster so the
-    // city actually catches up. Penalty stays −25%; players still
-    // want domestic delivery, just don't get punished as severely
-    // for relying on imports in the meantime.
+    // city actually catches up. Beta 1.6.37: imports give half the
+    // supply bonus (no penalty); players still prefer domestic
+    // delivery for the full +35%, but imports keep freight moving.
     const RATE_PER_SEC = 0.60;
     const CRITICAL_SUPPLY = 0.55;
     this.importTruckAccumulator += (stepMs / 1000) * RATE_PER_SEC;

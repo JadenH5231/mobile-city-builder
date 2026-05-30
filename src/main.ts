@@ -56,6 +56,14 @@ settings.load();
 const game = new Game();
 await game.init(appEl, MAP_SIZES.small, activeSlot);
 
+// Dev profiling overlay (Beta 1.7) — only when ?dev=1. Lazy-imported so
+// its DOM + code never ship to a normal player's first paint.
+if (new URLSearchParams(window.location.search).get('dev') === '1') {
+  void import('./ui/DevOverlay').then((m) => m.mountDevOverlay(game));
+  // Expose the Game on window for dev-console poking + perf stress tests.
+  (window as unknown as { game: Game }).game = game;
+}
+
 // If the just-loaded slot was empty (treasury still at the default
 // pre-load Economy seed of $15K) and a non-Normal difficulty was
 // picked in settings, seed the treasury to the difficulty's starting
@@ -389,22 +397,33 @@ if (undoBtn) {
 }
 
 // Stats panel HUD pill (Alpha 2.11) — opens the line-graph history.
-import { StatsPanel } from './ui/StatsPanel';
-const statsPanel = new StatsPanel(game.stats);
+// Beta 1.7 — lazy-loaded: the canvas-graph panel is code-split out of the
+// main bundle and only fetched the first time the player opens it. Most
+// sessions never touch it, so it shouldn't weigh down initial paint.
+let statsPanel: import('./ui/StatsPanel').StatsPanel | null = null;
 const statsBtn = document.getElementById('hud-stats');
 if (statsBtn) {
-  statsBtn.addEventListener('click', () => {
+  statsBtn.addEventListener('click', async () => {
+    if (!statsPanel) {
+      const { StatsPanel } = await import('./ui/StatsPanel');
+      statsPanel = new StatsPanel(game.stats);
+    }
     if (statsPanel.isOpen()) statsPanel.hide();
     else statsPanel.show();
   });
 }
 
-// Achievements panel + corner toast (Alpha 2.15).
-import { AchievementsPanel } from './ui/AchievementsPanel';
-const achievementsPanel = new AchievementsPanel(game.achievements);
+// Achievements panel + corner toast (Alpha 2.15). Beta 1.7 — lazy-loaded
+// (same rationale as the stats panel). The corner toast below is plain
+// DOM and stays eager; only the browseable grid panel is deferred.
+let achievementsPanel: import('./ui/AchievementsPanel').AchievementsPanel | null = null;
 const achievementsBtn = document.getElementById('hud-achievements');
 if (achievementsBtn) {
-  achievementsBtn.addEventListener('click', () => {
+  achievementsBtn.addEventListener('click', async () => {
+    if (!achievementsPanel) {
+      const { AchievementsPanel } = await import('./ui/AchievementsPanel');
+      achievementsPanel = new AchievementsPanel(game.achievements);
+    }
     if (achievementsPanel.isOpen()) achievementsPanel.hide();
     else achievementsPanel.show();
   });

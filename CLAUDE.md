@@ -211,7 +211,11 @@ political pressure when the stance matrix has opinions in it.
 R/C/I × low/med/high, MU × low/med/high (Alpha 2.0), `r_lux` for the
 luxury low-density 2-tile pair (Alpha 2.5), power_plant, water_tower,
 park, bus_stop, bus_depot, stop_sign — all rows filled with deliberate
-values. Intentionally absent from the matrix: `walking_path` and
+values. Later additions to the matrix include `ramp`, `cloverleaf`,
+forestry/farm/big_box/warehouse/parking_lot, the public-services pack,
+landmarks, transit pack, the Architect-mode decoratives + beautification,
+and `roundabout` (Beta 1.8 — both sizes map to it). Intentionally absent
+from the matrix: `walking_path` and
 `traffic_light` — neither has a per-tile cost or zone-change semantic
 for the council mechanic to gate, so adding rows would be dead weight.
 Their faction reactions live directly in each faction's `compute()`
@@ -353,6 +357,66 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.8.0 (Roundabouts — one-way ring with detailed island)
+
+User: "The next feature to add is a roundabout feature, to do a roundabout
+you have to draw 4 road pieces into each other, this lets you then go off
+of the roundabout in all directions and flows traffic in the way that one
+in real life would. Make the roundabout asset highly detailed and good
+looking." Clarified to: a dedicated Roundabout tool, in BOTH sizes (2×2
+and 3×3).
+
+**What landed:**
+
+- **Tool**: `place_roundabout_small` (2×2) + `place_roundabout_large`
+  (3×3) in the Roads toolbar group. Tap-to-place at the anchor (top-left).
+  Cost `ROUNDABOUT_COST` $5K / $12K. Validates the N×N footprint is
+  in-bounds, owned, on land, and free.
+- **Data model** (anchor pattern like skyscrapers): `Tile.roundabout`,
+  `roundaboutAx/Ay` (anchor coords on every footprint tile),
+  `roundaboutSize` (2/3 on the anchor only). `Grid.roundaboutAt(x,y)`
+  resolves `{ax,ay,size,cx,cy,isRing,isIsland}`. The 3×3 centre tile is
+  the non-drivable island; all other footprint tiles are ring road.
+  Save schema 32 → 33 (pre-33 saves load with no roundabouts).
+- **Placement** (`Game.placeRoundabout`): lays the perimeter ring as
+  `local` road edges (`roundaboutRingTiles` gives the CW cycle of
+  4 / 8 perimeter tiles), stamps the bits, charges the cost, and runs the
+  standard road-edit refresh. Bulldozing ANY footprint tile tears down the
+  whole roundabout (`clearRoundaboutAt`, run before the generic per-tile
+  road clear so the anchor lookup still resolves).
+- **One-way CCW traffic** (`RoadGraph.rebuild`): an edge between two ring
+  tiles of the same roundabout is pushed in only the counter-clockwise
+  direction (cross-product tangent test vs the centre; `cross < 0` =
+  CCW with north up). External approach edges stay bidirectional so they
+  serve as both entries and exits. Verified: A* routes a car around the
+  ring and out the chosen exit, never across the island, and takes the
+  long way round when the direct arc is against the flow.
+- **No crashes on the ring**: roundabout ring tiles join ramps/highways
+  in skipping the uncontrolled-intersection collision roll in
+  `Vehicles.update` — the whole point of a roundabout is to remove the
+  crossing conflicts that cause T-bone crashes. Spacing/leader-gap still
+  applies, so cars queue rather than overlap.
+- **Detailed renderer** (`builders.buildRoundaboutsGroup`, drawn from
+  `drawRoads` with `disposeGroup` teardown): one merged vertex-coloured
+  mesh for ALL roundabouts (single draw call). Per roundabout: circular
+  asphalt ring, white outer edge stripe, dashed yellow lane circle, four
+  CCW directional arrows, a raised concrete curb, a grassy island, and a
+  fountain/monument centrepiece (stone base + blue water + gold-tipped
+  column). The 3×3 also gets a ring of ornamental trees + alternating
+  flower beds. `buildRoadMesh` suppresses the internal ring↔ring square
+  road quads (the circular mesh replaces them) and skips stub squares on
+  roundabout tiles; external approach quads stay so connecting roads meet
+  the ring.
+- **Factions** (keystone rule): new `roundabout` row in `FACTION_STANCES`
+  for all 10 factions — Drivers +0.9 (continuous flow), Safer Streets
+  +0.8 (kills T-bone crashes), Greenleaf +0.4 (green island + less
+  idling), Taxpayers −0.4 (cost), everyone else mildly positive. Both
+  tools map to the `roundabout` stance key in `Game.refreshToolbarBans`.
+
+**Verified in-browser** (`?dev=1`): both sizes render detailed + correct,
+A* circulates CCW around the ring and exits all directions, 60fps, render
+<0.5 ms, 0 console errors, single added draw call. SW cache `v29` → `v30`.
 
 ## Status: Beta 1.7.0 ("Performance & memory" — profiling, leak fix, splits)
 

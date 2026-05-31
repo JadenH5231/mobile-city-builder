@@ -17,10 +17,15 @@ when every theme below has landed AND the product is feature-frozen.
 
 ---
 
-## Where we are: Beta 1.7.0 shipped — "Performance & memory" (theme open)
+## Where we are: Beta 1.8.0 shipped — Roundabouts (feature drop)
 
-**Status**: 1.7.0 shipped (see below). 1.6.x playtest-polish track stays
-open in parallel for anything urgent the player notices.
+**Status**: 1.7.0 ("Performance & memory") shipped. **1.8.0 shipped
+Roundabouts** as a feature drop (one-way CCW ring + detailed island, both
+2×2 and 3×3) — features take a minor bump (cf. 1.5 trucks, 1.6 warehouses),
+so roundabouts took 1.8 since 1.7 was the perf pass. The themed tracks
+below (Save robustness, Late-game depth, etc.) shift to the next free
+minors (1.9+) as they land. The 1.6.x playtest-polish track stays open in
+parallel for anything urgent the player notices.
 
 Tactical, playtest-driven fixes. Whatever the user notices, we ship in
 a small PR. No structural changes; this track is meant to stay close

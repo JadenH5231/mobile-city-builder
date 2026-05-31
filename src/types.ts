@@ -275,6 +275,14 @@ export const SKYSCRAPER_COST = {
   commercial: 25000,
   mixed: 28000
 } as const;
+/** Roundabout up-front cost (Beta 1.8). Small = 2×2 ring, large = 3×3
+ *  ring + bigger island/centrepiece. Priced as premium road
+ *  infrastructure — more than a handful of road tiles, less than a
+ *  skyscraper. */
+export const ROUNDABOUT_COST = {
+  small: 5000,
+  large: 12000
+} as const;
 /** Months per construction stage. 4 stages × 3 months = 12 months total. */
 export const SKYSCRAPER_MONTHS_PER_STAGE = 3;
 /** Per-tile resident capacity for an R skyscraper at stage 4 (built).
@@ -1126,7 +1134,13 @@ export type Tool =
   // Cloverleaf interchange (Alpha 4.17). 5×5 prefab built per-block,
   // beautiful curved highway loops + grass infields + bridge over.
   // Lives in the Roads group (it's road infrastructure, not a building).
-  | 'place_cloverleaf';
+  | 'place_cloverleaf'
+  // Roundabouts (Beta 1.8). Tap-to-place N×N prefab in the Roads group.
+  // A one-way (counter-clockwise) ring road around a landscaped central
+  // island; traffic flows around it and exits in any direction, like a
+  // real roundabout. Small = 2×2, large = 3×3.
+  | 'place_roundabout_small'
+  | 'place_roundabout_large';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's

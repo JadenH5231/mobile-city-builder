@@ -1648,7 +1648,12 @@ export class Vehicles {
           (grid.get(arrivedX, arrivedY + 1)?.roadType === 'highway') ||
           (grid.get(arrivedX, arrivedY - 1)?.roadType === 'highway')
         );
-        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !arrivedTile.ramp && !isHighway && !touchesHighway && !authority) {
+        // Roundabout ring tiles skip the roll too (Beta 1.8) — a
+        // roundabout is one-way circulation, the whole point of which is
+        // to eliminate the crossing conflicts that cause T-bone crashes.
+        // Cars yield on entry (handled via the one-way ring graph + the
+        // leader-gap spacing) rather than crossing, so no collision roll.
+        if (isIntersection && !arrivedTile.stopSign && !arrivedTile.trafficLight && !arrivedTile.ramp && !arrivedTile.roundabout && !isHighway && !touchesHighway && !authority) {
           const others = Math.max(0, arrivedTile.trafficLoad - 1);
           const p = Math.min(COLLISION_RATE_CAP, others * COLLISION_RATE_PER_OTHER);
           if (Math.random() < p) {

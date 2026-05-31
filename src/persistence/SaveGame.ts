@@ -23,6 +23,12 @@ export const NUM_SLOTS = 3;
  *  with single-slot saves — that's where any pre-2.20 city already lives. */
 export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
 /**
+ * Schema 33 (Beta 1.8 — Roundabouts): adds optional `roundabout`,
+ * `roundaboutAx`, `roundaboutAy`, `roundaboutSize` per tile (the N×N
+ * footprint anchor pattern). v32-and-earlier saves load with no
+ * roundabouts (roundabout=false, ax=ay=-1, size=0). Schema 30-32 were
+ * Beta 1.6.x supply-chain / persistence increments.
+ *
  * Schema 27 (Alpha 4.21 — Big-build rotation): adds optional
  * `bigBuildRotation` per tile. Only the anchor of a big civic build
  * carries a non-zero value (0..3, number of 90° CW turns). v26-and-
@@ -40,7 +46,7 @@ export const SLOT_KEYS: readonly string[] = ['main', 'slot2', 'slot3'];
  * Older saves load identically since neither building can have been
  * placed in them. No structural schema change.
  */
-const SCHEMA = 32;
+const SCHEMA = 33;
 const MIN_LOADABLE_SCHEMA = 2;
 
 /**
@@ -132,6 +138,14 @@ export interface TileSnapshot {
    *  recent delivery to this commercial tile came from a city-edge
    *  import truck (-25% revenue penalty until next domestic delivery). */
   importSource?: boolean;
+  /** Roundabout bits (Beta 1.8 / schema 33+). `roundabout` true on every
+   *  N×N footprint tile; `roundaboutAx/Ay` the anchor coords; `size` 2 or
+   *  3 on the anchor only. Pre-33 saves load with roundabout=false /
+   *  ax=ay=-1 / size=0 (no roundabouts existed). */
+  roundabout?: boolean;
+  roundaboutAx?: number;
+  roundaboutAy?: number;
+  roundaboutSize?: 0 | 2 | 3;
 }
 
 export interface SaveData {
@@ -461,7 +475,11 @@ export function serialize(
       cloverleaf: t.cloverleaf,
       bigBuildRotation: t.bigBuildRotation,
       supplies: t.supplies,
-      importSource: t.importSource
+      importSource: t.importSource,
+      roundabout: t.roundabout,
+      roundaboutAx: t.roundaboutAx,
+      roundaboutAy: t.roundaboutAy,
+      roundaboutSize: t.roundaboutSize
     };
   }
   const edges: number[] = [];
@@ -661,6 +679,11 @@ export function applySave(
     // first time a long-running city is opened post-update.
     t.supplies = snap.supplies ?? 1;
     t.importSource = snap.importSource ?? false;
+    // Roundabout bits (schema 33+). Pre-33 saves have none.
+    t.roundabout = snap.roundabout ?? false;
+    t.roundaboutAx = snap.roundaboutAx ?? -1;
+    t.roundaboutAy = snap.roundaboutAy ?? -1;
+    t.roundaboutSize = snap.roundaboutSize ?? 0;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

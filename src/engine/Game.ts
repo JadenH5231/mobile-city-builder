@@ -59,6 +59,7 @@ import {
   MAYOR_MANSION_DEPTH,
   MAYOR_MANSION_WIDTH,
   SKYSCRAPER_COST,
+  ROUNDABOUT_COST,
   SKYSCRAPER_VARIANT_COUNT,
   MAP_SIZES,
   PLACE_TOOL_TO_BUILDING,
@@ -825,7 +826,10 @@ export class Game {
       ['place_city_hall', 'city_hall'],
       ['place_provincial_capital', 'provincial_capital'],
       ['place_national_capital', 'national_capital'],
-      ['place_cloverleaf', 'cloverleaf']
+      ['place_cloverleaf', 'cloverleaf'],
+      // Roundabouts (Beta 1.8) — both sizes map to the same stance key.
+      ['place_roundabout_small', 'roundabout'],
+      ['place_roundabout_large', 'roundabout']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -2060,6 +2064,20 @@ export class Game {
       return;
     }
 
+    // Roundabouts (Beta 1.8) — tap-only, take an N×N footprint anchored
+    // at the tap (top-left). Lays a one-way CCW ring road around a
+    // landscaped island. See placeRoundabout for the validation rules.
+    if (this.tool === 'place_roundabout_small' || this.tool === 'place_roundabout_large') {
+      const size = this.tool === 'place_roundabout_large' ? 3 : 2;
+      const placed = this.placeRoundabout(tile.x, tile.y, size);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+
     if (
       this.tool === 'residential_skyscraper' ||
       this.tool === 'commercial_skyscraper' ||
@@ -2651,6 +2669,146 @@ export class Game {
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawZones(this.grid);
+    return true;
+  }
+
+  /**
+   * Roundabout placement (Beta 1.8). `size` is 2 or 3; the footprint is
+   * size×size anchored at (x, y) as the top-left tile. The perimeter
+   * tiles become a one-way (counter-clockwise) ring road around a
+   * landscaped central island; the 3×3 centre tile is the (non-drivable)
+   * island. Cars circulate the ring and exit in any direction the player
+   * has connected a road to — RoadGraph wires the ring CCW (see its
+   * rebuild). Returns false (with a toast) if the footprint is blocked or
+   * the treasury can't cover the cost.
+   */
+  private placeRoundabout(x: number, y: number, size: 2 | 3): boolean {
+    // Footprint must be fully in-bounds, owned, on land, and free of any
+    // road / path / zone / building / existing roundabout.
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const t = this.grid.get(x + dx, y + dy);
+        if (!t) {
+          this.onStatusMessage?.(`Roundabout needs a clear ${size}×${size} area`);
+          return false;
+        }
+        if (!t.owned) {
+          this.onStatusMessage?.('Roundabout needs owned land');
+          return false;
+        }
+        if (t.terrain === 'water' || t.bridge) {
+          this.onStatusMessage?.('Roundabout needs flat land (no water)');
+          return false;
+        }
+        if (t.road || t.path || t.zone !== 'none' || t.building !== 'none' || t.roundabout) {
+          this.onStatusMessage?.(`Roundabout needs all ${size}×${size} tiles free`);
+          return false;
+        }
+      }
+    }
+    const cost = size === 3 ? ROUNDABOUT_COST.large : ROUNDABOUT_COST.small;
+    if (this.economy.treasury < cost && !this.cheatUnlimitedMoney) {
+      this.onStatusMessage?.(`Not enough money — roundabout costs $${cost.toLocaleString()}`);
+      return false;
+    }
+
+    // Perimeter ring tiles in clockwise screen order (top edge L→R, right
+    // edge T→B, bottom edge R→L, left edge B→T) so consecutive entries are
+    // 4-adjacent and form a single closed cycle. The centre tile of a 3×3
+    // is intentionally excluded — it's the island.
+    const ring = this.roundaboutRingTiles(x, y, size);
+    // Lay the ring road by connecting each consecutive pair of perimeter
+    // tiles with a local-tier edge. setRoadEdge marks both endpoints as
+    // road, so the ring tiles become drivable; the island never becomes
+    // an edge endpoint and stays grass.
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      this.grid.setRoadEdge(a.x, a.y, b.x, b.y, true, 'local');
+    }
+    // Stamp roundabout bits on every footprint tile (ring + island).
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const t = this.grid.get(x + dx, y + dy)!;
+        t.roundabout = true;
+        t.roundaboutAx = x;
+        t.roundaboutAy = y;
+        t.roundaboutSize = 0;
+      }
+    }
+    const anchor = this.grid.get(x, y)!;
+    anchor.roundaboutSize = size;
+
+    this.economy.treasury -= cost;
+    // Same post-road-edit refresh sequence applyRoadStroke uses.
+    this.renderer.drawRoads(this.grid);
+    this.roadGraph.rebuild(this.grid);
+    this.pathGraph.rebuild(this.grid);
+    this.globalMarket.recompute(this.grid);
+    return true;
+  }
+
+  /**
+   * Perimeter tiles of an N×N roundabout in clockwise screen order,
+   * forming a single closed cycle of 4-adjacent tiles (the 3×3 centre
+   * island is excluded). Shared by placement (to lay ring edges) and the
+   * renderer/road-graph if needed.
+   */
+  private roundaboutRingTiles(ax: number, ay: number, size: number): Array<{ x: number; y: number }> {
+    if (size === 2) {
+      return [
+        { x: ax,     y: ay     },
+        { x: ax + 1, y: ay     },
+        { x: ax + 1, y: ay + 1 },
+        { x: ax,     y: ay + 1 }
+      ];
+    }
+    // size === 3: 8 perimeter tiles, clockwise from top-left.
+    return [
+      { x: ax,     y: ay     },
+      { x: ax + 1, y: ay     },
+      { x: ax + 2, y: ay     },
+      { x: ax + 2, y: ay + 1 },
+      { x: ax + 2, y: ay + 2 },
+      { x: ax + 1, y: ay + 2 },
+      { x: ax,     y: ay + 2 },
+      { x: ax,     y: ay + 1 }
+    ];
+  }
+
+  /**
+   * Tear down the entire roundabout that the tile at (x, y) belongs to
+   * (Beta 1.8). Removes every ring edge (which demotes ring tiles to
+   * non-road) and clears the roundabout bits + island tile. Called from
+   * the bulldoze path when the player demolishes any footprint tile.
+   * Returns true if a roundabout was found and cleared.
+   */
+  private clearRoundaboutAt(x: number, y: number): boolean {
+    const info = this.grid.roundaboutAt(x, y);
+    if (!info) return false;
+    const ring = this.roundaboutRingTiles(info.ax, info.ay, info.size);
+    // Remove the ring cycle edges — setRoadEdge(false) demotes a tile to
+    // non-road once it has no remaining edges, and setRoad(false) clears
+    // that tile's roundabout flags.
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % ring.length]!;
+      this.grid.setRoadEdge(a.x, a.y, b.x, b.y, false);
+    }
+    // Explicitly clear every footprint tile's roundabout bits (the island
+    // centre is never an edge endpoint, so it won't be cleared above; and
+    // ring tiles the player wired external roads to keep road=true but
+    // must shed their roundabout identity).
+    for (let dy = 0; dy < info.size; dy++) {
+      for (let dx = 0; dx < info.size; dx++) {
+        const t = this.grid.get(info.ax + dx, info.ay + dy);
+        if (!t) continue;
+        t.roundabout = false;
+        t.roundaboutAx = -1;
+        t.roundaboutAy = -1;
+        t.roundaboutSize = 0;
+      }
+    }
     return true;
   }
 
@@ -3808,6 +3966,17 @@ export class Game {
         bridgeRoadEdges: bridgeEdgesHere
       };
       this.strokeBulldozed.set(idx, snap);
+
+      // Roundabout (Beta 1.8) — bulldozing ANY footprint tile (ring or
+      // island) tears down the whole roundabout. Done BEFORE the per-tile
+      // road clearing below, because setRoad(false) clears this tile's
+      // roundabout flags defensively, which would make the lookup fail.
+      // clearRoundaboutAt removes the ring cycle edges + clears every
+      // footprint tile's bits; the tapped tile's remaining external edges
+      // are then cleared by the generic pass below.
+      if (tile.roundabout) {
+        if (this.clearRoundaboutAt(x, y)) roadsChanged = true;
+      }
 
       // Clear edges first (auto-demotes stub when last edge goes).
       for (const ek of snap.edges) {

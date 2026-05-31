@@ -54,6 +54,7 @@ import {
   buildPathMesh,
   buildRoadMesh,
   buildRoadOrnamentsGroup,
+  buildRoundaboutsGroup,
   buildSidewalkMesh,
   buildSkyscrapersMesh,
   buildTerrainMesh,
@@ -115,6 +116,9 @@ export class Renderer {
   private roadLanes: LineSegments | null = null;
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
   private roadOrnaments: Group | null = null;
+  /** Detailed roundabout meshes (Beta 1.8) — one merged Group for all
+   *  roundabouts on the map; rebuilt on every drawRoads. */
+  private roundaboutsGroup: Group | null = null;
   /** Upper-layer (Bridge Mode) road mesh — rebuilt with the ground roads. */
   private bridgeRoadMesh: Group | null = null;
   /** Trees mesh — merged variant geometry per forest tile (Alpha 2.2). */
@@ -1193,6 +1197,11 @@ export class Renderer {
       this.worldGroup.remove(this.bridgeRoadMesh);
       this.bridgeRoadMesh = null;
     }
+    if (this.roundaboutsGroup) {
+      this.disposeGroup(this.roundaboutsGroup);
+      this.worldGroup.remove(this.roundaboutsGroup);
+      this.roundaboutsGroup = null;
+    }
     this.rebuildSidewalks(grid);
     this.rebuildPaths(grid);
     const built = buildRoadMesh(grid);
@@ -1214,6 +1223,14 @@ export class Renderer {
     if (ornaments) {
       this.roadOrnaments = ornaments;
       this.worldGroup.add(ornaments);
+    }
+    // Detailed roundabout islands (Beta 1.8) — circular ring + island +
+    // fountain, drawn over the tiles whose square road quads were
+    // suppressed in buildRoadMesh.
+    const roundabouts = buildRoundaboutsGroup(grid);
+    if (roundabouts) {
+      this.roundaboutsGroup = roundabouts;
+      this.worldGroup.add(roundabouts);
     }
     // Refresh night-lights — avenue lamps depend on the road state.
     this.drawNightLights(grid);

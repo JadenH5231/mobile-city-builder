@@ -9,6 +9,7 @@ import { isCloudEnabled, getSupabase } from './auth/SupabaseClient';
 import { AuthModal } from './ui/AuthModal';
 import { initThemes } from './themes/registry';
 import { bindThemePicker } from './ui/ThemePicker';
+import { maybeShowWhatsNew } from './ui/WhatsNew';
 import './styles.css';
 
 // Theme pack init (Beta 1.2). Restores the player's active theme from
@@ -55,6 +56,11 @@ settings.load();
 
 const game = new Game();
 await game.init(appEl, MAP_SIZES.small, activeSlot);
+
+// "What's New" update popup (Beta 1.8) — shows for returning players when
+// the minor version changed since their last visit (e.g. 1.7 → 1.8).
+// Self-gating: brand-new players + patch-only bumps see nothing.
+maybeShowWhatsNew();
 
 // Dev profiling overlay (Beta 1.7) — only when ?dev=1. Lazy-imported so
 // its DOM + code never ship to a normal player's first paint.

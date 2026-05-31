@@ -77,6 +77,7 @@ src/
   main.ts             entry point + FPS counter
   styles.css          global CSS (HUD pills, toolbar, info panel)
   types.ts            shared constants + types (Dir, Tool, MAP_SIZES, ROAD_WIDTH…)
+  version.ts          canonical APP_VERSION (single source of truth; bump every release)
   engine/
     Game.ts           bootstraps Three.js, owns the loop, paint logic
     Camera.ts         3D ortho camera at fixed 3/4 angle (panBy, zoomAt, screenToWorld)
@@ -141,6 +142,7 @@ src/
     DistrictsPanel.ts district registry editor (Alpha 2.22)
     ThemePicker.ts    theme card grid in Settings (Beta 1.2)
     PhotoOpBanner.ts  opportunistic photo-op banner
+    WhatsNew.ts       returning-player update popup on a minor-version bump (Beta 1.8.1)
     Toolbar.ts        scrollable bottom tool selector w/ grouped popovers
 ```
 
@@ -357,6 +359,33 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.8.1 ("What's New" update popup)
+
+User: "Create an update pop up that explains the changes whenever it's a
+0.X decimal change update that way returning players can see what is new
+since the last major decimal change."
+
+- **`src/version.ts`** — new canonical `APP_VERSION` (`MAJOR.MINOR.PATCH`,
+  the numeric part of the "Beta X.Y.Z" label). Single source of truth.
+- **`src/ui/WhatsNew.ts`** — `maybeShowWhatsNew()` (called once from
+  `main.ts` after `game.init`). Compares `localStorage
+  ['mqcity-last-seen-version']` to `APP_VERSION`: shows a modal ONLY when
+  the **minor** changed for a returning player (1.7.x → 1.8.0); a patch
+  bump (1.8.0 → 1.8.1) or identical version shows nothing; a brand-new
+  player (no stored version) records silently and sees nothing. Multi-
+  minor skips (1.6 → 1.8) stack every newer minor's notes, newest first.
+  Changelog = `WHATS_NEW` keyed by `MAJOR.MINOR`. Modal reuses the
+  tutorial-prompt glass look (`.whats-new__*` in styles.css), z-index 135.
+
+**MAINTENANCE RULE (important for future sessions):** every release must
+bump `APP_VERSION` in `src/version.ts`. When the bump is a new MINOR, also
+add a matching `WHATS_NEW` entry in `WhatsNew.ts` so returning players see
+what changed. Forgetting the entry means the popup fires with no notes (it
+self-skips when the minor has no entry, so it won't crash — but players
+miss the announcement).
+
+SW cache `v30` → `v31`.
 
 ## Status: Beta 1.8.0 (Roundabouts — one-way ring with detailed island)
 

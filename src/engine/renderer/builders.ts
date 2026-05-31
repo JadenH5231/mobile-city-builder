@@ -6045,16 +6045,62 @@ function tierIndex(t: 'local' | 'avenue' | 'highway'): number {
  * sliced into pairs at every bridgeRoad tile. Returns null if no
  * upper-layer roads exist on the grid.
  */
+/**
+ * Oriented box "beam" between two centreline endpoints (Beta 1.8.2 bridge
+ * pass). Each endpoint has its own base height so the beam follows a ramp
+ * slope; `nx,nz` is the unit perpendicular in the XZ plane, `halfW` the
+ * half-thickness across it, `height` the vertical extrusion (top = base +
+ * height). Emits a full closed box (top / bottom / 2 long sides / 2 end
+ * caps). Used for the deck slab, the parapet barriers, and the pier caps —
+ * everything that needs visible 3D depth instead of a paper-thin quad. */
+function bridgeBeam(
+  x0: number, z0: number, y0: number,
+  x1: number, z1: number, y1: number,
+  nx: number, nz: number, halfW: number, height: number
+): BufferGeometry {
+  const px = nx * halfW, pz = nz * halfW;
+  const yt0 = y0 + height, yt1 = y1 + height;
+  const v = new Float32Array([
+    x0 - px, y0,  z0 - pz,   // 0 start-left  bottom
+    x0 + px, y0,  z0 + pz,   // 1 start-right bottom
+    x1 + px, y1,  z1 + pz,   // 2 end-right   bottom
+    x1 - px, y1,  z1 - pz,   // 3 end-left    bottom
+    x0 - px, yt0, z0 - pz,   // 4 start-left  top
+    x0 + px, yt0, z0 + pz,   // 5 start-right top
+    x1 + px, yt1, z1 + pz,   // 6 end-right   top
+    x1 - px, yt1, z1 - pz    // 7 end-left    top
+  ]);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(v, 3));
+  // Winding doesn't matter — the bridge meshes render DoubleSide.
+  g.setIndex(new BufferAttribute(new Uint32Array([
+    4, 5, 6, 4, 6, 7,   // top
+    0, 2, 1, 0, 3, 2,   // bottom
+    0, 4, 7, 0, 7, 3,   // left
+    1, 5, 6, 1, 6, 2,   // right
+    0, 1, 5, 0, 5, 4,   // start cap
+    3, 2, 6, 3, 6, 7    // end cap
+  ]), 1));
+  return g;
+}
+
 export function buildBridgeRoadMesh(grid: Grid): Group | null {
   const edges = Array.from(grid.iterBridgeRoadEdges());
   if (edges.length === 0) return null;
 
-  const decks: BufferGeometry[] = [];
-  const deckColours: number[] = [];
-  const railColours: number[] = [];
-  const rails: BufferGeometry[] = [];
-  const pillars: BufferGeometry[] = [];
-  const pillarColours: number[] = [];
+  // Beta 1.8.2 — richer overpass look: a thick concrete deck slab under
+  // the asphalt running surface, solid concrete parapet barriers on both
+  // shoulders, and chunky cylindrical piers with a cap beam (replacing the
+  // old paper-thin quad deck + flat rail strips + two grey sticks).
+  const deckTops: BufferGeometry[] = [];      // asphalt running surface
+  const deckTopColours: number[] = [];
+  const concrete: BufferGeometry[] = [];      // slab + parapets + piers + caps
+  const concreteColours: number[] = [];
+  const CONCRETE_DECK = tint(0xb8b3a6);
+  const CONCRETE_PARAPET = tint(0xd6d1c4);
+  const CONCRETE_CAP = tint(0xa39d8f);
+  const CONCRETE_PIER = tint(0x8c867a);
+  const DECK_THICK = 0.07;
 
   // Ramp logic (Alpha 2.13.1) — the FIRST and LAST tiles of an upper-
   // layer bridge segment ramp down to ground if a road exists there
@@ -6095,68 +6141,38 @@ export function buildBridgeRoadMesh(grid: Grid): Group | null {
     const yA = yAt(e.ax, e.ay);
     const yB = yAt(e.bx, e.by);
 
-    const deck = new BufferGeometry();
-    const positions = new Float32Array([
+    const nx = -dz / len, nz = dx / len;   // unit perpendicular
+
+    // Asphalt running surface — top quad cars drive on, kept at yA/yB so
+    // it follows the ramp slope and matches the car render height.
+    const topQuad = new BufferGeometry();
+    topQuad.setAttribute('position', new BufferAttribute(new Float32Array([
       ax + px, yA, az + pz,
       bx + px, yB, bz + pz,
       bx - px, yB, bz - pz,
       ax - px, yA, az - pz
-    ]);
-    deck.setAttribute('position', new BufferAttribute(positions, 3));
-    deck.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
-    decks.push(deck);
-    deckColours.push(tierProps.color);
+    ]), 3));
+    topQuad.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
+    deckTops.push(topQuad);
+    deckTopColours.push(tierProps.color);
 
-    // Rail edges along both shoulders, sit slightly above the deck.
-    // Build with explicit endpoint heights so the rail follows the ramp.
-    const railH = 0.06;
+    // Concrete deck slab — gives the deck real depth (extruded DECK_THICK
+    // below the asphalt) + a slight underhang past the road edge so the
+    // structure reads as a solid beam from the side, not a paper plane.
+    concrete.push(bridgeBeam(
+      ax, az, yA - DECK_THICK, bx, bz, yB - DECK_THICK,
+      nx, nz, half + 0.03, DECK_THICK
+    ));
+    concreteColours.push(CONCRETE_DECK);
+
+    // Solid concrete parapet barriers along both shoulders (replaces the
+    // old flat rail strips), straddling the deck rim and following the ramp.
+    const parapetH = 0.13, parapetT = 0.05;
     for (const sign of [1, -1]) {
-      const sx = sign * px;
-      const sz = sign * pz;
-      const railPositions = new Float32Array([
-        ax + sx - 0.0, yA + railH * 0.0, az + sz - 0.0,
-        ax + sx,        yA + railH,       az + sz,
-        bx + sx,        yB + railH,       bz + sz,
-        bx + sx - 0.0, yB + railH * 0.0, bz + sz - 0.0
-      ]);
-      // Hoist the rail bar up to floor + railH; build as a thin twisted
-      // strip. Easier: just pair lower + upper line and use them as a
-      // strip via two triangles.
-      const positionsRail = new Float32Array([
-        // lower-left, upper-left, upper-right, lower-right (along axis)
-        ax + sx, yA,         az + sz,
-        ax + sx, yA + railH, az + sz,
-        bx + sx, yB + railH, bz + sz,
-        bx + sx, yB,         bz + sz
-      ]);
-      const railGeom = new BufferGeometry();
-      railGeom.setAttribute('position', new BufferAttribute(positionsRail, 3));
-      railGeom.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
-      // Suppress unused railPositions array (was a previous prototype).
-      void railPositions;
-      // Add a mirror face so the rail isn't culled when viewed from the other side.
-      const back = new BufferGeometry();
-      back.setAttribute('position', new BufferAttribute(positionsRail, 3));
-      back.setIndex(new BufferAttribute(new Uint32Array([0, 2, 1, 0, 3, 2]), 1));
-      rails.push(railGeom);
-      railColours.push(0xb6a98a);
-      rails.push(back);
-      railColours.push(0xb6a98a);
-      // Add slight thickness — push a duplicated rail shifted inward a hair.
-      const inset = 0.012;
-      const insetX = sign * (px === 0 ? 0 : -Math.sign(px) * inset);
-      const insetZ = sign * (pz === 0 ? 0 : -Math.sign(pz) * inset);
-      const inner = new Float32Array([
-        ax + sx + insetX, yA,         az + sz + insetZ,
-        ax + sx + insetX, yA + railH, az + sz + insetZ,
-        bx + sx + insetX, yB + railH, bz + sz + insetZ,
-        bx + sx + insetX, yB,         bz + sz + insetZ
-      ]);
-      const innerGeom = new BufferGeometry();
-      innerGeom.setAttribute('position', new BufferAttribute(inner, 3));
-      innerGeom.setIndex(new BufferAttribute(new Uint32Array([0, 2, 1, 0, 3, 2]), 1));
-      rails.push(innerGeom);
-      railColours.push(0xa0937a);
+      const cxs = ax + sign * px, czs = az + sign * pz;
+      const cxe = bx + sign * px, cze = bz + sign * pz;
+      concrete.push(bridgeBeam(cxs, czs, yA, cxe, cze, yB, nx, nz, parapetT / 2, parapetH));
+      concreteColours.push(CONCRETE_PARAPET);
     }
   }
 
@@ -6183,32 +6199,42 @@ export function buildBridgeRoadMesh(grid: Grid): Group | null {
     }
     const tierProps = ROAD_TIER[t.bridgeRoadType];
     const half = tierProps.width / 2;
-    const pillarH = tileY + 0.05;
-    const pillarYBase = -0.05;
-    const pillarOffset = half + 0.04;
+    const pillarOffset = half + 0.02;
+    // Pier cap — a wide concrete beam tucked just under the deck slab,
+    // spanning the road width so both columns carry it (the classic
+    // overpass silhouette). Oriented across the road direction.
+    const capTopY = tileY - DECK_THICK;
+    const capH = 0.07;
+    const capLen = pillarOffset * 2 + 0.16;
+    const cap = horizontal
+      ? new BoxGeometry(0.20, capH, capLen)
+      : new BoxGeometry(capLen, capH, 0.20);
+    cap.translate(cx, capTopY - capH / 2, cz);
+    concrete.push(cap);
+    concreteColours.push(CONCRETE_CAP);
+    // Two chunky cylindrical piers dropping from the cap to the ground.
+    const colTop = capTopY - capH;
+    const colBase = -0.06;
+    const colH = Math.max(0.05, colTop - colBase);
     const offsets: Array<[number, number]> = horizontal
       ? [[0, -pillarOffset], [0, pillarOffset]]
       : [[-pillarOffset, 0], [pillarOffset, 0]];
     for (const [ox, oz] of offsets) {
-      const pillar = new BoxGeometry(0.06, pillarH, 0.06);
-      pillar.translate(cx + ox, pillarYBase + pillarH / 2, cz + oz);
-      pillars.push(pillar);
-      pillarColours.push(0x6e6e6e);
+      const col = cyl(0.075, colH, 10);
+      col.translate(cx + ox, colBase + colH / 2, cz + oz);
+      concrete.push(col);
+      concreteColours.push(CONCRETE_PIER);
     }
   }
 
   const group = new Group();
-  if (decks.length > 0) {
-    const merged = mergeGeoms(decks, deckColours);
-    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  if (deckTops.length > 0) {
+    const merged = mergeGeoms(deckTops, deckTopColours);
+    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true, side: DoubleSide })));
   }
-  if (rails.length > 0) {
-    const merged = mergeGeoms(rails, railColours);
-    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
-  }
-  if (pillars.length > 0) {
-    const merged = mergeGeoms(pillars, pillarColours);
-    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  if (concrete.length > 0) {
+    const merged = mergeGeoms(concrete, concreteColours);
+    group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true, side: DoubleSide })));
   }
   return group;
 }

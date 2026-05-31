@@ -360,6 +360,27 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.8.2 (Bridge-layer overpasses redesigned — silent patch)
+
+User: "Bridge layer bridges should look much more visually appealing than
+they do now, make this a silent update, like a x.y.1 version change." A
+patch bump is silent by construction — the What's New popup only fires on
+a MINOR change, so 1.8.1 → 1.8.2 announces nothing.
+
+Redesigned `buildBridgeRoadMesh` in `renderer/builders.ts` (the Bridge-
+Mode upper-layer `bridgeRoad` overpasses — NOT the auto-bridges over
+water). Old look: flat single-quad deck + paper-thin tan rail strips +
+two 0.06 grey stick pillars per tile. New look: a **thick concrete deck
+slab** under the asphalt running surface, **solid concrete parapet
+barriers** on both shoulders, and **chunky cylindrical piers with a
+pier-cap beam** under the deck. New module-level `bridgeBeam()` helper
+builds an oriented closed box between two centreline endpoints with
+independent end heights (follows the ramp slope); bridge meshes render
+`DoubleSide` so winding never culls a face. The asphalt top quad stays at
+the same yA/yB heights → ramp behaviour + car render height unchanged.
+Two merged meshes (asphalt + concrete), same low draw count. SW cache
+`v31` → `v32`.
+
 ## Status: Beta 1.8.1 ("What's New" update popup)
 
 User: "Create an update pop up that explains the changes whenever it's a

@@ -360,6 +360,21 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.8.4 (Cars drive around the roundabout — silent patch)
+
+User: "it needs to look like the cars are actually driving around it."
+Vehicles lerp straight tile-centre-to-tile-centre chords, so on a
+roundabout they cut across the island instead of curving. New
+`Renderer.roundaboutVehiclePos(grid,aX,aY,bX,bY,t)` helper: both endpoints
+ring tiles of the same roundabout → interpolate along the **circular arc**
+(constant driving radius = outer lane for CCW right-hand traffic) with a
+tangential yaw; exactly one ring endpoint (entry/exit) → straight but the
+ring endpoint is remapped onto the driving radius so the approach feeds
+tangentially into the circle. Wired into `updateCars` (cars + trucks) and
+`updateBuses`; null when the segment doesn't touch a ring tile (normal
+lane-offset straight path). Render-only — sim + one-way routing untouched.
+SW cache `v33` → `v34`.
+
 ## Status: Beta 1.8.3 (Roundabouts connect seamlessly to roads — silent patch)
 
 User: "the roundabouts look ugly right now, they need to seamlessly and

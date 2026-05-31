@@ -1298,6 +1298,70 @@ export class Renderer {
   }
 
   /**
+   * Beta 1.8.4 — roundabout-aware vehicle position. When a path segment
+   * touches a roundabout ring tile, the straight tile-centre-to-tile-centre
+   * lerp is replaced so the vehicle actually CURVES around the island
+   * instead of cutting across it in square chords:
+   *  - both endpoints are ring tiles of the same roundabout → interpolate
+   *    along the circular arc (constant driving radius) so the car drives
+   *    around the ring;
+   *  - exactly one endpoint is a ring tile (an entry/exit) → straight, but
+   *    the ring endpoint is remapped onto the ring's driving radius so the
+   *    approach road feeds tangentially into the circle with no jump.
+   * Returns position-space coords (×TILE_SIZE for world) + yaw, or null
+   * when neither endpoint is a roundabout ring tile (use the normal
+   * lane-offset straight path then). Shared by cars, trucks, and buses.
+   */
+  private roundaboutVehiclePos(
+    grid: Grid, aX: number, aY: number, bX: number, bY: number, t: number
+  ): { px: number; pz: number; yaw: number } | null {
+    const ra = grid.roundaboutAt(aX, aY);
+    const rb = grid.roundaboutAt(bX, bY);
+    const aRing = ra && ra.isRing ? ra : null;
+    const bRing = rb && rb.isRing ? rb : null;
+    if (!aRing && !bRing) return null;
+    const ax = aX + 0.5, az = aY + 0.5, bx = bX + 0.5, bz = bY + 0.5;
+    const radiusOf = (info: { size: number }): number => {
+      const outerR = info.size * 0.5;
+      const roadW = info.size === 3 ? 0.58 : 0.50;
+      const innerR = Math.max(0.22, outerR - roadW);
+      return innerR + roadW * 0.66;   // outer lane (right-hand traffic, CCW)
+    };
+    // Both ring tiles of the same roundabout → arc around the centre.
+    if (aRing && bRing && aRing.ax === bRing.ax && aRing.ay === bRing.ay) {
+      const cX = aRing.cx + 0.5, cZ = aRing.cy + 0.5;
+      const R = radiusOf(aRing);
+      const angA = Math.atan2(az - cZ, ax - cX);
+      const angB = Math.atan2(bz - cZ, bx - cX);
+      let d = angB - angA;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const ang = angA + d * t;
+      const s = d >= 0 ? 1 : -1;
+      return {
+        px: cX + Math.cos(ang) * R,
+        pz: cZ + Math.sin(ang) * R,
+        yaw: Math.atan2(-Math.sin(ang) * s, Math.cos(ang) * s)
+      };
+    }
+    // One ring tile (entry / exit) → straight, but the ring endpoint sits
+    // on the driving radius so it lines up with the arc.
+    const remap = (info: { cx: number; cy: number; size: number }, px: number, pz: number): [number, number] => {
+      const cX = info.cx + 0.5, cZ = info.cy + 0.5;
+      const ang = Math.atan2(pz - cZ, px - cX);
+      const R = radiusOf(info);
+      return [cX + Math.cos(ang) * R, cZ + Math.sin(ang) * R];
+    };
+    const [apx, apz] = aRing ? remap(aRing, ax, az) : [ax, az];
+    const [bpx, bpz] = bRing ? remap(bRing, bx, bz) : [bx, bz];
+    return {
+      px: apx + (bpx - apx) * t,
+      pz: apz + (bpz - apz) * t,
+      yaw: Math.atan2(bpx - apx, bpz - apz)
+    };
+  }
+
+  /**
    * Per-frame car positions. Reads each car's path + segmentT, computes
    * world position via lerp between the segment's endpoints, and orients
    * the box along the segment direction. Sets `count` to the active count
@@ -1369,13 +1433,21 @@ export class Renderer {
       const laneOffset = ROAD_TIER[tier].width * 0.22; // ≈ centre of right lane
       const rightX = (dzSeg / segLen) * laneOffset;
       const rightZ = (-dxSeg / segLen) * laneOffset;
-      obj.position.set(
-        (ax + dxSeg * t) * TILE_SIZE + rightX * TILE_SIZE,
-        yA + (yB - yA) * t + 0.05,
-        (az + dzSeg * t) * TILE_SIZE + rightZ * TILE_SIZE
-      );
-      // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
-      obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
+      // Roundabout arc (Beta 1.8.4) — curve around the ring instead of
+      // cutting across it. Null when the segment doesn't touch a ring tile.
+      const arc = this.roundaboutVehiclePos(grid, aTileX, aTileY, bTileX, bTileY, t);
+      if (arc) {
+        obj.position.set(arc.px * TILE_SIZE, yA + (yB - yA) * t + 0.05, arc.pz * TILE_SIZE);
+        obj.rotation.set(0, arc.yaw, 0);
+      } else {
+        obj.position.set(
+          (ax + dxSeg * t) * TILE_SIZE + rightX * TILE_SIZE,
+          yA + (yB - yA) * t + 0.05,
+          (az + dzSeg * t) * TILE_SIZE + rightZ * TILE_SIZE
+        );
+        // atan2(x, z) so +Z (south) is yaw=0, +X (east) is yaw=π/2.
+        obj.rotation.set(0, Math.atan2(dxSeg, dzSeg), 0);
+      }
       // Per-kind scale (Alpha 4.14, expanded 4.15.2; Beta 1.5):
       //  - motorcade_limo → 1.6× length (stretched limousine)
       //  - fire_response → 1.10× wide × 1.50× tall × 1.40× long
@@ -1648,12 +1720,19 @@ export class Renderer {
       const pz = (-dx / len) * lateral;
       const yA = roadSurfaceY(grid, aTileX, aTileY);
       const yB = roadSurfaceY(grid, bTileX, bTileY);
-      obj.position.set(
-        (ax + dx * t + px) * TILE_SIZE,
-        yA + (yB - yA) * t + 0.07,
-        (az + dz * t + pz) * TILE_SIZE
-      );
-      obj.rotation.set(0, Math.atan2(dx, dz), 0);
+      // Roundabout arc (Beta 1.8.4) — buses curve around the ring too.
+      const arc = this.roundaboutVehiclePos(grid, aTileX, aTileY, bTileX, bTileY, t);
+      if (arc) {
+        obj.position.set(arc.px * TILE_SIZE, yA + (yB - yA) * t + 0.07, arc.pz * TILE_SIZE);
+        obj.rotation.set(0, arc.yaw, 0);
+      } else {
+        obj.position.set(
+          (ax + dx * t + px) * TILE_SIZE,
+          yA + (yB - yA) * t + 0.07,
+          (az + dz * t + pz) * TILE_SIZE
+        );
+        obj.rotation.set(0, Math.atan2(dx, dz), 0);
+      }
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       this.busesMesh.setMatrixAt(visible, obj.matrix);

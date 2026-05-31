@@ -360,6 +360,30 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.8.3 (Roundabouts connect seamlessly to roads — silent patch)
+
+User: "the roundabouts look ugly right now, they need to seamlessly and
+visually connect with roads and look like they are a road." The 1.8.0
+circle floated above the roads, stopped short of the footprint edge, and
+the approach roads poked into the ring centre. Fixes in
+`renderer/builders.ts`:
+
+- `buildRoundaboutsGroup`: asphalt is now **coplanar** with the road
+  network (`ROAD_LIFT`, was +0.012) and reaches the **footprint edge**
+  (`outerR = size*0.5*TILE`) so it meets the approaches at the N/E/S/W
+  edge midpoints. New **throat connectors** bridge each external approach
+  into the ring with an asphalt band (incoming road's width), drawn above
+  the markings so entries read as clean asphalt (lane line "breaks" at
+  entries, like real life). Markings/curb/island/fountain unchanged.
+- `buildRoadMesh`: suppresses the **ring-tile half** of every approach
+  edge (no straight stub poking into the ring centre / z-fighting the
+  circle).
+- `buildSidewalkMesh`: **skips roundabout tiles** (square sidewalk pads
+  were poking past the circle as grey patches).
+
+Render-only — the road-edge graph + one-way-CCW routing are untouched.
+SW cache `v32` → `v33`.
+
 ## Status: Beta 1.8.2 (Bridge-layer overpasses redesigned — silent patch)
 
 User: "Bridge layer bridges should look much more visually appealing than

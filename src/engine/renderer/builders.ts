@@ -5874,15 +5874,24 @@ export function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const yB = tb?.bridge ? BRIDGE_LIFT : (yLift + (tb?.elevation ?? 0));
     const yMid = (yA + yB) / 2;
 
+    // Beta 1.8.3 — a roundabout ring tile's half-quad is NOT drawn here;
+    // the circular roundabout mesh (+ its throat connectors) covers that
+    // tile, so a straight road stub poking into the ring centre would
+    // z-fight the circle and break the seamless look. Only the external
+    // (non-ring) side of an approach edge keeps its half-quad, which then
+    // meets the roundabout's throat at the footprint edge.
+    const aIsRing = grid.roundaboutAt(e.ax, e.ay)?.isRing === true;
+    const bIsRing = grid.roundaboutAt(e.bx, e.by)?.isRing === true;
+
     // A's half: tile A center → midpoint at A's tier width.
     const propsA = ROAD_TIER[tierA];
     const halfA = propsA.width / 2;
-    emitHalf(ax, az, mx, mz, yA, yMid, nx * halfA, nz * halfA, propsA.color);
+    if (!aIsRing) emitHalf(ax, az, mx, mz, yA, yMid, nx * halfA, nz * halfA, propsA.color);
 
     // B's half: midpoint → tile B center at B's tier width.
     const propsB = ROAD_TIER[tierB];
     const halfB = propsB.width / 2;
-    emitHalf(mx, mz, bx, bz, yMid, yB, nx * halfB, nz * halfB, propsB.color);
+    if (!bIsRing) emitHalf(mx, mz, bx, bz, yMid, yB, nx * halfB, nz * halfB, propsB.color);
 
     // Lane stripes (Alpha 2.2 polish):
     //  - Local: dashed yellow centreline (two short dashes per edge).
@@ -6940,12 +6949,19 @@ export function buildRoundaboutsGroup(grid: Grid): Group | null {
     const cy = a.y + (a.size - 1) / 2;
     const wx = (cx + 0.5) * TILE_SIZE;
     const wz = (cy + 0.5) * TILE_SIZE;
-    const outerR = a.size * 0.5 * TILE_SIZE - 0.03;
-    const roadW = a.size === 3 ? 0.52 : 0.44;
-    const innerR = Math.max(0.2, outerR - roadW);   // island edge radius
-    const segs = a.size === 3 ? 44 : 32;
-    const yRoad = ROAD_LIFT + 0.012;
-    const yMark = yRoad + 0.006;
+    // Asphalt reaches the footprint edge so it touches the approach roads
+    // at the N/E/S/W edge midpoints — no grass gap between ring and road.
+    const outerR = a.size * 0.5 * TILE_SIZE;
+    const roadW = a.size === 3 ? 0.58 : 0.50;
+    const innerR = Math.max(0.22, outerR - roadW);   // island edge radius
+    const segs = a.size === 3 ? 48 : 36;
+    // Coplanar with the road network (ROAD_LIFT) so there's no floating
+    // lip where the ring meets the approach roads. Markings sit a hair
+    // above; throats sit above the markings so they read as clean asphalt
+    // flowing in (the circular lane line is "broken" at each entry).
+    const yRoad = ROAD_LIFT;
+    const yMark = ROAD_LIFT + 0.008;
+    const yThroat = ROAD_LIFT + 0.014;
 
     // Asphalt ring + white outer edge stripe.
     add(roundaboutAnnulus(wx, wz, innerR, outerR, yRoad, segs), asphalt);
@@ -6956,6 +6972,42 @@ export function buildRoundaboutsGroup(grid: Grid): Group | null {
       const a0 = (s / segs) * Math.PI * 2;
       const a1 = ((s + 1) / segs) * Math.PI * 2;
       add(roundaboutAnnulus(wx, wz, midR - 0.022, midR + 0.022, yMark, 1, a0, a1), stripe);
+    }
+
+    // Throat connectors — for each ring tile, every cardinal neighbour
+    // that's an EXTERNAL road tile gets an asphalt band bridging the
+    // straight road into the circular ring, so the join reads as one
+    // continuous road surface. Drawn above the markings so the entry is
+    // clean asphalt (markings break at each entry, like a real roundabout).
+    const DIRS: Array<[number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let ty = a.y; ty < a.y + a.size; ty++) {
+      for (let tx = a.x; tx < a.x + a.size; tx++) {
+        const info = grid.roundaboutAt(tx, ty);
+        if (!info || !info.isRing) continue;     // skip the 3×3 island centre
+        for (const [dx, dy] of DIRS) {
+          const n = grid.get(tx + dx, ty + dy);
+          if (!n || !n.road) continue;
+          const nr = grid.roundaboutAt(tx + dx, ty + dy);
+          if (nr && nr.ax === a.x && nr.ay === a.y) continue;  // internal edge
+          // External approach — bridge it into the ring with an asphalt band
+          // matching the incoming road's width.
+          const hw = ROAD_TIER[n.roadType].width / 2;
+          const mxw = (tx + 0.5 + dx * 0.5) * TILE_SIZE;   // footprint-edge midpoint
+          const mzw = (ty + 0.5 + dy * 0.5) * TILE_SIZE;
+          const outO = 0.18, inO = roadW + 0.12;           // into road / into ring
+          const corner = (along: number, perp: number): [number, number] =>
+            [mxw + dx * along + (-dy) * perp, mzw + dy * along + dx * perp];
+          const c1 = corner(outO, hw), c2 = corner(outO, -hw);
+          const c3 = corner(-inO, -hw), c4 = corner(-inO, hw);
+          const g = new BufferGeometry();
+          g.setAttribute('position', new BufferAttribute(new Float32Array([
+            c1[0], yThroat, c1[1], c2[0], yThroat, c2[1],
+            c3[0], yThroat, c3[1], c4[0], yThroat, c4[1]
+          ]), 3));
+          g.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
+          add(g, asphalt);
+        }
+      }
     }
 
     // Four CCW directional arrows on the asphalt — travel dir (sinθ,-cosθ).
@@ -6970,7 +7022,7 @@ export function buildRoundaboutsGroup(grid: Grid): Group | null {
         px + dx * arrowLen, pz + dz * arrowLen,
         px - dx * arrowLen * 0.3 + ex * arrowW, pz - dz * arrowLen * 0.3 + ez * arrowW,
         px - dx * arrowLen * 0.3 - ex * arrowW, pz - dz * arrowLen * 0.3 - ez * arrowW,
-        yMark
+        ROAD_LIFT + 0.02   // above throats so arrows stay visible
       ), white);
     }
 
@@ -7119,6 +7171,10 @@ export function buildSidewalkMesh(grid: Grid): Mesh | null {
     // for it to sit on (it would float underwater) and the bridge
     // deck reads cleanly without one.
     if (t.bridge) continue;
+    // Roundabout ring tiles are covered by the circular roundabout mesh
+    // (Beta 1.8.3) — a square sidewalk pad here would poke out past the
+    // circle and break the seamless "it's a road" look.
+    if (t.roundabout) continue;
     tiles.push({ x: t.x, y: t.y, tier: t.roadType, elevation: t.elevation });
   }
   if (tiles.length === 0) return null;

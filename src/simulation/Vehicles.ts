@@ -81,6 +81,15 @@ const MOTORCADE_PULLOVER_PAUSE_SEC = 0.7;
  */
 const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
 /**
+ * Hard cap on spawn ATTEMPTS per sim tick (Beta 1.9 perf). Spawn rate scales
+ * with city population/activity, so a large city otherwise fires ~17
+ * attempts/tick — each a full-grid candidate scan + an A* — even though
+ * visible vehicles are capped (MAX_VEHICLES / MAX_TRUCKS). That cost grew
+ * unbounded with the city (≈14 ms/tick on a 35k-pop city just for car spawns).
+ * Bounding attempts keeps it flat; small cities never hit the cap.
+ */
+const MAX_SPAWN_ATTEMPTS_PER_TICK = 6;
+/**
  * Truck spawn rate per supply-chain participant per real-time second
  * (Beta 1.6.7 — was per industrial tile in 1.5, fixed in 1.6.7 because
  * trucks SERVE commercial; gating spawn rate on supply-side starved
@@ -481,8 +490,10 @@ export class Vehicles {
     if (residents <= 0) return;
     const seconds = stepMs / 1000;
     this.spawnAccumulator += residents * SPAWN_PER_RESIDENT_PER_SEC * seconds;
-    while (this.spawnAccumulator >= 1) {
+    let attempts = 0;
+    while (this.spawnAccumulator >= 1 && attempts < MAX_SPAWN_ATTEMPTS_PER_TICK) {
       this.spawnAccumulator -= 1;
+      attempts++;
       // Only resident cars count against MAX_VEHICLES (Alpha 4.14).
       // Tourists / patrols / motorcade live in their own caps so total
       // visible traffic can exceed MAX when those events fire.
@@ -491,6 +502,9 @@ export class Vehicles {
         break;
       }
       this.attemptSpawn(grid, roadGraph, pathfinder, pathGraph, parking);
+    }
+    if (this.spawnAccumulator > MAX_SPAWN_ATTEMPTS_PER_TICK) {
+      this.spawnAccumulator = MAX_SPAWN_ATTEMPTS_PER_TICK;
     }
   }
 
@@ -532,13 +546,18 @@ export class Vehicles {
     const demandCount = industryCount + warehouseCount + commercialCount;
     const seconds = stepMs / 1000;
     this.truckSpawnAccumulator += demandCount * TRUCK_SPAWN_PER_DEMAND_PER_SEC * seconds;
-    while (this.truckSpawnAccumulator >= 1) {
+    let truckAttempts = 0;
+    while (this.truckSpawnAccumulator >= 1 && truckAttempts < MAX_SPAWN_ATTEMPTS_PER_TICK) {
       this.truckSpawnAccumulator -= 1;
+      truckAttempts++;
       if (this.countByKind('truck') >= MAX_TRUCKS) {
         this.truckSpawnAccumulator = 0;
         break;
       }
       this.attemptTruckSpawn(grid, roadGraph, pathfinder, supplyChain);
+    }
+    if (this.truckSpawnAccumulator > MAX_SPAWN_ATTEMPTS_PER_TICK) {
+      this.truckSpawnAccumulator = MAX_SPAWN_ATTEMPTS_PER_TICK;
     }
   }
 

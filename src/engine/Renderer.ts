@@ -18,12 +18,15 @@ import {
   MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
+  PCFSoftShadowMap,
   PlaneGeometry,
   Scene,
+  Vector3,
   WebGLRenderer
 } from 'three';
 import type { Camera } from './Camera';
 import type { Grid } from '../world/Grid';
+import type { Tile } from '../world/Tile';
 import {
   FARM_TRACTOR_MIN_CLUSTER,
   MAX_PEDESTRIANS,
@@ -44,6 +47,8 @@ import {
   buildBeautificationMesh,
   buildBridgeRoadMesh,
   buildBuildingsMesh,
+  emitZonedBuildingTile,
+  mergeZonedBuildings,
   buildCityBuildingsMesh,
   buildCrimeHeatmapMesh,
   buildDistrictsMesh,
@@ -75,6 +80,23 @@ import {
   walkerSurfaceY,
   warpDayPhase
 } from './renderer/builders';
+import { PostFX, DEFAULT_POSTFX, type PostFXConfig } from './renderer/postfx';
+
+/**
+ * Read the FX kill-switch from the URL. FX default ON (Beta 1.9 "looks"
+ * pass); `?fx=0` (or off/false/no) drops straight back to the pre-1.9
+ * direct-render path for A/B comparison and as the guaranteed WebGL2
+ * fallback. The Settings toggle persists a preference on top of this.
+ */
+function readFxParamEnabled(): boolean {
+  try {
+    const v = new URLSearchParams(window.location.search).get('fx');
+    if (v === null) return true;
+    return !['0', 'off', 'false', 'no'].includes(v.toLowerCase());
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Three.js renderer. Builds the world from three big meshes — terrain, trees,
@@ -100,10 +122,56 @@ import {
 // must NOT capture it into a module-level const at load.
 function THEME() { return getActiveTheme(); }
 const SELECTION_COLOR = 0xffd84d;
+/** World-units the shadow-casting sun sits from the camera target. The world
+ *  is tiny (TILE_SIZE = 1; tallest buildings only ~3 units), and a distant sun
+ *  blows out the packed-depth shadow map's precision so the shadow vanishes
+ *  ENTIRELY — keep it close. Empirically shadows render cleanly at ~18 and are
+ *  already gone by ~22. */
+const SUN_SHADOW_DIST = 18;
+/** Floor for the shadow sun's elevation (the y of its unit direction). A very
+ *  low sun (dawn/dusk) stretches the shadow-cam depth range and kills
+ *  precision, so the SHADOW caster stays this high even when the VISUAL sun
+ *  dips lower. ≈ 30° above the horizon. */
+const SUN_SHADOW_MIN_ELEV = 0.5;
+/** Ceiling for the shadow sun's elevation. Without it, midday's near-overhead
+ *  sun casts shadows so short they vanish under the buildings — the shadows
+ *  read as "barely there" exactly when the player is most likely looking. We
+ *  clamp the SHADOW caster into a pleasant fixed band (≈30°–44°) so cast
+ *  shadows stay a consistent, visible length all day; only their direction
+ *  rotates with time. The VISUAL sun colour/intensity still tracks the real
+ *  arc, so the day/night feel is unchanged. ≈ 44° above the horizon. */
+const SUN_SHADOW_MAX_ELEV = 0.7;
+/** Cap the orthoSize the shadow frustum tracks. Past this (zoomed way out) the
+ *  frustum — and therefore the near→far depth range — would grow large enough
+ *  to lose the shadow; instead we keep covering the central framed area (at far
+ *  zoom the per-building shadows are sub-pixel anyway). */
+const SUN_SHADOW_MAX_ORTHO = 22;
+/** Per-frame time budget (ms) for the incremental zoned-buildings rebuild
+ *  (Beta 1.9). Spreads a big city's ~1.5s full rebuild across frames so it
+ *  never freezes; the old mesh stays on screen until the new one is ready. */
+const BUILDINGS_REBUILD_BUDGET_MS = 8;
 
 export class Renderer {
   readonly scene = new Scene();
   readonly three: WebGLRenderer;
+
+  /** Post-processing pipeline (Beta 1.9). Lazily constructed on the first
+   *  render that needs it (we need the camera, which arrives via render()).
+   *  Null when FX are disabled — render() then takes the direct path. */
+  private postfx: PostFX | null = null;
+  private fxEnabled = readFxParamEnabled();
+  private fxConfig: PostFXConfig = { ...DEFAULT_POSTFX };
+  /** Last CSS viewport size, mirrored to the composer on resize + lazy init. */
+  private viewW = window.innerWidth;
+  private viewH = window.innerHeight;
+  /** Real sun-shadow maps active (Beta 1.9). Boot-decided from the FX flag so
+   *  materials compile with shadow support; `?fx=0` boots with this off. */
+  private shadowsActive = false;
+  /** Scratch for re-deriving the sun direction each frame in updateSunShadow. */
+  private readonly sunDir = new Vector3();
+  /** Last shadow-frustum half-extent — only re-derive near/far + projection
+   *  when the zoom (and therefore this) actually changes. */
+  private lastShadowR = -1;
 
   private readonly worldGroup = new Group();
   private terrainMesh: Mesh | null = null;
@@ -125,6 +193,17 @@ export class Renderer {
   private treesMesh: Mesh | null = null;
   /** Merged buildings geometry (Alpha 2.1 — variant-driven). */
   private buildingsMesh: Mesh | null = null;
+  /** In-flight incremental zoned-buildings rebuild (Beta 1.9). Null when idle.
+   *  The autonomous sim loop builds via this so a large city never freezes on
+   *  a full mesh rebuild; the current mesh stays visible until the job swaps. */
+  private bJob: {
+    grid: Grid; tiles: Tile[]; i: number;
+    geoms: BufferGeometry[]; colours: number[];
+    moodBase: number; months: number;
+  } | null = null;
+  /** A rebuild requested while another is mid-flight — applied when it finishes
+   *  (so continuous development doesn't restart the job forever, never updating). */
+  private bPending: { grid: Grid; cityMood: number; months: number } | null = null;
   /** One Group containing per-kind city building Mesh objects. Rebuilt on change. */
   private readonly cityBuildingsGroup = new Group();
   private heatmapMesh: Mesh | null = null;
@@ -241,6 +320,31 @@ export class Renderer {
     this.sunLight = new DirectionalLight(_atm0.sunColorNoon, _atm0.sunIntensityDay);
     this.sunLight.position.set(40, 80, 30);
     this.scene.add(this.sunLight);
+    // The directional light needs a target object in the scene to aim at;
+    // updateSunShadow re-points it at the camera target each frame so the
+    // shadow frustum tracks the player's view.
+    this.scene.add(this.sunLight.target);
+    // Real shadow maps (Beta 1.9 "looks" pass). Gated on the same boot-time
+    // FX flag as post-processing, so `?fx=0` is BOTH the exact pre-1.9 look
+    // and the guaranteed WebGL2 fallback. Three compiles shadow support into
+    // the materials only when shadowMap.enabled is set at construction, so
+    // shadows are boot-decided (the runtime setFxEnabled toggle drives
+    // post-processing alone).
+    this.shadowsActive = this.fxEnabled;
+    if (this.shadowsActive) {
+      this.three.shadowMap.enabled = true;
+      this.three.shadowMap.type = PCFSoftShadowMap;
+      this.sunLight.castShadow = true;
+      this.sunLight.shadow.mapSize.set(2048, 2048);
+      // Constant depth bias only — our flat-shaded meshes carry no normal
+      // attribute (Alpha 2.6 perf pass) for normalBias to offset along.
+      // Tuned to kill acne on big ground faces without peter-panning the
+      // chunky low-poly buildings off their footprints.
+      this.sunLight.shadow.bias = -0.0006;
+      // Frustum bounds + a TIGHT near/far are derived per-frame from the zoom
+      // in updateSunShadow (tight range = the depth precision this small world
+      // needs). Nothing to set here.
+    }
     // Optional fog — gentle Mediterranean haze on Coastal Pastel,
     // none on Stock. Exponential falloff so distant tiles soften
     // toward the theme's fog colour without a hard cutoff.
@@ -742,6 +846,9 @@ export class Renderer {
 
   setSize(width: number, height: number): void {
     this.three.setSize(width, height, false);
+    this.viewW = width;
+    this.viewH = height;
+    this.postfx?.setSize(width, height);
   }
 
   /** Build (or rebuild) the static terrain mesh + tree instances. */
@@ -749,6 +856,7 @@ export class Renderer {
     this.disposeMesh(this.terrainMesh);
     this.terrainMesh = buildTerrainMesh(grid);
     this.worldGroup.add(this.terrainMesh);
+    this.markShadows(this.terrainMesh, false, true); // ground receives only
 
     if (this.treesMesh) {
       this.worldGroup.remove(this.treesMesh);
@@ -756,7 +864,10 @@ export class Renderer {
       (this.treesMesh.material as MeshLambertMaterial).dispose?.();
     }
     this.treesMesh = buildTreesMesh(grid);
-    if (this.treesMesh) this.worldGroup.add(this.treesMesh);
+    if (this.treesMesh) {
+      this.worldGroup.add(this.treesMesh);
+      this.markShadows(this.treesMesh, true, true);
+    }
   }
 
   /** Rebuild the zone overlay from current tile zones. Also rebuilds
@@ -871,7 +982,10 @@ export class Renderer {
       }
     }
     const built = buildCityBuildingsMesh(grid, forestryHealth, farmHealth);
-    if (built) this.cityBuildingsGroup.add(built);
+    if (built) {
+      this.cityBuildingsGroup.add(built);
+      this.markShadows(built, true, true);
+    }
     // Refresh night-lights — park lamps depend on park placements.
     this.drawNightLights(grid);
     // Farm-tractor cluster detection (Alpha 4.19). Cheap one-pass
@@ -1117,23 +1231,27 @@ export class Renderer {
     this.beautificationProvider = fn;
   }
 
-  /** Rebuild the buildings InstancedMesh from current tile densities.
-   *  `monthsElapsed` drives the Alpha 2.16 patina pass — older buildings
-   *  read darker. Defaults to 0 (pre-history; everything looks new). */
-  drawBuildings(grid: Grid, cityMood = 0, monthsElapsed = 0): void {
+  /** Replace the zoned-buildings mesh: dispose the old, add the new (or clear),
+   *  flag shadow cast/receive. Shared by the sync + incremental builders. */
+  private swapBuildingsMesh(mesh: Mesh | null): void {
     if (this.buildingsMesh) {
       this.worldGroup.remove(this.buildingsMesh);
       this.buildingsMesh.geometry.dispose();
       (this.buildingsMesh.material as MeshLambertMaterial).dispose();
       this.buildingsMesh = null;
     }
-    const built = buildBuildingsMesh(grid, cityMood, monthsElapsed);
-    if (built) {
-      this.buildingsMesh = built;
-      this.worldGroup.add(this.buildingsMesh);
+    if (mesh) {
+      this.buildingsMesh = mesh;
+      this.worldGroup.add(mesh);
+      this.markShadows(mesh, true, true);
     }
-    // Skyscrapers — separate mesh (Alpha 3.1.7) so opacity can be faded
-    // on zoom. Same rebuild cadence as the main buildings layer.
+  }
+
+  /** Rebuild the sibling layers that share the buildings' dirty cadence:
+   *  skyscrapers (own mesh for zoom-fade), the lit-window overlay, and the
+   *  beautification streetscape. A fraction of the zoned-buildings cost, so
+   *  these stay synchronous even on the incremental path. */
+  private rebuildBuildingSiblings(grid: Grid): void {
     if (this.skyscrapersMesh) {
       this.worldGroup.remove(this.skyscrapersMesh);
       this.skyscrapersMesh.geometry.dispose();
@@ -1144,17 +1262,103 @@ export class Renderer {
     if (sky) {
       this.skyscrapersMesh = sky;
       this.worldGroup.add(this.skyscrapersMesh);
+      this.markShadows(this.skyscrapersMesh, true, true);
       this.applyCameraZoom(this.currentOrthoSize);
     }
-    // Lit-window overlay (Alpha 3.1.6) is a sibling layer of the buildings
-    // mesh — same dirty triggers, same rebuild cadence.
+    // Lit-window overlay (Alpha 3.1.6) + beautification streetscape (Alpha 4.0)
+    // share the buildings' dirty triggers. Beautification provider injected by
+    // Game; skipped when absent (e.g. an early test harness).
     this.drawLitWindows(grid);
-    // Beautification streetscape (Alpha 4.0) — same dirty triggers since
-    // it depends on the developed C/MU set. Provider injected by Game;
-    // when absent (e.g. an early test harness) we just skip the rebuild.
     if (this.beautificationProvider) {
       this.drawBeautification(grid, this.beautificationProvider());
     }
+  }
+
+  /** Rebuild the buildings mesh from current tile densities. SYNCHRONOUS — a
+   *  one-shot full rebuild for direct/user-driven callers (init, undo, theme
+   *  swap, placement) that want the result immediately. The autonomous sim
+   *  loop uses drawBuildingsIncremental so a large city doesn't freeze.
+   *  `monthsElapsed` drives the Alpha 2.16 patina pass. */
+  drawBuildings(grid: Grid, cityMood = 0, monthsElapsed = 0): void {
+    this.cancelBuildingsJob(); // a direct rebuild supersedes any in-flight one
+    this.bPending = null;
+    this.swapBuildingsMesh(buildBuildingsMesh(grid, cityMood, monthsElapsed));
+    this.rebuildBuildingSiblings(grid);
+  }
+
+  /** Incremental zoned-buildings rebuild (Beta 1.9). Snapshots the tiles and
+   *  builds them across frames via pumpBuildings, leaving the current mesh on
+   *  screen until the new one is ready — so a large city's ~1.5s rebuild never
+   *  freezes the frame. If a rebuild is already running, the latest request is
+   *  queued and applied when it finishes, so continuous development can't keep
+   *  restarting the job and leave it never updating. */
+  drawBuildingsIncremental(grid: Grid, cityMood = 0, monthsElapsed = 0): void {
+    if (this.bJob) {
+      this.bPending = { grid, cityMood, months: monthsElapsed };
+      return;
+    }
+    this.startBuildingsJob(grid, cityMood, monthsElapsed);
+    // Sibling layers (skyscrapers / lit-windows / beautification) are rebuilt
+    // ONCE when the job completes (see pumpBuildings), NOT on every trigger —
+    // the lit-window overlay is ~244ms on a big city, and during active growth
+    // buildingsDirty can fire every tick, which would re-incur that repeatedly.
+    // They hold their previous state until the job lands (lit windows are
+    // invisible by day anyway, so the brief staleness is unnoticeable).
+  }
+
+  private startBuildingsJob(grid: Grid, cityMood: number, monthsElapsed: number): void {
+    this.bJob = {
+      grid,
+      tiles: [...grid.iter()],
+      i: 0,
+      geoms: [],
+      colours: [],
+      moodBase: (cityMood + 1) * 0.5,
+      months: monthsElapsed
+    };
+  }
+
+  /** Advance the in-flight incremental rebuild by one frame's time budget.
+   *  Called every frame from the game loop; a no-op when idle. On completion
+   *  it merges the accumulated geometry and swaps it in (then starts a queued
+   *  follow-up if one was requested mid-build). */
+  pumpBuildings(): void {
+    const job = this.bJob;
+    if (!job) return;
+    const start = performance.now();
+    const n = job.tiles.length;
+    while (job.i < n) {
+      emitZonedBuildingTile(job.grid, job.tiles[job.i]!, job.moodBase, job.months, job.geoms, job.colours);
+      job.i++;
+      // Check the clock every 8 tiles. Developed tiles cost ~0.65ms each, so a
+      // coarser check (every 64) let a run of them blow ~40ms past the budget;
+      // every 8 caps the overshoot to a few ms. (performance.now isn't free, but
+      // the overhead is negligible — most tiles are instant skips.)
+      if ((job.i & 7) === 0 && performance.now() - start > BUILDINGS_REBUILD_BUDGET_MS) break;
+    }
+    if (job.i >= n) {
+      this.swapBuildingsMesh(mergeZonedBuildings(job.geoms, job.colours));
+      this.bJob = null;
+      if (this.bPending) {
+        // Development is still churning — start the next buildings pass and
+        // DEFER the sibling rebuild. Rebuilding the (~244ms) lit-windows on
+        // every back-to-back job would re-hitch constantly during growth.
+        const p = this.bPending;
+        this.bPending = null;
+        this.startBuildingsJob(p.grid, p.cityMood, p.months);
+      } else {
+        // Growth has settled — rebuild the sibling layers once so skyscrapers /
+        // lit-windows / beautification catch up to the now-current buildings.
+        this.rebuildBuildingSiblings(job.grid);
+      }
+    }
+  }
+
+  /** Drop any in-flight incremental rebuild, freeing its accumulated geometry. */
+  private cancelBuildingsJob(): void {
+    if (!this.bJob) return;
+    for (const g of this.bJob.geoms) g.dispose();
+    this.bJob = null;
   }
 
   /** Update skyscraper material opacity based on current camera ortho
@@ -1208,6 +1412,7 @@ export class Renderer {
     if (built) {
       this.roadMesh = built.mesh;
       this.worldGroup.add(this.roadMesh);
+      this.markShadows(this.roadMesh, false, true); // streets catch building shadows
       if (built.lanes) {
         this.roadLanes = built.lanes;
         this.worldGroup.add(this.roadLanes);
@@ -1218,6 +1423,7 @@ export class Renderer {
     if (bridgeRoads) {
       this.bridgeRoadMesh = bridgeRoads;
       this.worldGroup.add(this.bridgeRoadMesh);
+      this.markShadows(this.bridgeRoadMesh, true, true);
     }
     const ornaments = buildRoadOrnamentsGroup(grid);
     if (ornaments) {
@@ -1271,6 +1477,7 @@ export class Renderer {
     if (built) {
       this.sidewalkMesh = built;
       this.worldGroup.add(this.sidewalkMesh);
+      this.markShadows(this.sidewalkMesh, false, true);
     }
   }
 
@@ -2048,8 +2255,102 @@ export class Renderer {
     this.ghostWebGroup = null;
   }
 
+  /**
+   * Re-anchor the shadow-casting sun above the camera target each frame.
+   * `applyTimeOfDay` set sun.position to the absolute arc point (relative to
+   * origin); we reuse that as a pure DIRECTION and translate the light to sit
+   * over the player's view, sizing the ortho shadow frustum to the current
+   * zoom. Directional lighting depends only on direction, so scene shading is
+   * unchanged — only the shadow-map origin + coverage move.
+   */
+  private updateSunShadow(camera: Camera): void {
+    if (!this.shadowsActive) return;
+    // Re-derive the sun DIRECTION from the arc position applyTimeOfDay set,
+    // then floor its elevation so the shadow caster stays high enough to keep
+    // the depth range tight (the VISUAL sun colour/intensity still follows the
+    // full day arc — only the shadow position is clamped, which is invisible).
+    this.sunDir.copy(this.sunLight.position).normalize();
+    // Clamp the shadow caster into a fixed elevation band so cast shadows are
+    // a consistent, visible length all day (a near-overhead noon sun would
+    // otherwise hide them; a near-horizon dawn sun would wreck precision).
+    if (this.sunDir.y < SUN_SHADOW_MIN_ELEV || this.sunDir.y > SUN_SHADOW_MAX_ELEV) {
+      this.sunDir.y = Math.max(SUN_SHADOW_MIN_ELEV, Math.min(SUN_SHADOW_MAX_ELEV, this.sunDir.y));
+      this.sunDir.normalize();
+    }
+    const t = camera.target;
+    this.sunLight.position.set(
+      t.x + this.sunDir.x * SUN_SHADOW_DIST,
+      t.y + this.sunDir.y * SUN_SHADOW_DIST,
+      t.z + this.sunDir.z * SUN_SHADOW_DIST
+    );
+    this.sunLight.target.position.copy(t);
+    this.sunLight.target.updateMatrixWorld();
+    // Frustum half-extent tracks the zoom (capped), and near/far bracket the
+    // scene TIGHTLY — the packed-depth shadow map only holds the shadow when
+    // that range stays small. Re-derive only when the zoom changes.
+    const r = Math.min(camera.orthoSize, SUN_SHADOW_MAX_ORTHO) * 1.6;
+    if (r !== this.lastShadowR) {
+      this.lastShadowR = r;
+      const sc = this.sunLight.shadow.camera;
+      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r;
+      // Scene depth spreads ~0.7·r along the sun (its horizontal projection)
+      // plus the ~3-unit building height; bracket exactly that.
+      const depthHalf = r * 0.7 + 4;
+      sc.near = Math.max(1, SUN_SHADOW_DIST - depthHalf);
+      sc.far = SUN_SHADOW_DIST + depthHalf;
+      sc.updateProjectionMatrix();
+    }
+  }
+
+  /** Set shadow cast/receive flags on a mesh or every Mesh under a group.
+   *  No-op visually when shadowMap.enabled is false, so it's safe to call
+   *  unconditionally at build sites. */
+  private markShadows(obj: Object3D, cast: boolean, receive: boolean): void {
+    obj.traverse((o) => {
+      if (o instanceof Mesh) {
+        o.castShadow = cast;
+        o.receiveShadow = receive;
+      }
+    });
+  }
+
   render(camera: Camera): void {
-    this.three.render(this.scene, camera.three);
+    this.updateSunShadow(camera);
+    if (this.fxEnabled) {
+      // Lazy-build the composer the first time we render with FX on — we
+      // need the camera, which only arrives here. Sized to the last known
+      // viewport.
+      if (!this.postfx) {
+        this.postfx = new PostFX(this.three, this.scene, camera.three, this.fxConfig);
+        this.postfx.setSize(this.viewW, this.viewH);
+      }
+      this.postfx.render();
+    } else {
+      this.three.render(this.scene, camera.three);
+    }
+  }
+
+  /** Toggle the post-processing pipeline (Beta 1.9). Off = the exact
+   *  pre-1.9 direct-render path. The composer is kept once built so
+   *  flipping back on is instant. */
+  setFxEnabled(on: boolean): void {
+    this.fxEnabled = on;
+  }
+
+  isFxEnabled(): boolean {
+    return this.fxEnabled;
+  }
+
+  /** Live-tune the FX config from the dev console, e.g.
+   *  `game.renderer.tuneFx({ bloomStrength: 0.6, tiltShiftBlurPixels: 9 })`.
+   *  Builds the composer on demand so tuning works even before first paint. */
+  tuneFx(partial: Partial<PostFXConfig>): void {
+    Object.assign(this.fxConfig, partial);
+    this.postfx?.tune(partial);
+  }
+
+  getFxConfig(): Readonly<PostFXConfig> {
+    return this.fxConfig;
   }
 
   /**
@@ -2106,9 +2407,22 @@ export class Renderer {
       Math.min(1, Math.max(0, sunY / 40))
     );
     this.sunLight.color.setHex(sunColor);
-    this.sunLight.intensity = atm.sunIntensityNight + dayMix * (atm.sunIntensityDay - atm.sunIntensityNight);
-    this.ambientLight.intensity = atm.ambientIntensityNight + dayMix * (atm.ambientIntensityDay - atm.ambientIntensityNight);
-    this.hemisphereLight.intensity = 0.20 + dayMix * 0.40;
+    // Shadow-aware key/fill rebalance (Beta 1.9): real cast shadows only read
+    // if the ambient/hemisphere fill doesn't drown them. When shadows are
+    // active we shift ~30% of the fill into the directional key — but ONLY in
+    // proportion to how much sun there is (scaled by dayMix), so the carefully
+    // tuned night look is untouched and `?fx=0` is a perfect no-op.
+    // Shift a big chunk of the ambient/hemisphere FILL into the directional
+    // KEY when shadows are active, scaled by how much sun there is (dayMix).
+    // This is what makes the cast shadows actually READ: a shadowed face
+    // loses the (now-dominant) sun term and drops to ~45% brightness instead
+    // of blending into the soft fill. Night (dayMix→0) is untouched.
+    const shadowStrength = this.shadowsActive ? dayMix : 0;
+    const fillMul = 1 - 0.50 * shadowStrength;
+    const keyMul = 1 + 0.50 * shadowStrength;
+    this.sunLight.intensity = (atm.sunIntensityNight + dayMix * (atm.sunIntensityDay - atm.sunIntensityNight)) * keyMul;
+    this.ambientLight.intensity = (atm.ambientIntensityNight + dayMix * (atm.ambientIntensityDay - atm.ambientIntensityNight)) * fillMul;
+    this.hemisphereLight.intensity = (0.20 + dayMix * 0.40) * fillMul;
     // Hemisphere sky/ground tint: shift cooler at night.
     if (dayMix < 0.05) {
       this.hemisphereLight.color.setHex(atm.hemiSkyNight);

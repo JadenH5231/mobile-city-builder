@@ -29,6 +29,15 @@ interface ChangeEntry {
  *  added at the top or bottom — display order is computed by version, not
  *  object order. */
 const WHATS_NEW: Record<string, ChangeEntry> = {
+  '1.9': {
+    title: 'A better-looking city',
+    highlights: [
+      '🌇 Real sun shadows — buildings, trees and bridges now cast shadows that shift as the day passes, so the city reads as genuinely 3D.',
+      '✨ A soft glow on night lights — lit windows, street lamps and sun glints bloom gently after dark while the daytime palette stays true.',
+      '⚡ Big-city performance pass — placing roads and watching a large city grow no longer hitches; building updates are spread smoothly across frames.',
+      'Tip: everything is the same on older phones — add ?fx=0 to the URL to fall back to the classic look if you ever need to.'
+    ]
+  },
   '1.8': {
     title: 'Roundabouts',
     highlights: [

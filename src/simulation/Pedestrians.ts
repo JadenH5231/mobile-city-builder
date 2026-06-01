@@ -29,6 +29,16 @@ const MAX_WALK_TILES = 18;
  * peak (~1 walker per tile on busy blocks).
  */
 const SPAWN_PER_RESIDENT_PER_SEC = 0.005;
+/**
+ * Hard cap on spawn ATTEMPTS per sim tick (Beta 1.9 perf). The spawn rate
+ * scales with total residents, so a 35k-pop city would otherwise fire ~17
+ * attempts/tick — each a 2× full-grid candidate scan + an A* that usually
+ * fails (random R→C/I pairs on a sprawling map exceed MAX_WALK_TILES). That
+ * was ~38 ms/tick of almost entirely wasted work (the visible walker count is
+ * capped at MAX_PEDESTRIANS anyway). Bounding attempts keeps the cost flat as
+ * the city grows; small cities never hit the cap so their feel is unchanged.
+ */
+const MAX_SPAWN_ATTEMPTS_PER_TICK = 6;
 /** Walking speed in tile units per second. Real-feeling: ~5 km/h on a 1m grid. */
 const WALK_SPEED = 0.85;
 
@@ -56,13 +66,21 @@ export class Pedestrians {
     if (residents <= 0) return;
     const seconds = stepMs / 1000;
     this.spawnAccumulator += residents * SPAWN_PER_RESIDENT_PER_SEC * seconds;
-    while (this.spawnAccumulator >= 1) {
+    let attempts = 0;
+    while (this.spawnAccumulator >= 1 && attempts < MAX_SPAWN_ATTEMPTS_PER_TICK) {
       this.spawnAccumulator -= 1;
+      attempts++;
       if (this.walkers.length >= MAX_PEDESTRIANS) {
         this.spawnAccumulator = 0;
         break;
       }
       this.attemptSpawn(grid, pathGraph, pathfinder);
+    }
+    // Don't let a huge-population backlog pile up beyond what we'll ever
+    // attempt in a tick — otherwise the accumulator grows unbounded and we'd
+    // just be deferring the same wasted work to future ticks forever.
+    if (this.spawnAccumulator > MAX_SPAWN_ATTEMPTS_PER_TICK) {
+      this.spawnAccumulator = MAX_SPAWN_ATTEMPTS_PER_TICK;
     }
   }
 

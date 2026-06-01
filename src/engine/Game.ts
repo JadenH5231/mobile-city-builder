@@ -1261,10 +1261,18 @@ export class Game {
         // Election cycle — every 3 months. Runs after Economy bumps the
         // month counter so the election sees the latest happiness.
         if (this.economy.monthsElapsed > monthsBefore) {
-          // Monthly patina refresh (Alpha 2.16): even with no new development
-          // we want existing buildings to dim as they age. Cheap rebuild —
-          // sub-millisecond on Small/Medium and only fires on month rollover.
-          buildingsDirty = true;
+          // Patina refresh (Alpha 2.16): buildings dim as they age. The
+          // dimming ramps over 15 YEARS, so refreshing yearly is visually
+          // identical to monthly — but the rebuild is NOT "sub-millisecond"
+          // as the original comment assumed: on a large city it's a full
+          // ~1.5s merged-mesh rebuild, so firing it every month froze a big
+          // city every ~20s of play. Gate the cadence to once a year so
+          // steady-state cities stop stuttering. (Beta 1.9 perf — the real
+          // fix is incremental/chunked rebuilds; tracked separately. Any
+          // actual development/bulldoze still rebuilds immediately and picks
+          // up the latest patina, so aging stays current between yearly
+          // ticks too.)
+          if (this.economy.monthsElapsed % 12 === 0) buildingsDirty = true;
           // Treasury may have crossed the "can afford the active tool"
           // threshold — refresh the cost pill so the colour stays in
           // sync (Alpha 4.5).
@@ -1455,9 +1463,12 @@ export class Game {
       this.perf.simMs = performance.now() - simStart;
       this.perf.simSteps = steps;
       if (buildingsDirty) {
-        // drawBuildings auto-refreshes the beautification overlay via
-        // the provider installed in init() — no separate call needed.
-        this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
+        // Incremental rebuild (Beta 1.9): the autonomous loop fires this on
+        // development / yearly patina. A full mesh rebuild on a large city is
+        // ~1.5s, so drawBuildingsIncremental spreads it across frames (pumped
+        // each frame) instead of freezing. Auto-refreshes the beautification
+        // overlay via the provider installed in init() — no separate call.
+        this.renderer.drawBuildingsIncremental(this.grid, this.cityMood(), this.economy.monthsElapsed);
       } else if (this.renderer.getBeautificationTier() !== this.council.effectiveBeautificationTier) {
         // Tier flipped without the building set changing — e.g. a
         // council just elected a new tier or the budget defunded mid-
@@ -1577,6 +1588,11 @@ export class Game {
       // Push the camera's current ortho size into the renderer so
       // skyscraper opacity tracks zoom (Alpha 3.1.7).
       this.renderer.applyCameraZoom(this.camera.orthoSize);
+      // Beta 1.9 — advance any in-flight incremental buildings rebuild by one
+      // frame's budget so a large city's ~1.5s mesh rebuild never freezes the
+      // loop. No-op when idle. Runs every frame (even paused) so a rebuild
+      // started during the sim step finishes regardless of sim speed.
+      this.renderer.pumpBuildings();
       const renderStart = performance.now();
       this.renderer.render(this.camera);
       this.perf.renderMs = performance.now() - renderStart;

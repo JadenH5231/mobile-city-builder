@@ -85,6 +85,7 @@ src/
     Renderer.ts       Three.js scene facade: owns the class (state, draw* methods, update* loops, applyTimeOfDay, disposal). Beta 1.7 split — the ~7K lines of standalone build* mesh-geometry functions now live in renderer/builders.ts; the class imports them.
     renderer/
       builders.ts     all standalone build* functions (terrain, roads, buildings, lighting, debug, cluster part-builders + geom helpers). Imported by Renderer.ts. (1.7.1 will subdivide further by concern.)
+      postfx.ts       Beta 1.9 post-processing: EffectComposer wrapping render() with a tasteful bloom (RenderPass → UnrealBloom → OutputPass on a 4× MSAA HalfFloat target). Gated behind the renderer's FX flag; ?fx=0 = exact pre-1.9 direct render (WebGL2 fallback). Real sun shadows live on the Renderer class itself (updateSunShadow + markShadows + the constructor shadow setup), NOT here.
     BuildingVariants.ts barrel (Beta 1.7) re-exporting the building-variant kit, split into:
     buildingVariants/
       types.ts         shared VariantPart output type
@@ -359,6 +360,49 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.9 (Looks pass — bloom + real sun shadows) [on branch `claude/visual-perf-upgrade`]
+
+First slice of a "make it look + operate better" architecture branch. Two
+visual upgrades landed, both gated behind a single boot-time FX flag so
+`?fx=0` returns the EXACT pre-1.9 look and is the guaranteed WebGL2 fallback
+(memory: principle_universal_device_compat).
+
+**1. Post-processing (`src/engine/renderer/postfx.ts`)** — an EffectComposer
+wraps the single `Renderer.render()` seam: RenderPass → UnrealBloom →
+OutputPass, rendered into a 4× MSAA HalfFloat target (MSAA so edge
+antialiasing survives the composer). Just a tasteful bloom so night lit-
+windows / lamps glow; threshold kept high so daytime doesn't wash out.
+**A tilt-shift / miniature depth-blur was trialled and REMOVED** — the player
+explicitly disliked it ("don't like how that tilt shift looks"). Don't
+re-add it.
+
+**2. Real sun shadows** (on the `Renderer` class: `updateSunShadow` +
+`markShadows` + the constructor shadow block). Buildings / trees /
+skyscrapers / bridges cast; terrain / roads / sidewalks receive. A
+shadow-aware key/fill rebalance in `applyTimeOfDay` (shifts ~30% of the
+ambient/hemisphere fill into the sun, scaled by `dayMix`) makes the shadows
+read without darkening night.
+
+  **⚠ THE shadow gotcha (cost a long debug):** this world is TINY —
+  `TILE_SIZE = 1`, so the whole map is ~128×160 world units and the tallest
+  buildings are only ~3 units. The shadow pass was wired correctly but the
+  sun sat **130 units away with `far=286`**, which annihilated the packed-
+  depth (UnsignedByte) shadow map's precision → **NO shadow rendered at
+  all** (not subtle — zero). Proven by isolating a fresh minimal scene that
+  DID cast shadows through the very same renderer. **Fix:** keep the shadow
+  sun CLOSE (`SUN_SHADOW_DIST = 18`), floor its elevation
+  (`SUN_SHADOW_MIN_ELEV`), cap the frustum (`SUN_SHADOW_MAX_ORTHO`), and
+  bracket `near`/`far` TIGHTLY around the actual scene each frame. Shadows
+  are razor-sensitive to this distance (clean at ~18, gone by ~22) because
+  of the packed-depth precision. If you touch the shadow camera, keep the
+  sun close + the depth range tight, and verify on a real (imported) city —
+  a tiny default map hides shadows behind wall-to-wall density.
+
+**Render cost:** ~0.9 ms with shadows + bloom on the imported 128×160 real
+city. Verified in-browser (`?dev=1`), no console errors. Save schema
+unchanged. The branch continues with operation work (Web Worker sim) — see
+the task list.
 
 ## Status: Beta 1.8.4 (Cars drive around the roundabout — silent patch)
 

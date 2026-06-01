@@ -19,6 +19,7 @@ import {
   SRGBColorSpace
 } from 'three';
 import type { Grid } from '../../world/Grid';
+import type { Tile } from '../../world/Tile';
 import {
   buildCityHallParts,
   buildCloverleafParts,
@@ -351,80 +352,80 @@ export function mergeGeoms(geoms: BufferGeometry[], colours: number[]): BufferGe
  * each do small-N batches. Rebuild cost is comparable to the previous
  * single-InstancedMesh approach (sub-millisecond on Small/Medium).
  */
-export function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number): Mesh | null {
-  const geoms: BufferGeometry[] = [];
-  const colours: number[] = [];
-  // Per-tile lift = ROAD_LIFT/2 (avoid z-fighting with zone overlay)
-  // PLUS the tile's terrain elevation (Alpha 2.3) so buildings sit on
-  // the actual hill rather than buried in it.
+/**
+ * Emit ONE zoned tile's building geometry into the accumulators. Extracted
+ * verbatim from buildBuildingsMesh's loop body (Beta 1.9) so the Renderer can
+ * drive it in frame-budgeted batches — a full-city rebuild of a large map is
+ * ~1.5s and froze the game, so the incremental path spreads it across frames.
+ * Pure given (grid, tile, moodBase, monthsElapsed); identical output to the
+ * inline loop it replaced. `moodBase` = (cityMood + 1) * 0.5.
+ */
+export function emitZonedBuildingTile(
+  grid: Grid, t: Tile, moodBase: number, monthsElapsed: number,
+  geoms: BufferGeometry[], colours: number[]
+): void {
+  if (t.zone === 'none' || t.road) return;
+  // Per-tile lift = ROAD_LIFT/2 (avoid z-fighting with zone overlay) PLUS the
+  // tile's terrain elevation (Alpha 2.3) so buildings sit on the hill.
   const baseLift = ROAD_LIFT * 0.5;
-  // City mood is in [-1, +1]; lift to [0, 1] base.
-  const moodBase = (cityMood + 1) * 0.5;
-  for (const t of grid.iter()) {
-    if (t.zone === 'none' || t.road) continue;
-    // Luxury (Alpha 2.5): a 2-tile pair renders as one mansion. Emit only
-    // from the lex-smaller tile of the pair (lower x, then lower y) so we
-    // don't double-render. The mansion body extends into the partner.
-    // Luxury homes are NEVER modulated by happiness — they always look
-    // pristine per spec (Alpha 2.7).
-    if (t.luxury && t.zone === 'residential') {
-      const partner = findLuxuryPartner(grid, t.x, t.y);
-      if (!partner) continue; // orphan — render nothing
-      // Lex order: lower x wins; tie → lower y wins.
-      if (t.x > partner.x || (t.x === partner.x && t.y > partner.y)) continue;
-      // Alpha 4.3.1: compute the road yaw for the pair so the walkway
-      // aims at the road instead of laying a centred T.
-      const roadYaw = computeLuxuryRoadYaw(grid, t.x, t.y, partner.x, partner.y);
-      const parts = buildLuxuryParts(t.x, t.y, partner.x, partner.y, roadYaw);
-      const yLift = baseLift + t.elevation;
-      for (const p of parts) {
-        if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        if (yLift !== 0) p.geom.translate(0, yLift, 0);
-        geoms.push(p.geom);
-        // Theme tint (Beta 1.2): long-tail filter so unmigrated detail
-        // colours still feel of-a-piece with the active palette.
-        colours.push(tint(p.color));
-      }
-      continue;
-    }
-    // Skyscrapers (Alpha 3.1.2) live in their own mesh now (Alpha 3.1.7)
-    // so we can fade them when the camera zooms in. Skip them in the
-    // main building mesh — `buildSkyscrapersMesh` handles them.
-    if (t.skyscraper) continue;
-    if (t.density === 0) continue;
-    // Per-tile happiness (Alpha 2.7): city mood, nudged by services. Tiles
-    // with park coverage feel better; tiles missing power/water feel worse.
-    let happy = moodBase;
-    if (t.hasPark) happy += 0.10;
-    if (!t.hasPower) happy -= 0.20;
-    if (!t.hasWater) happy -= 0.15;
-    happy = Math.max(0, Math.min(1, happy));
-    // Patina (Alpha 2.16): newer buildings stay vibrant, older ones
-    // dim toward a weathered tone over the first decade. The factor is
-    // sampled once per tile and applied to every part's color so a single
-    // building reads consistently weathered (rather than a roof aging
-    // faster than its walls).
-    const ageMonths = Math.max(0, monthsElapsed - t.developedAt);
-    const patina = patinaFactor(ageMonths);
-    const yawForRoad = computeRoadFacingYaw(grid, t.x, t.y);
-    const parts = buildVariantParts(t.zone, t.density, t.x, t.y, happy, yawForRoad);
+  // Luxury (Alpha 2.5): a 2-tile pair renders as one mansion. Emit only from
+  // the lex-smaller tile of the pair so we don't double-render. Luxury homes
+  // are NEVER modulated by happiness — always pristine per spec (Alpha 2.7).
+  if (t.luxury && t.zone === 'residential') {
+    const partner = findLuxuryPartner(grid, t.x, t.y);
+    if (!partner) return; // orphan — render nothing
+    if (t.x > partner.x || (t.x === partner.x && t.y > partner.y)) return;
+    const roadYaw = computeLuxuryRoadYaw(grid, t.x, t.y, partner.x, partner.y);
+    const parts = buildLuxuryParts(t.x, t.y, partner.x, partner.y, roadYaw);
     const yLift = baseLift + t.elevation;
     for (const p of parts) {
       if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       if (yLift !== 0) p.geom.translate(0, yLift, 0);
       geoms.push(p.geom);
-      // Theme tint applied at merge time (Beta 1.2) — every per-variant
-      // colour passes through the active pack's mood filter, so the
-      // whole zoned city reads as a coherent palette even though each
-      // variant's BuildingVariants.ts entry stays as authored.
-      const tinted = tint(p.color);
-      colours.push(patina < 1 ? darkenHex(tinted, patina) : tinted);
+      colours.push(tint(p.color));
     }
+    return;
   }
+  // Skyscrapers live in their own mesh (Alpha 3.1.7) so opacity can fade.
+  if (t.skyscraper) return;
+  if (t.density === 0) return;
+  // Per-tile happiness (Alpha 2.7): mood nudged by services.
+  let happy = moodBase;
+  if (t.hasPark) happy += 0.10;
+  if (!t.hasPower) happy -= 0.20;
+  if (!t.hasWater) happy -= 0.15;
+  happy = Math.max(0, Math.min(1, happy));
+  // Patina (Alpha 2.16): older buildings dim over the first decade.
+  const ageMonths = Math.max(0, monthsElapsed - t.developedAt);
+  const patina = patinaFactor(ageMonths);
+  const yawForRoad = computeRoadFacingYaw(grid, t.x, t.y);
+  const parts = buildVariantParts(t.zone, t.density, t.x, t.y, happy, yawForRoad);
+  const yLift = baseLift + t.elevation;
+  for (const p of parts) {
+    if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    if (yLift !== 0) p.geom.translate(0, yLift, 0);
+    geoms.push(p.geom);
+    const tinted = tint(p.color);
+    colours.push(patina < 1 ? darkenHex(tinted, patina) : tinted);
+  }
+}
+
+/** Merge accumulated zoned-building geometry + colours into one Mesh (or null
+ *  when nothing developed). Shared by the sync builder + the incremental
+ *  finalize step so both produce a byte-identical mesh + material. */
+export function mergeZonedBuildings(geoms: BufferGeometry[], colours: number[]): Mesh | null {
   if (geoms.length === 0) return null;
   const merged = mergeGeoms(geoms, colours);
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(merged, mat);
+}
+
+export function buildBuildingsMesh(grid: Grid, cityMood: number, monthsElapsed: number): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const moodBase = (cityMood + 1) * 0.5;
+  for (const t of grid.iter()) emitZonedBuildingTile(grid, t, moodBase, monthsElapsed, geoms, colours);
+  return mergeZonedBuildings(geoms, colours);
 }
 
 /** Build the skyscraper mesh separately (Alpha 3.1.7) so we can fade

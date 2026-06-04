@@ -361,6 +361,44 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.4 (First-zone nudge re-arms for each new city)
+
+User: "look into why when I start a new city I don't get the play/pause
+button updates."
+
+**Bug:** the first-zone play/pause nudge (1.9.1/1.9.2) never showed on a new
+city for a returning player. **Root cause:** it's gated by the per-device
+localStorage flag `mqcity-speed-hint-seen`, which is permanent. Every
+new-city path — `Game.resetCity()` (Game.ts) and the slot-pick
+(`SlotPicker.onPick`, main.ts) — does a full `location.reload()`, which
+DOES reset the per-session `firstZoneFired` instance flag, but the
+localStorage `seen` flag survives the reload. So once a player pressed the
+speed control even once, ever, `game.onFirstZone` bailed at `speedHintSeen()`
+forever — including on every brand-new (paused) city.
+
+**Fix (one block in `main.ts`):** right after `await game.init(...)`, if
+`game.economy.monthsElapsed === 0`, clear `mqcity-speed-hint-seen`.
+`monthsElapsed === 0` reliably means "this city's sim has never advanced a
+month" = a genuinely new / reset / fresh-empty-slot city (the economy only
+advances months while `simSpeed > 0`). A city that's been played keeps its
+dismissed state, so a returning player isn't re-nagged on an existing city.
+Path-agnostic — covers reset, new slot, and first launch — because every
+new-city entry reloads through the same `init`.
+
+Verified in-browser (`?dev=1`): a real `resetCity()` produces a fresh city
+reading `monthsElapsed === 0`, and the fix flipped a returning player's
+`seen` flag from `1` → `null` at init, so the first zone re-shows the pulse +
+"Tap to play" callout; a previously-played city read `monthsElapsed === 1`
+and correctly kept `seen === 1` (no re-arm, no re-nag). SW cache `v38` →
+`v39`. `APP_VERSION` 1.9.3 → 1.9.4 (patch = silent).
+
+**Gotcha for future state-based gating:** `monthsElapsed === 0` is a clean
+"brand-new city" signal, but it flips to `1` the moment the first sim-month
+ticks (≈20 s of unpaused play), so it only reads true at the very start —
+which is exactly when this init check runs. Don't reuse it as a
+"player hasn't done much yet" signal later in the session; it's only a
+boot-time new-city detector.
+
 ## Status: Beta 1.9.3 (Discord community CTA — low-frequency invite)
 
 User: "I would like a CTA pop-up that asks if the user would like to join

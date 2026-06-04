@@ -4,7 +4,7 @@
 // Skips hashed Vite asset URLs (they're immutable; standard cache
 // rules apply). Indexed-DB save data is untouched by the SW.
 
-const CACHE = 'mq-city-v38';
+const CACHE = 'mq-city-v39';
 const SHELL = [
   './',
   './index.html',

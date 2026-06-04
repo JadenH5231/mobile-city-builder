@@ -532,6 +532,17 @@ const SPEED_HINT_KEY = 'mqcity-speed-hint-seen';
 const speedHintSeen = (): boolean => {
   try { return localStorage.getItem(SPEED_HINT_KEY) === '1'; } catch { return false; }
 };
+// Re-arm the nudge for each NEW city (Beta 1.9.4). A new/reset/empty-slot
+// city boots PAUSED, so it should teach the play control again — otherwise a
+// returning player who dismissed the hint on a previous city never sees it
+// on a brand-new city. User feedback: "when I start a new city I don't get
+// the play/pause button updates." monthsElapsed===0 means this city's sim
+// has never advanced a month (brand-new / freshly reset / fresh empty slot);
+// a city that's been played keeps its dismissed state. Every new-city path
+// reloads the page, so this init check runs fresh each time.
+if (game.economy.monthsElapsed === 0) {
+  try { localStorage.removeItem(SPEED_HINT_KEY); } catch { /* ignore */ }
+}
 
 // Labelled callout that floats just below the speed pill and points up at
 // it. Created once and appended to <body> (not #hud) so it's never clipped

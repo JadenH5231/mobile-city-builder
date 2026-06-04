@@ -361,6 +361,49 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.1 (First zone nudges the play/pause pill — onboarding)
+
+User: "when a player zones something for the first time the play/pause
+button highlights until it's pressed to tell the user to press it. I have
+received feedback that the play/pause button isn't super obvious for new
+users."
+
+A fresh city starts **paused** (verified: a fresh `?dev=1` load shows the
+sim-speed pill on ⏸ and the dev overlay reads `x0`), so a new player can
+paint a whole neighbourhood and see nothing happen without realising the
+play control exists. This adds a one-time attention nudge:
+
+- **Trigger** (`Game.notifyFirstZone`, called from the zone-apply loop in
+  `applyZoneStroke` AND from `placeLuxuryPair`): the first successful zone
+  paint of the session fires the new `Game.onFirstZone` callback. Self-
+  guarded by a private `firstZoneFired` flag so it fires once per session;
+  save-restore + undo paths bypass `setZone`, so they never trigger it.
+- **Nudge** (`main.ts` + `.pill.speed--hint` in `styles.css`): on
+  `onFirstZone`, `main.ts` adds `speed--hint` to `#hud-speed`, which runs a
+  soft golden `speed-hint-pulse` glow (1.25 s loop; a steady glow under
+  `prefers-reduced-motion`). Gated on a per-device localStorage flag
+  `mqcity-speed-hint-seen` so it only ever shows for a player who hasn't
+  used the speed control.
+- **Clear**: operating the speed control by tap OR keyboard (Space / 0-3)
+  removes the class and sets `mqcity-speed-hint-seen=1`. So a player who
+  found the button on their own is never nudged, and once acknowledged the
+  hint never returns. (A player who zones, sees the pulse, and reloads
+  without pressing gets nudged again next session — deliberate.)
+
+Render/UI-only — no save-schema change, no sim change. Verified in-browser
+(`?dev=1`, and at mobile 375×812): fresh-player first zone → pill pulses
+gold; press → glow clears + sim resumes (⏸→▶, `simSpeed` 0→1) + flag
+persists; re-firing after "seen" does nothing. The pill is the obvious
+focal point of the HUD top bar once lit. SW cache `v35` → `v36`.
+`APP_VERSION` 1.9.0 → 1.9.1 (a patch bump is silent — no What's New entry).
+
+**Principle for future onboarding nudges:** fire a one-shot `on*` callback
+from the Game at the moment of the first meaningful action, gate the visual
+on a per-device localStorage flag, and clear+persist it the instant the
+player uses the targeted control (by any input path). Don't bolt the
+"seen" state onto the save file — it's a per-device UX preference, like the
+tutorial-seen and theme flags.
+
 ## Status: Beta 1.9 (Looks pass — bloom + real sun shadows) [on branch `claude/visual-perf-upgrade`]
 
 First slice of a "make it look + operate better" architecture branch. Two

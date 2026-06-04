@@ -511,12 +511,35 @@ const renderSpeedHud = (): void => {
     game.simSpeed === 0 ? 'Resume simulation' : `Sim speed ${game.simSpeed}× — tap to cycle`);
   speedBtn.classList.toggle('speed--paused', game.simSpeed === 0);
 };
+
+// First-zone discoverability nudge (Beta 1.9.1). Feedback: new players
+// didn't notice the play/pause pill. The first time a player zones
+// anything, pulse the speed pill (CSS .speed--hint) until they press it —
+// then never again (persisted per device). Operating the control by tap OR
+// keyboard marks the hint seen, so a player who found it on their own is
+// never nudged.
+const SPEED_HINT_KEY = 'mqcity-speed-hint-seen';
+const speedHintSeen = (): boolean => {
+  try { return localStorage.getItem(SPEED_HINT_KEY) === '1'; } catch { return false; }
+};
+// Called whenever the player operates the speed control: drop the pulse and
+// remember it so the hint never fires again on this device.
+const markSpeedHintSeen = (): void => {
+  speedBtn?.classList.remove('speed--hint');
+  try { localStorage.setItem(SPEED_HINT_KEY, '1'); } catch { /* private mode — just nudge again next session */ }
+};
+game.onFirstZone = () => {
+  if (!speedBtn || speedHintSeen()) return;
+  speedBtn.classList.add('speed--hint');
+};
+
 if (speedBtn) {
   renderSpeedHud();
   speedBtn.addEventListener('click', () => {
     const next = game.simSpeed === 1 ? 2 : game.simSpeed === 2 ? 3 : game.simSpeed === 3 ? 0 : 1;
     game.simSpeed = next as 0 | 1 | 2 | 3;
     renderSpeedHud();
+    markSpeedHintSeen();
   });
 }
 
@@ -636,13 +659,14 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     game.simSpeed = game.simSpeed === 0 ? 1 : 0;
     renderSpeedHud();
+    markSpeedHintSeen();
     return;
   }
   // Direct sim speed select: 0 pause, 1 / 2 / 3 = speed multiplier.
-  if (k === '0') { e.preventDefault(); game.simSpeed = 0; renderSpeedHud(); return; }
-  if (k === '1') { e.preventDefault(); game.simSpeed = 1; renderSpeedHud(); return; }
-  if (k === '2') { e.preventDefault(); game.simSpeed = 2; renderSpeedHud(); return; }
-  if (k === '3') { e.preventDefault(); game.simSpeed = 3; renderSpeedHud(); return; }
+  if (k === '0') { e.preventDefault(); game.simSpeed = 0; renderSpeedHud(); markSpeedHintSeen(); return; }
+  if (k === '1') { e.preventDefault(); game.simSpeed = 1; renderSpeedHud(); markSpeedHintSeen(); return; }
+  if (k === '2') { e.preventDefault(); game.simSpeed = 2; renderSpeedHud(); markSpeedHintSeen(); return; }
+  if (k === '3') { e.preventDefault(); game.simSpeed = 3; renderSpeedHud(); markSpeedHintSeen(); return; }
   // Undo. Plain Z or Cmd/Ctrl+Z; Shift+Z reserved for future redo.
   if (k === 'z' && !e.shiftKey) {
     e.preventDefault();

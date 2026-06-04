@@ -219,6 +219,16 @@ export class Game {
   onStatusMessage?: (msg: string) => void;
 
   /**
+   * First zone painted (Beta 1.9.1). Fired exactly once per session the
+   * first time the player successfully applies ANY zone (R/C/I/MU paint
+   * or a luxury pair). Feedback: new players didn't notice the play/pause
+   * pill, so main.ts uses this to pulse it until pressed. main.ts owns the
+   * "already seen" persistence — the Game just signals that a zone happened.
+   */
+  onFirstZone?: () => void;
+  private firstZoneFired = false;
+
+  /**
    * Milestone earned (Alpha 2.8). Fired once per milestone the city
    * crosses, with the Milestone object so main.ts can render the
    * celebration banner. Multiple milestones earned in one tick are
@@ -2601,6 +2611,7 @@ export class Game {
     partnerTile.luxury = true;
     this.economy.treasury -= cost;
     this.maybeOfferPhotoOp('r_lux');
+    this.notifyFirstZone();
     return true;
   }
 
@@ -3727,6 +3738,16 @@ export class Game {
 
   // --- Zone tool stroke ---------------------------------------------------
 
+  /** Fire onFirstZone the first (and only the first) time a zone is painted
+   *  this session. Cheap self-guard so it's safe to call from inside the
+   *  per-tile apply loop. Save-restore / undo paths bypass setZone, so this
+   *  only ever fires on a genuine player paint. */
+  private notifyFirstZone(): void {
+    if (this.firstZoneFired) return;
+    this.firstZoneFired = true;
+    this.onFirstZone?.();
+  }
+
   // applyZoneStroke widened to 1|2|3|4 in Alpha 4.18 for the Max tier.
   private applyZoneStroke(
     path: { x: number; y: number }[],
@@ -3775,7 +3796,7 @@ export class Game {
       if (!this.strokeZones.has(idx)) {
         this.strokeZones.set(idx, { zone: tile.zone, cap: tile.zoneCap });
       }
-      if (this.grid.setZone(x, y, zone, cap)) changed = true;
+      if (this.grid.setZone(x, y, zone, cap)) { changed = true; this.notifyFirstZone(); }
     }
     // Council-block toast (Alpha 2.9.1) — surface a clear pop-up when
     // the change was actually blocked, not just for "no road adjacent"

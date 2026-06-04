@@ -1044,35 +1044,90 @@ body[data-show-fps="true"] #hud-fps {
   box-shadow: inset 0 0 0 1px rgba(208, 106, 138, 0.4);
 }
 
-/* First-zone discoverability nudge (Beta 1.9.1). The sim-speed pill pulses
-   with a soft golden glow the first time a new player zones, until they
-   press it — feedback was that new players didn't notice the play/pause
-   control. main.ts adds .speed--hint on the first zone and removes it
+/* First-zone discoverability nudge (Beta 1.9.1; strengthened + labelled in
+   1.9.2). The sim-speed pill is held in a golden highlight AND pulses (glow
+   + a small scale) the first time a new player zones, and a "Tap to play"
+   callout pops underneath pointing at it — feedback was that new players
+   didn't notice the play/pause control (and a fresh city starts paused).
+   main.ts adds .speed--hint on the first zone and removes it + the callout
    (persisting "seen") the moment the pill is operated by tap or keyboard. */
 .pill.speed--hint {
   animation: speed-hint-pulse 1.25s ease-in-out infinite;
+  /* Lift above neighbouring pills so the scaled glow is never clipped. */
+  position: relative;
+  z-index: 2;
 }
 @keyframes speed-hint-pulse {
   0%, 100% {
-    background: rgba(255, 216, 77, 0.16);
-    color: #ffe98a;
-    box-shadow: 0 0 0 0 rgba(255, 216, 77, 0), inset 0 0 0 1px rgba(255, 216, 77, 0.45);
+    background: rgba(255, 216, 77, 0.22);
+    color: #fff4c2;
+    box-shadow: 0 0 6px 1px rgba(255, 216, 77, 0.30), inset 0 0 0 1px rgba(255, 216, 77, 0.6);
+    transform: scale(1);
   }
   50% {
-    background: rgba(255, 216, 77, 0.32);
-    color: #fff4c2;
-    box-shadow: 0 0 16px 4px rgba(255, 216, 77, 0.55), inset 0 0 0 1px rgba(255, 216, 77, 0.9);
+    background: rgba(255, 216, 77, 0.42);
+    color: #fffbe6;
+    box-shadow: 0 0 22px 6px rgba(255, 216, 77, 0.7), inset 0 0 0 1px rgba(255, 216, 77, 1);
+    transform: scale(1.09);
   }
 }
-/* Reduced-motion: hold a steady glow instead of pulsing so the nudge stays
-   visible without animation. */
+
+/* "Tap to play" callout — floats below the speed pill (positioned by
+   main.ts), with an up-pointing tip aimed at the button. pointer-events
+   none so it never eats a tap meant for the pill behind/above it. */
+.speed-hint-callout {
+  position: fixed;
+  z-index: 60;
+  opacity: 1;
+  pointer-events: none;
+  padding: 7px 13px;
+  border-radius: 10px;
+  background: rgba(18, 26, 20, 0.94);
+  color: #ffe98a;
+  border: 1px solid rgba(255, 216, 77, 0.75);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), 0 0 18px rgba(255, 216, 77, 0.4);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  animation: speed-hint-callout-in 240ms ease-out,
+             speed-hint-callout-bob 1.25s ease-in-out 240ms infinite;
+}
+.speed-hint-callout.hidden { display: none; }
+.speed-hint-callout__arrow {
+  position: absolute;
+  top: -5px;
+  left: var(--arrow-x, 50%);
+  width: 10px;
+  height: 10px;
+  background: rgba(18, 26, 20, 0.94);
+  border-left: 1px solid rgba(255, 216, 77, 0.75);
+  border-top: 1px solid rgba(255, 216, 77, 0.75);
+  transform: translateX(-50%) rotate(45deg);
+}
+@keyframes speed-hint-callout-in {
+  0%   { opacity: 0; transform: translateY(-6px) scale(0.9); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes speed-hint-callout-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px); }
+}
+/* Photo mode hides the HUD; hide the callout with it so it isn't left
+   pointing at a vanished pill. */
+body.photo-mode .speed-hint-callout { display: none; }
+/* Reduced-motion: hold a steady highlight + static callout (no pulse, scale,
+   or bob) so the nudge stays visible without animation. */
 @media (prefers-reduced-motion: reduce) {
   .pill.speed--hint {
     animation: none;
-    background: rgba(255, 216, 77, 0.30);
-    color: #fff4c2;
-    box-shadow: 0 0 14px 3px rgba(255, 216, 77, 0.5), inset 0 0 0 1px rgba(255, 216, 77, 0.85);
+    background: rgba(255, 216, 77, 0.34);
+    color: #fffbe6;
+    box-shadow: 0 0 16px 4px rgba(255, 216, 77, 0.6), inset 0 0 0 1px rgba(255, 216, 77, 0.9);
   }
+  .speed-hint-callout { animation: none; }
 }
 
 /* Photo mode — hide every HUD chrome layer so the user can frame a shot

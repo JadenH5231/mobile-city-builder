@@ -361,29 +361,38 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
-## Status: Beta 1.9.1 (First zone nudges the play/pause pill — onboarding)
+## Status: Beta 1.9.2 (First zone nudges the play/pause pill — onboarding)
 
-User: "when a player zones something for the first time the play/pause
-button highlights until it's pressed to tell the user to press it. I have
-received feedback that the play/pause button isn't super obvious for new
-users."
+User (1.9.1): "when a player zones something for the first time the
+play/pause button highlights until it's pressed to tell the user to press
+it. I have received feedback that the play/pause button isn't super obvious
+for new users." Then (1.9.2): "maybe pop up with some words underneath that
+say 'tap to play' or something to indicate what they are supposed to do."
 
-A fresh city starts **paused** (verified: a fresh `?dev=1` load shows the
-sim-speed pill on ⏸ and the dev overlay reads `x0`), so a new player can
-paint a whole neighbourhood and see nothing happen without realising the
-play control exists. This adds a one-time attention nudge:
+A fresh city starts **paused** — `SettingsPanel` defaults `defaultSimSpeed`
+to `0` (verified: a fresh load with no saved settings boots into ⏸ /
+`simSpeed === 0`), so a brand-new player can paint a whole neighbourhood and
+watch nothing happen without realising the play control exists. This adds a
+one-time attention nudge:
 
 - **Trigger** (`Game.notifyFirstZone`, called from the zone-apply loop in
   `applyZoneStroke` AND from `placeLuxuryPair`): the first successful zone
   paint of the session fires the new `Game.onFirstZone` callback. Self-
   guarded by a private `firstZoneFired` flag so it fires once per session;
   save-restore + undo paths bypass `setZone`, so they never trigger it.
-- **Nudge** (`main.ts` + `.pill.speed--hint` in `styles.css`): on
-  `onFirstZone`, `main.ts` adds `speed--hint` to `#hud-speed`, which runs a
-  soft golden `speed-hint-pulse` glow (1.25 s loop; a steady glow under
-  `prefers-reduced-motion`). Gated on a per-device localStorage flag
-  `mqcity-speed-hint-seen` so it only ever shows for a player who hasn't
-  used the speed control.
+- **Nudge** (`main.ts` + `.pill.speed--hint` / `.speed-hint-callout` in
+  `styles.css`): on `onFirstZone`, `main.ts` (a) holds `#hud-speed` in a
+  golden highlight that pulses (`speed-hint-pulse` — glow + a small scale,
+  1.25 s loop) and (b) pops a labelled **"Tap to play"** callout
+  (`speed-hint-callout`, created once + appended to `<body>` so the HUD
+  never clips it, positioned under the pill with an arrow that always aims
+  at the pill centre even when the bubble is clamped to a viewport edge).
+  The callout wording reads the live state — paused → "Tap to play",
+  already-running → "Tap to fast-forward". Both the pulse/scale and the
+  callout's bob collapse to a steady highlight under
+  `prefers-reduced-motion`, and the callout hides in photo mode. Gated on a
+  per-device localStorage flag `mqcity-speed-hint-seen` so it only shows for
+  a player who hasn't used the speed control.
 - **Clear**: operating the speed control by tap OR keyboard (Space / 0-3)
   removes the class and sets `mqcity-speed-hint-seen=1`. So a player who
   found the button on their own is never nudged, and once acknowledged the
@@ -391,11 +400,12 @@ play control exists. This adds a one-time attention nudge:
   without pressing gets nudged again next session — deliberate.)
 
 Render/UI-only — no save-schema change, no sim change. Verified in-browser
-(`?dev=1`, and at mobile 375×812): fresh-player first zone → pill pulses
-gold; press → glow clears + sim resumes (⏸→▶, `simSpeed` 0→1) + flag
-persists; re-firing after "seen" does nothing. The pill is the obvious
-focal point of the HUD top bar once lit. SW cache `v35` → `v36`.
-`APP_VERSION` 1.9.0 → 1.9.1 (a patch bump is silent — no What's New entry).
+(`?dev=1`, at desktop 1280×800 and mobile 375×812): fresh-player first zone
+→ pill glows + pulses and the "Tap to play" callout pops below it, arrow
+on-target and fully in-viewport at both sizes; press → highlight + callout
+both clear, sim resumes (⏸→▶, `simSpeed` 0→1), flag persists; re-firing
+after "seen" does nothing. SW cache `v35` → `v37` (across 1.9.1 + 1.9.2).
+`APP_VERSION` 1.9.0 → 1.9.2 (patch bumps are silent — no What's New entry).
 
 **Principle for future onboarding nudges:** fire a one-shot `on*` callback
 from the Game at the moment of the first meaningful action, gate the visual

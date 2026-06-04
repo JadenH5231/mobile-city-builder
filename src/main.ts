@@ -512,26 +512,72 @@ const renderSpeedHud = (): void => {
   speedBtn.classList.toggle('speed--paused', game.simSpeed === 0);
 };
 
-// First-zone discoverability nudge (Beta 1.9.1). Feedback: new players
-// didn't notice the play/pause pill. The first time a player zones
-// anything, pulse the speed pill (CSS .speed--hint) until they press it —
-// then never again (persisted per device). Operating the control by tap OR
-// keyboard marks the hint seen, so a player who found it on their own is
-// never nudged.
+// First-zone discoverability nudge (Beta 1.9.1; labelled in 1.9.2).
+// Feedback: new players didn't notice the play/pause pill — and a fresh
+// city starts PAUSED (defaultSimSpeed defaults to 0), so nothing grows
+// until they find it. The first time a player zones anything we (a) pulse +
+// highlight the speed pill (CSS .speed--hint) and (b) pop a labelled
+// "Tap to play" callout pointing at it, until they press it — then never
+// again (persisted per device). Operating the control by tap OR keyboard
+// marks the hint seen, so a player who found it on their own is never nudged.
 const SPEED_HINT_KEY = 'mqcity-speed-hint-seen';
 const speedHintSeen = (): boolean => {
   try { return localStorage.getItem(SPEED_HINT_KEY) === '1'; } catch { return false; }
 };
-// Called whenever the player operates the speed control: drop the pulse and
-// remember it so the hint never fires again on this device.
+
+// Labelled callout that floats just below the speed pill and points up at
+// it. Created once and appended to <body> (not #hud) so it's never clipped
+// by the HUD and we control photo-mode hiding explicitly via CSS.
+const speedHintCallout = document.createElement('div');
+speedHintCallout.id = 'speed-hint-callout';
+speedHintCallout.className = 'speed-hint-callout hidden';
+speedHintCallout.setAttribute('role', 'status');
+speedHintCallout.innerHTML =
+  '<span class="speed-hint-callout__arrow" aria-hidden="true"></span>' +
+  '<span class="speed-hint-callout__text">Tap to play</span>';
+document.body.appendChild(speedHintCallout);
+const speedHintText = speedHintCallout.querySelector('.speed-hint-callout__text') as HTMLElement;
+
+// Pin the callout under the pill, clamped to the viewport. The arrow is
+// offset independently (via --arrow-x) so it keeps pointing at the pill
+// centre even when the bubble is nudged inward to stay on-screen.
+const positionSpeedHintCallout = (): void => {
+  if (!speedBtn || speedHintCallout.classList.contains('hidden')) return;
+  const r = speedBtn.getBoundingClientRect();
+  const w = speedHintCallout.offsetWidth || 120;
+  const margin = 8;
+  const pillCx = r.left + r.width / 2;
+  const left = Math.max(margin, Math.min(pillCx - w / 2, window.innerWidth - w - margin));
+  speedHintCallout.style.left = `${Math.round(left)}px`;
+  speedHintCallout.style.top = `${Math.round(r.bottom + 10)}px`;
+  speedHintCallout.style.setProperty('--arrow-x', `${Math.round(pillCx - left)}px`);
+};
+
+const showSpeedHint = (): void => {
+  if (!speedBtn) return;
+  speedBtn.classList.add('speed--hint');
+  // Match the wording to the state: a fresh city is paused → "Tap to play";
+  // the rare already-running case reads "Tap to fast-forward".
+  speedHintText.textContent = game.simSpeed === 0 ? 'Tap to play' : 'Tap to fast-forward';
+  speedHintCallout.classList.remove('hidden');
+  positionSpeedHintCallout();
+};
+
+// Called whenever the player operates the speed control: drop the pulse +
+// callout and remember it so the hint never fires again on this device.
 const markSpeedHintSeen = (): void => {
   speedBtn?.classList.remove('speed--hint');
+  speedHintCallout.classList.add('hidden');
   try { localStorage.setItem(SPEED_HINT_KEY, '1'); } catch { /* private mode — just nudge again next session */ }
 };
+
 game.onFirstZone = () => {
   if (!speedBtn || speedHintSeen()) return;
-  speedBtn.classList.add('speed--hint');
+  showSpeedHint();
 };
+// Keep the callout pinned to the pill if the layout reflows (orientation /
+// resize) while the hint is up.
+window.addEventListener('resize', positionSpeedHintCallout);
 
 if (speedBtn) {
   renderSpeedHud();

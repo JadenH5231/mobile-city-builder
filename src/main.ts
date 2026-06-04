@@ -10,6 +10,7 @@ import { AuthModal } from './ui/AuthModal';
 import { initThemes } from './themes/registry';
 import { bindThemePicker } from './ui/ThemePicker';
 import { maybeShowWhatsNew } from './ui/WhatsNew';
+import { tickDiscordSession, checkDiscordSignin } from './ui/DiscordCta';
 import './styles.css';
 
 // Theme pack init (Beta 1.2). Restores the player's active theme from
@@ -61,6 +62,13 @@ await game.init(appEl, MAP_SIZES.small, activeSlot);
 // the minor version changed since their last visit (e.g. 1.7 → 1.8).
 // Self-gating: brand-new players + patch-only bumps see nothing.
 maybeShowWhatsNew();
+
+// Discord community CTA (Beta 1.9.3) — the session-cadence trigger: counts
+// page loads and pops the invite once every 5th fresh session. Self-gating
+// (skips if suppressed, already shown this load, or a higher-priority modal
+// like What's New is up). The sign-in trigger is wired in the auth block
+// below. Kept deliberately low-frequency to avoid pop-up fatigue.
+tickDiscordSession();
 
 // Dev profiling overlay (Beta 1.7) — only when ?dev=1. Lazy-imported so
 // its DOM + code never ship to a normal player's first paint.
@@ -1431,6 +1439,18 @@ if (isCloudEnabled()) {
       try { localStorage.setItem(AUTH_PROMPTED_KEY, '1'); } catch { /* private mode */ }
     });
   }, 800);
+
+  // Discord community CTA (Beta 1.9.3) — the sign-in trigger. A sign-in
+  // reloads the page (authModal.onSuccess), so we detect a genuine
+  // signed-out → signed-in transition across the reload by reading the live
+  // session against a persisted `was-signed-in` flag. Runs after the
+  // auth-prompt window so it never stacks on the sign-in modal. getSession()
+  // is the settle point (initAuth restores asynchronously).
+  setTimeout(() => {
+    const supa = getSupabase();
+    if (!supa) { checkDiscordSignin(false); return; }
+    void supa.auth.getSession().then(({ data }) => checkDiscordSignin(!!data.session));
+  }, 1000);
 }
 
 // Expose for ad-hoc debugging from the device's remote inspector.

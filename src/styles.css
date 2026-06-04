@@ -1631,6 +1631,114 @@ body.photo-mode .photo-exit {
   cursor: pointer;
 }
 
+/* ---- Discord community CTA (Beta 1.9.3) ----------------------------- *
+ * Low-frequency invite to the Discord. Reuses the What's New overlay
+ * pattern with centred content and Discord-blurple branding on the primary
+ * action. Trigger + frequency logic lives in src/ui/DiscordCta.ts. */
+.discord-cta {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 136;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: auto;
+}
+.discord-cta__sheet {
+  background: var(--pill-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pill-border);
+  border-radius: 18px;
+  padding: 26px 24px 18px;
+  max-width: 380px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.discord-cta__icon {
+  color: #5865f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: rgba(88, 101, 242, 0.16);
+  margin-bottom: 14px;
+}
+.discord-cta__title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.discord-cta__body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--pill-fg);
+  margin-bottom: 20px;
+}
+.discord-cta__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.discord-cta__join {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  appearance: none;
+  text-decoration: none;
+  background: #5865f2;
+  color: #fff;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.discord-cta__join:hover,
+.discord-cta__join:active {
+  background: #4752c4;
+}
+.discord-cta__later {
+  appearance: none;
+  background: transparent;
+  color: var(--pill-fg);
+  border: 1px solid var(--pill-border);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.discord-cta__later:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+.discord-cta__never {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  margin-top: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.discord-cta__never:active {
+  color: rgba(255, 255, 255, 0.65);
+}
+
 /* ---- Tutorial — Live banner (Alpha 4.10) ---------------------------- */
 /* Persistent top-center pill that surfaces the current objective.
    Updates automatically as the player satisfies each step's predicate.

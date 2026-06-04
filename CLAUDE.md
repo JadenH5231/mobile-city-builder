@@ -361,6 +361,58 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.3 (Discord community CTA — low-frequency invite)
+
+User: "I would like a CTA pop-up that asks if the user would like to join
+the discord community. This should pop up the next time a user signs in and
+once every 5 times they open the page back up in a new session. Not too
+often we don't want pop-up fatigue. Link is https://discord.gg/WWfcRdnArU"
+
+New `src/ui/DiscordCta.ts` (mirrors the self-contained dynamic-DOM pattern
+of `WhatsNew.ts`) + `.discord-cta*` styles. A centred glass modal with the
+Discord logo, a Discord-blurple **"Join the Discord"** primary action (opens
+the invite in a new tab, `rel="noopener noreferrer"`), a soft **"Maybe
+later"**, and a **"Don't show this again"** opt-out.
+
+**Two triggers, both deliberately low-frequency:**
+- **Session cadence** (`tickDiscordSession`, called once on load in
+  `main.ts` right after `maybeShowWhatsNew`): a per-device session counter
+  (`mqcity-discord-cta-sessions`) increments every fresh page load and the
+  CTA pops on every 5th. Showing it resets the counter to 0 so the next
+  periodic show is a full 5 sessions out.
+- **Sign-in** (`checkDiscordSignin`, wired inside the `isCloudEnabled()`
+  auth block): a sign-in reloads the page (`authModal.onSuccess`), so a
+  genuine signed-out → signed-in transition is detected across the reload by
+  reading the live `getSession()` against a persisted `was-signed-in` flag
+  (`mqcity-discord-was-signed-in`). A settled signed-out clears the flag so
+  the NEXT sign-in counts as new.
+
+**Anti-fatigue rules:** at most one CTA per page load (`shownThisSession`);
+never stacks on a higher-priority modal (What's New / auth / tutorial /
+event); clicking **Join** or **Don't show again** sets a permanent
+`mqcity-discord-cta-done` flag that hard-stops BOTH triggers (the session
+tick bails before it even increments). **Maybe later** / backdrop just
+closes and the CTA returns on the normal cadence. All state is per-device
+localStorage — never in the save file; private-mode (no storage) fails
+closed → never shows.
+
+Verified in-browser (mobile 375×812 + desktop 1280×800): the 5th-session
+trigger fires + resets the counter, the modal renders cleanly at both sizes
+with the correct `https://discord.gg/WWfcRdnArU` link + safe `target`/`rel`,
+"Maybe later" closes WITHOUT suppressing, "Join" / "Don't show again" set
+the permanent suppress, and a suppressed user gets nothing on a forced 5th
+session (tick bails before incrementing). The **sign-in trigger is wired but
+couldn't be exercised on the local dev build** — it has no Supabase
+configured (`isCloudEnabled()` false → the whole auth block is inert); it
+runs on the production build where Supabase is set. No console errors,
+typecheck clean. SW cache `v37` → `v38`. `APP_VERSION` 1.9.2 → 1.9.3 (patch
+= silent; the CTA announces itself, so no What's New entry).
+
+**Tuning levers:** `SESSIONS_PER_SHOW` (currently 5) in `DiscordCta.ts`; to
+change the invite, edit `DISCORD_URL` there. The two trigger call-sites are
+in `main.ts` (the `tickDiscordSession()` call near boot + the
+`checkDiscordSignin()` setTimeout in the auth block).
+
 ## Status: Beta 1.9.2 (First zone nudges the play/pause pill — onboarding)
 
 User (1.9.1): "when a player zones something for the first time the

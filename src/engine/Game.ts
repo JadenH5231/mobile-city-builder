@@ -1,6 +1,7 @@
 import { Camera } from './Camera';
 import { Input } from './Input';
 import { Renderer } from './Renderer';
+import { setVariantMilestoneTier } from './BuildingVariants';
 import { Grid } from '../world/Grid';
 import type { Tile } from '../world/Tile';
 import { TileInfoPanel, diagnoseTile } from '../ui/TileInfoPanel';
@@ -857,6 +858,11 @@ export class Game {
    * them; tapping shows an "Unlocks at <Milestone> · NNN pop" toast.
    */
   private refreshToolbarLocks(): void {
+    // Milestone-gated architecture (Beta 1.10): sync the variant picker's tier
+    // to the city's earned-milestone count so fancier building variants enter
+    // the pool as the city grows. Runs here because refreshToolbarLocks is the
+    // canonical "milestones changed / restored" hook (init, load, every earn).
+    setVariantMilestoneTier(this.milestones.earned.size);
     const KNOWN_TOOLS: readonly Tool[] = [
       'pan', 'bulldoze',
       'road_local', 'road_avenue', 'road_highway', 'place_path',

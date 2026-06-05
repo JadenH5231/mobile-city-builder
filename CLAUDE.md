@@ -362,6 +362,40 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.8 (Milestone-gated architectural variety)
+
+User (batch): "Add more architectural variety to all levels of density across
+all zoning types, have certain types of variety only start to show up at
+certain milestones."
+
+The `VARIANTS[zone][density]` Spec table (core.ts) already had ~8 variants per
+cell; added **16 new premium variants** — one per (zone × density) across R/C/
+I/MU × L1-L4 — each gated by a new `Spec.minTier` field. New **milestone-gating
+mechanism**: a module-level `activeMilestoneTier` in core.ts (set via the
+exported `setVariantMilestoneTier`, which `Game.refreshToolbarLocks` calls with
+`this.milestones.earned.size` on every milestone change / init / load).
+`buildVariantParts` + `getVariantBodyFootprint` filter the pool to
+`unlockedVariants()` (variants with `minTier ≤ activeMilestoneTier`) BEFORE the
+deterministic `pickVariant`, so both the geometry pass and the lit-windows pass
+agree. New variants are gated City (tier 4) / Metro (tier 5) / Capital (tier 6)
+— glass condos, art-deco shopfronts, office/HQ towers, clean-tech/giga
+factories, podium-tower mixed-use, etc. Net effect: a tile's rendered
+architecture upgrades as the city crosses milestones (verified in-browser:
+the SAME L3 block renders glass towers + a magenta accent + podium designs at
+Capital tier, and falls back to base brick mid-rises at tier 0 — fancier
+buildings genuinely appear as the city matures). Single draw call preserved.
+
+**Pattern for future variants:** add a `Spec` to the relevant
+`VARIANTS[zone][density]` array; set `minTier` to gate it (0/undefined =
+always). No renderer changes needed — the pool filter + `pickVariant` handle
+it. Threading the tier as a module-level (not a param) keeps all the existing
+`drawBuildings` call sites unchanged.
+
+Verified in-browser (`?dev=1`): typecheck clean, no console errors, rich
+variety at high tier, gated pool shrinks correctly at low tier. SW cache `v42`
+→ `v43`. `APP_VERSION` 1.9.7 → 1.9.8 (**silent patch** — consolidated What's
+New held for end of batch).
+
 ## Status: Beta 1.9.7 (Single-tile luxury home)
 
 User (batch): "Add an additional type of luxury low density housing that only

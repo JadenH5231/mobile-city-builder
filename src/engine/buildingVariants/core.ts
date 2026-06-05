@@ -87,6 +87,30 @@ interface Spec {
   /** Optional secondary body (e.g. attached garage, shop wing). */
   body2?: Body;
   decorations?: Decoration[];
+  /** Milestone gate (Beta 1.10). This variant only enters the deterministic
+   *  pick pool once the city's milestone tier (count of earned milestones,
+   *  0=none … 6=Capital) is ≥ minTier. Undefined / 0 = always available. So
+   *  fancier architecture "appears" as the city matures. */
+  minTier?: number;
+}
+
+/** Current city milestone tier (count of earned milestones). Set by Game via
+ *  setVariantMilestoneTier whenever milestones change; read by the variant
+ *  picker so gated variants enter the pool as the city grows. Module-level so
+ *  both buildVariantParts and getVariantBodyFootprint agree without threading
+ *  a param through every renderer call site. */
+let activeMilestoneTier = 0;
+export function setVariantMilestoneTier(tier: number): void {
+  activeMilestoneTier = tier;
+}
+
+/** Filter a variant list to those unlocked at the current milestone tier.
+ *  Always returns a non-empty list (base variants have minTier 0/undefined),
+ *  but falls back to the full list defensively if a cell somehow gated all
+ *  of its variants. */
+function unlockedVariants(variants: Spec[]): Spec[] {
+  const open = variants.filter((v) => (v.minTier ?? 0) <= activeMilestoneTier);
+  return open.length > 0 ? open : variants;
 }
 
 /* ---- Builder -------------------------------------------------------- */
@@ -101,8 +125,10 @@ export function buildVariantParts(
   happiness = 0.5, yawOverride?: number
 ): VariantPart[] {
   if (zone === 'none' || density <= 0) return [];
-  const variants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
-  if (!variants || variants.length === 0) return [];
+  const allVariants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
+  if (!allVariants || allVariants.length === 0) return [];
+  // Milestone-gated pool (Beta 1.10): fancier variants enter as the city grows.
+  const variants = unlockedVariants(allVariants);
   // Deterministic variant pick — same tile always renders the same variant.
   const variantIdx = pickVariant(tileX, tileY, variants.length);
   const spec = variants[variantIdx]!;
@@ -150,8 +176,9 @@ export function getVariantBodyFootprint(
   yawOverride?: number
 ): { cx: number; cz: number; halfX: number; halfZ: number; height: number } | null {
   if (zone === 'none' || density <= 0) return null;
-  const variants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
-  if (!variants || variants.length === 0) return null;
+  const allVariants = VARIANTS[zone]?.[density as 1 | 2 | 3 | 4];
+  if (!allVariants || allVariants.length === 0) return null;
+  const variants = unlockedVariants(allVariants);
   const variantIdx = pickVariant(tileX, tileY, variants.length);
   const spec = variants[variantIdx]!;
   // Same hash + jitter formula as buildVariantParts above.
@@ -1163,6 +1190,13 @@ const VARIANTS: VariantTable = {
   // ---- Residential -------------------------------------------------------
   residential: {
     1: [
+      // Modern villa — white render + flat roof + glazed side wing (City+).
+      {
+        body: { w: 0.55, h: 0.34, d: 0.46, color: 0xf4f1ea },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        body2: { w: 0.30, h: 0.24, d: 0.30, color: 0xcfe0e6, yBase: 0 },
+        minTier: 4
+      },
       // Cottage with a steep gable roof.
       {
         body: { w: 0.40, h: 0.30, d: 0.45, color: 0xd9c89e },
@@ -1219,6 +1253,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     2: [
+      // Brownstone row — deep brick + cornice, flat roof (City+).
+      {
+        body: { w: 0.66, h: 0.70, d: 0.40, color: 0x9c5a3c },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'chimney', dx: 0.22, dz: -0.12, h: 0.12, color: 0x5a3a2a }],
+        minTier: 4
+      },
       // Townhouse row — three connected gabled blocks.
       {
         body: { w: 0.70, h: 0.55, d: 0.32, color: 0xc8a878 },
@@ -1283,6 +1324,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     3: [
+      // Glass mid-rise condo — cool curtain wall + setback crown (Metro+).
+      {
+        body: { w: 0.62, h: 1.05, d: 0.58, color: 0x9fb6c6 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'tower', w: 0.40, d: 0.40, h: 0.30, color: 0xb8cdd8, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 5
+      },
       // High-rise tower with stepped setback.
       {
         body: { w: 0.85, h: 0.55, d: 0.85, color: 0x8a6f4e },
@@ -1338,6 +1386,12 @@ const VARIANTS: VariantTable = {
     // skyscrapers (~10-15 storeys). L4 R = ~6-9 storey buildings:
     // brownstones + mid-rise apartment buildings + co-ops.
     4: [
+      // Luxury residential tower on a podium (Capital).
+      {
+        body: { w: 0.80, h: 0.40, d: 0.78, color: 0xc9b89a },
+        decorations: [{ kind: 'tower', w: 0.52, d: 0.52, h: 1.30, color: 0xd8c8aa, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 6
+      },
       // 7-storey brownstone block — warm brick body, stone-trim base,
       // low parapet, set of vertical sash windows implied by tower
       // setback. Heights ~2.5 = 7-8 storeys.
@@ -1386,6 +1440,13 @@ const VARIANTS: VariantTable = {
   // ---- Commercial -------------------------------------------------------
   commercial: {
     1: [
+      // Boutique storefront — slate + bold awning (City+).
+      {
+        body: { w: 0.55, h: 0.40, d: 0.45, color: 0x6a7e8c },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'awning', side: 'S', width: 0.40, depth: 0.12, color: 0xd23f3f }],
+        minTier: 4
+      },
       // Corner shop with awning + sign.
       {
         body: { w: 0.60, h: 0.36, d: 0.55, color: 0xc0d4ec },
@@ -1455,6 +1516,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     2: [
+      // Art-deco shopfront — stepped gold corner tower (City+).
+      {
+        body: { w: 0.62, h: 0.80, d: 0.50, color: 0x4f6472 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'tower', w: 0.30, d: 0.30, h: 0.26, color: 0xc9a24a, roofKind: 'pyramid', roofHeight: 0.14, roofColor: 0xb88a30 }],
+        minTier: 4
+      },
       // 3-storey office cube.
       {
         body: { w: 0.60, h: 0.78, d: 0.60, color: 0x7a92b5 }
@@ -1516,6 +1584,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     3: [
+      // Glass office tower — steel-blue curtain wall (Metro+).
+      {
+        body: { w: 0.66, h: 1.30, d: 0.60, color: 0x6f8aa0 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'tower', w: 0.42, d: 0.42, h: 0.30, color: 0x8aa6bc, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 5
+      },
       // Classic skyscraper — tall narrow rectangle.
       {
         body: { w: 0.55, h: 1.50, d: 0.55, color: 0x52688a },
@@ -1574,6 +1649,12 @@ const VARIANTS: VariantTable = {
     // skyscrapers. Wider footprints than residential L4 — commercial
     // mid-rise tends to mass out the lot more than residential.
     4: [
+      // Corporate HQ — broad dark podium + signature slab (Capital).
+      {
+        body: { w: 0.82, h: 0.50, d: 0.80, color: 0x3f5260 },
+        decorations: [{ kind: 'tower', w: 0.50, d: 0.50, h: 1.40, color: 0x5a7488, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 6
+      },
       // 8-storey corporate office — light grey curtain wall + crown band.
       {
         body: { w: 0.85, h: 2.40, d: 0.85, color: 0xa6b0bc },
@@ -1620,6 +1701,13 @@ const VARIANTS: VariantTable = {
   // ---- Industrial -------------------------------------------------------
   industrial: {
     1: [
+      // Modern logistics shed — clean panel walls + canopy (City+).
+      {
+        body: { w: 0.62, h: 0.30, d: 0.55, color: 0x9aa0a4 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'awning', side: 'S', width: 0.30, depth: 0.14, color: 0x6a6e70 }],
+        minTier: 4
+      },
       // Square low warehouse.
       {
         body: { w: 0.65, h: 0.32, d: 0.65, color: 0xb0a080 },
@@ -1678,6 +1766,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     2: [
+      // Clean-tech plant — pale cladding + vent stack (City+).
+      {
+        body: { w: 0.66, h: 0.62, d: 0.58, color: 0x8a9298 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        body2: { w: 0.30, h: 0.40, d: 0.30, color: 0x767e84, yBase: 0 },
+        minTier: 4
+      },
       // Factory with 2 chimneys.
       {
         body: { w: 0.75, h: 0.55, d: 0.55, color: 0x7e6e58 },
@@ -1741,6 +1836,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     3: [
+      // Research campus block — taller, with a rooftop plant tower (Metro+).
+      {
+        body: { w: 0.70, h: 0.85, d: 0.62, color: 0x7e868c },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        decorations: [{ kind: 'tower', w: 0.34, d: 0.34, h: 0.30, color: 0x9aa2a8, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 5
+      },
       // Massive factory complex — main hall + two chimneys + tank.
       {
         body: { w: 0.85, h: 0.85, d: 0.65, color: 0x584c3a },
@@ -1822,6 +1924,12 @@ const VARIANTS: VariantTable = {
     // skyscraper-tall in real cities, so L4 caps at ~5 storeys but
     // gets WIDER + more stacks/tanks on top.
     4: [
+      // Gigafactory — massive low slab + utility stack (Capital).
+      {
+        body: { w: 0.84, h: 0.70, d: 0.82, color: 0x6e767c },
+        decorations: [{ kind: 'tower', w: 0.24, d: 0.24, h: 0.50, color: 0x5e666c, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 6
+      },
       // 5-storey processing plant — wide gunmetal slab + 4 tall stacks.
       {
         body: { w: 0.95, h: 1.50, d: 0.85, color: 0x4a4844 },
@@ -1890,6 +1998,13 @@ const VARIANTS: VariantTable = {
   // ---- Mixed-use --------------------------------------------------------
   mixed: {
     1: [
+      // Live-work loft — warm base + cool glazed upper (City+).
+      {
+        body: { w: 0.55, h: 0.46, d: 0.46, color: 0xc2a07a },
+        body2: { w: 0.50, h: 0.20, d: 0.42, color: 0x7e8c96, yBase: 0.46 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        minTier: 4
+      },
       // 2-storey brownstone — shop down, flat above.
       {
         body: { w: 0.55, h: 0.40, d: 0.50, color: 0xc8b294 },
@@ -1955,6 +2070,13 @@ const VARIANTS: VariantTable = {
       }
     ],
     2: [
+      // Boutique mixed block — retail podium + flats above (City+).
+      {
+        body: { w: 0.62, h: 0.30, d: 0.54, color: 0xc8aa80 },
+        body2: { w: 0.54, h: 0.55, d: 0.48, color: 0x6f8290, yBase: 0.30 },
+        roof: { kind: 'flat', height: 0, color: 0 },
+        minTier: 4
+      },
       // 4-storey modern mixed.
       {
         body: { w: 0.55, h: 0.78, d: 0.55, color: 0x8d92a4 },
@@ -2017,6 +2139,12 @@ const VARIANTS: VariantTable = {
       }
     ],
     3: [
+      // Podium-tower mixed-use — wide base + residential tower (Metro+).
+      {
+        body: { w: 0.70, h: 0.34, d: 0.62, color: 0xcdb189 },
+        decorations: [{ kind: 'tower', w: 0.46, d: 0.46, h: 1.05, color: 0x7e93a2, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 5
+      },
       // High-rise with podium (commercial base + residential tower).
       {
         body: { w: 0.85, h: 0.42, d: 0.85, color: 0xb89a7e },
@@ -2087,6 +2215,12 @@ const VARIANTS: VariantTable = {
     // floor retail, 5-7 storeys of residential above. Bridges L3
     // (small podium-tower) and skyscraper-tier (full skyscraper).
     4: [
+      // Signature mixed-use tower — flagship podium + slab (Capital).
+      {
+        body: { w: 0.82, h: 0.42, d: 0.78, color: 0xd0b68f },
+        decorations: [{ kind: 'tower', w: 0.52, d: 0.52, h: 1.45, color: 0x6f8b9e, roofKind: 'flat', roofHeight: 0, roofColor: 0 }],
+        minTier: 6
+      },
       // 8-storey podium-tower — bright retail base + warm-stone tower above.
       {
         body: { w: 0.85, h: 0.42, d: 0.85, color: 0xece4cf },   // ground retail

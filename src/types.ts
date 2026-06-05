@@ -494,7 +494,12 @@ export type Building =
   // The anchor's `building` value flips to `'cloverleaf'` only when all
   // 25 footprint blocks are paid; until then the anchor stays
   // `'none'` and per-tile construction sites render on paid blocks.
-  | 'cloverleaf';
+  | 'cloverleaf'
+  // Grand Stadium (Beta 1.10). 5×4 multi-block showpiece built via the
+  // same per-block placement system as the civic monuments. An elliptical
+  // seating bowl with a green pitch, roof canopy, floodlights and an
+  // entrance plaza. Single-instance per city. Metropolis milestone.
+  | 'grand_stadium';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -577,6 +582,9 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // Cloverleaf interchange (Alpha 4.17) — 5×5 prefab placed via per-
   // block construction. Total ~$50K spread across 25 blocks ≈ $2K/block.
   cloverleaf: 50000,
+  // Grand Stadium (Beta 1.10) — 5×4 entertainment showpiece. Between
+  // City Hall and Provincial Capital in cost. Per-block over 20 blocks.
+  grand_stadium: 2000000,
   // Toronto landmark Easter eggs (Alpha 4.24). Cost 0 because they're
   // not exposed in any place tool — only the bundled Toronto preset
   // stamps them. Listed here only so TS's exhaustive Building Record
@@ -650,6 +658,9 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // Cloverleaf upkeep — meaningful but not punishing. Multi-acre
   // pavement + medians + lighting. Equivalent to a small landmark.
   cloverleaf: 200,
+  // Grand Stadium (Beta 1.10) — events, grounds crew, lighting. Real
+  // ongoing cost but the tourism + entertainment revenue offsets it.
+  grand_stadium: 5000,
   // Toronto landmark Easter eggs (Alpha 4.24). Free upkeep — they're
   // cosmetic-only and not exposed via any place tool.
   cn_tower: 0,
@@ -915,6 +926,8 @@ export const MILESTONES: readonly Milestone[] = [
       // Civic monuments (Alpha 4.12) — Provincial Capital is the
       // Metro-tier showpiece building.
       'place_provincial_capital',
+      // Grand Stadium (Beta 1.10) — Metro-tier entertainment showpiece.
+      'place_grand_stadium',
       // Level 4 / "Max" density (Alpha 4.18) — bridges L3 → skyscraper.
       // Unlocks at Metro since City already unlocks both L3 + skyscrapers,
       // and Metro is the natural next density progression.
@@ -1123,6 +1136,9 @@ export type Tool =
   | 'place_city_hall'
   | 'place_provincial_capital'
   | 'place_national_capital'
+  // Grand Stadium (Beta 1.10). 5×4 single-instance showpiece built
+  // per-block, anchor-tile convention. Lives in the Mon group.
+  | 'place_grand_stadium'
   // Cloverleaf interchange (Alpha 4.17). 5×5 prefab built per-block,
   // beautiful curved highway loops + grass infields + bridge over.
   // Lives in the Roads group (it's road infrastructure, not a building).
@@ -1202,6 +1218,8 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_city_hall', 'city_hall' as const],
   ['place_provincial_capital', 'provincial_capital' as const],
   ['place_national_capital', 'national_capital' as const],
+  // Grand Stadium (Beta 1.10). Per-block flow.
+  ['place_grand_stadium', 'grand_stadium' as const],
   // Cloverleaf interchange (Alpha 4.17). Per-block flow.
   ['place_cloverleaf', 'cloverleaf' as const]
 ]);
@@ -1230,7 +1248,9 @@ export const ARCHITECTURAL_BUILDINGS: ReadonlySet<Exclude<Building, 'none'>> = n
   'clock_tower', 'triumphal_arch', 'pier', 'mayor_mansion',
   // Civic monuments (Alpha 4.12) — they live with the Architect /
   // Mon group as well, even though they have a real service field.
-  'city_hall', 'provincial_capital', 'national_capital'
+  'city_hall', 'provincial_capital', 'national_capital',
+  // Grand Stadium (Beta 1.10) — same Mon-group showpiece class.
+  'grand_stadium'
 ] as const);
 
 /** Mayor's Mansion footprint (Alpha 4.2) — 4 wide × 2 deep. The
@@ -1263,6 +1283,10 @@ export const NATIONAL_CAPITAL_DEPTH = 4;
  *  monuments. Anchor is the lex-smallest tile (top-left). */
 export const CLOVERLEAF_WIDTH = 5;
 export const CLOVERLEAF_DEPTH = 5;
+/** Grand Stadium footprint (Beta 1.10) — 5×4 = 20 tiles. Per-block
+ *  placement + anchor-tile convention like the civic monuments. */
+export const GRAND_STADIUM_WIDTH = 5;
+export const GRAND_STADIUM_DEPTH = 4;
 
 /** Tile radius around any city-hall-class building (Alpha 4.12) inside
  *  which every developed building gets free power + water + park (i.e.
@@ -1279,7 +1303,7 @@ export const CIVIC_MONUMENT_SERVICE_RADIUS = 35;
  *  player can spread the spend across many sim months, paying for
  *  one block at a time as they earn the money. */
 export function monumentBlockCost(
-  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' | 'grand_stadium'
 ): number {
   const dims = (() => {
     switch (kind) {
@@ -1288,6 +1312,7 @@ export function monumentBlockCost(
       case 'provincial_capital': return PROVINCIAL_CAPITAL_WIDTH * PROVINCIAL_CAPITAL_DEPTH;
       case 'national_capital':   return NATIONAL_CAPITAL_WIDTH * NATIONAL_CAPITAL_DEPTH;
       case 'cloverleaf':         return CLOVERLEAF_WIDTH * CLOVERLEAF_DEPTH;
+      case 'grand_stadium':      return GRAND_STADIUM_WIDTH * GRAND_STADIUM_DEPTH;
     }
   })();
   return Math.ceil(BUILDING_COSTS[kind] / dims);

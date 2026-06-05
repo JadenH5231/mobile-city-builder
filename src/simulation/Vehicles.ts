@@ -1806,6 +1806,7 @@ function isTouristDestination(t: Tile): boolean {
     case 'city_hall':
     case 'provincial_capital':
     case 'national_capital':
+    case 'grand_stadium':
       return true;
     default:
       return false;

@@ -208,6 +208,9 @@ export class Tile {
   cityHall = false;
   provincialCapital = false;
   nationalCapital = false;
+  /** Grand Stadium bit (Beta 1.10). Same anchor pattern as the civic
+   *  monuments; the anchor carries `building = 'grand_stadium'`. */
+  grandStadium = false;
   /**
    * Big-build rotation (Alpha 4.21). Only meaningful on the ANCHOR tile
    * of a multi-tile civic monument footprint (Mayor's Mansion / City

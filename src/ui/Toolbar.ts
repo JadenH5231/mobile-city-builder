@@ -644,7 +644,14 @@ const ARCHITECT_ITEMS: readonly ToolbarItem[] = [
       // the END of the Mon group so they read as the new apex tier.
       { kind: 'tool', tool: 'place_city_hall',          label: 'City Hall',   icon: ICON_CITY_HALL },
       { kind: 'tool', tool: 'place_provincial_capital', label: 'Provincial', icon: ICON_PROVINCIAL },
-      { kind: 'tool', tool: 'place_national_capital',   label: 'National',   icon: ICON_NATIONAL }
+      { kind: 'tool', tool: 'place_national_capital',   label: 'National',   icon: ICON_NATIONAL },
+      // Grand Stadium (Beta 1.10) — 5×4 elliptical-bowl entertainment
+      // showpiece. Distinct from the single-tile `place_stadium` landmark.
+      { kind: 'tool', tool: 'place_grand_stadium', label: 'Stadium', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="13" rx="9" ry="5.5" stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <ellipse cx="12" cy="13" rx="4.5" ry="2.6" stroke="currentColor" stroke-width="1.3" fill="none"/>
+        <path d="M4 6.5v3 M20 6.5v3 M4 8h16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+      </svg>` }
     ]
   }
 ];

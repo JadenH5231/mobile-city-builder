@@ -362,6 +362,49 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.6 (Grand Stadium — multi-block showpiece)
+
+User (batch): "Add a stadium (Make it multiple blocks similar to capitals,
+mayors mansion, etc)."
+
+New `grand_stadium` building — a 5×4 multi-block showpiece that plugs into
+the existing **per-block civic-monument system** (the same `BigBuildKind`
+machinery as the Mayor's Mansion / city_hall / capitals): two-tap arm +
+ghost preview, per-block payment, rotation, one-per-city, anchor-tile
+dispatch, walk-back bulldoze. Distinct from the pre-existing single-tile
+`stadium` landmark. Metropolis-milestone unlock, $2M (per-block), $5K/mo
+upkeep. Renderer `buildGrandStadiumParts` (in `buildingVariants/monuments.ts`)
+emits a premium elliptical bowl: green pitch + white markings (centre
+circle/line/penalty boxes), 4 raked stepped seating tiers in alternating
+section colours (the "crowd"), a cantilevered white roof-canopy ring, a
+concrete outer facade with a front entrance gap, 4 corner floodlight masts
+with bulb arrays, a back scoreboard, and an entrance plaza with gateway
+pylons + flags — one merged vertex-coloured mesh (single draw call).
+
+**Integration touch points** (the pattern for any future `BigBuildKind`):
+`types.ts` (Building union, BUILDING_COSTS, upkeep, `GRAND_STADIUM_WIDTH/
+DEPTH`, `monumentBlockCost`, Tool union, PLACE_TOOL_TO_BUILDING,
+ARCHITECTURAL_BUILDINGS, the Metro milestone unlocks); `Tile.grandStadium`;
+`Game.ts` (BigBuildKind, label map, toolbar-ban map, cost-preview,
+tap-dispatch, `monumentFootprint`, `canPlaceMonumentFootprint`,
+`reserveMonumentFootprint` set/readKindBit, validation, tool→kind, bulldoze
+walk-back); `Renderer.ts` ghost-web kind type; `builders.ts` (import,
+`readKind`, geometry dispatch, construction-site reserved/kind detection);
+`BuildingVariants.ts` re-export; `SaveGame.ts` (interface/write/read +
+bigBuildBlockPaid derivation — pre-1.10 saves load with grandStadium=false,
+no schema bump); `Council.ts` `grand_stadium` stance (interface + all 10
+faction rows — Chamber +0.9 / Working +0.6 / Transit +0.5 love it, NIMBY
+−0.5 / Greenleaf −0.4 / Taxpayers −0.7 dislike); `FactionDetailPanel`
+label; `Toolbar` Mon-group entry + bowl icon.
+
+Verified in-browser (`?dev=1`): typecheck clean, no console errors, a
+completed stadium renders as a detailed premium bowl (single draw call),
+placement/bulldoze go through the shared monument machinery. SW cache `v40`
+→ `v41`. `APP_VERSION` 1.9.5 → 1.9.6 (**silent patch** — the player asked to
+hold the What's New changelog until ALL the new batch features land, so this
++ the upcoming features ship as silent patches and the consolidated What's
+New entry + a single MINOR bump come at the end).
+
 ## Status: Beta 1.9.5 (Roundabouts removed)
 
 User: "remove the roundabouts entirely, they never worked the way I wanted

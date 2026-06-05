@@ -54,6 +54,7 @@ const STANCE_LABEL: Record<StanceKey, string> = {
   city_hall: 'City Hall',
   provincial_capital: 'Provincial Capital',
   national_capital: 'National Capital',
+  grand_stadium: 'Grand Stadium',
   beautification: 'Beautification budget'
 };
 

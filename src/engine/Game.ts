@@ -58,6 +58,8 @@ import {
   LUXURY_LOW_COST,
   MAYOR_MANSION_DEPTH,
   MAYOR_MANSION_WIDTH,
+  GRAND_STADIUM_WIDTH,
+  GRAND_STADIUM_DEPTH,
   SKYSCRAPER_COST,
   SKYSCRAPER_VARIANT_COUNT,
   MAP_SIZES,
@@ -98,7 +100,7 @@ const RESET_FLAG = 'city-builder-just-reset';
  *  monuments PLUS the Alpha 4.17 cloverleaf interchange are built using
  *  the same per-block reservation + payment system. The renderer handles
  *  each kind's geometry separately. */
-type BigBuildKind = 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf';
+type BigBuildKind = 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' | 'grand_stadium';
 
 /** Human-readable labels for the cost-pill display (Alpha 4.5). Falls
  *  back to the Building key when missing. */
@@ -142,7 +144,8 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_mayor_mansion: 'Mayor\'s Mansion',
   place_city_hall: 'City Hall',
   place_provincial_capital: 'Provincial Capital',
-  place_national_capital: 'National Capital'
+  place_national_capital: 'National Capital',
+  place_grand_stadium: 'Grand Stadium'
 };
 
 /**
@@ -835,6 +838,7 @@ export class Game {
       ['place_city_hall', 'city_hall'],
       ['place_provincial_capital', 'provincial_capital'],
       ['place_national_capital', 'national_capital'],
+      ['place_grand_stadium', 'grand_stadium'],
       ['place_cloverleaf', 'cloverleaf']
     ];
     for (const [tool, key] of toolToKey) {
@@ -883,6 +887,8 @@ export class Game {
       'place_mayor_mansion',
       // Civic monuments (Alpha 4.12) — Town / Metro / Capital unlocks.
       'place_city_hall', 'place_provincial_capital', 'place_national_capital',
+      // Grand Stadium (Beta 1.10) — Metropolis milestone (see Milestones).
+      'place_grand_stadium',
       // Cloverleaf interchange (Alpha 4.17) — City milestone, alongside highways.
       'place_cloverleaf'
     ];
@@ -1126,6 +1132,12 @@ export class Game {
       const banned = !isFinite(mult);
       const cost = banned ? monumentBlockCost('cloverleaf') : Math.round(monumentBlockCost('cloverleaf') * mult);
       return { label: 'Cloverleaf (block)', cost, banned };
+    }
+    if (tool === 'place_grand_stadium') {
+      const mult = this.council.costMultiplier('grand_stadium');
+      const banned = !isFinite(mult);
+      const cost = banned ? monumentBlockCost('grand_stadium') : Math.round(monumentBlockCost('grand_stadium') * mult);
+      return { label: 'Grand Stadium (block)', cost, banned };
     }
     // Land purchase.
     if (tool === 'buy_land') {
@@ -2114,12 +2126,14 @@ export class Game {
         || this.tool === 'place_city_hall'
         || this.tool === 'place_provincial_capital'
         || this.tool === 'place_national_capital'
+        || this.tool === 'place_grand_stadium'
         || this.tool === 'place_cloverleaf') {
       const kind: BigBuildKind =
         this.tool === 'place_mayor_mansion'      ? 'mayor_mansion' :
         this.tool === 'place_city_hall'          ? 'city_hall' :
         this.tool === 'place_provincial_capital' ? 'provincial_capital' :
         this.tool === 'place_national_capital'   ? 'national_capital' :
+        this.tool === 'place_grand_stadium'      ? 'grand_stadium' :
                                                     'cloverleaf';
       // Per-block placement (Alpha 4.15). If the player taps an
       // existing reservation's unpaid tile, this is a single-tap
@@ -2706,6 +2720,9 @@ export class Game {
       case 'cloverleaf':
         return { w: CLOVERLEAF_WIDTH, h: CLOVERLEAF_DEPTH,
                  label: 'Cloverleaf', cost: BUILDING_COSTS.cloverleaf };
+      case 'grand_stadium':
+        return { w: GRAND_STADIUM_WIDTH, h: GRAND_STADIUM_DEPTH,
+                 label: 'Grand Stadium', cost: BUILDING_COSTS.grand_stadium };
     }
   }
 
@@ -2734,6 +2751,7 @@ export class Game {
         kind === 'mayor_mansion'      ? (t) => t.mayorMansion :
         kind === 'city_hall'          ? (t) => t.cityHall :
         kind === 'provincial_capital' ? (t) => t.provincialCapital :
+        kind === 'grand_stadium'      ? (t) => t.grandStadium :
                                          (t) => t.nationalCapital;
       for (const t of this.grid.iter()) {
         if (occupiedBit(t)) return false;
@@ -2753,7 +2771,7 @@ export class Game {
         if (!t.owned) return false;
         if (t.road || t.path || t.zone !== 'none' || t.building !== 'none') return false;
         if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury || t.mayorMansion) return false;
-        if (t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf) return false;
+        if (t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf || t.grandStadium) return false;
       }
     }
     return true;
@@ -2772,6 +2790,7 @@ export class Game {
       case 'provincial_capital': return t.provincialCapital;
       case 'national_capital':   return t.nationalCapital;
       case 'cloverleaf':         return t.cloverleaf;
+      case 'grand_stadium':      return t.grandStadium;
     }
   }
 
@@ -2947,6 +2966,7 @@ export class Game {
       else if (kind === 'city_hall') t.cityHall = v;
       else if (kind === 'provincial_capital') t.provincialCapital = v;
       else if (kind === 'national_capital') t.nationalCapital = v;
+      else if (kind === 'grand_stadium') t.grandStadium = v;
       else t.cloverleaf = v;
     };
     const readKindBit = (t: Tile): boolean => {
@@ -2954,6 +2974,7 @@ export class Game {
       if (kind === 'city_hall') return t.cityHall;
       if (kind === 'provincial_capital') return t.provincialCapital;
       if (kind === 'national_capital') return t.nationalCapital;
+      if (kind === 'grand_stadium') return t.grandStadium;
       return t.cloverleaf;
     };
     // One-per-city sweep — but cloverleaves are MULTI-instance (the
@@ -3000,7 +3021,7 @@ export class Game {
         return false;
       }
       if (t.terrain !== 'grass' || t.bridge || t.skyscraper || t.luxury
-          || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf) {
+          || t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf || t.grandStadium) {
         this.onStatusMessage?.(`${fp.label} needs flat grass land`);
         return false;
       }
@@ -3187,6 +3208,7 @@ export class Game {
         case 'place_city_hall':          return 'city_hall' as const;
         case 'place_provincial_capital': return 'provincial_capital' as const;
         case 'place_national_capital':   return 'national_capital' as const;
+        case 'place_grand_stadium':      return 'grand_stadium' as const;
         case 'place_cloverleaf':         return 'cloverleaf' as const;
         default: return null;
       }
@@ -3966,6 +3988,28 @@ export class Game {
             peer.nationalCapital = false;
             peer.bigBuildBlockPaid = false;
             if (peer.building === 'national_capital') {
+              if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
+            }
+          }
+        }
+        cityBuildingsChanged = true;
+      }
+      // Grand Stadium (Beta 1.10). Same walk-back-to-anchor teardown.
+      // Scans a square bounding box of max(W,H) so a rotated footprint
+      // (5×4 → 4×5) is fully cleared regardless of orientation; only tiles
+      // that actually carry the bit are touched.
+      if (tile.grandStadium) {
+        let ax = x, ay = y;
+        while (ax > 0 && this.grid.get(ax - 1, y)?.grandStadium) ax--;
+        while (ay > 0 && this.grid.get(ax, ay - 1)?.grandStadium) ay--;
+        const span = Math.max(GRAND_STADIUM_WIDTH, GRAND_STADIUM_DEPTH);
+        for (let dy = 0; dy < span; dy++) {
+          for (let dx = 0; dx < span; dx++) {
+            const peer = this.grid.get(ax + dx, ay + dy);
+            if (!peer || !peer.grandStadium) continue;
+            peer.grandStadium = false;
+            peer.bigBuildBlockPaid = false;
+            if (peer.building === 'grand_stadium') {
               if (this.grid.setBuilding(peer.x, peer.y, 'none')) cityBuildingsChanged = true;
             }
           }

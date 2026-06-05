@@ -2090,7 +2090,7 @@ export class Renderer {
   private ghostWebGroup: Group | null = null;
   showMonumentGhostWeb(
     grid: Grid,
-    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
+    kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' | 'grand_stadium'
   ): void {
     this.clearMonumentGhostWeb();
     const group = new Group();

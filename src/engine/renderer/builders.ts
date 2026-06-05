@@ -23,6 +23,7 @@ import type { Tile } from '../../world/Tile';
 import {
   buildCityHallParts,
   buildCloverleafParts,
+  buildGrandStadiumParts,
   buildLuxuryParts,
   buildMayorMansionParts,
   buildNationalCapitalParts,
@@ -55,6 +56,8 @@ import {
   PROVINCIAL_CAPITAL_DEPTH,
   NATIONAL_CAPITAL_WIDTH,
   NATIONAL_CAPITAL_DEPTH,
+  GRAND_STADIUM_WIDTH,
+  GRAND_STADIUM_DEPTH,
   PATH_LIFT,
   PATH_WIDTH,
   BRIDGE_LIFT,
@@ -739,7 +742,7 @@ function isSkyscraperAnchor(grid: Grid, x: number, y: number): boolean {
  *  the per-block construction-site pass to walk back to the anchor. */
 export function readKind(
   t: import('../../world/Tile').Tile,
-  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf'
+  kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' | 'grand_stadium'
 ): boolean {
   switch (kind) {
     case 'mayor_mansion':      return t.mayorMansion;
@@ -747,6 +750,7 @@ export function readKind(
     case 'provincial_capital': return t.provincialCapital;
     case 'national_capital':   return t.nationalCapital;
     case 'cloverleaf':         return t.cloverleaf;
+    case 'grand_stadium':      return t.grandStadium;
   }
 }
 
@@ -2287,6 +2291,19 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
       }
       continue;
     }
+    // Grand Stadium (Beta 1.10) — 5×4 elliptical bowl showpiece. Same
+    // anchor-tile dispatch + rotation pattern as the civic monuments.
+    if (t.building === 'grand_stadium') {
+      const parts = buildGrandStadiumParts(t.x, t.y);
+      const yLift = ROAD_LIFT * 0.5 + t.elevation;
+      rotateBigBuildPartsInPlace(parts, t.bigBuildRotation, t.x, t.y, GRAND_STADIUM_WIDTH, GRAND_STADIUM_DEPTH);
+      for (const p of parts) {
+        if (yLift !== 0) p.geom.translate(0, yLift, 0);
+        geoms.push(p.geom);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Cloverleaf interchange (Alpha 4.17) — same anchor-tile dispatch
     // pattern. Anchor's `building` is `'cloverleaf'` once all 25 blocks
     // are paid; the geometry includes the highway through-lanes,
@@ -2359,17 +2376,18 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
   // the ghost-web overlay separately (Renderer.showMonumentGhostWeb).
   for (const t of grid.iter()) {
     if (!t.bigBuildBlockPaid) continue;
-    const isReserved = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf;
+    const isReserved = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.cloverleaf || t.grandStadium;
     if (!isReserved) continue;
     // Is this footprint COMPLETE? We detect by finding the anchor (lex-
     // smallest of the kind-bit set) and checking its `building` value.
     // If the anchor is promoted, the merged finished geometry already
     // covered this tile — skip.
-    const kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' =
+    const kind: 'mayor_mansion' | 'city_hall' | 'provincial_capital' | 'national_capital' | 'cloverleaf' | 'grand_stadium' =
       t.mayorMansion ? 'mayor_mansion' :
       t.cityHall ? 'city_hall' :
       t.provincialCapital ? 'provincial_capital' :
-      t.nationalCapital ? 'national_capital' : 'cloverleaf';
+      t.nationalCapital ? 'national_capital' :
+      t.grandStadium ? 'grand_stadium' : 'cloverleaf';
     // Cheap "is the building complete" check: scan north + west from this
     // tile for the anchor; if anchor.building === kind we're complete.
     let ax = t.x, ay = t.y;

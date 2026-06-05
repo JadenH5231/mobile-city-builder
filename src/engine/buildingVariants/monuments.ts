@@ -2128,3 +2128,240 @@ export function buildCloverleafParts(ax: number, ay: number): VariantPart[] {
 
   return out;
 }
+
+/* ============================================================================
+ * The Grand Stadium (Beta 1.10)
+ *
+ * A multi-block showpiece sports stadium — 5 wide × 4 deep elliptical bowl.
+ * Green pitch in the centre with white markings; raked seating tiers all the
+ * way around in alternating section colours (the "crowd"); a cantilevered
+ * white roof canopy ring; a concrete outer facade with a front entrance gap;
+ * four floodlight masts at the corners; a back-of-house scoreboard; and an
+ * entrance plaza with gateway pylons + flags at the front. Same anchor-tile
+ * convention as the Mayor's Mansion / capitals (lex-smallest tile is the
+ * anchor; emit the whole merged composition from there).
+ * ========================================================================== */
+
+const GS_CONCRETE = 0xd2cdbf;       // facade, plaza
+const GS_CONCRETE_DEEP = 0xb6af9e;  // recessed openings, risers
+const GS_CONCRETE_DARK = 0x8f897a;
+const GS_PITCH = 0x3f8f3a;          // playing field
+const GS_PITCH_DARK = 0x368030;     // mowing stripe
+const GS_LINE = 0xeef2ec;           // field markings
+const GS_SEAT_A = 0x2f6fb0;         // section blue
+const GS_SEAT_B = 0xd2473f;         // section red
+const GS_SEAT_C = 0xe6b84a;         // section gold
+const GS_SEAT_D = 0xe8ecf0;         // section white
+const GS_ROOF = 0xeef1f4;           // canopy
+const GS_ROOF_EDGE = 0xb9c1ca;
+const GS_STEEL = 0x49525f;          // masts, structure
+const GS_LIGHT = 0xfff7d8;          // floodlight bulbs
+const GS_GOLD = 0xeec453;
+const GS_GLASS = 0x1f2c40;          // scoreboard glass
+
+export function buildGrandStadiumParts(ax: number, ay: number): VariantPart[] {
+  const out: VariantPart[] = [];
+  const cx = ax + 2.5;   // 5 wide
+  const cz = ay + 2;     // 4 deep
+  const TWO_PI = Math.PI * 2;
+  const RX = 2.35, RZ = 1.85;        // outer (facade) ellipse radii
+  const FX = 1.12, FZ = 0.78;        // pitch ellipse radii
+  const SEG = 24;                    // segments around the bowl
+  // Front entrance gap centred on +Z (south, θ = π/2).
+  const GAP_C = Math.PI / 2;
+  const GAP_HALF = 0.50;             // radians
+  const inGap = (theta: number): boolean => {
+    let d = Math.abs(theta - GAP_C);
+    if (d > Math.PI) d = TWO_PI - d;
+    return d < GAP_HALF;
+  };
+  // Radial yaw so a box's depth points outward, width runs tangentially.
+  const radialYaw = (theta: number): number => Math.atan2(Math.cos(theta), Math.sin(theta));
+
+  // ===== Plaza pad (whole footprint) =====
+  const pad = new BoxGeometry(4.92, 0.03, 3.92);
+  pad.translate(cx, 0.015, cz);
+  out.push({ geom: pad, color: GS_CONCRETE });
+
+  // ===== Pitch (green ellipse) + mowing stripe + markings =====
+  const pitch = new CylinderGeometry(1, 1, 0.04, 32);
+  pitch.scale(FX, 1, FZ);
+  pitch.translate(cx, 0.05, cz);
+  out.push({ geom: pitch, color: GS_PITCH });
+  // A couple of darker mowing stripes.
+  for (const sx of [-0.5, 0.1] as number[]) {
+    const stripe = new BoxGeometry(FX * 0.55, 0.006, FZ * 1.7);
+    stripe.translate(cx + sx, 0.058, cz);
+    out.push({ geom: stripe, color: GS_PITCH_DARK });
+  }
+  // Centre line + centre circle (white ring made from a white disc with a
+  // green disc on top) + centre spot.
+  const midLine = new BoxGeometry(0.05, 0.006, FZ * 1.85);
+  midLine.translate(cx, 0.06, cz);
+  out.push({ geom: midLine, color: GS_LINE });
+  const circOuter = new CylinderGeometry(1, 1, 0.006, 20);
+  circOuter.scale(0.32, 1, 0.32);
+  circOuter.translate(cx, 0.061, cz);
+  out.push({ geom: circOuter, color: GS_LINE });
+  const circInner = new CylinderGeometry(1, 1, 0.008, 20);
+  circInner.scale(0.26, 1, 0.26);
+  circInner.translate(cx, 0.062, cz);
+  out.push({ geom: circInner, color: GS_PITCH });
+  // Penalty boxes (thin white outlines) at each end along X.
+  for (const ex of [-1, 1] as number[]) {
+    const box = new BoxGeometry(0.04, 0.006, FZ * 0.95);
+    box.translate(cx + ex * (FX * 0.6), 0.06, cz);
+    out.push({ geom: box, color: GS_LINE });
+  }
+
+  // ===== Seating bowl — 4 raked, stepped rings of section-coloured boxes =====
+  const seatPal = [GS_SEAT_A, GS_SEAT_B, GS_SEAT_C, GS_SEAT_D];
+  const STEPS = 4;
+  for (let s = 0; s < STEPS; s++) {
+    const tr = s / (STEPS - 1);   // 0..1 inner→outer
+    const rxS = FX + 0.28 + tr * (RX - FX - 0.50);
+    const rzS = FZ + 0.28 + tr * (RZ - FZ - 0.50);
+    const hTop = 0.12 + tr * 0.62;                   // rises toward the back
+    const stepH = 0.16 + tr * 0.10;
+    for (let i = 0; i < SEG; i++) {
+      const theta = (i / SEG) * TWO_PI;
+      const arc = (TWO_PI / SEG) * 1.18;             // slight overlap, no gaps
+      const wSeg = ((rxS + rzS) / 2) * arc;
+      const g = new BoxGeometry(wSeg, stepH, 0.30);
+      g.rotateY(radialYaw(theta));
+      g.translate(cx + Math.cos(theta) * rxS, hTop - stepH / 2 + 0.05, cz + Math.sin(theta) * rzS);
+      out.push({ geom: g, color: seatPal[(i + s) % seatPal.length] });
+    }
+  }
+  // Vomitory / entrance tunnel: darken the lowest-tier segments at the front
+  // gap so the bowl reads as "open here".
+  for (let i = 0; i < SEG; i++) {
+    const theta = (i / SEG) * TWO_PI;
+    if (!inGap(theta)) continue;
+    const arc = (TWO_PI / SEG) * 1.18;
+    const wSeg = ((FX + FZ) / 2 + 0.28) * arc;
+    const g = new BoxGeometry(wSeg, 0.14, 0.30);
+    g.rotateY(radialYaw(theta));
+    g.translate(cx + Math.cos(theta) * (FX + 0.28), 0.10, cz + Math.sin(theta) * (FZ + 0.28));
+    out.push({ geom: g, color: GS_CONCRETE_DEEP });
+  }
+
+  // ===== Outer facade ring (concrete, arched openings), front gap left open =====
+  for (let i = 0; i < SEG; i++) {
+    const theta = (i / SEG) * TWO_PI;
+    if (inGap(theta)) continue;
+    const arc = (TWO_PI / SEG) * 1.16;
+    const wSeg = ((RX + RZ) / 2) * arc;
+    const yaw = radialYaw(theta);
+    const px = cx + Math.cos(theta) * RX;
+    const pz = cz + Math.sin(theta) * RZ;
+    const wall = new BoxGeometry(wSeg, 0.92, 0.16);
+    wall.rotateY(yaw);
+    wall.translate(px, 0.46, pz);
+    out.push({ geom: wall, color: GS_CONCRETE });
+    // Recessed arch opening (darker inset on the outer face).
+    const arch = new BoxGeometry(wSeg * 0.5, 0.42, 0.06);
+    arch.rotateY(yaw);
+    arch.translate(px + Math.cos(theta) * 0.06, 0.34, pz + Math.sin(theta) * 0.06);
+    out.push({ geom: arch, color: GS_CONCRETE_DEEP });
+    // Parapet cap.
+    const cap = new BoxGeometry(wSeg, 0.07, 0.20);
+    cap.rotateY(yaw);
+    cap.translate(px, 0.95, pz);
+    out.push({ geom: cap, color: GS_CONCRETE_DARK });
+  }
+
+  // ===== Roof canopy ring — cantilevered white slabs over the stands =====
+  for (let i = 0; i < SEG; i++) {
+    const theta = (i / SEG) * TWO_PI;
+    if (inGap(theta)) continue;
+    const arc = (TWO_PI / SEG) * 1.18;
+    const rxR = RX - 0.30, rzR = RZ - 0.30;
+    const wSeg = ((rxR + rzR) / 2) * arc;
+    const yaw = radialYaw(theta);
+    const slab = new BoxGeometry(wSeg, 0.05, 0.62);
+    slab.rotateX(-0.16);             // tilt down toward the pitch
+    slab.rotateY(yaw);
+    slab.translate(cx + Math.cos(theta) * rxR, 1.02, cz + Math.sin(theta) * rzR);
+    out.push({ geom: slab, color: GS_ROOF });
+    // Front leading edge accent.
+    const edge = new BoxGeometry(wSeg, 0.05, 0.07);
+    edge.rotateY(yaw);
+    edge.translate(cx + Math.cos(theta) * (rxR - 0.30), 0.96, cz + Math.sin(theta) * (rzR - 0.30));
+    out.push({ geom: edge, color: GS_ROOF_EDGE });
+  }
+
+  // ===== Floodlight masts at the four diagonal corners =====
+  for (const theta of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) {
+    const px = cx + Math.cos(theta) * (RX * 1.0);
+    const pz = cz + Math.sin(theta) * (RZ * 1.0);
+    const mast = new CylinderGeometry(0.045, 0.06, 1.7, 6);
+    mast.translate(px, 0.85, pz);
+    out.push({ geom: mast, color: GS_STEEL });
+    // Light array — a box angled toward the pitch centre.
+    const toC = Math.atan2(cx - px, cz - pz);
+    const rig = new BoxGeometry(0.42, 0.22, 0.08);
+    rig.rotateY(toC);
+    rig.translate(px, 1.66, pz);
+    out.push({ geom: rig, color: GS_STEEL });
+    // Bulbs (2×3 grid) on the pitch-facing side.
+    for (let bx = -1; bx <= 1; bx++) {
+      for (let by = 0; by <= 1; by++) {
+        const b = new BoxGeometry(0.09, 0.07, 0.03);
+        b.rotateY(toC);
+        const off = bx * 0.13;
+        b.translate(
+          px + Math.cos(toC) * 0.05 + Math.cos(toC + Math.PI / 2) * off,
+          1.60 + by * 0.10,
+          pz + Math.sin(toC) * 0.05 + Math.sin(toC + Math.PI / 2) * off
+        );
+        out.push({ geom: b, color: GS_LIGHT });
+      }
+    }
+  }
+
+  // ===== Scoreboard at the back (north, θ = 3π/2) =====
+  {
+    const bx = cx, bz = cz + Math.sin(3 * Math.PI / 2) * (RZ - 0.45);
+    for (const ox of [-0.34, 0.34] as number[]) {
+      const post = new CylinderGeometry(0.05, 0.05, 1.05, 6);
+      post.translate(bx + ox, 0.95, bz);
+      out.push({ geom: post, color: GS_STEEL });
+    }
+    const frame = new BoxGeometry(0.92, 0.5, 0.12);
+    frame.translate(bx, 1.5, bz);
+    out.push({ geom: frame, color: GS_GOLD });
+    const screen = new BoxGeometry(0.82, 0.4, 0.06);
+    screen.translate(bx, 1.5, bz - 0.04);   // face toward pitch (−Z)
+    out.push({ geom: screen, color: GS_GLASS });
+  }
+
+  // ===== Entrance plaza + gateway pylons + flags (front, south) =====
+  {
+    const fz = cz + (RZ + 0.10);
+    // Two descending steps.
+    for (let st = 0; st < 2; st++) {
+      const step = new BoxGeometry(1.7 - st * 0.2, 0.05, 0.18);
+      step.translate(cx, 0.05 - st * 0.02, fz + 0.10 + st * 0.18);
+      out.push({ geom: step, color: GS_CONCRETE_DEEP });
+    }
+    // Gateway pylons flanking the entrance.
+    for (const ox of [-0.78, 0.78] as number[]) {
+      const pylon = new BoxGeometry(0.22, 1.0, 0.22);
+      pylon.translate(cx + ox, 0.5, fz);
+      out.push({ geom: pylon, color: GS_CONCRETE });
+      const cap = new BoxGeometry(0.28, 0.08, 0.28);
+      cap.translate(cx + ox, 1.04, fz);
+      out.push({ geom: cap, color: GS_GOLD });
+      // Flag pole + banner.
+      const pole = new CylinderGeometry(0.02, 0.02, 0.5, 5);
+      pole.translate(cx + ox, 1.33, fz);
+      out.push({ geom: pole, color: GS_STEEL });
+      const flag = new BoxGeometry(0.01, 0.18, 0.24);
+      flag.translate(cx + ox + 0.13, 1.45, fz);
+      out.push({ geom: flag, color: ox < 0 ? GS_SEAT_A : GS_SEAT_B });
+    }
+  }
+
+  return out;
+}

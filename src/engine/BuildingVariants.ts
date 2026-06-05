@@ -35,5 +35,6 @@ export {
   buildCityHallParts,
   buildProvincialCapitalParts,
   buildNationalCapitalParts,
-  buildCloverleafParts
+  buildCloverleafParts,
+  buildGrandStadiumParts
 } from './buildingVariants/monuments';

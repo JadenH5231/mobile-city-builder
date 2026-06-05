@@ -112,6 +112,8 @@ export interface TileSnapshot {
   cityHall?: boolean;
   provincialCapital?: boolean;
   nationalCapital?: boolean;
+  /** Grand Stadium bit (Beta 1.10). Pre-1.10 saves load with false. */
+  grandStadium?: boolean;
   /** Per-block placement bit (Alpha 4.15 / schema 23+). True iff the
    *  player has paid for THIS block of a big civic build. v22-and-
    *  earlier saves load with this defaulted to `true` for any tile
@@ -466,6 +468,7 @@ export function serialize(
       cityHall: t.cityHall,
       provincialCapital: t.provincialCapital,
       nationalCapital: t.nationalCapital,
+      grandStadium: t.grandStadium,
       bigBuildBlockPaid: t.bigBuildBlockPaid,
       ramp: t.ramp,
       cloverleaf: t.cloverleaf,
@@ -648,6 +651,7 @@ export function applySave(
     t.cityHall = snap.cityHall ?? false;
     t.provincialCapital = snap.provincialCapital ?? false;
     t.nationalCapital = snap.nationalCapital ?? false;
+    t.grandStadium = snap.grandStadium ?? false;
     // Per-block placement bit (schema 23+). v22-and-earlier saves
     // pre-date per-block construction, so any tile with a kind-bit
     // set is implicitly already paid for (the building was complete
@@ -655,7 +659,7 @@ export function applySave(
     if (snap.bigBuildBlockPaid !== undefined) {
       t.bigBuildBlockPaid = snap.bigBuildBlockPaid;
     } else {
-      t.bigBuildBlockPaid = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital;
+      t.bigBuildBlockPaid = t.mayorMansion || t.cityHall || t.provincialCapital || t.nationalCapital || t.grandStadium;
     }
     // Highway interchange ramp bit (schema 24+). v23-and-earlier saves
     // load with `false` since no ramps existed before Alpha 4.16.

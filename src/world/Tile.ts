@@ -269,24 +269,6 @@ export class Tile {
    */
   cloverleaf = false;
   /**
-   * Roundabout bits (Beta 1.8). A roundabout is an N×N footprint (N=2 or
-   * 3) whose perimeter tiles are one-way (counter-clockwise) ring road
-   * and whose centre is a landscaped island. Anchor pattern like
-   * skyscrapers: every footprint tile carries `roundabout=true` and the
-   * anchor coords (`roundaboutAx`/`roundaboutAy`, lex-smallest tile);
-   * only the anchor carries `roundaboutSize` (2 or 3). The centre tile of
-   * a 3×3 is the island — `roundabout=true` but `road=false` (not
-   * drivable). All ring tiles are normal road tiles (road=true) wired
-   * into a CCW cycle by RoadGraph. Bulldozing any footprint tile tears
-   * down the whole roundabout. -1 / 0 defaults = "not a roundabout", so
-   * pre-schema saves load clean.
-   */
-  roundabout = false;
-  roundaboutAx = -1;
-  roundaboutAy = -1;
-  /** 0 = not an anchor; 2 or 3 = anchor of an N×N roundabout. */
-  roundaboutSize: 0 | 2 | 3 = 0;
-  /**
    * Supply chain (Beta 1.6). For developed commercial tiles + warehouse
    * tiles, this is the current inventory (0..1, normalised). Truck
    * arrivals refill it; SupplyChain.tick consumes a small amount each

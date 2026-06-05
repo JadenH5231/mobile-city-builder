@@ -216,8 +216,9 @@ luxury low-density 2-tile pair (Alpha 2.5), power_plant, water_tower,
 park, bus_stop, bus_depot, stop_sign — all rows filled with deliberate
 values. Later additions to the matrix include `ramp`, `cloverleaf`,
 forestry/farm/big_box/warehouse/parking_lot, the public-services pack,
-landmarks, transit pack, the Architect-mode decoratives + beautification,
-and `roundabout` (Beta 1.8 — both sizes map to it). Intentionally absent
+landmarks, transit pack, and the Architect-mode decoratives +
+beautification. (`roundabout` was a row Beta 1.8 → removed in 1.9.5 when the
+roundabout feature was cut.) Intentionally absent
 from the matrix: `walking_path` and
 `traffic_light` — neither has a per-tile cost or zone-change semantic
 for the council mechanic to gate, so adding rows would be dead weight.
@@ -360,6 +361,40 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 1.9.5 (Roundabouts removed)
+
+User: "remove the roundabouts entirely, they never worked the way I wanted
+them to."
+
+Full removal of the Beta 1.8 roundabout feature across all 13 files that
+touched it: the two toolbar tools (`place_roundabout_small/large`),
+`ROUNDABOUT_COST`, the `Tile.roundabout*` fields, `Grid.roundaboutAt()` +
+its setRoad clear, the `RoadGraph` CCW one-way ring logic (ring edges are
+now plain bidirectional), the `Vehicles` ring crash-skip term, the
+`Renderer.roundaboutVehiclePos` arc + its car/bus call-sites,
+`builders.buildRoundaboutsGroup` + the `roundaboutAnnulus/Tri` helpers + the
+`buildRoadMesh`/`buildSidewalkMesh` ring-suppression, `Game.placeRoundabout`
+/`roundaboutRingTiles`/`clearRoundaboutAt` + the tool dispatch + bulldoze
+hook + toolbar-ban mapping, the `Council` `roundabout` stance (interface
+field + all 10 faction rows), the `FactionDetailPanel` label, the
+`Toolbar` icon, and the `SaveGame` read/write of the roundabout fields.
+
+**Save back-compat:** old saves degrade gracefully. A roundabout's ring was
+laid as real `local` road edges (which ARE serialized), so on load the ring
+tiles reload as plain local roads; the 3×3 island tile (road=false) becomes
+grass. Any leftover `roundabout*` fields in an old save blob are simply
+ignored (no longer read). No schema bump needed (removing optional fields is
+backward-compatible). The 1.8 "What's New" entry was rewritten from
+"Roundabouts" to "Roads & bridges" (the bridge redesign that also shipped in
+1.8 and remains).
+
+Verified in-browser (`?dev=1`): typecheck clean, no console errors, game
+inits, `grid.roundaboutAt` is gone, toolbar has no roundabout tools, and a
+freshly-laid local/avenue/diagonal/highway road network builds + renders
+correctly (draws=1, no exceptions) — the `buildRoadMesh` simplification
+didn't regress normal roads. SW cache `v39` → `v40`. `APP_VERSION` 1.9.4 →
+1.9.5 (silent patch; cleanup, not a feature, so no changelog entry).
 
 ## Status: Beta 1.9.4 (First-zone nudge re-arms for each new city)
 

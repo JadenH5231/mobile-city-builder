@@ -19,7 +19,7 @@ import { APP_VERSION } from '../version';
 const LAST_SEEN_KEY = 'mqcity-last-seen-version';
 
 interface ChangeEntry {
-  /** Headline shown as the section title, e.g. "Roundabouts". */
+  /** Headline shown as the section title, e.g. "Roads & bridges". */
   title: string;
   /** Bullet highlights — short, player-facing, emoji-friendly. */
   highlights: string[];
@@ -39,13 +39,11 @@ const WHATS_NEW: Record<string, ChangeEntry> = {
     ]
   },
   '1.8': {
-    title: 'Roundabouts',
+    title: 'Roads & bridges',
     highlights: [
-      '🔄 New Roundabout tool in the Roads group — drop a small (2×2) or large (3×3) roundabout in a single tap.',
-      'Traffic flows one-way around the island and exits in every direction, just like a real roundabout.',
-      '🛡 No more crashes at the junction — circulating traffic never crosses, so a roundabout keeps a busy intersection flowing without gridlock.',
-      '⛲ A detailed landscaped island with a fountain centrepiece — the large one adds ornamental trees and flower beds.',
-      'Drivers and the Safer Streets Coalition both love them.'
+      '🌉 Redesigned bridge-layer overpasses — proper concrete decks, solid parapet barriers and chunky piers, so an overpass reads as a real bridge.',
+      '🛣 Smoother road rendering where roads meet and cross.',
+      'Plus a round of polish and fixes across the network.'
     ]
   },
   '1.7': {

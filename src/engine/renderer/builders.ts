@@ -5774,22 +5774,11 @@ interface BuiltRoads {
 }
 
 export function buildRoadMesh(grid: Grid): BuiltRoads | null {
-  // Beta 1.8 — internal roundabout ring↔ring edges are NOT drawn as
-  // square road quads; the circular roundabout mesh (buildRoundaboutsGroup)
-  // replaces them. External approach edges (ring tile ↔ outside road) stay,
-  // so connecting roads still visually meet the ring.
-  const isInternalRingEdge = (e: { ax: number; ay: number; bx: number; by: number }): boolean => {
-    const ra = grid.roundaboutAt(e.ax, e.ay);
-    const rb = grid.roundaboutAt(e.bx, e.by);
-    return !!(ra && rb && ra.isRing && rb.isRing && ra.ax === rb.ax && ra.ay === rb.ay);
-  };
-  const edges = Array.from(grid.iterRoadEdges()).filter((e) => !isInternalRingEdge(e));
+  const edges = Array.from(grid.iterRoadEdges());
   // Stub tiles (road=true with no incident edge) get a small centre square.
-  // Roundabout tiles are excluded — the circular mesh covers them, so a
-  // ring tile whose only edges were filtered out must NOT render a stub.
   const stubs: { x: number; y: number }[] = [];
   for (const t of grid.iter()) {
-    if (!t.road || t.roundabout) continue;
+    if (!t.road) continue;
     let hasEdge = false;
     for (const e of edges) {
       if ((e.ax === t.x && e.ay === t.y) || (e.bx === t.x && e.by === t.y)) {
@@ -5875,24 +5864,15 @@ export function buildRoadMesh(grid: Grid): BuiltRoads | null {
     const yB = tb?.bridge ? BRIDGE_LIFT : (yLift + (tb?.elevation ?? 0));
     const yMid = (yA + yB) / 2;
 
-    // Beta 1.8.3 — a roundabout ring tile's half-quad is NOT drawn here;
-    // the circular roundabout mesh (+ its throat connectors) covers that
-    // tile, so a straight road stub poking into the ring centre would
-    // z-fight the circle and break the seamless look. Only the external
-    // (non-ring) side of an approach edge keeps its half-quad, which then
-    // meets the roundabout's throat at the footprint edge.
-    const aIsRing = grid.roundaboutAt(e.ax, e.ay)?.isRing === true;
-    const bIsRing = grid.roundaboutAt(e.bx, e.by)?.isRing === true;
-
     // A's half: tile A center → midpoint at A's tier width.
     const propsA = ROAD_TIER[tierA];
     const halfA = propsA.width / 2;
-    if (!aIsRing) emitHalf(ax, az, mx, mz, yA, yMid, nx * halfA, nz * halfA, propsA.color);
+    emitHalf(ax, az, mx, mz, yA, yMid, nx * halfA, nz * halfA, propsA.color);
 
     // B's half: midpoint → tile B center at B's tier width.
     const propsB = ROAD_TIER[tierB];
     const halfB = propsB.width / 2;
-    if (!bIsRing) emitHalf(mx, mz, bx, bz, yMid, yB, nx * halfB, nz * halfB, propsB.color);
+    emitHalf(mx, mz, bx, bz, yMid, yB, nx * halfB, nz * halfB, propsB.color);
 
     // Lane stripes (Alpha 2.2 polish):
     //  - Local: dashed yellow centreline (two short dashes per edge).
@@ -6868,202 +6848,6 @@ export function buildRoadOrnamentsGroup(grid: Grid): Group | null {
   return group;
 }
 
-// --- Roundabouts (Beta 1.8) ---------------------------------------------
-
-/** Flat ring (annulus) in the XZ plane at height `y`, centred at (wx,wz),
- *  spanning [arcStart, arcEnd] (full circle by default). Uncoloured — the
- *  caller pairs it with a hex in mergeGeoms. rInner=0 yields a filled disc. */
-function roundaboutAnnulus(
-  wx: number, wz: number, rInner: number, rOuter: number,
-  y: number, segs: number, arcStart = 0, arcEnd = Math.PI * 2
-): BufferGeometry {
-  const pos: number[] = [];
-  const idx: number[] = [];
-  for (let s = 0; s < segs; s++) {
-    const a0 = arcStart + (arcEnd - arcStart) * (s / segs);
-    const a1 = arcStart + (arcEnd - arcStart) * ((s + 1) / segs);
-    const c0 = Math.cos(a0), n0 = Math.sin(a0);
-    const c1 = Math.cos(a1), n1 = Math.sin(a1);
-    const b = pos.length / 3;
-    pos.push(
-      wx + c0 * rInner, y, wz + n0 * rInner,
-      wx + c0 * rOuter, y, wz + n0 * rOuter,
-      wx + c1 * rOuter, y, wz + n1 * rOuter,
-      wx + c1 * rInner, y, wz + n1 * rInner
-    );
-    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
-  g.setIndex(idx);
-  return g;
-}
-
-/** Flat triangle in the XZ plane from three world points at height `y`. */
-function roundaboutTri(
-  ax: number, az: number, bx: number, bz: number, cx: number, cz: number, y: number
-): BufferGeometry {
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array([
-    ax, y, az, bx, y, bz, cx, y, cz
-  ]), 3));
-  g.setIndex([0, 1, 2]);
-  return g;
-}
-
-/**
- * Detailed roundabout mesh (Beta 1.8). One merged vertex-coloured Mesh for
- * ALL roundabouts on the map (single draw call). Per roundabout: circular
- * asphalt ring, white outer edge stripe, dashed yellow lane circle, four
- * CCW directional arrows, a raised concrete curb, a grassy central island,
- * and a fountain/monument centrepiece (the 3×3 also gets a ring of trees +
- * flower beds). The circular asphalt replaces the square road quads, which
- * buildRoadMesh suppresses for internal ring↔ring edges.
- */
-export function buildRoundaboutsGroup(grid: Grid): Group | null {
-  const anchors: Array<{ x: number; y: number; size: number }> = [];
-  for (const t of grid.iter()) {
-    if (t.roundaboutSize >= 2) anchors.push({ x: t.x, y: t.y, size: t.roundaboutSize });
-  }
-  if (anchors.length === 0) return null;
-
-  const geoms: BufferGeometry[] = [];
-  const colours: number[] = [];
-  const add = (g: BufferGeometry, hex: number): void => { geoms.push(g); colours.push(hex); };
-
-  // Palette — themed where a theme colour exists, tinted literals otherwise.
-  const asphalt = ROAD_TIER.local.color;
-  const stripe = THEME().roads.laneStripe;     // yellow centre-line
-  const white = tint(0xece8e0);
-  const curbCol = tint(0xb9b2a0);
-  const grassCol = THEME().terrain.grass;
-  const stone = tint(0xcfc8b6);
-  const water = tint(0x4d8eb9);
-  const gold = tint(0xeec453);
-  const treeLeaf = tint(0x2f6a2d);
-  const treeTrunk = tint(0x6e3e1d);
-  const flowerA = tint(0xd84545);
-  const flowerB = tint(0xf2cd5c);
-
-  for (const a of anchors) {
-    const cx = a.x + (a.size - 1) / 2;
-    const cy = a.y + (a.size - 1) / 2;
-    const wx = (cx + 0.5) * TILE_SIZE;
-    const wz = (cy + 0.5) * TILE_SIZE;
-    // Asphalt reaches the footprint edge so it touches the approach roads
-    // at the N/E/S/W edge midpoints — no grass gap between ring and road.
-    const outerR = a.size * 0.5 * TILE_SIZE;
-    const roadW = a.size === 3 ? 0.58 : 0.50;
-    const innerR = Math.max(0.22, outerR - roadW);   // island edge radius
-    const segs = a.size === 3 ? 48 : 36;
-    // Coplanar with the road network (ROAD_LIFT) so there's no floating
-    // lip where the ring meets the approach roads. Markings sit a hair
-    // above; throats sit above the markings so they read as clean asphalt
-    // flowing in (the circular lane line is "broken" at each entry).
-    const yRoad = ROAD_LIFT;
-    const yMark = ROAD_LIFT + 0.008;
-    const yThroat = ROAD_LIFT + 0.014;
-
-    // Asphalt ring + white outer edge stripe.
-    add(roundaboutAnnulus(wx, wz, innerR, outerR, yRoad, segs), asphalt);
-    add(roundaboutAnnulus(wx, wz, outerR - 0.05, outerR - 0.02, yMark, segs), white);
-    // Dashed yellow lane circle at mid radius (every other segment).
-    const midR = (innerR + outerR) / 2;
-    for (let s = 0; s < segs; s += 2) {
-      const a0 = (s / segs) * Math.PI * 2;
-      const a1 = ((s + 1) / segs) * Math.PI * 2;
-      add(roundaboutAnnulus(wx, wz, midR - 0.022, midR + 0.022, yMark, 1, a0, a1), stripe);
-    }
-
-    // Throat connectors — for each ring tile, every cardinal neighbour
-    // that's an EXTERNAL road tile gets an asphalt band bridging the
-    // straight road into the circular ring, so the join reads as one
-    // continuous road surface. Drawn above the markings so the entry is
-    // clean asphalt (markings break at each entry, like a real roundabout).
-    const DIRS: Array<[number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (let ty = a.y; ty < a.y + a.size; ty++) {
-      for (let tx = a.x; tx < a.x + a.size; tx++) {
-        const info = grid.roundaboutAt(tx, ty);
-        if (!info || !info.isRing) continue;     // skip the 3×3 island centre
-        for (const [dx, dy] of DIRS) {
-          const n = grid.get(tx + dx, ty + dy);
-          if (!n || !n.road) continue;
-          const nr = grid.roundaboutAt(tx + dx, ty + dy);
-          if (nr && nr.ax === a.x && nr.ay === a.y) continue;  // internal edge
-          // External approach — bridge it into the ring with an asphalt band
-          // matching the incoming road's width.
-          const hw = ROAD_TIER[n.roadType].width / 2;
-          const mxw = (tx + 0.5 + dx * 0.5) * TILE_SIZE;   // footprint-edge midpoint
-          const mzw = (ty + 0.5 + dy * 0.5) * TILE_SIZE;
-          const outO = 0.18, inO = roadW + 0.12;           // into road / into ring
-          const corner = (along: number, perp: number): [number, number] =>
-            [mxw + dx * along + (-dy) * perp, mzw + dy * along + dx * perp];
-          const c1 = corner(outO, hw), c2 = corner(outO, -hw);
-          const c3 = corner(-inO, -hw), c4 = corner(-inO, hw);
-          const g = new BufferGeometry();
-          g.setAttribute('position', new BufferAttribute(new Float32Array([
-            c1[0], yThroat, c1[1], c2[0], yThroat, c2[1],
-            c3[0], yThroat, c3[1], c4[0], yThroat, c4[1]
-          ]), 3));
-          g.setIndex(new BufferAttribute(new Uint32Array([0, 1, 2, 0, 2, 3]), 1));
-          add(g, asphalt);
-        }
-      }
-    }
-
-    // Four CCW directional arrows on the asphalt — travel dir (sinθ,-cosθ).
-    const arrowLen = 0.17, arrowW = 0.11;
-    for (let k = 0; k < 4; k++) {
-      const th = (k / 4) * Math.PI * 2 + Math.PI / 4;
-      const px = wx + Math.cos(th) * midR;
-      const pz = wz + Math.sin(th) * midR;
-      const dx = Math.sin(th), dz = -Math.cos(th);   // CCW tangent
-      const ex = -dz, ez = dx;                        // perpendicular
-      add(roundaboutTri(
-        px + dx * arrowLen, pz + dz * arrowLen,
-        px - dx * arrowLen * 0.3 + ex * arrowW, pz - dz * arrowLen * 0.3 + ez * arrowW,
-        px - dx * arrowLen * 0.3 - ex * arrowW, pz - dz * arrowLen * 0.3 - ez * arrowW,
-        ROAD_LIFT + 0.02   // above throats so arrows stay visible
-      ), white);
-    }
-
-    // Raised concrete curb wall + grassy island cap.
-    add(cyl(innerR, 0.10, segs).translate(wx, ROAD_LIFT + 0.05, wz), curbCol);
-    add(roundaboutAnnulus(wx, wz, 0, innerR - 0.02, ROAD_LIFT + 0.10, segs), grassCol);
-
-    // Centrepiece fountain / monument.
-    const baseR = innerR * 0.6;
-    add(cyl(baseR, 0.12, 18).translate(wx, ROAD_LIFT + 0.16, wz), stone);
-    add(cyl(baseR * 0.82, 0.05, 18).translate(wx, ROAD_LIFT + 0.21, wz), water);
-    const colH = a.size === 3 ? 0.62 : 0.40;
-    add(cyl(0.07, colH, 10).translate(wx, ROAD_LIFT + 0.16 + colH / 2, wz), stone);
-    add(cone(0.13, 0.18, 10).translate(wx, ROAD_LIFT + 0.16 + colH + 0.05, wz), gold);
-
-    if (a.size === 3) {
-      // Big roundabout: ring of ornamental trees + alternating flower beds.
-      const treeR = innerR * 0.78;
-      for (let k = 0; k < 6; k++) {
-        const th = (k / 6) * Math.PI * 2 + 0.35;
-        const tx = wx + Math.cos(th) * treeR;
-        const tz = wz + Math.sin(th) * treeR;
-        add(cyl(0.04, 0.16, 6).translate(tx, ROAD_LIFT + 0.18, tz), treeTrunk);
-        add(cone(0.17, 0.36, 7).translate(tx, ROAD_LIFT + 0.40, tz), treeLeaf);
-      }
-      for (let k = 0; k < 6; k++) {
-        const th = (k / 6) * Math.PI * 2;
-        const fx = wx + Math.cos(th) * (innerR * 0.45);
-        const fz = wz + Math.sin(th) * (innerR * 0.45);
-        add(box(0.11, 0.04, 0.11).translate(fx, ROAD_LIFT + 0.12, fz), k % 2 ? flowerA : flowerB);
-      }
-    }
-  }
-
-  const merged = mergeGeoms(geoms, colours);
-  const group = new Group();
-  group.add(new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })));
-  return group;
-}
-
 // --- Walking paths ------------------------------------------------------
 
 /**
@@ -7172,10 +6956,6 @@ export function buildSidewalkMesh(grid: Grid): Mesh | null {
     // for it to sit on (it would float underwater) and the bridge
     // deck reads cleanly without one.
     if (t.bridge) continue;
-    // Roundabout ring tiles are covered by the circular roundabout mesh
-    // (Beta 1.8.3) — a square sidewalk pad here would poke out past the
-    // circle and break the seamless "it's a road" look.
-    if (t.roundabout) continue;
     tiles.push({ x: t.x, y: t.y, tier: t.roadType, elevation: t.elevation });
   }
   if (tiles.length === 0) return null;

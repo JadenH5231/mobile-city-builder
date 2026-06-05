@@ -288,39 +288,8 @@ export class Grid {
       // even after demoing it." Clearing on road removal restores the
       // tile to a plain water tile that the player can fill / re-pave.
       t.bridge = false;
-      // Roundabout bits are per-footprint; the full teardown lives in
-      // Game's bulldoze path (clearRoundabout), but clear this tile's
-      // flags defensively so a stray single-tile road removal can't leave
-      // an orphan roundabout marker behind.
-      t.roundabout = false;
-      t.roundaboutAx = -1;
-      t.roundaboutAy = -1;
-      t.roundaboutSize = 0;
       return true;
     }
-  }
-
-  /**
-   * Resolve the roundabout a tile belongs to (Beta 1.8), or null. Reads
-   * the anchor coords stored on the tile, then the size off the anchor.
-   * `cx`/`cy` are the footprint centre in tile coords (fractional for an
-   * even size). `isIsland` is true only for the non-drivable centre tile
-   * of a 3×3; `isRing` is true for the drivable perimeter tiles.
-   */
-  roundaboutAt(x: number, y: number): {
-    ax: number; ay: number; size: number;
-    cx: number; cy: number; isRing: boolean; isIsland: boolean;
-  } | null {
-    const t = this.get(x, y);
-    if (!t || !t.roundabout || t.roundaboutAx < 0) return null;
-    const anchor = this.get(t.roundaboutAx, t.roundaboutAy);
-    const size = anchor?.roundaboutSize ?? 0;
-    if (size < 2) return null;
-    const cx = t.roundaboutAx + (size - 1) / 2;
-    const cy = t.roundaboutAy + (size - 1) / 2;
-    // Island = the single centre tile of a 3×3 (size 2 has no island).
-    const isIsland = size === 3 && x === t.roundaboutAx + 1 && y === t.roundaboutAy + 1;
-    return { ax: t.roundaboutAx, ay: t.roundaboutAy, size, cx, cy, isRing: !isIsland, isIsland };
   }
 
   hasRoad(x: number, y: number): boolean {

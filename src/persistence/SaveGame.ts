@@ -138,14 +138,10 @@ export interface TileSnapshot {
    *  recent delivery to this commercial tile came from a city-edge
    *  import truck (-25% revenue penalty until next domestic delivery). */
   importSource?: boolean;
-  /** Roundabout bits (Beta 1.8 / schema 33+). `roundabout` true on every
-   *  N×N footprint tile; `roundaboutAx/Ay` the anchor coords; `size` 2 or
-   *  3 on the anchor only. Pre-33 saves load with roundabout=false /
-   *  ax=ay=-1 / size=0 (no roundabouts existed). */
-  roundabout?: boolean;
-  roundaboutAx?: number;
-  roundaboutAy?: number;
-  roundaboutSize?: 0 | 2 | 3;
+  // Roundabout bits (Beta 1.8 schema 33) were REMOVED post-1.9 — the
+  // feature was cut. Old saves may still carry roundabout* fields in their
+  // blob; they're simply ignored on load (the ring tiles were real `local`
+  // road edges, so they reload as plain roads). No fields read/written here.
 }
 
 export interface SaveData {
@@ -475,11 +471,7 @@ export function serialize(
       cloverleaf: t.cloverleaf,
       bigBuildRotation: t.bigBuildRotation,
       supplies: t.supplies,
-      importSource: t.importSource,
-      roundabout: t.roundabout,
-      roundaboutAx: t.roundaboutAx,
-      roundaboutAy: t.roundaboutAy,
-      roundaboutSize: t.roundaboutSize
+      importSource: t.importSource
     };
   }
   const edges: number[] = [];
@@ -679,11 +671,6 @@ export function applySave(
     // first time a long-running city is opened post-update.
     t.supplies = snap.supplies ?? 1;
     t.importSource = snap.importSource ?? false;
-    // Roundabout bits (schema 33+). Pre-33 saves have none.
-    t.roundabout = snap.roundabout ?? false;
-    t.roundaboutAx = snap.roundaboutAx ?? -1;
-    t.roundaboutAy = snap.roundaboutAy ?? -1;
-    t.roundaboutSize = snap.roundaboutSize ?? 0;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

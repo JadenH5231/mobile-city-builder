@@ -48,32 +48,6 @@ export class RoadGraph {
       const tb = grid.get(e.bx, e.by);
       if (!ta || !tb) continue;
 
-      // Roundabout ring edges (Beta 1.8) are ONE-WAY (counter-clockwise),
-      // so cars circulate like a real roundabout instead of crossing it.
-      // An edge between two ring tiles of the SAME roundabout gets only
-      // its CCW-directed neighbor pushed; every other edge (including
-      // external road ↔ ring tile, which serve as entries AND exits)
-      // stays bidirectional.
-      const ra = grid.roundaboutAt(e.ax, e.ay);
-      const rb = grid.roundaboutAt(e.bx, e.by);
-      if (ra && rb && ra.isRing && rb.isRing && ra.ax === rb.ax && ra.ay === rb.ay) {
-        // Tangent test: radial r = (a - centre); move m = (b - a). The
-        // sign of the 2D cross r×m tells us the rotational sense of a→b.
-        // cross < 0 is counter-clockwise as viewed from above with north
-        // up (matches right-hand-traffic roundabouts). Keep that one.
-        const rx = e.ax - ra.cx;
-        const ry = e.ay - ra.cy;
-        const mx = e.bx - e.ax;
-        const my = e.by - e.ay;
-        const cross = rx * my - ry * mx;
-        if (cross < 0) {
-          this.push(ai, bi, base * ROAD_PATH_WEIGHT[tb.roadType]);
-        } else {
-          this.push(bi, ai, base * ROAD_PATH_WEIGHT[ta.roadType]);
-        }
-        continue;
-      }
-
       // Bidirectional in both directions — edge cost uses the destination
       // tile's tier so A* still prefers highways for long trips.
       this.push(ai, bi, base * ROAD_PATH_WEIGHT[tb.roadType]);

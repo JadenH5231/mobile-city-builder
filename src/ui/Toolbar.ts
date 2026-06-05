@@ -60,16 +60,6 @@ const ICON_PATH = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <circle cx="13" cy="9" r="0.9" fill="currentColor"/>
   <circle cx="17" cy="4" r="0.9" fill="currentColor"/>
 </svg>`;
-// Roundabout (Beta 1.8) — a circular arrow with four stub roads off the
-// compass points, reading instantly as "ring road, exits all directions".
-const ICON_ROUNDABOUT = `<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M12 2v4 M12 18v4 M2 12h4 M18 12h4"
-        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-  <path d="M16.5 8.5a6 6 0 1 1-4.5-2"
-        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-  <path d="M12 3.2l1.8 2.4-3 .6z" fill="currentColor"/>
-  <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
-</svg>`;
 const ICON_R = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M4 11l8-7 8 7v9H4z M10 20v-5h4v5"
         stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
@@ -293,11 +283,7 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       // renderer code are intentionally LEFT IN PLACE so existing
       // saves with ramp / cloverleaf tiles still display correctly —
       // the player can bulldoze them but can't make new ones.
-      { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH },
-      // Roundabouts (Beta 1.8) — tap-to-place ring-road prefabs. Small =
-      // 2×2, large = 3×3 with a bigger central island/monument.
-      { kind: 'tool', tool: 'place_roundabout_small', label: 'Roundabout', icon: ICON_ROUNDABOUT },
-      { kind: 'tool', tool: 'place_roundabout_large', label: 'Big Roundabout', icon: ICON_ROUNDABOUT }
+      { kind: 'tool', tool: 'place_path',   label: 'Path',    icon: ICON_PATH }
     ]
   },
   {

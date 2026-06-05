@@ -80,12 +80,6 @@ export interface FactionStances {
    *  Greenleaf / NIMBYs / Hometown hate it more (huge footprint of
    *  car-centric infrastructure). */
   cloverleaf: number;
-  /** Roundabout (Beta 1.8). One-way ring road around a landscaped island.
-   *  Drivers love (continuous flow, no stops); Safer Streets love (kills
-   *  the right-angle / T-bone crashes that signalised intersections cause);
-   *  Greenleaf likes the green island + reduced idling; Taxpayers dislike
-   *  the up-front cost; everyone else mildly positive (smoother traffic). */
-  roundabout: number;
   /** Forestry industry (Alpha 2.7). Doesn't drain forest resources, but
    *  industrial-flavoured visuals + lumber-truck haul; environmentalists
    *  hate, chamber/working-families love. Hometown likes it (logging is
@@ -190,7 +184,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // NIMBYs hate ramps — exit ramps mean more cars cutting through the
     // neighbourhood, more noise, more pollution. Cloverleaf is much
     // worse — a 5×5 freeway interchange right there.
-    ramp: -0.6, cloverleaf: -0.9, roundabout: 0.2,
+    ramp: -0.6, cloverleaf: -0.9,
     forestry: -0.4,
     farm: -0.2,
     // NIMBYs ambivalent on big_box (jobs are good but the traffic isn't).
@@ -220,7 +214,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     bus_stop: 0.7, bus_depot: 0.8, stop_sign: 0.2,
     // YIMBYs are mildly anti-ramp — every ramp encourages car commuting.
     // Cloverleaf is worse: 5×5 of land that could've been housing.
-    ramp: -0.3, cloverleaf: -0.6, roundabout: 0.3,
+    ramp: -0.3, cloverleaf: -0.6,
     forestry: 0.0,
     farm: -0.1,
     // YIMBYs HATE big_box (sprawl, car-oriented, low-density) and
@@ -256,7 +250,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Greenleaf hates ramps — more highway = more emissions, more cars
     // moving fast through the city. Cloverleaf is the apex offender:
     // huge paved footprint, encourages high-speed driving culture.
-    ramp: -0.5, cloverleaf: -0.9, roundabout: 0.4,
+    ramp: -0.5, cloverleaf: -0.9,
     forestry: -0.7,
     farm: 0.4,
     // Greenleaf HATES big_box (freight emissions, sprawl) and HATES
@@ -290,7 +284,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Hometown Heritage hates ramps — they're modern highway
     // infrastructure that erodes the small-town feel. Cloverleaf is
     // the worst — pure suburban-sprawl architecture.
-    ramp: -0.4, cloverleaf: -0.8, roundabout: 0.3,
+    ramp: -0.4, cloverleaf: -0.8,
     forestry: 0.6,
     farm: 0.8,
     // Hometown Heritage HATES big_box — kills small-town main-street
@@ -325,7 +319,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Chamber loves ramps — easier highway access pulls in customers +
     // freight from out of town. Cloverleaf is the dream: a real
     // freeway interchange screams "regional commerce hub."
-    ramp: 0.6, cloverleaf: 0.9, roundabout: 0.3,
+    ramp: 0.6, cloverleaf: 0.9,
     forestry: 0.7,
     farm: 0.6,
     // Chamber LOVES big_box — pure jobs + retail draw. Likes
@@ -357,7 +351,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     bus_stop: 1.0, bus_depot: 1.0, stop_sign: 0.3,
     // Transit dislikes ramps — every ramp validates "highways for cars"
     // as the city's primary mode of travel. Cloverleaf is the worst.
-    ramp: -0.4, cloverleaf: -0.7, roundabout: 0.2,
+    ramp: -0.4, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.1,
     // Transit HATES big_box (anti-walkability, requires car commute)
@@ -391,7 +385,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Drivers LOVE ramps — easy on/off the highway, smooth merges
     // mean less time sitting at red lights. Cloverleaf is the apex —
     // proper freeway interchange, full speed both directions.
-    ramp: 1.0, cloverleaf: 1.0, roundabout: 0.9,
+    ramp: 1.0, cloverleaf: 1.0,
     forestry: 0.2,
     farm: 0.3,
     // Drivers LOVE big_box (parking + drive-up access) and LOVE
@@ -424,7 +418,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     bus_stop: -0.2, bus_depot: -0.4, stop_sign: -0.2,
     // Taxpayers grudgingly approve ramp; cloverleaf is a $50K splurge
     // they'd rather skip — real utility but not THAT much real utility.
-    ramp: 0.2, cloverleaf: -0.4, roundabout: -0.4,
+    ramp: 0.2, cloverleaf: -0.4,
     forestry: 0.5,
     farm: 0.4,
     // Taxpayers warm to big_box (low capital cost + real jobs) and
@@ -458,7 +452,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Safer Streets dislikes ramps — fast highway merges = more
     // accident risk than controlled intersections. Cloverleaf is even
     // worse: full freeway speeds + complex weaving zones.
-    ramp: -0.5, cloverleaf: -0.7, roundabout: 0.8,
+    ramp: -0.5, cloverleaf: -0.7,
     forestry: 0.0,
     farm: 0.2,
     // Safer Streets dislikes both — large parking lots are dead at
@@ -492,7 +486,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     bus_stop: 0.4, bus_depot: 0.4, stop_sign: 0.3,
     // Working Families likes ramps — easier highway = easier commute
     // to out-of-town jobs. Cloverleaf is a real commute upgrade.
-    ramp: 0.3, cloverleaf: 0.5, roundabout: 0.2,
+    ramp: 0.3, cloverleaf: 0.5,
     forestry: 0.6,
     farm: 0.7,
     // Working Families LOVE big_box (low prices, entry-level jobs) and

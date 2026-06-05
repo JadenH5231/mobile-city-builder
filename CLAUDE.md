@@ -394,6 +394,14 @@ patch (the consolidated What's New is still held for the end of the batch):
 
 SW cache `v43` → `v47`. `APP_VERSION` 1.9.8 → 1.9.12.
 
+**⏭ Batch not finished — 3 features still queued:** the player's batch also
+asked for **Resorts** (modular industry, ≥6 size varieties), **Hotels/Motels**
+(modular, size→airbnb/motel/hotel), and **Subways** (real transit lines), plus
+a **consolidated What's New popup** (held until all are done — each feature
+ships as a SILENT PATCH, then one `1.10.0` minor bump + one What's New entry).
+**Full pickup instructions are in [`docs/HANDOFF_remaining_features.md`](docs/HANDOFF_remaining_features.md)** — read it before starting. Continue
+numbering at 1.9.13.
+
 ## Status: Beta 1.9.8 (Milestone-gated architectural variety)
 
 User (batch): "Add more architectural variety to all levels of density across

@@ -1132,6 +1132,16 @@ export function buildLampGlowMesh(grid: Grid, texture: import('three').Texture):
         // Bright central halo + slightly-larger outer wash.
         lamps.push({ cx, cz, y: baseY, r: 1.60 });
         break;
+      case 'grand_stadium': {
+        // Floodlit bowl washes a big area at night (Beta 1.10.x). Anchor is
+        // (t.x, t.y); the 5×4 stadium centre is +2, +1.5 from its centre.
+        const scx = cx + 2, scz = cz + 1.5;
+        lamps.push({ cx: scx, cz: scz, y: baseY, r: 3.4 });
+        for (const th of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) {
+          lamps.push({ cx: scx + Math.cos(th) * 2.0, cz: scz + Math.sin(th) * 1.6, y: baseY, r: 1.6 });
+        }
+        break;
+      }
       case 'statue':
         // Dramatic statue uplighting — narrower but intense halo.
         lamps.push({ cx, cz, y: baseY, r: 1.20 });
@@ -1789,6 +1799,38 @@ function addArchitecturalLights(
       const waterGlow = new CylinderGeometry(0.32, 0.32, 0.020, 16);
       waterGlow.translate(cx, 0.155, cz);
       pushLit(waterGlow, DUSK_WATER);
+      break;
+    }
+    case 'grand_stadium': {
+      // Night game! Floodlights blaze, the pitch glows, the stands light up,
+      // the scoreboard shines. Stadium centre is +2, +1.5 from the anchor.
+      const scx = cx + 2, scz = cz + 1.5;
+      const RX = 2.35, RZ = 1.85;
+      // Floodlight bulb panels — bright white, the signature "lights on".
+      for (const th of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]) {
+        const px = scx + Math.cos(th) * (RX + 0.02), pz = scz + Math.sin(th) * (RZ + 0.02);
+        const toC = Math.atan2(scx - px, scz - pz);
+        const panel = new BoxGeometry(0.44, 0.24, 0.06);
+        panel.rotateY(toC);
+        panel.translate(px + Math.cos(toC) * 0.06, 1.78, pz + Math.sin(toC) * 0.06);
+        pushLit(panel, 0xfffdf2);
+      }
+      // Floodlit pitch — the field glows brightly under the lights.
+      const field = new CylinderGeometry(1, 1, 0.02, 28);
+      field.scale(1.05, 1, 0.72);
+      field.translate(scx, 0.11, scz);
+      pushLit(field, 0xe6f0d6);
+      // Lit upper stands — a warm concourse glow ringing the bowl.
+      for (let i = 0; i < 16; i++) {
+        const th = (i / 16) * Math.PI * 2;
+        const bx2 = new BoxGeometry(0.34, 0.05, 0.30);
+        bx2.translate(scx + Math.cos(th) * (RX - 0.55), 0.58, scz + Math.sin(th) * (RZ - 0.55));
+        pushLit(bx2, 0xffd890);
+      }
+      // Scoreboard screen glow at the back.
+      const sb = new BoxGeometry(0.92, 0.44, 0.04);
+      sb.translate(scx, 1.55, scz - (RZ - 0.30) + 0.07);
+      pushLit(sb, 0x9fd0ff);
       break;
     }
     case 'statue': {

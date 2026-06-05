@@ -356,6 +356,9 @@ export const FARM_TRACTOR_MIN_CLUSTER = 20;
  *  parts in the body InstancedMesh; cap keeps the per-frame matrix
  *  writes bounded on a map with many large farms. */
 export const MAX_TRACTORS = 16;
+/** Cap on animated stadium players (Beta 1.10.x). ~12 per Grand Stadium ×
+ *  a few stadiums. Only rendered at night when the floodlights are on. */
+export const MAX_STADIUM_PLAYERS = 48;
 
 /**
  * Motorcade event interval, in sim months. Production cadence: every

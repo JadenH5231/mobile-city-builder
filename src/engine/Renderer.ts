@@ -31,6 +31,7 @@ import {
   FARM_TRACTOR_MIN_CLUSTER,
   MAX_PEDESTRIANS,
   MAX_TRACTORS,
+  MAX_STADIUM_PLAYERS,
   MAX_VEHICLES,
   MAX_TOURIST_VEHICLES,
   MAX_SERVICE_VEHICLES,
@@ -259,6 +260,14 @@ export class Renderer {
     path: Array<{ x: number; y: number }>;
     progress: number;   // position along path, [0, path.length)
   }> = [];
+  /** Animated stadium players (Beta 1.10.x). One InstancedMesh of tiny
+   *  jersey-coloured figures that run around the pitch of every Grand
+   *  Stadium AT NIGHT (when the floodlights are on). Registry = one entry
+   *  per stadium with its field centre + pitch radii; `updateStadiumPlayers`
+   *  advances a shared time accumulator each frame. */
+  private stadiumPlayersMesh!: InstancedMesh;
+  private stadiumFields: Array<{ cx: number; cz: number; fx: number; fz: number; elev: number }> = [];
+  private stadiumPlayerT = 0;
   private busesMesh: InstancedMesh;
   private busWindowsMesh!: InstancedMesh;
   private busHeadlightsMesh!: InstancedMesh;
@@ -724,6 +733,28 @@ export class Renderer {
       this.worldGroup.add(this.tractorWindowsMesh);
     }
 
+    // Stadium players (Beta 1.10.x) — tiny humanoid figures that run around
+    // the pitch of a Grand Stadium at night. One merged white geometry
+    // (body + head + 2 legs); per-instance colour paints the jersey. The
+    // local +Z is forward; yaw is set per-frame in updateStadiumPlayers.
+    {
+      const pBody = new BoxGeometry(0.035, 0.06, 0.025); pBody.translate(0, 0.045, 0);
+      const pHead = new BoxGeometry(0.028, 0.028, 0.028); pHead.translate(0, 0.090, 0);
+      const pLegL = new BoxGeometry(0.012, 0.03, 0.012); pLegL.translate(-0.010, 0.015, 0);
+      const pLegR = new BoxGeometry(0.012, 0.03, 0.012); pLegR.translate(0.010, 0.015, 0);
+      const playerGeom = mergeGeoms(
+        [pBody, pHead, pLegL, pLegR],
+        [0xffffff, 0xffffff, 0xffffff, 0xffffff]
+      );
+      // Unlit (MeshBasicMaterial) so the jerseys read at full brightness
+      // against the floodlit pitch — players only ever render at night.
+      const playerMat = new MeshBasicMaterial({ vertexColors: true });
+      this.stadiumPlayersMesh = new InstancedMesh(playerGeom, playerMat, MAX_STADIUM_PLAYERS);
+      this.stadiumPlayersMesh.count = 0;
+      this.stadiumPlayersMesh.frustumCulled = false;
+      this.worldGroup.add(this.stadiumPlayersMesh);
+    }
+
     // Buses — bigger silhouette so they read as transit, separate from cars.
     // Bus silhouette (Alpha 2.1) — chunky body with a slight cab notch
     // and a low roofline, so it reads as a transit bus rather than a slab.
@@ -991,6 +1022,19 @@ export class Renderer {
     // whenever the player places/bulldozes a farm) so the set stays
     // in sync.
     this.refreshFarmClusters(grid);
+    this.refreshStadiumFields(grid);
+  }
+
+  /** Detect Grand Stadiums and register each one's pitch centre + radii so
+   *  updateStadiumPlayers can run figures on the field. Cheap O(grid); re-run
+   *  on every drawCityBuildings (placement / bulldoze keeps the set in sync). */
+  private refreshStadiumFields(grid: Grid): void {
+    this.stadiumFields.length = 0;
+    for (const t of grid.iter()) {
+      if (t.building !== 'grand_stadium') continue;
+      // Anchor at (t.x, t.y); the 5×4 stadium's pitch centre is +2.5, +2.
+      this.stadiumFields.push({ cx: t.x + 2.5, cz: t.y + 2, fx: 0.92, fz: 0.60, elev: t.elevation });
+    }
   }
 
   /** Detect large farm clusters + build the snake path for each
@@ -1083,6 +1127,57 @@ export class Renderer {
     this.tractorsMesh.instanceMatrix.needsUpdate = true;
     this.tractorWindowsMesh.instanceMatrix.needsUpdate = true;
     if (this.tractorsMesh.instanceColor) this.tractorsMesh.instanceColor.needsUpdate = true;
+  }
+
+  /** Animate "a game in progress" — jersey-coloured figures running around
+   *  the pitch of every Grand Stadium, AT NIGHT only (when the floodlights
+   *  are on). Mirrors the tractor pattern: a shared time accumulator drives
+   *  each player along a drifting elliptical path within the field, facing
+   *  the direction of motion with a slight running bob. `timeOfDay` 0=peak
+   *  night … 0.5=midday … 1=midnight, so night ≈ <0.22 or >0.78. */
+  updateStadiumPlayers(dt: number, timeOfDay: number): void {
+    const isNight = timeOfDay < 0.22 || timeOfDay > 0.78;
+    if (!isNight || this.stadiumFields.length === 0) {
+      this.stadiumPlayersMesh.count = 0;
+      return;
+    }
+    this.stadiumPlayerT += dt;
+    const t = this.stadiumPlayerT;
+    const obj = this.tmpObj;
+    const c = this.tmpColor;
+    const PER = 12;                          // figures per stadium (two teams)
+    const team = [0xe23b3b, 0x3a6ed0];       // red vs blue jerseys (pop on the lit pitch)
+    let inst = 0;
+    for (let s = 0; s < this.stadiumFields.length; s++) {
+      const f = this.stadiumFields[s]!;
+      for (let p = 0; p < PER; p++) {
+        if (inst >= MAX_STADIUM_PLAYERS) break;
+        const spd = 0.55 + (p % 4) * 0.14;
+        const ang = (p / PER) * Math.PI * 2 + t * spd + s * 1.3;
+        const rf = 0.28 + 0.62 * (0.5 + 0.5 * Math.sin(p * 2.1 + t * 0.6));
+        const px = f.cx + f.fx * rf * Math.cos(ang);
+        const pz = f.cz + f.fz * rf * Math.sin(ang);
+        // Sample slightly ahead for the facing yaw.
+        const ang2 = ang + 0.06;
+        const rf2 = 0.28 + 0.62 * (0.5 + 0.5 * Math.sin(p * 2.1 + (t + 0.06) * 0.6));
+        const nx = f.cx + f.fx * rf2 * Math.cos(ang2);
+        const nz = f.cz + f.fz * rf2 * Math.sin(ang2);
+        const bob = Math.abs(Math.sin(t * 9 + p)) * 0.016;
+        // Feet on the pitch, body above the lit-field overlay so they're not
+        // washed out by the floodlit-grass glow.
+        obj.position.set(px * TILE_SIZE, f.elev + 0.055 + bob, pz * TILE_SIZE);
+        obj.rotation.set(0, Math.atan2(nx - px, nz - pz), 0);
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        this.stadiumPlayersMesh.setMatrixAt(inst, obj.matrix);
+        c.setHex(team[p % 2]!);
+        this.stadiumPlayersMesh.setColorAt(inst, c);
+        inst++;
+      }
+    }
+    this.stadiumPlayersMesh.count = inst;
+    this.stadiumPlayersMesh.instanceMatrix.needsUpdate = true;
+    if (this.stadiumPlayersMesh.instanceColor) this.stadiumPlayersMesh.instanceColor.needsUpdate = true;
   }
 
   /** Districts overlay (Alpha 2.22). One translucent quad per tile that

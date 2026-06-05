@@ -1815,10 +1815,11 @@ function addArchitecturalLights(
         panel.translate(px + Math.cos(toC) * 0.06, 1.78, pz + Math.sin(toC) * 0.06);
         pushLit(panel, 0xfffdf2);
       }
-      // Floodlit pitch — the field glows brightly under the lights.
+      // Floodlit pitch — the field glows brightly under the lights. Sits low
+      // (just above the green pitch) so the player figures read on top of it.
       const field = new CylinderGeometry(1, 1, 0.02, 28);
       field.scale(1.05, 1, 0.72);
-      field.translate(scx, 0.11, scz);
+      field.translate(scx, 0.062, scz);
       pushLit(field, 0xe6f0d6);
       // Lit upper stands — a warm concourse glow ringing the bowl.
       for (let i = 0; i < 16; i++) {

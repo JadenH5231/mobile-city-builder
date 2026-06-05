@@ -1565,6 +1565,7 @@ export class Game {
       // farm cluster, animated along a boustrophedon path through
       // the cluster's tiles. Pure visual; no sim/road interaction.
       this.renderer.updateTractors(dt, this.grid);
+      this.renderer.updateStadiumPlayers(dt, this.timeOfDay);
       // Heatmap rebuild is the most expensive optional layer (full road
       // mesh rebuild). Throttle to 5 Hz when visible — the EMA only moves
       // that fast anyway. Memory: feedback_traffic_pressure (heatmap must

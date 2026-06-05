@@ -353,9 +353,9 @@ export const ACHIEVEMENT_DEFS: readonly Achievement[] = [
   {
     id: 'tourist_trap',
     name: 'Tourist Trap',
-    description: 'Operate a museum, a stadium, and an observatory at once.',
+    description: 'Operate a museum and an observatory at once.',
     icon: '🗺️',
-    check: (s) => s.uniqueLandmarkKinds >= 3
+    check: (s) => s.uniqueLandmarkKinds >= 2
   },
   {
     id: 'bond_issuer',
@@ -490,7 +490,6 @@ export class Achievements {
     let l3Buildings = 0;
     let developedBuildings = 0;
     let hasMuseum = false;
-    let hasStadium = false;
     let hasObservatory = false;
     let ferryDocks = 0;
     let subwayEntrances = 0;
@@ -508,13 +507,12 @@ export class Achievements {
       if (t.path) walkingPathTiles++;
       if (t.building === 'bus_depot') busDepots++;
       else if (t.building === 'museum') hasMuseum = true;
-      else if (t.building === 'stadium') hasStadium = true;
       else if (t.building === 'observatory') hasObservatory = true;
       else if (t.building === 'ferry_dock') ferryDocks++;
       else if (t.building === 'subway_entrance') subwayEntrances++;
     }
     const uniqueLandmarkKinds =
-      (hasMuseum ? 1 : 0) + (hasStadium ? 1 : 0) + (hasObservatory ? 1 : 0);
+      (hasMuseum ? 1 : 0) + (hasObservatory ? 1 : 0);
     let highwayEdges = 0;
     let totalRoadEdges = 0;
     for (const e of grid.iterRoadEdges()) {

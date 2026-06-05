@@ -420,7 +420,6 @@ export type Building =
   // Landmarks (Alpha 2.17). 1-tile each, generate monthly tourism revenue
   // scaled by city population once they have road access.
   | 'museum'
-  | 'stadium'
   | 'observatory'
   // Transit pack (Alpha 2.19). Ferry docks live on the water edge and
   // run boats between paired docks; subway entrances are cosmetic
@@ -544,7 +543,6 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // is the splashy big-ticket build, observatory is mid, museum is the
   // entry-tier landmark unlocked at Town.
   museum: 6000,
-  stadium: 12000,
   observatory: 9000,
   // Transit pack (Alpha 2.19). Ferry dock anchors a water route; subway
   // entrance is the most expensive single-tile build because of the
@@ -631,7 +629,6 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   fire_station: 250,
   police_station: 250,
   museum: 200,
-  stadium: 500,
   observatory: 250,
   ferry_dock: 250,
   subway_entrance: 350,
@@ -692,14 +689,12 @@ export const SUBWAY_SUPPRESSION_RADIUS = 6;
  * higher upkeep + cost should be worth it as the city grows; museum is
  * the entry-tier earner so it's always positive net once unlocked.
  */
-export const LANDMARK_TOURISM_BASE: Record<'museum' | 'stadium' | 'observatory', number> = {
+export const LANDMARK_TOURISM_BASE: Record<'museum' | 'observatory', number> = {
   museum: 50,
-  stadium: 80,
   observatory: 40
 };
-export const LANDMARK_TOURISM_PER_RESIDENT: Record<'museum' | 'stadium' | 'observatory', number> = {
+export const LANDMARK_TOURISM_PER_RESIDENT: Record<'museum' | 'observatory', number> = {
   museum: 0.05,
-  stadium: 0.10,
   observatory: 0.04
 };
 
@@ -897,7 +892,7 @@ export const MILESTONES: readonly Milestone[] = [
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
     unlocks: [
-      'road_highway', 'residential_high', 'place_hospital', 'place_stadium', 'place_ferry_dock',
+      'road_highway', 'residential_high', 'place_hospital', 'place_ferry_dock',
       // (Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1
       //  — kept in code for backwards-compat with existing saves but
       //  no longer unlockable.)
@@ -1096,7 +1091,6 @@ export type Tool =
   // road. Visual + behavioural change — see RAMP_COST.
   | 'place_ramp'
   | 'place_museum'
-  | 'place_stadium'
   | 'place_observatory'
   | 'place_ferry_dock'
   | 'place_subway_entrance'
@@ -1204,7 +1198,6 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_bus_stop', 'bus_stop' as const],
   ['place_bus_depot', 'bus_depot' as const],
   ['place_museum', 'museum' as const],
-  ['place_stadium', 'stadium' as const],
   ['place_observatory', 'observatory' as const],
   ['place_ferry_dock', 'ferry_dock' as const],
   ['place_subway_entrance', 'subway_entrance' as const],

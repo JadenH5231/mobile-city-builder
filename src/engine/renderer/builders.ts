@@ -4990,31 +4990,6 @@ function cityBuildingParts(b: string): CityBuildingPart[] {
         { makeGeom: () => box(0.55, 0.025, 0.06), color: 0xc7bfa9, dx: 0, dy: 0.04 + 0.013, dz: 0.36 }
       ];
     }
-    case 'stadium': {
-      // Oval bowl: low base ring + raised seating + interior field.
-      // Crisp silhouette on a single tile thanks to the elliptical body.
-      // Cylinder approximated by a hex prism + interior field box; reads
-      // unambiguously as a stadium at this art scale.
-      return [
-        // Field interior (green).
-        { makeGeom: () => box(0.55, 0.025, 0.40), color: 0x4d8442, dx: 0, dy: 0.013, dz: 0 },
-        // Outer concrete ring as 4 sweeping wedges of a hex prism.
-        { makeGeom: () => cyl(0.46, 0.18, 18), color: 0xc4c0b6, dx: 0, dy: 0.09, dz: 0 },
-        // Cut the field out by laying a green inner cylinder on top —
-        // creates the bowl reveal.
-        { makeGeom: () => cyl(0.34, 0.04, 18), color: 0x4d8442, dx: 0, dy: 0.18 + 0.02, dz: 0 },
-        // Stadium lights — 4 corner pylons.
-        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx: -0.32, dy: 0.30, dz: -0.18 },
-        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx:  0.32, dy: 0.30, dz: -0.18 },
-        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx: -0.32, dy: 0.30, dz:  0.18 },
-        { makeGeom: () => box(0.025, 0.30, 0.025), color: 0xb0b0b0, dx:  0.32, dy: 0.30, dz:  0.18 },
-        // Light fixtures atop pylons.
-        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx: -0.32, dy: 0.46, dz: -0.18 },
-        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz: -0.18 },
-        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx: -0.32, dy: 0.46, dz:  0.18 },
-        { makeGeom: () => box(0.10, 0.04, 0.04), color: 0xfff7d0, dx:  0.32, dy: 0.46, dz:  0.18 }
-      ];
-    }
     case 'ferry_dock': {
       // Wooden pier on land + a short jetty extending toward water. Bright
       // red flag pole reads at any zoom level.

@@ -2359,25 +2359,13 @@ export function buildLuxurySingleParts(ax: number, ay: number, roadYaw?: number)
     out.push({ geom: win, color: 0x24405e });
   }
 
-  // Road-facing walkway (or centred fallback).
-  const walkColor = 0xb6ad9b;
-  if (roadYaw !== undefined) {
-    const yawIdx = Math.round(roadYaw / (Math.PI / 2)) & 3; // 0=S,1=E,2=N,3=W
-    let dx = 0, dz = 0, gw = 0.18, gd = 0.18; const off = 0.34;
-    if (yawIdx === 0) { dz = off; gd = 0.30; }
-    else if (yawIdx === 1) { dx = off; gw = 0.30; }
-    else if (yawIdx === 2) { dz = -off; gd = 0.30; }
-    else { dx = -off; gw = 0.30; }
-    const walk = new BoxGeometry(gw, 0.018, gd);
-    walk.translate(cx + dx, 0.009, cz + dz);
-    out.push({ geom: walk, color: walkColor });
-  } else {
-    const walk = new BoxGeometry(0.16, 0.018, 0.34);
-    walk.translate(cx, 0.009, cz + 0.28);
-    out.push({ geom: walk, color: walkColor });
-  }
+  // Front walkway — always built on the +Z (front) face; the whole
+  // composition is rotated to the road below so it points the right way.
+  const walk = new BoxGeometry(0.18, 0.018, 0.34);
+  walk.translate(cx, 0.009, cz + 0.30);
+  out.push({ geom: walk, color: 0xb6ad9b });
 
-  // Ornamental shrubs + a small tree.
+  // Ornamental shrubs flanking the front + a small tree at the back corner.
   for (const sx of [-0.34, 0.34] as number[]) {
     const sh = new BoxGeometry(0.10, 0.12, 0.10);
     sh.translate(cx + sx, 0.06, cz + 0.34);
@@ -2389,6 +2377,18 @@ export function buildLuxurySingleParts(ax: number, ay: number, roadYaw?: number)
   const leaf = new ConeGeometry(0.12, 0.22, 7);
   leaf.translate(cx - 0.36, 0.22, cz - 0.30);
   out.push({ geom: leaf, color: 0x2f6a2d });
+
+  // Omni-directional facing (Beta 1.10.x fix): rotate the ENTIRE estate
+  // around its tile centre so the front door / windows / garage / walkway
+  // all aim at the nearest road, instead of always facing south. roadYaw
+  // (0=S, π/2=E, π=N, 3π/2=W) comes from computeRoadFacingYaw.
+  if (roadYaw) {
+    for (const p of out) {
+      p.geom.translate(-cx, 0, -cz);
+      p.geom.rotateY(roadYaw);
+      p.geom.translate(cx, 0, cz);
+    }
+  }
 
   return out;
 }

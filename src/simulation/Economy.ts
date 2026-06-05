@@ -256,7 +256,7 @@ export class Economy {
     // build a road" feedback through the budget panel.
     let tourismRevenue = 0;
     for (const t of grid.iter()) {
-      if (t.building !== 'museum' && t.building !== 'stadium' && t.building !== 'observatory') continue;
+      if (t.building !== 'museum' && t.building !== 'observatory') continue;
       if (!grid.hasRoadAdjacent(t.x, t.y)) continue;
       const kind = t.building;
       tourismRevenue += LANDMARK_TOURISM_BASE[kind] +

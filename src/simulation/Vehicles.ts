@@ -1789,7 +1789,6 @@ function isTouristDestination(t: Tile): boolean {
   switch (t.building) {
     case 'park':
     case 'museum':
-    case 'stadium':
     case 'observatory':
     case 'plaza':
     case 'fountain':

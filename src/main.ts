@@ -943,7 +943,6 @@ function unlockLabel(tool: string): string {
     place_stop_sign: 'Stop sign',
     place_traffic_light: 'Traffic light',
     place_museum: 'Museum',
-    place_stadium: 'Stadium',
     place_observatory: 'Observatory',
     place_ferry_dock: 'Ferry dock',
     place_subway_entrance: 'Subway entrance',

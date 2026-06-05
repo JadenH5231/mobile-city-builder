@@ -509,14 +509,6 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
         <path d="M3 9l9-5 9 5 M5 9v10 M19 9v10 M9 19v-7 M15 19v-7 M3 21h18"
               stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
       </svg>` },
-      { kind: 'tool', tool: 'place_stadium', label: 'Stadium', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-        <ellipse cx="12" cy="12" rx="9" ry="5"
-              stroke="currentColor" stroke-width="1.6" fill="none"/>
-        <path d="M3 12c0 3 4 5 9 5s9-2 9-5"
-              stroke="currentColor" stroke-width="1.4" fill="none"/>
-        <path d="M12 7v10"
-              stroke="currentColor" stroke-width="1.2" fill="none"/>
-      </svg>` },
       { kind: 'tool', tool: 'place_observatory', label: 'Obs.', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 18a7 7 0 0 1 14 0z M3 21h18"
               stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>

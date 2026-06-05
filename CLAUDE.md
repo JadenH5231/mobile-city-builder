@@ -362,6 +362,33 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.7 (Single-tile luxury home)
+
+User (batch): "Add an additional type of luxury low density housing that only
+takes up one square, has same effects as two square luxury."
+
+New `residential_luxury_single` tool ("Lux 1" in the R group) — a 1×1 luxury
+estate. **Key insight:** Population + Economy + faction logic already read
+`t.luxury` PER TILE (capacity, 2.5× tax, NIMBY-biased faction share), so a
+single luxury tile inherits ALL the premium effects automatically. The only
+new code is placement + rendering. A new `Tile.luxurySingle` bit distinguishes
+it: a single estate sets BOTH `luxury=true` (for effects) AND
+`luxurySingle=true` (so it renders standalone and never seeks a pair
+partner). `Game.placeLuxurySingle` validates one road-adjacent grass tile via
+the existing `canZoneLuxury`, zones it R-low + luxury, charges
+`LUXURY_SINGLE_COST` ($500, vs $800 pair), reuses the `r_lux` council stance.
+Renderer `buildLuxurySingleParts` (core.ts) emits a compact premium home
+(2-storey body, hip roof + gold finial, chimney, attached garage, door +
+windows, road-facing walkway, shrubs + tree), reusing the `LUXURY_VARIANTS`
+palette for per-tile variety. `findLuxuryPartner` + `Grid.clearAdjacentLuxury`
+now exclude `luxurySingle` tiles so a single never pairs with (or clears) a
+neighbour. Save: `luxurySingle` bit added (pre-1.10 saves load false, no
+schema bump); undo covered via the SaveGame snapshot. Town-milestone unlock
+(same as the pair). Verified in-browser: typecheck clean, no console errors,
+a row of single estates renders with variety + road-facing walkways (single
+draw call). SW cache `v41` → `v42`. `APP_VERSION` 1.9.6 → 1.9.7 (**silent
+patch** — changelog held for the consolidated end-of-batch What's New).
+
 ## Status: Beta 1.9.6 (Grand Stadium — multi-block showpiece)
 
 User (batch): "Add a stadium (Make it multiple blocks similar to capitals,

@@ -95,6 +95,11 @@ export class Tile {
    * faction-population mix toward NIMBYs.
    */
   luxury = false;
+  /** Single-tile luxury home (Beta 1.10). When true, `luxury` is also true
+   *  (so all per-tile economy/population/faction effects apply identically),
+   *  but this estate occupies ONE tile instead of a pair — it renders as a
+   *  standalone home and has no partner to clear on bulldoze. */
+  luxurySingle = false;
   /** 0 = no building yet, 1..3 = low / medium / high density. */
   density = 0;
   /** Sim-tick accumulator. Crossing 1.0 promotes density by one tier. */

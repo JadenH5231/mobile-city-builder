@@ -25,6 +25,7 @@ import {
   buildCloverleafParts,
   buildGrandStadiumParts,
   buildLuxuryParts,
+  buildLuxurySingleParts,
   buildMayorMansionParts,
   buildNationalCapitalParts,
   buildProvincialCapitalParts,
@@ -371,6 +372,20 @@ export function emitZonedBuildingTile(
   // Per-tile lift = ROAD_LIFT/2 (avoid z-fighting with zone overlay) PLUS the
   // tile's terrain elevation (Alpha 2.3) so buildings sit on the hill.
   const baseLift = ROAD_LIFT * 0.5;
+  // Single-tile luxury home (Beta 1.10) — standalone 1×1 estate. Renders its
+  // own compact mansion from this tile; no partner involved.
+  if (t.luxurySingle && t.zone === 'residential') {
+    const roadYaw = computeRoadFacingYaw(grid, t.x, t.y) ?? undefined;
+    const parts = buildLuxurySingleParts(t.x, t.y, roadYaw);
+    const yLift = baseLift + t.elevation;
+    for (const p of parts) {
+      if (TILE_SIZE !== 1) p.geom.scale(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      if (yLift !== 0) p.geom.translate(0, yLift, 0);
+      geoms.push(p.geom);
+      colours.push(tint(p.color));
+    }
+    return;
+  }
   // Luxury (Alpha 2.5): a 2-tile pair renders as one mansion. Emit only from
   // the lex-smaller tile of the pair so we don't double-render. Luxury homes
   // are NEVER modulated by happiness — always pristine per spec (Alpha 2.7).
@@ -716,7 +731,8 @@ function findLuxuryPartner(grid: Grid, x: number, y: number): { x: number; y: nu
   const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
   for (const [dx, dy] of dirs) {
     const n = grid.get(x + dx, y + dy);
-    if (n && n.luxury && n.zone === 'residential') return { x: n.x, y: n.y };
+    // A single-tile luxury home is never a pair partner (Beta 1.10).
+    if (n && n.luxury && !n.luxurySingle && n.zone === 'residential') return { x: n.x, y: n.y };
   }
   return null;
 }

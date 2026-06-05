@@ -2159,3 +2159,103 @@ const VARIANTS: VariantTable = {
  *   4 = built (full design, no construction equipment)
  */
 
+/**
+ * Single-tile luxury home (Beta 1.10). A 1×1 estate that carries the SAME
+ * per-tile effects as the 2-tile luxury pair (the `luxury` bit drives
+ * population + tax + faction draw) — this is purely the rendered geometry
+ * for the standalone variant. Reuses the LUXURY_VARIANTS palette so a single
+ * estate reads of-a-piece with the pair mansions. Premium but compact: a
+ * 2-storey body with a hip roof + gold finial, a chimney, an attached
+ * garage, a front door + windows, a road-facing walkway, ornamental shrubs
+ * and a small tree.
+ */
+export function buildLuxurySingleParts(ax: number, ay: number, roadYaw?: number): VariantPart[] {
+  const out: VariantPart[] = [];
+  const cx = ax + 0.5, cz = ay + 0.5;
+  const v = LUXURY_VARIANTS[pickVariant(ax, ay, LUXURY_VARIANTS.length)]!;
+
+  // Lawn pad.
+  const lawn = new BoxGeometry(0.92, 0.015, 0.92);
+  lawn.translate(cx, 0.0075, cz);
+  out.push({ geom: lawn, color: v.lawnColor });
+
+  // Body — 2-storey, biased toward the back so the front lawn reads.
+  const bodyW = 0.60, bodyD = 0.50, bodyH = 0.50;
+  const bz = cz - 0.06;
+  const body = new BoxGeometry(bodyW, bodyH, bodyD);
+  body.translate(cx, bodyH / 2, bz);
+  out.push({ geom: body, color: v.bodyColor });
+  const band = new BoxGeometry(bodyW + 0.02, 0.03, bodyD + 0.02);
+  band.translate(cx, bodyH * 0.5, bz);
+  out.push({ geom: band, color: v.roofColor });
+
+  // Hip roof (4-sided pyramid) + gold finial.
+  const roof = new ConeGeometry(Math.hypot(bodyW, bodyD) / 2 + 0.03, 0.28, 4);
+  roof.rotateY(Math.PI / 4);
+  roof.translate(cx, bodyH + 0.14, bz);
+  out.push({ geom: roof, color: v.roofColor });
+  const finial = new ConeGeometry(0.022, 0.09, 6);
+  finial.translate(cx, bodyH + 0.30, bz);
+  out.push({ geom: finial, color: 0xeec453 });
+
+  // Chimney.
+  const chimney = new BoxGeometry(0.09, 0.22, 0.09);
+  chimney.translate(cx + 0.18, bodyH + 0.10, bz - 0.10);
+  out.push({ geom: chimney, color: v.chimneyColor });
+
+  // Attached garage nub on the variant's preferred side.
+  const gs = v.garageSide === 'a' ? -1 : 1;
+  const garage = new BoxGeometry(0.26, 0.28, 0.34);
+  garage.translate(cx + gs * 0.40, 0.14, bz + 0.04);
+  out.push({ geom: garage, color: v.garageColor });
+  const gRoof = new BoxGeometry(0.30, 0.03, 0.38);
+  gRoof.translate(cx + gs * 0.40, 0.30, bz + 0.04);
+  out.push({ geom: gRoof, color: v.roofColor });
+  const gDoor = new BoxGeometry(0.18, 0.18, 0.02);
+  gDoor.translate(cx + gs * 0.40, 0.11, bz + 0.04 + 0.18);
+  out.push({ geom: gDoor, color: 0x5a4632 });
+
+  // Front door + three windows on the +Z face.
+  const door = new BoxGeometry(0.10, 0.20, 0.02);
+  door.translate(cx - 0.10, 0.10, bz + bodyD / 2 + 0.001);
+  out.push({ geom: door, color: 0x3a2410 });
+  for (const [wx, wy] of [[0.12, 0.12], [0.12, 0.34], [-0.12, 0.34]] as Array<[number, number]>) {
+    const win = new BoxGeometry(0.10, 0.10, 0.02);
+    win.translate(cx + wx, wy, bz + bodyD / 2 + 0.001);
+    out.push({ geom: win, color: 0x24405e });
+  }
+
+  // Road-facing walkway (or centred fallback).
+  const walkColor = 0xb6ad9b;
+  if (roadYaw !== undefined) {
+    const yawIdx = Math.round(roadYaw / (Math.PI / 2)) & 3; // 0=S,1=E,2=N,3=W
+    let dx = 0, dz = 0, gw = 0.18, gd = 0.18; const off = 0.34;
+    if (yawIdx === 0) { dz = off; gd = 0.30; }
+    else if (yawIdx === 1) { dx = off; gw = 0.30; }
+    else if (yawIdx === 2) { dz = -off; gd = 0.30; }
+    else { dx = -off; gw = 0.30; }
+    const walk = new BoxGeometry(gw, 0.018, gd);
+    walk.translate(cx + dx, 0.009, cz + dz);
+    out.push({ geom: walk, color: walkColor });
+  } else {
+    const walk = new BoxGeometry(0.16, 0.018, 0.34);
+    walk.translate(cx, 0.009, cz + 0.28);
+    out.push({ geom: walk, color: walkColor });
+  }
+
+  // Ornamental shrubs + a small tree.
+  for (const sx of [-0.34, 0.34] as number[]) {
+    const sh = new BoxGeometry(0.10, 0.12, 0.10);
+    sh.translate(cx + sx, 0.06, cz + 0.34);
+    out.push({ geom: sh, color: 0x2f6a2d });
+  }
+  const trunk = new CylinderGeometry(0.02, 0.025, 0.12, 5);
+  trunk.translate(cx - 0.36, 0.06, cz - 0.30);
+  out.push({ geom: trunk, color: 0x6e3e1d });
+  const leaf = new ConeGeometry(0.12, 0.22, 7);
+  leaf.translate(cx - 0.36, 0.22, cz - 0.30);
+  out.push({ geom: leaf, color: 0x2f6a2d });
+
+  return out;
+}
+

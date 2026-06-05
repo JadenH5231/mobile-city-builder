@@ -299,6 +299,9 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       // Level 4 / Max density (Alpha 4.18). Sits between High and Sky.
       { kind: 'tool', tool: 'residential_max',    label: 'Max',  icon: ICON_TIER_MAX },
       { kind: 'tool', tool: 'residential_luxury_low', label: 'Lux',  icon: ICON_TIER_LUX },
+      // Single-tile luxury home (Beta 1.10) — 1×1 estate, same premium
+      // effects as the 2-tile Lux pair.
+      { kind: 'tool', tool: 'residential_luxury_single', label: 'Lux 1', icon: ICON_TIER_LUX },
       { kind: 'tool', tool: 'residential_skyscraper', label: 'Sky',  icon: ICON_TIER_SKY }
     ]
   },

@@ -260,6 +260,10 @@ export const LUXURY_TAX_BONUS = 1.5;
  * Charged once, on placement of the pair (not at development time).
  */
 export const LUXURY_LOW_COST = 800;
+/** Up-front cost for a single-tile luxury home (Beta 1.10). Same per-tile
+ *  premium effects as the 2-tile pair (the `luxury` bit), but one square —
+ *  priced ~per-tile of the pair. */
+export const LUXURY_SINGLE_COST = 500;
 
 /**
  * Skyscraper parameters (Alpha 3.1.2). Each skyscraper occupies a 2×2
@@ -850,7 +854,7 @@ export const MILESTONES: readonly Milestone[] = [
     name: 'Village',
     subtitle: 'Becoming a real town',
     popThreshold: 200,
-    unlocks: ['road_avenue', 'place_water', 'place_power', 'place_stop_sign', 'residential_luxury_low'],
+    unlocks: ['road_avenue', 'place_water', 'place_power', 'place_stop_sign', 'residential_luxury_low', 'residential_luxury_single'],
     rewardCash: 2500,
     rewardPC: 2,
     herald: 'chamber',
@@ -1044,6 +1048,9 @@ export type Tool =
   | 'residential_medium'
   | 'residential_high'
   | 'residential_luxury_low'
+  // Single-tile luxury home (Beta 1.10) — 1×1 estate, same per-tile premium
+  // effects as the 2-tile luxury pair.
+  | 'residential_luxury_single'
   | 'commercial_low'
   | 'commercial_medium'
   | 'commercial_high'

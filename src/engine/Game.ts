@@ -56,6 +56,7 @@ import {
   CLOVERLEAF_DEPTH,
   LAND_PURCHASE_COST_PER_TILE,
   LUXURY_LOW_COST,
+  LUXURY_SINGLE_COST,
   MAYOR_MANSION_DEPTH,
   MAYOR_MANSION_WIDTH,
   GRAND_STADIUM_WIDTH,
@@ -779,6 +780,7 @@ export class Game {
       ['residential_medium', 'r_medium'],
       ['residential_high', 'r_high'],
       ['residential_luxury_low', 'r_lux'],
+      ['residential_luxury_single', 'r_lux'],
       ['commercial_low', 'c_low'],
       ['commercial_medium', 'c_medium'],
       ['commercial_high', 'c_high'],
@@ -1081,6 +1083,13 @@ export class Game {
       const banned = !isFinite(mult);
       const cost = banned ? LUXURY_LOW_COST : Math.round(LUXURY_LOW_COST * mult);
       return { label: 'Luxury Lot', cost, banned };
+    }
+    // Single-tile luxury home (Beta 1.10) — same r_lux stance, one tile.
+    if (tool === 'residential_luxury_single') {
+      const mult = this.council.costMultiplier('r_lux');
+      const banned = !isFinite(mult);
+      const cost = banned ? LUXURY_SINGLE_COST : Math.round(LUXURY_SINGLE_COST * mult);
+      return { label: 'Luxury Home', cost, banned };
     }
     // Stop sign + traffic light — flat costs.
     if (tool === 'place_stop_sign') {
@@ -1733,6 +1742,7 @@ export class Game {
       hasFireProtection: t.hasFireProtection,
       hasPolice: t.hasPolice,
       luxury: t.luxury,
+      luxurySingle: t.luxurySingle,
       bridge: t.bridge,
       bridgeRoad: t.bridgeRoad,
       hasRoadAdjacent: this.grid.hasRoadAdjacent(tile.x, tile.y),
@@ -2077,6 +2087,16 @@ export class Game {
     // no valid partner adjacent.
     if (this.tool === 'residential_luxury_low') {
       const placed = this.placeLuxuryPair(tile.x, tile.y);
+      if (!placed) {
+        this.undoStack.pop();
+        this.strokeDidSnapshot = false;
+      }
+      this.strokeOrigin = null;
+      return;
+    }
+    // Single-tile luxury home (Beta 1.10) — tap-only, one square.
+    if (this.tool === 'residential_luxury_single') {
+      const placed = this.placeLuxurySingle(tile.x, tile.y);
       if (!placed) {
         this.undoStack.pop();
         this.strokeDidSnapshot = false;
@@ -2607,6 +2627,40 @@ export class Game {
     const partnerTile = this.grid.get(partner.x, partner.y)!;
     partnerTile.luxury = true;
     this.economy.treasury -= cost;
+    this.maybeOfferPhotoOp('r_lux');
+    this.notifyFirstZone();
+    return true;
+  }
+
+  /**
+   * Place a single-tile luxury home (Beta 1.10). One square with the SAME
+   * per-tile premium effects as the 2-tile pair (the `luxury` bit drives
+   * population + tax + faction draw); marked `luxurySingle` so it renders as
+   * a standalone estate and never tries to find a pair partner.
+   */
+  private placeLuxurySingle(x: number, y: number): boolean {
+    const t = this.grid.get(x, y);
+    if (!t) return false;
+    if (!this.canZoneLuxury(x, y)) {
+      this.onStatusMessage?.('Luxury home needs a free road-adjacent tile');
+      return false;
+    }
+    const mult = this.council.costMultiplier('r_lux');
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return false;
+    }
+    const cost = Math.round(LUXURY_SINGLE_COST * mult);
+    if (this.economy.treasury < cost && !this.cheatUnlimitedMoney) {
+      this.onStatusMessage?.(`Not enough money — need $${cost.toLocaleString()}`);
+      return false;
+    }
+    if (!this.grid.setZone(x, y, 'residential', 1)) return false;
+    t.luxury = true;
+    t.luxurySingle = true;
+    this.economy.treasury -= cost;
+    this.renderer.drawZones(this.grid);
+    this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.maybeOfferPhotoOp('r_lux');
     this.notifyFirstZone();
     return true;

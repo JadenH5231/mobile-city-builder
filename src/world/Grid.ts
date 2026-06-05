@@ -443,6 +443,7 @@ export class Grid {
     if (sameZone && sameCap) return false;
     const wasNone = t.zone === 'none';
     const wasLuxury = t.luxury;
+    const wasLuxurySingle = t.luxurySingle;
     t.zone = zone;
     t.zoneCap = cap;
     if (zone === 'none') {
@@ -451,7 +452,9 @@ export class Grid {
       // un-luxury its partner so we don't leave an orphan half-mansion.
       if (wasLuxury) {
         t.luxury = false;
-        this.clearAdjacentLuxury(x, y);
+        t.luxurySingle = false;
+        // A single-tile estate (Beta 1.10) has no partner to clear.
+        if (!wasLuxurySingle) this.clearAdjacentLuxury(x, y);
       }
     } else if (wasNone || !sameZone) {
       // Switched zone kind (or zoned a fresh tile) — start over. If we
@@ -460,7 +463,9 @@ export class Grid {
       t.resetDevelopment();
       if (wasLuxury) {
         t.luxury = false;
-        this.clearAdjacentLuxury(x, y);
+        t.luxurySingle = false;
+        // A single-tile estate (Beta 1.10) has no partner to clear.
+        if (!wasLuxurySingle) this.clearAdjacentLuxury(x, y);
       }
     }
     // Cap-only changes preserve current density. If the new cap is below
@@ -479,7 +484,8 @@ export class Grid {
     const dirs: Array<[number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
     for (const [dx, dy] of dirs) {
       const n = this.get(x + dx, y + dy);
-      if (n && n.luxury && n.zone === 'residential') {
+      // Only clear a PAIR partner — a single-tile estate is its own home.
+      if (n && n.luxury && !n.luxurySingle && n.zone === 'residential') {
         n.luxury = false;
         n.resetDevelopment();
       }

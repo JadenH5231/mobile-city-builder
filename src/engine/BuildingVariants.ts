@@ -23,7 +23,8 @@ export type { VariantPart } from './buildingVariants/types';
 export {
   buildVariantParts,
   getVariantBodyFootprint,
-  buildLuxuryParts
+  buildLuxuryParts,
+  buildLuxurySingleParts
 } from './buildingVariants/core';
 export type { SkyscraperDesign } from './buildingVariants/skyscrapers';
 export {

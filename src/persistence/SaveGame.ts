@@ -80,6 +80,8 @@ export interface TileSnapshot {
   zoneCap?: 0 | 1 | 2 | 3 | 4;
   /** Luxury low-density bit. Schema 8+. */
   luxury?: boolean;
+  /** Single-tile luxury home (Beta 1.10). Pre-1.10 saves load with false. */
+  luxurySingle?: boolean;
   density: number;
   pressure: number;
   /** Months when density first went 0 → 1 on this tile. Schema 14+. Drives
@@ -451,6 +453,7 @@ export function serialize(
       zone: t.zone,
       zoneCap: t.zoneCap,
       luxury: t.luxury,
+      luxurySingle: t.luxurySingle,
       density: t.density,
       pressure: t.developmentPressure,
       developedAt: t.developedAt,
@@ -617,6 +620,7 @@ export function applySave(
     t.zoneCap = snap.zoneCap ?? (snap.zone === 'none' ? 0 : 3);
     // Luxury bit is schema 8+. Older saves had no luxury zone.
     t.luxury = snap.luxury ?? false;
+    t.luxurySingle = snap.luxurySingle ?? false;
     t.density = snap.density;
     t.developmentPressure = snap.pressure;
     // developedAt schema 14+. v13-and-earlier saves treat current density as

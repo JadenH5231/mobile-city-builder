@@ -362,6 +362,38 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.9–1.9.12 (Playtest fixes on the new-features batch)
+
+Five fixes from playtest feedback on the 1.9.5–1.9.8 batch, each a silent
+patch (the consolidated What's New is still held for the end of the batch):
+
+- **1.9.9 — Luxury-home omni-directional facing.** The 1×1 luxury home
+  (1.9.7) only faced south; `buildLuxurySingleParts` now rotates the ENTIRE
+  estate around its tile centre by `roadYaw` so the front aims at the road
+  on any side.
+- **1.9.9 — Removed the old single-tile `stadium` landmark** ("never been a
+  great asset") — gone from the Building/Tool unions, costs, upkeep,
+  landmark-tourism records, milestone, toolbar, renderer case, Economy
+  tourism sweep, Vehicles tourist switch, and the "Tourist Trap" achievement
+  (now museum+observatory). The multi-block **Grand Stadium** is unaffected.
+- **1.9.10 — Clean Grand Stadium geometry.** Rewrote `buildGrandStadiumParts`:
+  the bowl is concentric FLAT stepped rings (overlapping → solid, no gaps);
+  the roof is a flat cantilevered ring (the tilted slabs were the "lighting
+  bug" — varied normals → patchy shading); scoreboard fixed to the back.
+- **1.9.11 — Stadium night lighting.** `grand_stadium` cases in
+  `buildLampGlowMesh` (bowl + corner halos) and `addArchitecturalLights`
+  (floodlight panels, floodlit pitch, glowing stands, scoreboard) — only at
+  night via the existing opacity ramp.
+- **1.9.12 — Animated players at night.** New `stadiumPlayersMesh`
+  InstancedMesh (mirrors the farm-tractor system): a `stadiumFields` registry
+  (rebuilt in `drawCityBuildings`) + `updateStadiumPlayers(dt, timeOfDay)` in
+  the Game loop. 12 red/blue figures per stadium run drifting elliptical
+  paths around the pitch with a running bob, **only at night** (gated on
+  `timeOfDay`). `MAX_STADIUM_PLAYERS = 48`. The lit-field overlay was lowered
+  so players read on top of it.
+
+SW cache `v43` → `v47`. `APP_VERSION` 1.9.8 → 1.9.12.
+
 ## Status: Beta 1.9.8 (Milestone-gated architectural variety)
 
 User (batch): "Add more architectural variety to all levels of density across

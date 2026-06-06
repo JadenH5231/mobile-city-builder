@@ -121,6 +121,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_big_box: 'Big Box',
   place_warehouse: 'Warehouse',
   place_parking_lot: 'Parking Lot',
+  place_resort: 'Resort',
   place_school: 'School',
   place_hospital: 'Hospital',
   place_fire_station: 'Fire Station',
@@ -808,6 +809,7 @@ export class Game {
       ['place_big_box', 'big_box'],
       ['place_warehouse', 'warehouse'],
       ['place_parking_lot', 'parking_lot'],
+      ['place_resort', 'resort'],
       ['place_school', 'school'],
       ['place_hospital', 'hospital'],
       ['place_fire_station', 'fire_station'],
@@ -2300,10 +2302,11 @@ export class Game {
     // Big Box + Parking Lot terrain gates (Beta 1.3). Both want flat
     // dry land — grass or sand — and must not pave over water, forest,
     // or an existing zoned tile.
-    if (kind === 'big_box' || kind === 'parking_lot' || kind === 'warehouse') {
+    if (kind === 'big_box' || kind === 'parking_lot' || kind === 'warehouse' || kind === 'resort') {
       const t = this.grid.get(x, y);
       const label = kind === 'big_box' ? 'Big Box'
                   : kind === 'warehouse' ? 'Warehouse'
+                  : kind === 'resort' ? 'Resort'
                   : 'Parking lot';
       if (t && (t.terrain === 'water' || t.terrain === 'forest')) {
         this.onStatusMessage?.(label + ' must be placed on flat dry land (grass or sand)');

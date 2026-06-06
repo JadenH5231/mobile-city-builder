@@ -907,23 +907,23 @@ export class Vehicles {
     // instead of mostly empty asphalt with one car parked.
     const roll = Math.random();
     let dest: { x: number; y: number } | null = null;
-    if (roll < 0.42) {
+    if (roll < 0.40) {
       dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else if (roll < 0.70) {
+    } else if (roll < 0.68) {
       dest = pickRandomDevelopedTile(grid, 'industrial');
-    } else if (roll < 0.86) {
+    } else if (roll < 0.84) {
       dest = pickRandomBuildingTile(grid, 'forestry');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else if (roll < 0.94) {
+    } else if (roll < 0.91) {
       dest = pickRandomBuildingTile(grid, 'farm');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else {
-      // Beta 1.6.5 — warehouses are employment destinations too.
-      // Residents drive to warehouses for shifts; the 1.4.2
-      // `findStallNearDest` then automatically routes them through
-      // the adjacent parking lot, fills the stalls, and spawns a
-      // walking shopper for the final leg. Was 0% pre-1.6.5 → 6%.
+    } else if (roll < 0.96) {
       dest = pickRandomBuildingTile(grid, 'warehouse');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+    } else {
+      // Beta 2.0 — resorts are hospitality employment destinations.
+      // Resort workers drive in; adjacent parking lots fill naturally.
+      dest = pickRandomBuildingTile(grid, 'resort');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     }
     if (!dest) return;
@@ -1806,6 +1806,7 @@ function isTouristDestination(t: Tile): boolean {
     case 'provincial_capital':
     case 'national_capital':
     case 'grand_stadium':
+    case 'resort':
       return true;
     default:
       return false;

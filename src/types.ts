@@ -505,7 +505,13 @@ export type Building =
   // same per-block placement system as the civic monuments. An elliptical
   // seating bowl with a green pitch, roof canopy, floodlights and an
   // entrance plaza. Single-instance per city. Metropolis milestone.
-  | 'grand_stadium';
+  | 'grand_stadium'
+  // Resort (Beta 2.0). Modular tourism industry — adjacent resort tiles
+  // cluster at render time into 6 visual tiers by size, from a single beach
+  // villa up to a grand water-park complex. Earns per-tile tourism revenue
+  // monthly; a coast/water-adjacency bonus rewards oceanfront placement.
+  // Employment destination for resident cars + tourist vehicles. Metro unlock.
+  | 'resort';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -590,6 +596,9 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // Grand Stadium (Beta 1.10) — 5×4 entertainment showpiece. Between
   // City Hall and Provincial Capital in cost. Per-block over 20 blocks.
   grand_stadium: 2000000,
+  // Resort (Beta 2.0) — per-tile sticker price. A single beach villa is
+  // $2K; a 16-tile water-park totals $32K — a real Metro-tier investment.
+  resort: 2000,
   // Toronto landmark Easter eggs (Alpha 4.24). Cost 0 because they're
   // not exposed in any place tool — only the bundled Toronto preset
   // stamps them. Listed here only so TS's exhaustive Building Record
@@ -665,6 +674,9 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // Grand Stadium (Beta 1.10) — events, grounds crew, lighting. Real
   // ongoing cost but the tourism + entertainment revenue offsets it.
   grand_stadium: 5000,
+  // Resort (Beta 2.0) — pool maintenance, landscaping, hospitality staff.
+  // Higher per-tile than warehouse because resorts are service-intensive.
+  resort: 150,
   // Toronto landmark Easter eggs (Alpha 4.24). Free upkeep — they're
   // cosmetic-only and not exposed via any place tool.
   cn_tower: 0,
@@ -729,6 +741,31 @@ export const FARM_DISCONNECTED_MULT = 0.55;
  *  diversifies between forestry and farming has smoother revenue. */
 export const PRODUCE_AMP = 0.25;
 export const PRODUCE_PERIOD_MONTHS = 12;
+
+/**
+ * Resort revenue parameters (Beta 2.0). Per-tile per-month tourism income
+ * that scales with cluster size (small beach villas earn a modest flat rate;
+ * a grand water-park earns significantly more from its natural economies of
+ * scale via the size multiplier in Economy.runMonth). A water/coast adjacency
+ * bonus rewards oceanfront / lakefront placement — each resort tile adjacent
+ * to a water tile multiplies that tile's revenue by RESORT_WATER_BONUS_MULT.
+ * Tuning targets: a 4-tile beachfront resort earns ~$400-$600/month; a
+ * 16-tile grand resort earns ~$2 500-$3 500/month.
+ */
+export const RESORT_BASE_REVENUE_PER_TILE = 70;
+/** Bonus multiplier on per-tile revenue when ANY of its 4 cardinal
+ *  neighbours is water terrain — beach / lakefront placement reward. */
+export const RESORT_WATER_BONUS_MULT = 1.6;
+/** Scale factor when the city is NOT connected to the outside world.
+ *  Tourists can't get here if there's no highway to the edge. */
+export const RESORT_DISCONNECTED_MULT = 0.25;
+/** Additional % per-tile revenue multiplier per extra tile above 1 in the
+ *  cluster (economies of scale: a full-service resort earns more per tile
+ *  than a lone beach villa). Capped at RESORT_SCALE_CAP tiles for the
+ *  multiplier computation so a 40-tile megacluster doesn't become a money
+ *  printer — but each extra tile does earn its own base revenue. */
+export const RESORT_SCALE_BONUS_PER_TILE = 0.04;
+export const RESORT_SCALE_CAP = 20;
 
 /**
  * Service coverage radii in tile units. Buildings within a building's radius
@@ -922,6 +959,10 @@ export const MILESTONES: readonly Milestone[] = [
       // suburban-commercial archetype; parking lots are the
       // infrastructure for it (and other downtown destinations).
       'place_big_box', 'place_warehouse', 'place_parking_lot',
+      // Resort (Beta 2.0) — tourism industry. Metro unlock because a real
+      // resort economy only makes sense in a city with enough population
+      // to justify the hospitality investment.
+      'place_resort',
       // Architect Mode upper-mid tier (Alpha 4.0) — premium water
       // features unlock once the city reads as a metropolis.
       'place_fountain', 'place_reflecting_pool', 'place_memorial_garden',
@@ -1081,6 +1122,11 @@ export type Tool =
   // Parking Lot (Beta 1.3). Industry group toolbar entry. Stands
   // alone OR clusters into an adjacent big_box's paved field.
   | 'place_parking_lot'
+  // Resort (Beta 2.0). Industry group toolbar entry. Modular — adjacent
+  // resort tiles cluster into 6 visual tiers from beach villa → water-park.
+  // Metro milestone unlock. Earns per-tile tourism revenue; water-adjacent
+  // clusters get a coast bonus.
+  | 'place_resort'
   | 'place_school'
   | 'place_hospital'
   | 'place_fire_station'
@@ -1223,6 +1269,8 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_national_capital', 'national_capital' as const],
   // Grand Stadium (Beta 1.10). Per-block flow.
   ['place_grand_stadium', 'grand_stadium' as const],
+  // Resort (Beta 2.0).
+  ['place_resort', 'resort' as const],
   // Cloverleaf interchange (Alpha 4.17). Per-block flow.
   ['place_cloverleaf', 'cloverleaf' as const]
 ]);

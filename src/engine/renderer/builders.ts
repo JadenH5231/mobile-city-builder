@@ -2248,6 +2248,31 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
       }
       continue;
     }
+    // Resort (Beta 2.0) — modular cluster renders as a tiered tropical
+    // resort complex. Six visual tiers by cluster size. Absorbs adjacent
+    // parking_lot tiles into the approach apron.
+    if (t.building === 'resort') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'resort', visited);
+      const parts = resortClusterParts(cluster, grid);
+      for (const c of cluster) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = c.x + dx, ny = c.y + dy;
+          const nt = grid.get(nx, ny);
+          if (nt && nt.building === 'parking_lot') {
+            visited.add(ny * grid.width + nx);
+          }
+        }
+      }
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Big Box (Beta 1.3) — modular cluster of adjacent big_box tiles
     // forms one strip-mall composition. The cluster builder also
     // absorbs adjacent parking_lot tiles into the same paved field.
@@ -4612,6 +4637,219 @@ function warehouseClusterParts(
     for (const x of lampXs) {
       out.push({ makeGeom: () => box(0.020, 0.22, 0.020), color: lampPole, dx: x, dy: 0.11, dz: lampZ });
       out.push({ makeGeom: () => box(0.06, 0.03, 0.06), color: lampHead, dx: x, dy: 0.23, dz: lampZ });
+    }
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Resort cluster builder (Beta 2.0)
+// ---------------------------------------------------------------------------
+/**
+ * Renders a connected resort cluster as a tiered tropical/Mediterranean
+ * complex. Six visual tiers by cluster size:
+ *   1 tile       → villa
+ *   2–3 tiles    → boutique resort
+ *   4–6 tiles    → resort with pool + cabanas
+ *   7–10 tiles   → large resort complex
+ *   11–15 tiles  → mega resort with water features
+ *   16+ tiles    → grand resort with arch entrance + water park
+ *
+ * Pattern mirrors warehouseClusterParts: per-tile exterior detection,
+ * body + roof + facade detail, then tier-specific add-ons.
+ */
+function resortClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+  _grid: Grid
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  const stucco    = 0xf5f0e6;
+  const roofTile  = 0xc4714b;
+  const poolWater = 0x4bc8da;
+  const poolCurb  = 0xdae8ec;
+  const patio     = 0xe2cfa0;
+  const palmFrond = 0x4da83a;
+  const palmTrunk = 0xa07a3d;
+  const awning    = 0xd96b3a;
+  const woodDoor  = 0x4a3520;
+  const windowGl  = 0x8ecde0;
+  const deckWood  = 0xc8a870;
+  const goldAccent = 0xd4af37;
+
+  const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  const size  = sorted.length;
+  const centerX = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
+  const centerZ = ((minY + maxY) / 2 + 0.5) * TILE_SIZE;
+
+  const clusterSet = new Set(sorted.map((c) => `${c.x},${c.y}`));
+  const inCluster  = (x: number, y: number) => clusterSet.has(`${x},${y}`);
+  const tier = size === 1 ? 1 : size <= 3 ? 2 : size <= 6 ? 3 : size <= 10 ? 4 : size <= 15 ? 5 : 6;
+
+  type TileMeta = { x: number; y: number; N: boolean; E: boolean; S: boolean; W: boolean };
+  const tileMeta: TileMeta[] = sorted.map((c) => ({
+    x: c.x, y: c.y,
+    N: !inCluster(c.x, c.y - 1),
+    E: !inCluster(c.x + 1, c.y),
+    S: !inCluster(c.x, c.y + 1),
+    W: !inCluster(c.x - 1, c.y),
+  }));
+
+  const bodyH = 0.22 + Math.min(tier - 1, 4) * 0.06;
+  const FRONT_IN = 0.26;
+  const SIDE_IN  = 0.05;
+  const BACK_IN  = 0.05;
+
+  const ext = (m: TileMeta) => {
+    const iN = m.N ? BACK_IN  : 0;
+    const iS = m.S ? FRONT_IN : 0;
+    const iE = m.E ? SIDE_IN  : 0;
+    const iW = m.W ? SIDE_IN  : 0;
+    const w  = TILE_SIZE - iE - iW;
+    const d  = TILE_SIZE - iN - iS;
+    const cx = (m.x + 0.5) * TILE_SIZE + (iW - iE) / 2;
+    const cz = (m.y + 0.5) * TILE_SIZE + (iN - iS) / 2;
+    return { w, d, cx, cz, xW: cx - w / 2, xE: cx + w / 2, zN: cz - d / 2, zS: cz + d / 2 };
+  };
+
+  // 1. Sandy patio ground pad
+  for (const c of sorted) {
+    const cx = (c.x + 0.5) * TILE_SIZE;
+    const cz = (c.y + 0.5) * TILE_SIZE;
+    out.push({ makeGeom: () => box(1.02, 0.015, 1.02), color: patio, dx: cx, dy: 0.0075, dz: cz });
+  }
+
+  // 2. Stucco body per tile
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = ext(m);
+    if (w <= 0 || d <= 0) continue;
+    out.push({ makeGeom: () => box(w, bodyH, d), color: stucco, dx: cx, dy: bodyH / 2 + 0.02, dz: cz });
+  }
+
+  // 3. Terracotta roof slab with small overhang on exterior edges
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = ext(m);
+    if (w <= 0 || d <= 0) continue;
+    const ovE = m.E ? 0.04 : 0; const ovW = m.W ? 0.04 : 0;
+    const ovN = m.N ? 0.04 : 0; const ovS = m.S ? 0.04 : 0;
+    out.push({
+      makeGeom: () => box(w + ovE + ovW, 0.04, d + ovN + ovS),
+      color: roofTile,
+      dx: cx + (ovE - ovW) / 2, dy: bodyH + 0.04, dz: cz + (ovS - ovN) / 2
+    });
+  }
+
+  // 4. S-exterior lobby facade: wide window + door + awning
+  for (const m of tileMeta) {
+    if (!m.S) continue;
+    const { w, cx, zS } = ext(m);
+    out.push({ makeGeom: () => box(w * 0.65, bodyH * 0.45, 0.025), color: windowGl, dx: cx, dy: bodyH * 0.45, dz: zS - 0.012 });
+    out.push({ makeGeom: () => box(0.10, bodyH * 0.55, 0.03), color: woodDoor, dx: cx, dy: bodyH * 0.275, dz: zS - 0.015 });
+    out.push({ makeGeom: () => box(0.22, 0.025, 0.14), color: awning, dx: cx, dy: bodyH * 0.58, dz: zS + 0.05 });
+  }
+
+  // 5. Gold trim accent stripe near roof on all exterior faces
+  for (const m of tileMeta) {
+    const { w, d, cx, cz } = ext(m);
+    if (m.S) out.push({ makeGeom: () => box(w, 0.018, 0.015), color: goldAccent, dx: cx, dy: bodyH + 0.01, dz: cz + d / 2 - 0.008 });
+    if (m.N) out.push({ makeGeom: () => box(w, 0.018, 0.015), color: goldAccent, dx: cx, dy: bodyH + 0.01, dz: cz - d / 2 + 0.008 });
+    if (m.E) out.push({ makeGeom: () => box(0.015, 0.018, d), color: goldAccent, dx: cx + w / 2 - 0.008, dy: bodyH + 0.01, dz: cz });
+    if (m.W) out.push({ makeGeom: () => box(0.015, 0.018, d), color: goldAccent, dx: cx - w / 2 + 0.008, dy: bodyH + 0.01, dz: cz });
+  }
+
+  // 6. Pool (tier ≥ 2) — centred on the tile closest to cluster centre
+  if (tier >= 2) {
+    const poolTile = sorted.reduce((best, c) => {
+      const d1 = Math.abs((c.x + 0.5) * TILE_SIZE - centerX) + Math.abs((c.y + 0.5) * TILE_SIZE - centerZ);
+      const d2 = Math.abs((best.x + 0.5) * TILE_SIZE - centerX) + Math.abs((best.y + 0.5) * TILE_SIZE - centerZ);
+      return d1 < d2 ? c : best;
+    });
+    const px = (poolTile.x + 0.5) * TILE_SIZE;
+    const pz = (poolTile.y + 0.5) * TILE_SIZE;
+    const pw = Math.min(0.52 + (tier - 2) * 0.08, 0.78);
+    const pd = Math.min(0.34 + (tier - 2) * 0.06, 0.58);
+    out.push({ makeGeom: () => box(pw + 0.06, 0.06, pd + 0.06), color: poolCurb, dx: px, dy: 0.03, dz: pz });
+    out.push({ makeGeom: () => box(pw, 0.04, pd), color: poolWater, dx: px, dy: 0.052, dz: pz });
+    out.push({ makeGeom: () => box(pw + 0.16, 0.012, pd + 0.16), color: deckWood, dx: px, dy: 0.016, dz: pz });
+  }
+
+  // 7. Palm trees on exterior corner tiles (more palms per tier)
+  const cornerTiles = tileMeta.filter((m) =>
+    (m.N ? 1 : 0) + (m.E ? 1 : 0) + (m.S ? 1 : 0) + (m.W ? 1 : 0) >= 2
+  );
+  const maxPalms = Math.min(cornerTiles.length, 2 + tier);
+  for (let i = 0; i < maxPalms; i++) {
+    const m = cornerTiles[i % cornerTiles.length]!;
+    const h = ((m.x * 374761393) ^ (m.y * 668265263)) >>> 0;
+    const px = (m.x + 0.5) * TILE_SIZE + ((h & 0x3f) / 63 - 0.5) * 0.28;
+    const pz = (m.y + 0.5) * TILE_SIZE + (((h >> 7) & 0x3f) / 63 - 0.5) * 0.28;
+    const trH = 0.24 + ((h >> 14) & 0xf) / 15 * 0.14;
+    out.push({ makeGeom: () => cyl(0.026, trH, 6), color: palmTrunk, dx: px, dy: trH / 2 + 0.02, dz: pz });
+    for (let fi = 0; fi < 3; fi++) {
+      const angle = (fi / 3) * Math.PI * 2 + ((h >> (fi * 4)) & 0xff) * 0.4;
+      out.push({
+        makeGeom: () => box(0.15, 0.03, 0.10),
+        color: palmFrond,
+        dx: px + Math.sin(angle) * 0.11,
+        dy: trH + 0.025,
+        dz: pz + Math.cos(angle) * 0.11
+      });
+    }
+  }
+
+  // 8. Tier 3+: shade cabanas on some S-exterior tiles
+  if (tier >= 3) {
+    for (const m of tileMeta) {
+      if (!m.S) continue;
+      const h = ((m.x * 374761393) ^ (m.y * 668265263)) >>> 0;
+      if ((h & 1) === 0) continue;
+      const { cx, zS } = ext(m);
+      const cax = cx + (((h >> 4) & 0x3) - 1) * 0.20;
+      const caz = zS + 0.16;
+      out.push({ makeGeom: () => box(0.26, 0.012, 0.20), color: awning, dx: cax, dy: bodyH + 0.09, dz: caz });
+      out.push({ makeGeom: () => box(0.025, bodyH + 0.09, 0.025), color: palmTrunk, dx: cax - 0.11, dy: (bodyH + 0.09) / 2, dz: caz - 0.08 });
+      out.push({ makeGeom: () => box(0.025, bodyH + 0.09, 0.025), color: palmTrunk, dx: cax + 0.11, dy: (bodyH + 0.09) / 2, dz: caz - 0.08 });
+    }
+  }
+
+  // 9. Tier 4+: outdoor bar terrace on the middle S-exterior tile
+  if (tier >= 4) {
+    const sExt = tileMeta.filter((m) => m.S).sort((a, b) => a.x - b.x);
+    if (sExt.length > 0) {
+      const mid = sExt[Math.floor(sExt.length / 2)]!;
+      const { cx, zS } = ext(mid);
+      out.push({ makeGeom: () => box(0.58, 0.012, 0.28), color: deckWood, dx: cx, dy: 0.018, dz: zS + 0.14 });
+      out.push({ makeGeom: () => box(0.30, 0.012, 0.30), color: awning, dx: cx, dy: 0.22, dz: zS + 0.14 });
+      out.push({ makeGeom: () => cyl(0.012, 0.22, 6), color: stucco, dx: cx, dy: 0.11, dz: zS + 0.14 });
+    }
+  }
+
+  // 10. Tier 5+: slide tower + second pool
+  if (tier >= 5) {
+    out.push({ makeGeom: () => box(0.10, 0.48, 0.10), color: stucco, dx: centerX + 0.32, dy: 0.24, dz: centerZ });
+    out.push({ makeGeom: () => box(0.16, 0.022, 0.32), color: poolWater, dx: centerX + 0.20, dy: 0.25, dz: centerZ });
+    out.push({ makeGeom: () => box(0.54, 0.04, 0.40), color: poolWater, dx: centerX - 0.38, dy: 0.03, dz: centerZ + 0.20 });
+    out.push({ makeGeom: () => box(0.60, 0.06, 0.46), color: poolCurb, dx: centerX - 0.38, dy: 0.015, dz: centerZ + 0.20 });
+  }
+
+  // 11. Tier 6: grand entrance arch + gold finials
+  if (tier >= 6) {
+    const sExt = tileMeta.filter((m) => m.S);
+    if (sExt.length > 0) {
+      const mid = sExt[Math.floor(sExt.length / 2)]!;
+      const { cx, zS } = ext(mid);
+      const az = zS + 0.06;
+      out.push({ makeGeom: () => box(0.06, 0.44, 0.06), color: stucco, dx: cx - 0.19, dy: 0.22, dz: az });
+      out.push({ makeGeom: () => box(0.06, 0.44, 0.06), color: stucco, dx: cx + 0.19, dy: 0.22, dz: az });
+      out.push({ makeGeom: () => box(0.44, 0.06, 0.06), color: roofTile, dx: cx, dy: 0.44, dz: az });
+      out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx - 0.19, dy: 0.51, dz: az });
+      out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx + 0.19, dy: 0.51, dz: az });
     }
   }
 

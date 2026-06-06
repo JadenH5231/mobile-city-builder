@@ -440,6 +440,15 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       { kind: 'tool', tool: 'place_parking_lot', label: 'Parking', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3 4h18v16H3z M7 4v16 M13 4v16 M19 4v16 M3 12h18"
               stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+      </svg>` },
+      // Resort (Beta 2.0). Pool + palm silhouette — the universal resort cue.
+      { kind: 'tool', tool: 'place_resort', label: 'Resort', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="15" rx="7" ry="4"
+                 stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M12 4 Q9 7 8 11 M12 4 Q15 7 16 11"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        <circle cx="12" cy="4" r="1.5" fill="currentColor"/>
+        <path d="M5 19h14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
       </svg>` }
     ]
   },

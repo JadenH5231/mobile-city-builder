@@ -362,6 +362,46 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.13 (Resorts — modular industry, 6 visual tiers)
+
+User batch request: "Resorts — modular industry, ≥6 size varieties."
+
+New `resort` building kind using the established `big_box`/`warehouse` cluster
+pattern. Adjacent resort tiles flood-fill at render time into a single tiered
+tropical/Mediterranean complex. Six visual tiers by cluster size: 1 tile
+(villa) → 2–3 (boutique) → 4–6 (resort+pool+cabanas) → 7–10 (large complex
++terrace) → 11–15 (mega, +slide tower +second pool) → 16+ (grand, +arch
+entrance with gold finials).
+
+**Revenue model:** per-tile base $70/mo × scale multiplier (`1 + min(size-1,
+20) × 0.04`) × water-adjacency bonus (×1.6 if any tile borders water) ×
+connection multiplier (×0.25 if disconnected). Added to `tourismRevenue`
+alongside landmarks; tracked separately as `Economy.lastResortRevenue`.
+
+**Key files changed:**
+- `types.ts` — Building/Tool unions, BUILDING_COSTS ($2K/tile), BUILDING_UPKEEP
+  ($150/tile/mo), PLACE_TOOL_TO_BUILDING, Metro-unlock, revenue constants
+- `Council.ts` — `resort: number` in FactionStances interface + all 10 faction rows
+- `FactionDetailPanel.ts` — STANCE_LABEL entry
+- `Game.ts` — tool label map, toolToKey map in refreshToolbarBans, terrain gate
+- `Toolbar.ts` — Resort entry in Industry group (pool+palm SVG icon)
+- `Population.ts` — `iJobs += 2` per resort tile
+- `Economy.ts` — cluster-BFS revenue calculation, `lastResortRevenue` field
+- `Vehicles.ts` — 4% destination roll + `isTouristDestination` case
+- `builders.ts` — `resortClusterParts()` + dispatch block in `buildCityBuildingsMesh`
+
+SW cache `v47` → `v48`. `APP_VERSION` 1.9.12 → 1.9.13 (**silent patch**).
+
+**⏭ Batch not finished — 2 features still queued:** Hotels/Motels (1.9.14,
+dimension-based archetypes: 1×1=airbnb, 1×N=motel, M×N=hotel) and Subways
+(1.9.15, real transit lines with drawable tracks, stations, visible trains),
+then a **consolidated Beta 2.0.0 What's New** popup covering the full batch
+(Grand Stadium + 1×1 luxury homes + milestone-gated architecture + Resorts +
+Hotels & Motels + Subways). Read `docs/HANDOFF_remaining_features.md` before
+starting Hotels. Continue numbering at 1.9.14.
+
+---
+
 ## Status: Beta 1.9.9–1.9.12 (Playtest fixes on the new-features batch)
 
 Five fixes from playtest feedback on the 1.9.5–1.9.8 batch, each a silent

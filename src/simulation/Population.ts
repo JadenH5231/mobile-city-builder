@@ -134,6 +134,9 @@ export class Population {
       if (t.building === 'warehouse') iJobs += 1;
       else if (t.building === 'farm') iJobs += 1;
       else if (t.building === 'forestry') iJobs += 1;
+      // Resort (Beta 2.0) — hospitality + service jobs (2 per tile because
+      // resorts are labour-intensive: front desk, housekeeping, food & bev).
+      else if (t.building === 'resort') iJobs += 2;
       if (t.zone === 'none' || t.road) continue;
       // Luxury tiles count even at density 0 — they're permanent placement
       // (not demand-driven growth), so capacity is fixed per tile.

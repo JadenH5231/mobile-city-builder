@@ -14,6 +14,11 @@ import {
   LUXURY_TAX_BONUS,
   MIXED_COMMERCIAL_JOBS,
   RESIDENT_CAPACITY,
+  RESORT_BASE_REVENUE_PER_TILE,
+  RESORT_DISCONNECTED_MULT,
+  RESORT_SCALE_BONUS_PER_TILE,
+  RESORT_SCALE_CAP,
+  RESORT_WATER_BONUS_MULT,
   ROAD_TIER,
   type Building,
   type Zone
@@ -109,6 +114,8 @@ export class Economy {
   lastTourismRevenue = 0;
   /** Lifetime tourism revenue earned. Drives the tourism achievement. */
   lifetimeTourismRevenue = 0;
+  /** Last completed month's resort tourism revenue (Beta 2.0). */
+  lastResortRevenue = 0;
   /** Last completed month's bond debt service (Alpha 2.18). Pull-out line
    *  in the budget panel so the player sees what their borrowing costs. */
   lastBondPayment = 0;
@@ -262,6 +269,50 @@ export class Economy {
       tourismRevenue += LANDMARK_TOURISM_BASE[kind] +
         LANDMARK_TOURISM_PER_RESIDENT[kind] * population.totalResidents;
     }
+    // Resort tourism (Beta 2.0): connected clusters earn per-tile base revenue
+    // boosted by cluster size (economies of scale) and water adjacency
+    // (coastal/waterfront plots are premium). Disconnected clusters earn a
+    // heavy discount — a resort nobody can reach still draws visitors, just far fewer.
+    let resortRevenue = 0;
+    {
+      const visitedResorts = new Set<number>();
+      for (const t of grid.iter()) {
+        if (t.building !== 'resort') continue;
+        const startKey = t.y * grid.width + t.x;
+        if (visitedResorts.has(startKey)) continue;
+        const cluster: Array<{x: number; y: number}> = [];
+        const queue: Array<{x: number; y: number}> = [{x: t.x, y: t.y}];
+        visitedResorts.add(startKey);
+        while (queue.length > 0) {
+          const curr = queue.shift()!;
+          cluster.push(curr);
+          for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]] as const) {
+            const nx = curr.x + dx, ny = curr.y + dy;
+            const nk = ny * grid.width + nx;
+            if (visitedResorts.has(nk)) continue;
+            const nt = grid.get(nx, ny);
+            if (!nt || nt.building !== 'resort') continue;
+            visitedResorts.add(nk);
+            queue.push({x: nx, y: ny});
+          }
+        }
+        const size = cluster.length;
+        const scaleMult = 1 + Math.min(size - 1, RESORT_SCALE_CAP) * RESORT_SCALE_BONUS_PER_TILE;
+        const hasWater = cluster.some(({x, y}) => {
+          for (const [dx2, dy2] of [[0,1],[0,-1],[1,0],[-1,0]] as const) {
+            const nt = grid.get(x + dx2, y + dy2);
+            if (nt && nt.terrain === 'water') return true;
+          }
+          return false;
+        });
+        const hasRoad = cluster.some(({x, y}) => grid.hasRoadAdjacent(x, y));
+        const connMult = hasRoad ? 1.0 : RESORT_DISCONNECTED_MULT;
+        const waterBonus = hasWater ? RESORT_WATER_BONUS_MULT : 1.0;
+        resortRevenue += size * RESORT_BASE_REVENUE_PER_TILE * scaleMult * waterBonus * connMult;
+      }
+    }
+    this.lastResortRevenue = Math.round(resortRevenue);
+    tourismRevenue += resortRevenue;
     this.lastTourismRevenue = Math.round(tourismRevenue);
     this.lifetimeTourismRevenue += this.lastTourismRevenue;
 

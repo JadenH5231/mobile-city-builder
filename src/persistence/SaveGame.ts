@@ -90,8 +90,6 @@ export interface TileSnapshot {
   building: Building;
   /** Walking-path bit (Alpha 1.6). Schema 5+. */
   path?: boolean;
-  /** Subway track bit (Beta 1.9.15). Pre-1.9.15 saves load with false. */
-  subwayTrack?: boolean;
   /** Upper-layer Bridge-Mode road bits (Alpha 2.12 / schema 12+). */
   bridgeRoad?: boolean;
   bridgeRoadType?: RoadType;
@@ -461,7 +459,6 @@ export function serialize(
       developedAt: t.developedAt,
       building: t.building,
       path: t.path,
-      subwayTrack: t.subwayTrack,
       bridgeRoad: t.bridgeRoad,
       bridgeRoadType: t.bridgeRoadType,
       bridgeHighwayDir: t.bridgeHighwayDir,
@@ -637,8 +634,6 @@ export function applySave(
     t.path = snap.path ?? false;
     // Defensive: a path on a road tile would violate the invariant.
     if (t.road) t.path = false;
-    // Subway track bit (Beta 1.9.15). Pre-1.9.15 saves load with false.
-    t.subwayTrack = snap.subwayTrack ?? false;
     // Bridge Mode upper-layer fields (schema 12+).
     t.bridgeRoad = snap.bridgeRoad ?? false;
     t.bridgeRoadType = snap.bridgeRoadType ?? 'local';

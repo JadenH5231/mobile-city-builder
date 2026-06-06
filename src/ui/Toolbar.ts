@@ -513,13 +513,6 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
         <path d="M9 9l3 6 3-6 M9 18v3 M15 18v3"
               stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>` },
-      { kind: 'tool', tool: 'draw_subway', label: 'Track', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 20 L20 4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="4" cy="20" r="2.5" fill="currentColor"/>
-        <circle cx="20" cy="4" r="2.5" fill="currentColor"/>
-        <line x1="7" y1="17" x2="9" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
-        <line x1="12" y1="12" x2="14" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
-      </svg>` }
     ]
   },
   // Landmarks (Alpha 2.17). Grouped popover so the toolbar stays scannable.

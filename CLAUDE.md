@@ -363,13 +363,25 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
-## Status: Beta 2.0.0 (Batch complete — consolidated What's New)
+## Status: Beta 2.0.1 (Subways removed, hotel tower rework, resort amenity system)
 
-All six features from the batch (Grand Stadium, 1×1 luxury homes, milestone-gated architecture, Resorts, Hotels & Motels, Subways) shipped as silent patches 1.9.6–1.9.15 and are now consolidated under MINOR bump 2.0.0 with a `WHATS_NEW['2.0']` entry for returning players. SW cache `v51`. **No further batch items queued.**
+Three post-ship polish fixes on 2.0.0:
+
+1. **Subways removed** — the entire subway system (Trains.ts, `draw_subway` tool, `subwayTrack` Tile bit, all SaveGame/faction/toolbar wiring) removed across 12 files. Old saves load cleanly. `WHATS_NEW['2.0']` subway bullet also removed.
+2. **Hotel tower** — `hotelClusterParts` M×N block archetype replaced with per-floor window bands (alternating warm golden / cool blue panes), spandrel bands, column reveals, juliet balconies, penthouse cap, gold sign, lobby glass + porte-cochère, flag poles. Number of floors scales with cluster depth.
+3. **Resort amenity system** — `resortClusterParts` rewritten: lodge body stays constant height; each size threshold adds a named amenity (pool / tiki bar / tennis court / spa pavilion / beach loungers / outdoor cinema / volleyball court / jacuzzi / waterslide tower / grand entrance arch). Also fixed "Airbnb" brand-name reference in `WHATS_NEW['2.0']` → "vacation rental cottage".
+
+SW cache `v51` → `v52`. `APP_VERSION` `2.0.0` → `2.0.1` (patch = silent). **No further items queued.**
 
 ---
 
-## Status: Beta 1.9.15 (Subways — draw_subway + Trains.ts + visible metro cars)
+## Status: Beta 2.0.0 (Batch complete — consolidated What's New)
+
+Five features from the batch (Grand Stadium, 1×1 luxury homes, milestone-gated architecture, Resorts, Hotels & Motels) shipped as silent patches 1.9.6–1.9.14 and are now consolidated under MINOR bump 2.0.0 with a `WHATS_NEW['2.0']` entry for returning players. Subways also shipped (1.9.15) but were removed in 2.0.1. SW cache `v51`.
+
+---
+
+## Status: Beta 1.9.15 (Subways — draw_subway + Trains.ts + visible metro cars) [REMOVED IN 2.0.1]
 
 New `draw_subway` stroke tool (Capital milestone, $200/tile) lets players paint `subwayTrack`
 tiles connecting placed `subway_entrance` stations. `src/simulation/Trains.ts`: BFS-floods

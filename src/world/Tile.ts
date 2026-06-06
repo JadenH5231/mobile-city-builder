@@ -78,10 +78,6 @@ export class Tile {
    * which case painting clears the zone first. Never settable on a road tile.
    */
   path = false;
-  /** Subway track bit (Beta 1.9.15). Drawn by the `draw_subway` tool; connects
-   *  subway_entrance stations into a line. Trains.ts finds connected components
-   *  of subwayTrack tiles and creates a visible train per line. */
-  subwayTrack = false;
   zone: Zone = 'none';
   /**
    * Player-set density cap (1..3) — the upper bound this tile is *permitted*

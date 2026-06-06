@@ -705,9 +705,6 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   runway: 0
 };
 
-/** Per-tile cost for drawing a subway track segment (Beta 1.9.15). */
-export const SUBWAY_TRACK_COST = 200;
-
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
  *  within this radius of an entrance get a strong probability of
  *  converting a car spawn into a walker — modelling the abstraction of
@@ -1018,7 +1015,7 @@ export const MILESTONES: readonly Milestone[] = [
     subtitle: 'Region-defining city',
     popThreshold: 5000,
     unlocks: [
-      'place_subway_entrance', 'draw_subway',
+      'place_subway_entrance',
       // Capital tier monumental architecture (Alpha 4.0) — the most
       // expensive single-tile placements in the game. Capitals can
       // build clock towers and triumphal arches; nobody else can.
@@ -1178,7 +1175,6 @@ export type Tool =
   | 'place_observatory'
   | 'place_ferry_dock'
   | 'place_subway_entrance'
-  | 'draw_subway'
   | 'paint_district'
   | 'erase_district'
   // Skyscrapers (Alpha 3.1.2). 2×2 footprint, 12-month build with

@@ -4681,18 +4681,30 @@ function resortClusterParts(
   if (cluster.length === 0) return [];
   const out: CityBuildingPart[] = [];
 
-  const stucco    = 0xf5f0e6;
-  const roofTile  = 0xc4714b;
-  const poolWater = 0x4bc8da;
-  const poolCurb  = 0xdae8ec;
-  const patio     = 0xe2cfa0;
-  const palmFrond = 0x4da83a;
-  const palmTrunk = 0xa07a3d;
-  const awning    = 0xd96b3a;
-  const woodDoor  = 0x4a3520;
-  const windowGl  = 0x8ecde0;
-  const deckWood  = 0xc8a870;
+  // --- Palette ---
+  const stucco     = 0xf5f0e6;
+  const roofTile   = 0xc4714b;
+  const patio      = 0xe2cfa0;
+  const palmFrond  = 0x4da83a;
+  const palmTrunk  = 0xa07a3d;
+  const awning     = 0xd96b3a;
+  const woodDoor   = 0x4a3520;
+  const windowGl   = 0x8ecde0;
   const goldAccent = 0xd4af37;
+  const deckWood   = 0xc8a870;
+  const poolWater  = 0x4bc8da;
+  const poolCurb   = 0xdae8ec;
+  const tikiPole   = 0x6b3f1f;
+  const tikiThatch = 0xd4a84a;
+  const courtGreen = 0x3a8a3a;
+  const courtLine  = 0xf0f0f0;
+  const spaStone   = 0xcec8b8;
+  const loungeFab  = 0xf5e8c8;
+  const umbrellaR  = 0xd43a2a;
+  const umbrellaB  = 0x3a6aaa;
+  const hotWater   = 0xa8d8e8;
+  const sandPit    = 0xe8d890;
+  const slideBlue  = 0x4488cc;
 
   const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
   const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
@@ -4700,12 +4712,17 @@ function resortClusterParts(
   const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
   const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
   const size  = sorted.length;
-  const centerX = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
-  const centerZ = ((minY + maxY) / 2 + 0.5) * TILE_SIZE;
+
+  // Cluster geometry reference points
+  const edgeN  = minY * TILE_SIZE;
+  const edgeS  = (maxY + 1) * TILE_SIZE;
+  const edgeE  = (maxX + 1) * TILE_SIZE;
+  const edgeW  = minX * TILE_SIZE;
+  const centerX = (edgeW + edgeE) / 2;
+  const centerZ = (edgeN + edgeS) / 2;
 
   const clusterSet = new Set(sorted.map((c) => `${c.x},${c.y}`));
   const inCluster  = (x: number, y: number) => clusterSet.has(`${x},${y}`);
-  const tier = size === 1 ? 1 : size <= 3 ? 2 : size <= 6 ? 3 : size <= 10 ? 4 : size <= 15 ? 5 : 6;
 
   type TileMeta = { x: number; y: number; N: boolean; E: boolean; S: boolean; W: boolean };
   const tileMeta: TileMeta[] = sorted.map((c) => ({
@@ -4716,8 +4733,9 @@ function resortClusterParts(
     W: !inCluster(c.x - 1, c.y),
   }));
 
-  const bodyH = 0.22 + Math.min(tier - 1, 4) * 0.06;
-  const FRONT_IN = 0.26;
+  // Lodge body height — stays modest regardless of size (a resort lodge, not a skyscraper)
+  const bodyH  = 0.26;
+  const FRONT_IN = 0.24;
   const SIDE_IN  = 0.05;
   const BACK_IN  = 0.05;
 
@@ -4733,138 +4751,277 @@ function resortClusterParts(
     return { w, d, cx, cz, xW: cx - w / 2, xE: cx + w / 2, zN: cz - d / 2, zS: cz + d / 2 };
   };
 
-  // 1. Sandy patio ground pad
+  // --- Helper: palm tree at (px, pz) with unique hash for variety ---
+  const addPalm = (px: number, pz: number, hash: number) => {
+    const trH = 0.22 + ((hash >> 14) & 0xf) / 15 * 0.12;
+    out.push({ makeGeom: () => cyl(0.024, trH, 6), color: palmTrunk, dx: px, dy: trH / 2 + 0.02, dz: pz });
+    for (let fi = 0; fi < 3; fi++) {
+      const angle = (fi / 3) * Math.PI * 2 + ((hash >> (fi * 4)) & 0xff) * 0.4;
+      out.push({ makeGeom: () => box(0.14, 0.025, 0.09), color: palmFrond,
+        dx: px + Math.sin(angle) * 0.10, dy: trH + 0.020, dz: pz + Math.cos(angle) * 0.10 });
+    }
+  };
+
+  // ---- MAIN LODGE BUILDING (always present) --------------------------------
+  // Sandy patio ground pad per tile
   for (const c of sorted) {
     const cx = (c.x + 0.5) * TILE_SIZE;
     const cz = (c.y + 0.5) * TILE_SIZE;
     out.push({ makeGeom: () => box(1.02, 0.015, 1.02), color: patio, dx: cx, dy: 0.0075, dz: cz });
   }
-
-  // 2. Stucco body per tile
+  // Stucco body per tile
   for (const m of tileMeta) {
     const { w, d, cx, cz } = ext(m);
     if (w <= 0 || d <= 0) continue;
-    out.push({ makeGeom: () => box(w, bodyH, d), color: stucco, dx: cx, dy: bodyH / 2 + 0.02, dz: cz });
+    out.push({ makeGeom: () => box(w, bodyH, d), color: stucco, dx: cx, dy: bodyH / 2 + 0.018, dz: cz });
   }
-
-  // 3. Terracotta roof slab with small overhang on exterior edges
+  // Terracotta roof with exterior overhang
   for (const m of tileMeta) {
     const { w, d, cx, cz } = ext(m);
     if (w <= 0 || d <= 0) continue;
     const ovE = m.E ? 0.04 : 0; const ovW = m.W ? 0.04 : 0;
     const ovN = m.N ? 0.04 : 0; const ovS = m.S ? 0.04 : 0;
-    out.push({
-      makeGeom: () => box(w + ovE + ovW, 0.04, d + ovN + ovS),
-      color: roofTile,
-      dx: cx + (ovE - ovW) / 2, dy: bodyH + 0.04, dz: cz + (ovS - ovN) / 2
-    });
+    out.push({ makeGeom: () => box(w + ovE + ovW, 0.038, d + ovN + ovS),
+      color: roofTile, dx: cx + (ovE - ovW) / 2, dy: bodyH + 0.037, dz: cz + (ovS - ovN) / 2 });
   }
-
-  // 4. S-exterior lobby facade: wide window + door + awning
+  // S-exterior: lobby window + door + awning
   for (const m of tileMeta) {
     if (!m.S) continue;
     const { w, cx, zS } = ext(m);
-    out.push({ makeGeom: () => box(w * 0.65, bodyH * 0.45, 0.025), color: windowGl, dx: cx, dy: bodyH * 0.45, dz: zS - 0.012 });
-    out.push({ makeGeom: () => box(0.10, bodyH * 0.55, 0.03), color: woodDoor, dx: cx, dy: bodyH * 0.275, dz: zS - 0.015 });
-    out.push({ makeGeom: () => box(0.22, 0.025, 0.14), color: awning, dx: cx, dy: bodyH * 0.58, dz: zS + 0.05 });
+    out.push({ makeGeom: () => box(w * 0.62, bodyH * 0.42, 0.022), color: windowGl, dx: cx, dy: bodyH * 0.44, dz: zS - 0.011 });
+    out.push({ makeGeom: () => box(0.09, bodyH * 0.52, 0.028), color: woodDoor, dx: cx, dy: bodyH * 0.26, dz: zS - 0.014 });
+    out.push({ makeGeom: () => box(0.20, 0.022, 0.13), color: awning, dx: cx, dy: bodyH * 0.57, dz: zS + 0.045 });
   }
-
-  // 5. Gold trim accent stripe near roof on all exterior faces
+  // Gold trim on all exterior faces
   for (const m of tileMeta) {
     const { w, d, cx, cz } = ext(m);
-    if (m.S) out.push({ makeGeom: () => box(w, 0.018, 0.015), color: goldAccent, dx: cx, dy: bodyH + 0.01, dz: cz + d / 2 - 0.008 });
-    if (m.N) out.push({ makeGeom: () => box(w, 0.018, 0.015), color: goldAccent, dx: cx, dy: bodyH + 0.01, dz: cz - d / 2 + 0.008 });
-    if (m.E) out.push({ makeGeom: () => box(0.015, 0.018, d), color: goldAccent, dx: cx + w / 2 - 0.008, dy: bodyH + 0.01, dz: cz });
-    if (m.W) out.push({ makeGeom: () => box(0.015, 0.018, d), color: goldAccent, dx: cx - w / 2 + 0.008, dy: bodyH + 0.01, dz: cz });
+    if (m.S) out.push({ makeGeom: () => box(w, 0.016, 0.013), color: goldAccent, dx: cx, dy: bodyH + 0.008, dz: cz + d / 2 - 0.007 });
+    if (m.N) out.push({ makeGeom: () => box(w, 0.016, 0.013), color: goldAccent, dx: cx, dy: bodyH + 0.008, dz: cz - d / 2 + 0.007 });
+    if (m.E) out.push({ makeGeom: () => box(0.013, 0.016, d), color: goldAccent, dx: cx + w / 2 - 0.007, dy: bodyH + 0.008, dz: cz });
+    if (m.W) out.push({ makeGeom: () => box(0.013, 0.016, d), color: goldAccent, dx: cx - w / 2 + 0.007, dy: bodyH + 0.008, dz: cz });
   }
-
-  // 6. Pool (tier ≥ 2) — centred on the tile closest to cluster centre
-  if (tier >= 2) {
-    const poolTile = sorted.reduce((best, c) => {
-      const d1 = Math.abs((c.x + 0.5) * TILE_SIZE - centerX) + Math.abs((c.y + 0.5) * TILE_SIZE - centerZ);
-      const d2 = Math.abs((best.x + 0.5) * TILE_SIZE - centerX) + Math.abs((best.y + 0.5) * TILE_SIZE - centerZ);
-      return d1 < d2 ? c : best;
-    });
-    const px = (poolTile.x + 0.5) * TILE_SIZE;
-    const pz = (poolTile.y + 0.5) * TILE_SIZE;
-    const pw = Math.min(0.52 + (tier - 2) * 0.08, 0.78);
-    const pd = Math.min(0.34 + (tier - 2) * 0.06, 0.58);
-    out.push({ makeGeom: () => box(pw + 0.06, 0.06, pd + 0.06), color: poolCurb, dx: px, dy: 0.03, dz: pz });
-    out.push({ makeGeom: () => box(pw, 0.04, pd), color: poolWater, dx: px, dy: 0.052, dz: pz });
-    out.push({ makeGeom: () => box(pw + 0.16, 0.012, pd + 0.16), color: deckWood, dx: px, dy: 0.016, dz: pz });
-  }
-
-  // 7. Palm trees on exterior corner tiles (more palms per tier)
+  // Palms on all exterior corner tiles
   const cornerTiles = tileMeta.filter((m) =>
     (m.N ? 1 : 0) + (m.E ? 1 : 0) + (m.S ? 1 : 0) + (m.W ? 1 : 0) >= 2
   );
-  const maxPalms = Math.min(cornerTiles.length, 2 + tier);
+  const maxPalms = Math.min(cornerTiles.length, 2 + Math.floor(size / 2));
   for (let i = 0; i < maxPalms; i++) {
     const m = cornerTiles[i % cornerTiles.length]!;
     const h = ((m.x * 374761393) ^ (m.y * 668265263)) >>> 0;
-    const px = (m.x + 0.5) * TILE_SIZE + ((h & 0x3f) / 63 - 0.5) * 0.28;
-    const pz = (m.y + 0.5) * TILE_SIZE + (((h >> 7) & 0x3f) / 63 - 0.5) * 0.28;
-    const trH = 0.24 + ((h >> 14) & 0xf) / 15 * 0.14;
-    out.push({ makeGeom: () => cyl(0.026, trH, 6), color: palmTrunk, dx: px, dy: trH / 2 + 0.02, dz: pz });
-    for (let fi = 0; fi < 3; fi++) {
-      const angle = (fi / 3) * Math.PI * 2 + ((h >> (fi * 4)) & 0xff) * 0.4;
-      out.push({
-        makeGeom: () => box(0.15, 0.03, 0.10),
-        color: palmFrond,
-        dx: px + Math.sin(angle) * 0.11,
-        dy: trH + 0.025,
-        dz: pz + Math.cos(angle) * 0.11
-      });
+    const px = (m.x + 0.5) * TILE_SIZE + ((h & 0x3f) / 63 - 0.5) * 0.26;
+    const pz = (m.y + 0.5) * TILE_SIZE + (((h >> 7) & 0x3f) / 63 - 0.5) * 0.26;
+    addPalm(px, pz, h);
+  }
+
+  // ---- NAMED AMENITIES (each appears at a specific size threshold) ----------
+  // Positioned in the front garden zone (south of the lodge) or on the side/back.
+  // Each one is a distinct visually recognisable structure.
+
+  // Amenity 1 — SWIMMING POOL (size ≥ 2)
+  // A classic rectangular resort pool with wooden deck and loungers, placed
+  // south-centre in front of the lodge entrance.
+  if (size >= 2) {
+    const px = centerX;
+    const pz = edgeS + 0.28;
+    const pw = Math.min(0.55 + (size - 2) * 0.03, 0.80);
+    const pd = 0.32;
+    // Wooden deck surround
+    out.push({ makeGeom: () => box(pw + 0.22, 0.012, pd + 0.22), color: deckWood, dx: px, dy: 0.014, dz: pz });
+    // Pool curb
+    out.push({ makeGeom: () => box(pw + 0.06, 0.060, pd + 0.06), color: poolCurb, dx: px, dy: 0.030, dz: pz });
+    // Pool water
+    out.push({ makeGeom: () => box(pw, 0.040, pd), color: poolWater, dx: px, dy: 0.048, dz: pz });
+    // Two lounge chairs flanking the pool
+    for (let side = -1; side <= 1; side += 2) {
+      const lx = px + side * (pw / 2 + 0.09);
+      out.push({ makeGeom: () => box(0.09, 0.018, 0.22), color: loungeFab, dx: lx, dy: 0.024, dz: pz });
+      out.push({ makeGeom: () => box(0.09, 0.04, 0.07), color: loungeFab, dx: lx, dy: 0.032, dz: pz - 0.075 });
     }
   }
 
-  // 8. Tier 3+: shade cabanas on some S-exterior tiles
-  if (tier >= 3) {
-    for (const m of tileMeta) {
-      if (!m.S) continue;
-      const h = ((m.x * 374761393) ^ (m.y * 668265263)) >>> 0;
-      if ((h & 1) === 0) continue;
-      const { cx, zS } = ext(m);
-      const cax = cx + (((h >> 4) & 0x3) - 1) * 0.20;
-      const caz = zS + 0.16;
-      out.push({ makeGeom: () => box(0.26, 0.012, 0.20), color: awning, dx: cax, dy: bodyH + 0.09, dz: caz });
-      out.push({ makeGeom: () => box(0.025, bodyH + 0.09, 0.025), color: palmTrunk, dx: cax - 0.11, dy: (bodyH + 0.09) / 2, dz: caz - 0.08 });
-      out.push({ makeGeom: () => box(0.025, bodyH + 0.09, 0.025), color: palmTrunk, dx: cax + 0.11, dy: (bodyH + 0.09) / 2, dz: caz - 0.08 });
+  // Amenity 2 — TIKI BAR (size ≥ 3)
+  // A bamboo-pole thatched-roof bar with counter and stools, placed at the
+  // SE corner of the resort grounds.
+  if (size >= 3) {
+    const bx = edgeE + 0.30;
+    const bz = edgeS - 0.25;
+    // Bar counter
+    out.push({ makeGeom: () => box(0.52, 0.060, 0.16), color: tikiPole, dx: bx, dy: 0.036, dz: bz });
+    out.push({ makeGeom: () => box(0.54, 0.012, 0.18), color: tikiPole, dx: bx, dy: 0.072, dz: bz });
+    // Thatched roof canopy
+    out.push({ makeGeom: () => box(0.60, 0.028, 0.48), color: tikiThatch, dx: bx, dy: 0.30, dz: bz - 0.04 });
+    // 4 bamboo support poles
+    for (let px = -1; px <= 1; px += 2) {
+      for (let pz = -1; pz <= 1; pz += 2) {
+        out.push({ makeGeom: () => cyl(0.020, 0.30, 6), color: tikiPole,
+          dx: bx + px * 0.26, dy: 0.15, dz: bz + pz * 0.21 });
+      }
+    }
+    // 3 stools along front of bar
+    for (let i = 0; i < 3; i++) {
+      const sx = bx - 0.18 + i * 0.18;
+      out.push({ makeGeom: () => cyl(0.030, 0.07, 6), color: tikiPole, dx: sx, dy: 0.035, dz: bz + 0.14 });
+      out.push({ makeGeom: () => cyl(0.034, 0.010, 8), color: loungeFab, dx: sx, dy: 0.076, dz: bz + 0.14 });
+    }
+    // Palm tree next to bar
+    addPalm(bx + 0.34, bz - 0.20, (bx * 374761393 | 0) >>> 0);
+  }
+
+  // Amenity 3 — TENNIS COURT (size ≥ 4)
+  // A full green court with white lines and net, placed behind/beside the lodge.
+  if (size >= 4) {
+    const tx = edgeE + 0.42;
+    const tz = centerZ - 0.10;
+    // Court surface
+    out.push({ makeGeom: () => box(0.72, 0.012, 0.54), color: courtGreen, dx: tx, dy: 0.014, dz: tz });
+    // Boundary lines
+    out.push({ makeGeom: () => box(0.72, 0.004, 0.012), color: courtLine, dx: tx, dy: 0.020, dz: tz - 0.264 });
+    out.push({ makeGeom: () => box(0.72, 0.004, 0.012), color: courtLine, dx: tx, dy: 0.020, dz: tz + 0.264 });
+    out.push({ makeGeom: () => box(0.012, 0.004, 0.54), color: courtLine, dx: tx - 0.354, dy: 0.020, dz: tz });
+    out.push({ makeGeom: () => box(0.012, 0.004, 0.54), color: courtLine, dx: tx + 0.354, dy: 0.020, dz: tz });
+    // Centre service line + net posts + net
+    out.push({ makeGeom: () => box(0.012, 0.004, 0.54), color: courtLine, dx: tx, dy: 0.020, dz: tz });
+    out.push({ makeGeom: () => cyl(0.012, 0.075, 6), color: 0xdddddd, dx: tx - 0.36, dy: 0.050, dz: tz });
+    out.push({ makeGeom: () => cyl(0.012, 0.075, 6), color: 0xdddddd, dx: tx + 0.36, dy: 0.050, dz: tz });
+    out.push({ makeGeom: () => box(0.72, 0.008, 0.006), color: 0xeeeeee, dx: tx, dy: 0.084, dz: tz });
+  }
+
+  // Amenity 4 — SPA PAVILION (size ≥ 5)
+  // An open-sided stone pavilion with thatched roof and massage tables, placed
+  // at the NW side of the resort.
+  if (size >= 5) {
+    const sx = edgeW - 0.35;
+    const sz = centerZ - 0.10;
+    // Stone floor pad
+    out.push({ makeGeom: () => box(0.64, 0.014, 0.52), color: spaStone, dx: sx, dy: 0.012, dz: sz });
+    // Thatched roof
+    out.push({ makeGeom: () => box(0.66, 0.032, 0.54), color: tikiThatch, dx: sx, dy: 0.26, dz: sz });
+    // 4 stone columns
+    for (let px2 = -1; px2 <= 1; px2 += 2) {
+      for (let pz2 = -1; pz2 <= 1; pz2 += 2) {
+        out.push({ makeGeom: () => box(0.040, 0.26, 0.040), color: spaStone,
+          dx: sx + px2 * 0.28, dy: 0.13, dz: sz + pz2 * 0.22 });
+      }
+    }
+    // Two massage tables inside
+    for (let side = -1; side <= 1; side += 2) {
+      out.push({ makeGeom: () => box(0.14, 0.028, 0.30), color: loungeFab, dx: sx + side * 0.16, dy: 0.028, dz: sz });
+      out.push({ makeGeom: () => box(0.12, 0.016, 0.26), color: 0xf5f5e8, dx: sx + side * 0.16, dy: 0.046, dz: sz });
     }
   }
 
-  // 9. Tier 4+: outdoor bar terrace on the middle S-exterior tile
-  if (tier >= 4) {
-    const sExt = tileMeta.filter((m) => m.S).sort((a, b) => a.x - b.x);
-    if (sExt.length > 0) {
-      const mid = sExt[Math.floor(sExt.length / 2)]!;
-      const { cx, zS } = ext(mid);
-      out.push({ makeGeom: () => box(0.58, 0.012, 0.28), color: deckWood, dx: cx, dy: 0.018, dz: zS + 0.14 });
-      out.push({ makeGeom: () => box(0.30, 0.012, 0.30), color: awning, dx: cx, dy: 0.22, dz: zS + 0.14 });
-      out.push({ makeGeom: () => cyl(0.012, 0.22, 6), color: stucco, dx: cx, dy: 0.11, dz: zS + 0.14 });
+  // Amenity 5 — BEACH LOUNGER ROW (size ≥ 6)
+  // A row of coloured beach loungers with striped umbrellas, placed south of the pool.
+  if (size >= 6) {
+    const lz = edgeS + 0.72;
+    const nChairs = Math.min(3 + Math.floor((size - 6) / 2), 6);
+    const spacing = 0.26;
+    const startX = centerX - ((nChairs - 1) * spacing) / 2;
+    for (let i = 0; i < nChairs; i++) {
+      const lx = startX + i * spacing;
+      const uCol = (i & 1) === 0 ? umbrellaR : umbrellaB;
+      // Lounger base
+      out.push({ makeGeom: () => box(0.10, 0.014, 0.22), color: loungeFab, dx: lx, dy: 0.018, dz: lz });
+      out.push({ makeGeom: () => box(0.10, 0.038, 0.07), color: loungeFab, dx: lx, dy: 0.026, dz: lz - 0.076 });
+      // Umbrella pole + canopy
+      out.push({ makeGeom: () => cyl(0.010, 0.30, 6), color: 0xaaaaaa, dx: lx, dy: 0.15, dz: lz - 0.04 });
+      out.push({ makeGeom: () => cone(0.14, 0.055, 8), color: uCol, dx: lx, dy: 0.32, dz: lz - 0.04 });
     }
   }
 
-  // 10. Tier 5+: slide tower + second pool
-  if (tier >= 5) {
-    out.push({ makeGeom: () => box(0.10, 0.48, 0.10), color: stucco, dx: centerX + 0.32, dy: 0.24, dz: centerZ });
-    out.push({ makeGeom: () => box(0.16, 0.022, 0.32), color: poolWater, dx: centerX + 0.20, dy: 0.25, dz: centerZ });
-    out.push({ makeGeom: () => box(0.54, 0.04, 0.40), color: poolWater, dx: centerX - 0.38, dy: 0.03, dz: centerZ + 0.20 });
-    out.push({ makeGeom: () => box(0.60, 0.06, 0.46), color: poolCurb, dx: centerX - 0.38, dy: 0.015, dz: centerZ + 0.20 });
+  // Amenity 6 — OUTDOOR CINEMA (size ≥ 8)
+  // A white movie screen with rows of deck chairs and a projector booth, placed
+  // at the N end (back of the resort).
+  if (size >= 8) {
+    const ox = centerX + 0.10;
+    const oz = edgeN - 0.35;
+    // Screen backing
+    out.push({ makeGeom: () => box(0.60, 0.32, 0.025), color: 0xf8f8f8, dx: ox, dy: 0.22, dz: oz - 0.012 });
+    out.push({ makeGeom: () => box(0.64, 0.36, 0.016), color: 0xd0c8b8, dx: ox, dy: 0.22, dz: oz });
+    // Screen support posts
+    out.push({ makeGeom: () => cyl(0.014, 0.40, 6), color: 0x888888, dx: ox - 0.28, dy: 0.20, dz: oz + 0.004 });
+    out.push({ makeGeom: () => cyl(0.014, 0.40, 6), color: 0x888888, dx: ox + 0.28, dy: 0.20, dz: oz + 0.004 });
+    // 2 rows of deck chairs facing the screen
+    for (let row = 0; row < 2; row++) {
+      const rz = oz + 0.18 + row * 0.20;
+      for (let col = -1; col <= 1; col++) {
+        const cx2 = ox + col * 0.20;
+        out.push({ makeGeom: () => box(0.12, 0.013, 0.20), color: deckWood, dx: cx2, dy: 0.016, dz: rz });
+        out.push({ makeGeom: () => box(0.12, 0.10, 0.013), color: deckWood, dx: cx2, dy: 0.062, dz: rz - 0.094 });
+      }
+    }
+    // Projector booth
+    out.push({ makeGeom: () => box(0.12, 0.10, 0.12), color: spaStone, dx: ox + 0.34, dy: 0.058, dz: oz + 0.54 });
+    out.push({ makeGeom: () => box(0.10, 0.038, 0.10), color: roofTile, dx: ox + 0.34, dy: 0.118, dz: oz + 0.54 });
   }
 
-  // 11. Tier 6: grand entrance arch + gold finials
-  if (tier >= 6) {
+  // Amenity 7 — VOLLEYBALL COURT (size ≥ 10)
+  // A sandy beach-volleyball court with net, placed to the NE of the resort.
+  if (size >= 10) {
+    const vx = edgeE + 0.44;
+    const vz = edgeN + 0.36;
+    // Sand pit
+    out.push({ makeGeom: () => box(0.76, 0.014, 0.60), color: sandPit, dx: vx, dy: 0.014, dz: vz });
+    // Net posts + net
+    out.push({ makeGeom: () => cyl(0.014, 0.13, 6), color: 0xbbbbbb, dx: vx - 0.38, dy: 0.072, dz: vz });
+    out.push({ makeGeom: () => cyl(0.014, 0.13, 6), color: 0xbbbbbb, dx: vx + 0.38, dy: 0.072, dz: vz });
+    out.push({ makeGeom: () => box(0.76, 0.007, 0.004), color: 0xeeeeee, dx: vx, dy: 0.124, dz: vz });
+    // Boundary lines
+    out.push({ makeGeom: () => box(0.76, 0.003, 0.007), color: 0xffffff, dx: vx, dy: 0.018, dz: vz - 0.296 });
+    out.push({ makeGeom: () => box(0.76, 0.003, 0.007), color: 0xffffff, dx: vx, dy: 0.018, dz: vz + 0.296 });
+    // A volleyball sitting on the sand
+    out.push({ makeGeom: () => cyl(0.040, 0.040, 8), color: 0xf5e050, dx: vx - 0.22, dy: 0.040, dz: vz + 0.20 });
+  }
+
+  // Amenity 8 — JACUZZI / HOT TUB (size ≥ 12)
+  // A raised stone-edged hot tub near the spa, perfect for an intimate relaxation corner.
+  if (size >= 12) {
+    const jx = edgeW - 0.38;
+    const jz = edgeS - 0.32;
+    // Stone plinth + tub surround
+    out.push({ makeGeom: () => box(0.44, 0.070, 0.44), color: spaStone, dx: jx, dy: 0.042, dz: jz });
+    // Tub interior
+    out.push({ makeGeom: () => box(0.30, 0.048, 0.30), color: hotWater, dx: jx, dy: 0.072, dz: jz });
+    // Wooden edge step
+    out.push({ makeGeom: () => box(0.46, 0.013, 0.46), color: deckWood, dx: jx, dy: 0.018, dz: jz });
+    // 2 flanking palms
+    addPalm(jx - 0.26, jz - 0.28, ((jx * 374761393) | 0) >>> 0);
+    addPalm(jx + 0.26, jz - 0.28, ((jz * 668265263) | 0) >>> 0);
+  }
+
+  // Amenity 9 — WATERSLIDE TOWER (size ≥ 15)
+  // A tall tower with a spiralling blue slide — the signature mega-resort landmark.
+  if (size >= 15) {
+    const wx = edgeE + 0.36;
+    const wz = edgeN + 0.95;
+    // Tower core
+    out.push({ makeGeom: () => box(0.14, 0.56, 0.14), color: stucco, dx: wx, dy: 0.28, dz: wz });
+    // Observation platform + railing
+    out.push({ makeGeom: () => box(0.22, 0.014, 0.22), color: spaStone, dx: wx, dy: 0.574, dz: wz });
+    out.push({ makeGeom: () => cyl(0.004, 0.07, 4), color: 0xbbbbbb, dx: wx - 0.09, dy: 0.608, dz: wz - 0.09 });
+    out.push({ makeGeom: () => cyl(0.004, 0.07, 4), color: 0xbbbbbb, dx: wx + 0.09, dy: 0.608, dz: wz - 0.09 });
+    out.push({ makeGeom: () => cyl(0.004, 0.07, 4), color: 0xbbbbbb, dx: wx + 0.09, dy: 0.608, dz: wz + 0.09 });
+    // Slide chute (approximated as two tilted slabs spiralling down)
+    out.push({ makeGeom: () => box(0.09, 0.018, 0.32), color: slideBlue, dx: wx + 0.16, dy: 0.38, dz: wz + 0.10 });
+    out.push({ makeGeom: () => box(0.32, 0.018, 0.09), color: slideBlue, dx: wx + 0.10, dy: 0.22, dz: wz + 0.16 });
+    // Splash pool at the bottom
+    out.push({ makeGeom: () => box(0.38, 0.060, 0.38), color: poolCurb, dx: wx + 0.22, dy: 0.030, dz: wz + 0.22 });
+    out.push({ makeGeom: () => box(0.28, 0.038, 0.28), color: poolWater, dx: wx + 0.22, dy: 0.048, dz: wz + 0.22 });
+  }
+
+  // Amenity 10 — GRAND ENTRANCE ARCH (size ≥ 20)
+  // A ceremonial gate arch in front of the resort.
+  if (size >= 20) {
     const sExt = tileMeta.filter((m) => m.S);
     if (sExt.length > 0) {
       const mid = sExt[Math.floor(sExt.length / 2)]!;
-      const { cx, zS } = ext(mid);
-      const az = zS + 0.06;
-      out.push({ makeGeom: () => box(0.06, 0.44, 0.06), color: stucco, dx: cx - 0.19, dy: 0.22, dz: az });
-      out.push({ makeGeom: () => box(0.06, 0.44, 0.06), color: stucco, dx: cx + 0.19, dy: 0.22, dz: az });
-      out.push({ makeGeom: () => box(0.44, 0.06, 0.06), color: roofTile, dx: cx, dy: 0.44, dz: az });
-      out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx - 0.19, dy: 0.51, dz: az });
-      out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx + 0.19, dy: 0.51, dz: az });
+      const { cx: ax, zS } = ext(mid);
+      const az = zS + 0.08;
+      out.push({ makeGeom: () => box(0.055, 0.50, 0.055), color: stucco, dx: ax - 0.22, dy: 0.25, dz: az });
+      out.push({ makeGeom: () => box(0.055, 0.50, 0.055), color: stucco, dx: ax + 0.22, dy: 0.25, dz: az });
+      out.push({ makeGeom: () => box(0.50, 0.055, 0.055), color: roofTile, dx: ax, dy: 0.50, dz: az });
+      out.push({ makeGeom: () => cone(0.038, 0.085, 8), color: goldAccent, dx: ax - 0.22, dy: 0.575, dz: az });
+      out.push({ makeGeom: () => cone(0.038, 0.085, 8), color: goldAccent, dx: ax + 0.22, dy: 0.575, dz: az });
     }
   }
 
@@ -4966,13 +5123,15 @@ function hotelClusterParts(
     out.push({ makeGeom: () => box(0.18, 0.10, 0.04),   color: signRed,  dx: sx + sigOffX, dy: 0.44, dz: sz + sigOffZ });
 
   } else {
-    // Multi-storey hotel block — podium + glass tower + lobby porte-cochère.
-    const concrete  = 0xd0ccba;
-    const glassBlue = 0x7bb8d0;
-    const accentGl  = 0xa8d4e8;
-    const lobbyGl   = 0x5da8cc;
-    const canopySil = 0xd4d4d4;
-    const roofDark  = 0x444855;
+    // Multi-storey hotel tower — concrete podium + per-floor window grid + balconies.
+    const concrete  = 0xcec8ba;   // warm light concrete
+    const concreteDk = 0xb0a898;  // darker concrete for floor bands / reveals
+    const winLit    = 0xf0d898;   // warm golden hotel-room glow (lit rooms)
+    const winCool   = 0x88bcd4;   // cooler blue pane (unlit rooms, upper floors)
+    const lobbyGl   = 0x5da8cc;   // tall lobby glass
+    const canopy    = 0xd8d8d8;   // porte-cochère canopy
+    const roofDark  = 0x3d3a4a;
+    const signGold  = 0xd4af37;
     const flagRed   = 0xcc2222;
 
     const cx = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
@@ -4980,43 +5139,98 @@ function hotelClusterParts(
     const hw = bw * TILE_SIZE * 0.44;
     const hd = bh * TILE_SIZE * 0.44;
 
-    // Podium
-    out.push({ makeGeom: () => box(hw * 2, 0.20, hd * 2),       color: concrete,  dx: cx, dy: 0.10, dz: cz });
-    out.push({ makeGeom: () => box(hw * 2 + 0.02, 0.03, hd * 2 + 0.02), color: 0x888888, dx: cx, dy: 0.21, dz: cz });
+    // Podium (2-storey base, same footprint as the old cluster logic)
+    const podH = 0.22;
+    out.push({ makeGeom: () => box(hw * 2, podH, hd * 2), color: concrete, dx: cx, dy: podH / 2, dz: cz });
+    // Podium ledge ring
+    out.push({ makeGeom: () => box(hw * 2 + 0.03, 0.020, hd * 2 + 0.03), color: concreteDk, dx: cx, dy: podH, dz: cz });
 
-    // Tower
-    const towerH = 0.20 + Math.min(bw, bh) * 0.12;
-    const tw = hw * 1.7;
-    const td = hd * 1.7;
-    out.push({ makeGeom: () => box(tw, towerH, td),              color: concrete,  dx: cx, dy: 0.22 + towerH / 2, dz: cz });
+    // Tower sits on podium, slightly narrower
+    const tw = hw * 1.55;
+    const td = hd * 1.55;
+    // Tower height scales up with cluster size so larger hotels are taller
+    const towerH = 0.32 + Math.min(bw, bh) * 0.20;
+    const towerBase = podH;
+    out.push({ makeGeom: () => box(tw, towerH, td), color: concrete, dx: cx, dy: towerBase + towerH / 2, dz: cz });
 
-    // Glass curtain walls
-    out.push({ makeGeom: () => box(tw * 0.96, towerH * 0.92, 0.01), color: glassBlue, dx: cx, dy: 0.22 + towerH / 2, dz: cz + td / 2 });
-    out.push({ makeGeom: () => box(tw * 0.96, towerH * 0.92, 0.01), color: glassBlue, dx: cx, dy: 0.22 + towerH / 2, dz: cz - td / 2 });
-    out.push({ makeGeom: () => box(0.01, towerH * 0.92, td * 0.96), color: accentGl,  dx: cx + tw / 2, dy: 0.22 + towerH / 2, dz: cz });
-    out.push({ makeGeom: () => box(0.01, towerH * 0.92, td * 0.96), color: accentGl,  dx: cx - tw / 2, dy: 0.22 + towerH / 2, dz: cz });
+    // Per-floor window bands — the key "real hotel" visual.
+    // Each floor gets a strip of glass on all four faces, alternating warm/cool.
+    const floorH  = 0.060;
+    const nFloors = Math.max(3, Math.floor(towerH / floorH));
+    const winH    = 0.036;   // window strip height
+    const winInset = 0.028;  // horizontal margin (reveals concrete corners)
+    const glassZ   = 0.007;  // glass panel protrusion depth
 
-    // Roof
-    out.push({ makeGeom: () => box(tw + 0.04, 0.04, td + 0.04), color: roofDark,  dx: cx, dy: 0.24 + towerH, dz: cz });
-    out.push({ makeGeom: () => box(tw * 0.5, 0.08, td * 0.5),  color: roofDark,  dx: cx, dy: 0.28 + towerH, dz: cz });
+    for (let f = 0; f < nFloors; f++) {
+      const fy = towerBase + (f + 0.5) * floorH;
+      // Ground floor = cool lobby glass; alternate warm/cool above
+      const col = f === 0 ? winCool : ((f & 1) === 0 ? winLit : winCool);
+      const winW_s = tw - winInset * 2;
+      const winD_e = td - winInset * 2;
+      // S face
+      out.push({ makeGeom: () => box(winW_s, winH, glassZ), color: col, dx: cx, dy: fy, dz: cz + td / 2 + glassZ / 2 });
+      // N face
+      out.push({ makeGeom: () => box(winW_s, winH, glassZ), color: col, dx: cx, dy: fy, dz: cz - td / 2 - glassZ / 2 });
+      // E face
+      out.push({ makeGeom: () => box(glassZ, winH, winD_e), color: col, dx: cx + tw / 2 + glassZ / 2, dy: fy, dz: cz });
+      // W face
+      out.push({ makeGeom: () => box(glassZ, winH, winD_e), color: col, dx: cx - tw / 2 - glassZ / 2, dy: fy, dz: cz });
 
-    // Lobby entrance (south face)
+      // Horizontal concrete floor band between windows (spandrel)
+      if (f < nFloors - 1) {
+        const bandY = towerBase + (f + 1) * floorH;
+        const bandT = 0.010;
+        const bandP = 0.008;
+        out.push({ makeGeom: () => box(tw + bandP * 2, bandT, bandP), color: concreteDk, dx: cx, dy: bandY, dz: cz + td / 2 + bandP / 2 });
+        out.push({ makeGeom: () => box(tw + bandP * 2, bandT, bandP), color: concreteDk, dx: cx, dy: bandY, dz: cz - td / 2 - bandP / 2 });
+        out.push({ makeGeom: () => box(bandP, bandT, td + bandP * 2), color: concreteDk, dx: cx + tw / 2 + bandP / 2, dy: bandY, dz: cz });
+        out.push({ makeGeom: () => box(bandP, bandT, td + bandP * 2), color: concreteDk, dx: cx - tw / 2 - bandP / 2, dy: bandY, dz: cz });
+      }
+    }
+
+    // Vertical column reveals on S + N faces (divides windows into bays)
+    const nCols = Math.max(2, Math.floor((tw - winInset * 2) / 0.10));
+    const colStep = (tw - winInset * 2) / nCols;
+    for (let c = 0; c <= nCols; c++) {
+      const rx = cx - (tw / 2 - winInset) + c * colStep;
+      out.push({ makeGeom: () => box(0.007, towerH, 0.009), color: concreteDk, dx: rx, dy: towerBase + towerH / 2, dz: cz + td / 2 + 0.005 });
+      out.push({ makeGeom: () => box(0.007, towerH, 0.009), color: concreteDk, dx: rx, dy: towerBase + towerH / 2, dz: cz - td / 2 - 0.005 });
+    }
+
+    // Balconies on S face at every other floor (classic hotel look)
+    const balD = 0.055;
+    for (let f = 2; f < nFloors; f += 2) {
+      const fy = towerBase + f * floorH - 0.006;
+      out.push({ makeGeom: () => box(tw - winInset * 2 + 0.008, 0.009, balD), color: concreteDk, dx: cx, dy: fy, dz: cz + td / 2 + balD / 2 });
+    }
+
+    // Roof cap + rooftop mechanical penthouse
+    out.push({ makeGeom: () => box(tw + 0.04, 0.038, td + 0.04), color: roofDark, dx: cx, dy: towerBase + towerH + 0.019, dz: cz });
+    out.push({ makeGeom: () => box(tw * 0.42, 0.090, td * 0.42), color: concreteDk, dx: cx, dy: towerBase + towerH + 0.063, dz: cz });
+
+    // Hotel name sign — gold band near the top of the tower (S face)
+    out.push({ makeGeom: () => box(tw * 0.58, 0.028, 0.013), color: signGold, dx: cx, dy: towerBase + towerH - floorH * 0.55, dz: cz + td / 2 + 0.007 });
+
+    // Lobby glass (ground floor, S face — tall panels above podium entrance)
+    const lobbyH = podH * 0.82;
+    const entrW  = Math.min(0.56, tw * 0.68);
+    out.push({ makeGeom: () => box(entrW, lobbyH, 0.013), color: lobbyGl, dx: cx, dy: lobbyH / 2, dz: cz + hd + 0.007 });
+
+    // Porte-cochère canopy + columns
     const frontZ = cz + hd;
-    const entrW  = Math.min(0.40, tw * 0.6);
-    out.push({ makeGeom: () => box(entrW, 0.03, 0.20),          color: canopySil, dx: cx, dy: 0.30, dz: frontZ + 0.10 });
-    out.push({ makeGeom: () => cyl(0.02, 0.30, 6),              color: 0x888888,  dx: cx - entrW / 2 + 0.03, dy: 0.15, dz: frontZ + 0.18 });
-    out.push({ makeGeom: () => cyl(0.02, 0.30, 6),              color: 0x888888,  dx: cx + entrW / 2 - 0.03, dy: 0.15, dz: frontZ + 0.18 });
-    out.push({ makeGeom: () => box(entrW * 0.6, 0.22, 0.02),    color: lobbyGl,   dx: cx, dy: 0.11, dz: frontZ + 0.01 });
+    out.push({ makeGeom: () => box(entrW + 0.14, 0.020, 0.28), color: canopy, dx: cx, dy: podH * 0.84, dz: frontZ + 0.14 });
+    out.push({ makeGeom: () => cyl(0.015, podH * 0.84, 6), color: 0xaaa898, dx: cx - entrW * 0.40, dy: podH * 0.42, dz: frontZ + 0.24 });
+    out.push({ makeGeom: () => cyl(0.015, podH * 0.84, 6), color: 0xaaa898, dx: cx + entrW * 0.40, dy: podH * 0.42, dz: frontZ + 0.24 });
 
-    // Flag poles on roof corners
-    const roofY = 0.26 + towerH;
-    const fH = 0.18;
-    const pX = tw / 2 - 0.04;
-    const pZ = td / 2 - 0.04;
-    out.push({ makeGeom: () => cyl(0.012, fH, 6), color: 0x888888, dx: cx - pX, dy: roofY + fH / 2, dz: cz - pZ });
-    out.push({ makeGeom: () => cyl(0.012, fH, 6), color: 0x888888, dx: cx + pX, dy: roofY + fH / 2, dz: cz - pZ });
-    out.push({ makeGeom: () => box(0.08, 0.05, 0.01), color: flagRed,   dx: cx - pX + 0.05, dy: roofY + fH - 0.02, dz: cz - pZ });
-    out.push({ makeGeom: () => box(0.08, 0.05, 0.01), color: 0x2244aa,  dx: cx + pX + 0.05, dy: roofY + fH - 0.02, dz: cz - pZ });
+    // Flag poles on two front roof corners
+    const roofY = towerBase + towerH + 0.038;
+    const fH = 0.14;
+    const pX = tw * 0.38;
+    const pZ = td * 0.38;
+    out.push({ makeGeom: () => cyl(0.009, fH, 6), color: 0x888888, dx: cx - pX, dy: roofY + fH / 2, dz: cz - pZ });
+    out.push({ makeGeom: () => cyl(0.009, fH, 6), color: 0x888888, dx: cx + pX, dy: roofY + fH / 2, dz: cz - pZ });
+    out.push({ makeGeom: () => box(0.065, 0.036, 0.007), color: flagRed,  dx: cx - pX + 0.036, dy: roofY + fH - 0.012, dz: cz - pZ });
+    out.push({ makeGeom: () => box(0.065, 0.036, 0.007), color: 0x2244aa, dx: cx + pX + 0.036, dy: roofY + fH - 0.012, dz: cz - pZ });
   }
 
   return out;
@@ -7449,104 +7663,6 @@ export function buildSidewalkMesh(grid: Grid): Mesh | null {
   geom.setAttribute('color', new BufferAttribute(colours, 3));
   geom.setIndex(new BufferAttribute(indices, 1));
   // Flat-shaded: skip normals.
-  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  return new Mesh(geom, mat);
-}
-
-/** Subway track + ballast mesh (Beta 1.9.15). One dark ballast pad + two silver
- *  rail strips per tile, with stubs extending toward adjacent track tiles. */
-export function buildSubwayTrackMesh(grid: Grid): Mesh | null {
-  const trackTiles: { x: number; y: number; elevation: number }[] = [];
-  for (const t of grid.iter()) {
-    if (t.subwayTrack) trackTiles.push({ x: t.x, y: t.y, elevation: t.elevation });
-  }
-  if (trackTiles.length === 0) return null;
-
-  const SUBWAY_HALF = 0.19;
-  const RAIL_OFFSET = 0.09;  // distance from centreline to each rail centre
-  const RAIL_HALF  = 0.025;  // half-width of a rail strip
-  const stubLen = TILE_SIZE * 0.5;
-  const BASE_Y = ROAD_LIFT - 0.006; // just below road level so roads overlay cleanly
-
-  // Upper bound: each tile ≤ 5 ballast quads + 8 rail quads (2 rails × 4 directions).
-  const maxQuads = trackTiles.length * 13;
-  const positions = new Float32Array(maxQuads * 4 * 3);
-  const colours   = new Float32Array(maxQuads * 4 * 3);
-  const indices   = new Uint32Array(maxQuads * 6);
-  const cBallast  = new Color(0x2d2d2d);   // dark charcoal ballast
-  const cRail     = new Color(0xa8a8a8);   // silver rails
-
-  let vi = 0, ci = 0, ii = 0, v = 0;
-
-  const push = (x0: number, z0: number, x1: number, z1: number, y: number, col: Color) => {
-    pushQuad(positions, colours, indices, x0, z0, x1, z1, y, col, vi, ci, ii, v);
-    vi += 12; ci += 12; ii += 6; v += 4;
-  };
-
-  const hasTrack = (tx: number, ty: number) => {
-    const t = grid.get(tx, ty);
-    return t?.subwayTrack ?? false;
-  };
-
-  for (const tile of trackTiles) {
-    const cx  = (tile.x + 0.5) * TILE_SIZE;
-    const cz  = (tile.y + 0.5) * TILE_SIZE;
-    const y   = BASE_Y + tile.elevation;
-    const yR  = y + 0.003; // rails sit slightly above the ballast
-
-    // Centre ballast pad.
-    push(cx - SUBWAY_HALF, cz - SUBWAY_HALF, cx + SUBWAY_HALF, cz + SUBWAY_HALF, y, cBallast);
-
-    const cN = hasTrack(tile.x, tile.y - 1);
-    const cS = hasTrack(tile.x, tile.y + 1);
-    const cE = hasTrack(tile.x + 1, tile.y);
-    const cW = hasTrack(tile.x - 1, tile.y);
-
-    // Ballast + rails extending into each connected direction.
-    if (cN) {
-      push(cx - SUBWAY_HALF, cz - stubLen, cx + SUBWAY_HALF, cz - SUBWAY_HALF, y, cBallast);
-      push(cx - RAIL_OFFSET - RAIL_HALF, cz - stubLen, cx - RAIL_OFFSET + RAIL_HALF, cz, yR, cRail);
-      push(cx + RAIL_OFFSET - RAIL_HALF, cz - stubLen, cx + RAIL_OFFSET + RAIL_HALF, cz, yR, cRail);
-    }
-    if (cS) {
-      push(cx - SUBWAY_HALF, cz + SUBWAY_HALF, cx + SUBWAY_HALF, cz + stubLen, y, cBallast);
-      push(cx - RAIL_OFFSET - RAIL_HALF, cz, cx - RAIL_OFFSET + RAIL_HALF, cz + stubLen, yR, cRail);
-      push(cx + RAIL_OFFSET - RAIL_HALF, cz, cx + RAIL_OFFSET + RAIL_HALF, cz + stubLen, yR, cRail);
-    }
-    if (cE) {
-      push(cx + SUBWAY_HALF, cz - SUBWAY_HALF, cx + stubLen, cz + SUBWAY_HALF, y, cBallast);
-      push(cx, cz - RAIL_OFFSET - RAIL_HALF, cx + stubLen, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
-      push(cx, cz + RAIL_OFFSET - RAIL_HALF, cx + stubLen, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
-    }
-    if (cW) {
-      push(cx - stubLen, cz - SUBWAY_HALF, cx - SUBWAY_HALF, cz + SUBWAY_HALF, y, cBallast);
-      push(cx - stubLen, cz - RAIL_OFFSET - RAIL_HALF, cx, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
-      push(cx - stubLen, cz + RAIL_OFFSET - RAIL_HALF, cx, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
-    }
-
-    // Rail crosses on isolated centre (no connections) — two short L-crossing marks.
-    if (!cN && !cS) {
-      push(cx - RAIL_OFFSET - RAIL_HALF, cz - SUBWAY_HALF, cx - RAIL_OFFSET + RAIL_HALF, cz + SUBWAY_HALF, yR, cRail);
-      push(cx + RAIL_OFFSET - RAIL_HALF, cz - SUBWAY_HALF, cx + RAIL_OFFSET + RAIL_HALF, cz + SUBWAY_HALF, yR, cRail);
-    }
-    if (!cE && !cW) {
-      push(cx - SUBWAY_HALF, cz - RAIL_OFFSET - RAIL_HALF, cx + SUBWAY_HALF, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
-      push(cx - SUBWAY_HALF, cz + RAIL_OFFSET - RAIL_HALF, cx + SUBWAY_HALF, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
-    }
-  }
-
-  // Trim to actual usage.
-  const usedVerts = vi / 3;
-  const usedTris  = ii / 3;
-  const trimPos  = positions.slice(0, vi);
-  const trimCol  = colours.slice(0, ci);
-  const trimIdx  = indices.slice(0, ii);
-
-  const geom = new BufferGeometry();
-  geom.setAttribute('position', new BufferAttribute(trimPos, 3));
-  geom.setAttribute('color',    new BufferAttribute(trimCol, 3));
-  geom.setIndex(new BufferAttribute(trimIdx, 1));
-  void usedVerts; void usedTris;
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   return new Mesh(geom, mat);
 }

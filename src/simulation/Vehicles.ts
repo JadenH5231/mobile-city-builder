@@ -917,13 +917,16 @@ export class Vehicles {
     } else if (roll < 0.91) {
       dest = pickRandomBuildingTile(grid, 'farm');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else if (roll < 0.96) {
+    } else if (roll < 0.95) {
       dest = pickRandomBuildingTile(grid, 'warehouse');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
-    } else {
+    } else if (roll < 0.98) {
       // Beta 2.0 — resorts are hospitality employment destinations.
-      // Resort workers drive in; adjacent parking lots fill naturally.
       dest = pickRandomBuildingTile(grid, 'resort');
+      if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
+    } else {
+      // Beta 1.9.14 — hotels/motels are accommodation employment destinations.
+      dest = pickRandomBuildingTile(grid, 'hotel');
       if (!dest) dest = pickRandomDevelopedTile(grid, 'commercial', 2);
     }
     if (!dest) return;
@@ -1807,6 +1810,7 @@ function isTouristDestination(t: Tile): boolean {
     case 'national_capital':
     case 'grand_stadium':
     case 'resort':
+    case 'hotel':
       return true;
     default:
       return false;

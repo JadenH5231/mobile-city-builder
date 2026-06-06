@@ -449,6 +449,18 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
               stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
         <circle cx="12" cy="4" r="1.5" fill="currentColor"/>
         <path d="M5 19h14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` },
+      // Hotel (Beta 1.9.14). Bed silhouette — immediately reads as accommodation.
+      { kind: 'tool', tool: 'place_hotel', label: 'Hotel', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="9" rx="1"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M3 11V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M3 16h18"
+              stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <circle cx="7" cy="13.5" r="1" fill="currentColor"/>
+        <circle cx="12" cy="13.5" r="1" fill="currentColor"/>
+        <circle cx="17" cy="13.5" r="1" fill="currentColor"/>
       </svg>` }
     ]
   },

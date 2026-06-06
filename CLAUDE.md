@@ -362,6 +362,37 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 1.9.14 (Hotels & Motels — dimension-based archetypes)
+
+User batch request: "Hotels/Motels (dimension-based archetypes: 1×1=airbnb,
+1×N=motel, M×N=hotel)."
+
+New `hotel` building kind using the same modular cluster pattern as `resort`.
+Adjacent hotel tiles flood-fill at render time; the **archetype** is chosen
+from the cluster's bounding-box shape: 1×1 = airbnb cottage (whitewashed walls,
+gable roof, shutters, porch); 1×N (or N×1) = motel strip (long 1-storey, per-
+room doors + covered walkway, end sign pole); M×N = hotel block (concrete/glass
+podium + curtain-wall tower + lobby porte-cochère + flag poles).
+
+**Revenue model:** per-tile base $80/mo × archetype multiplier (airbnb 0.8×,
+motel 1.0×, hotel 1.5×) × water-adjacency bonus (×1.4) × connection multiplier
+(×0.2 if disconnected). Added to `tourismRevenue`; tracked as
+`Economy.lastHotelRevenue`.
+
+**Key files changed:**
+- `types.ts` — Building/Tool unions, BUILDING_COSTS ($2K/tile), BUILDING_UPKEEP
+  ($180/tile/mo), PLACE_TOOL_TO_BUILDING, City-unlock, hotel revenue constants
+- `Council.ts` — `hotel: number` in FactionStances interface + all 10 faction rows
+- `FactionDetailPanel.ts` — STANCE_LABEL entry
+- `Game.ts` — tool label map, toolToKey map in refreshToolbarBans, terrain gate
+- `Toolbar.ts` — Hotel entry in Industry group after Resort (bed SVG icon)
+- `Population.ts` — `iJobs += 2` per hotel tile
+- `Economy.ts` — cluster-BFS revenue with bbox archetype multiplier, `lastHotelRevenue`
+- `Vehicles.ts` — 2% destination roll + `isTouristDestination` case
+- `builders.ts` — `hotelClusterParts()` + dispatch block in `buildCityBuildingsMesh`
+
+SW cache `v48` → `v49`. `APP_VERSION` 1.9.13 → 1.9.14 (**silent patch**).
+
 ## Status: Beta 1.9.13 (Resorts — modular industry, 6 visual tiers)
 
 User batch request: "Resorts — modular industry, ≥6 size varieties."
@@ -392,13 +423,11 @@ alongside landmarks; tracked separately as `Economy.lastResortRevenue`.
 
 SW cache `v47` → `v48`. `APP_VERSION` 1.9.12 → 1.9.13 (**silent patch**).
 
-**⏭ Batch not finished — 2 features still queued:** Hotels/Motels (1.9.14,
-dimension-based archetypes: 1×1=airbnb, 1×N=motel, M×N=hotel) and Subways
-(1.9.15, real transit lines with drawable tracks, stations, visible trains),
-then a **consolidated Beta 2.0.0 What's New** popup covering the full batch
-(Grand Stadium + 1×1 luxury homes + milestone-gated architecture + Resorts +
-Hotels & Motels + Subways). Read `docs/HANDOFF_remaining_features.md` before
-starting Hotels. Continue numbering at 1.9.14.
+**⏭ Batch not finished — 1 feature still queued:** Subways (1.9.15, real
+transit lines with drawable tracks, stations, visible trains), then a
+**consolidated Beta 2.0.0 What's New** popup covering the full batch (Grand
+Stadium + 1×1 luxury homes + milestone-gated architecture + Resorts +
+Hotels & Motels + Subways). Continue numbering at 1.9.15.
 
 ---
 

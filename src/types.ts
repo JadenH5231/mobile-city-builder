@@ -511,7 +511,13 @@ export type Building =
   // villa up to a grand water-park complex. Earns per-tile tourism revenue
   // monthly; a coast/water-adjacency bonus rewards oceanfront placement.
   // Employment destination for resident cars + tourist vehicles. Metro unlock.
-  | 'resort';
+  | 'resort'
+  // Hotel / Motel / Airbnb (Beta 2.0). Modular: adjacent tiles cluster at
+  // render time. Archetype is chosen by bounding-box dimensions at render
+  // time — 1×1=airbnb cottage, 1×N strip=motel, M×N block=hotel. All earn
+  // per-tile tourism revenue; hotels earn more per tile than motels/airbnbs.
+  // Employment destination. City milestone unlock.
+  | 'hotel';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -599,6 +605,11 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   // Resort (Beta 2.0) — per-tile sticker price. A single beach villa is
   // $2K; a 16-tile water-park totals $32K — a real Metro-tier investment.
   resort: 2000,
+  // Hotel (Beta 2.0) — per-tile sticker price. Airbnb = cheap ($1.5K
+  // single tile), motel = mid ($2K/tile), hotel = premium ($2.5K/tile avg).
+  // Use a single cost since the archetype is determined at render time, not
+  // placement time; the per-tile upkeep differentiates ongoing cost.
+  hotel: 2000,
   // Toronto landmark Easter eggs (Alpha 4.24). Cost 0 because they're
   // not exposed in any place tool — only the bundled Toronto preset
   // stamps them. Listed here only so TS's exhaustive Building Record
@@ -677,6 +688,9 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   // Resort (Beta 2.0) — pool maintenance, landscaping, hospitality staff.
   // Higher per-tile than warehouse because resorts are service-intensive.
   resort: 150,
+  // Hotel (Beta 2.0) — housekeeping, front desk, utilities. Slightly higher
+  // upkeep per tile than resort because hotels run 24/7 with more staff.
+  hotel: 180,
   // Toronto landmark Easter eggs (Alpha 4.24). Free upkeep — they're
   // cosmetic-only and not exposed via any place tool.
   cn_tower: 0,
@@ -766,6 +780,20 @@ export const RESORT_DISCONNECTED_MULT = 0.25;
  *  printer — but each extra tile does earn its own base revenue. */
 export const RESORT_SCALE_BONUS_PER_TILE = 0.04;
 export const RESORT_SCALE_CAP = 20;
+
+/**
+ * Hotel / Motel / Airbnb revenue parameters (Beta 2.0). Per-tile per-month
+ * tourism income. The archetype multiplier differentiates earnings:
+ * airbnb (1×1) 0.8×, motel (strip) 1.0×, hotel (block) 1.5×. Water-adjacent
+ * clusters get a waterfront bonus. Tuning targets: a 6-tile beachfront motel
+ * earns ~$500-$700/mo; a 4×3 hotel earns ~$1200-$1800/mo.
+ */
+export const HOTEL_BASE_REVENUE_PER_TILE = 80;
+export const HOTEL_WATER_BONUS_MULT = 1.4;
+export const HOTEL_DISCONNECTED_MULT = 0.2;
+export const HOTEL_AIRBNB_MULT   = 0.8;
+export const HOTEL_MOTEL_MULT    = 1.0;
+export const HOTEL_HOTEL_MULT    = 1.5;
 
 /**
  * Service coverage radii in tile units. Buildings within a building's radius
@@ -932,7 +960,7 @@ export const MILESTONES: readonly Milestone[] = [
     subtitle: 'Five digits and counting',
     popThreshold: 1000,
     unlocks: [
-      'road_highway', 'residential_high', 'place_hospital', 'place_ferry_dock',
+      'road_highway', 'residential_high', 'place_hospital', 'place_ferry_dock', 'place_hotel',
       // (Ramp + Cloverleaf were scrapped from the UI in Alpha 4.18.1
       //  — kept in code for backwards-compat with existing saves but
       //  no longer unlockable.)
@@ -1127,6 +1155,10 @@ export type Tool =
   // Metro milestone unlock. Earns per-tile tourism revenue; water-adjacent
   // clusters get a coast bonus.
   | 'place_resort'
+  // Hotel (Beta 2.0). Industry group toolbar entry. Modular — adjacent tiles
+  // cluster into airbnb / motel / hotel archetypes based on bounding-box
+  // dimensions. City milestone unlock. Earns per-tile tourism revenue.
+  | 'place_hotel'
   | 'place_school'
   | 'place_hospital'
   | 'place_fire_station'
@@ -1271,6 +1303,8 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_grand_stadium', 'grand_stadium' as const],
   // Resort (Beta 2.0).
   ['place_resort', 'resort' as const],
+  // Hotel (Beta 2.0).
+  ['place_hotel', 'hotel' as const],
   // Cloverleaf interchange (Alpha 4.17). Per-block flow.
   ['place_cloverleaf', 'cloverleaf' as const]
 ]);

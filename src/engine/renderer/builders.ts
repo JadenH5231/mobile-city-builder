@@ -2273,6 +2273,21 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
       }
       continue;
     }
+    // Hotel / Motel / Airbnb (Beta 1.9.14) — modular cluster picks archetype
+    // from bounding-box shape (1×1=airbnb, strip=motel, block=hotel).
+    if (t.building === 'hotel') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'hotel', visited);
+      const parts = hotelClusterParts(cluster, grid);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Big Box (Beta 1.3) — modular cluster of adjacent big_box tiles
     // forms one strip-mall composition. The cluster builder also
     // absorbs adjacent parking_lot tiles into the same paved field.
@@ -4851,6 +4866,157 @@ function resortClusterParts(
       out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx - 0.19, dy: 0.51, dz: az });
       out.push({ makeGeom: () => cone(0.04, 0.09, 8), color: goldAccent, dx: cx + 0.19, dy: 0.51, dz: az });
     }
+  }
+
+  return out;
+}
+
+/**
+ * Hotel / Motel / Airbnb cluster builder (Beta 1.9.14).
+ * Archetype branches on bounding-box shape:
+ *   1×1 → airbnb cottage (cozy B&B aesthetic)
+ *   min-dim = 1, max > 1 → motel strip (long low roadside building)
+ *   both dims ≥ 2 → hotel block (multi-storey glass + concrete)
+ */
+function hotelClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+  _grid: Grid
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  const sorted = cluster.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  const bw = maxX - minX + 1;
+  const bh = maxY - minY + 1;
+
+  const isAirbnb = (bw === 1 && bh === 1);
+  const isMotel  = !isAirbnb && (bw === 1 || bh === 1);
+
+  const set = new Set(cluster.map(c => `${c.x},${c.y}`));
+  const inCluster = (x: number, y: number): boolean => set.has(`${x},${y}`);
+
+  if (isAirbnb) {
+    // Single cottage — whitewashed walls, gable roof, shutters, porch.
+    const creamWall = 0xfaf0e0;
+    const roofSlate = 0x4a5568;
+    const shutterBl = 0x2c5f8a;
+    const woodTrim  = 0x8b5e3c;
+    const chimneyGy = 0x888888;
+    const cx = (sorted[0]!.x + 0.5) * TILE_SIZE;
+    const cz = (sorted[0]!.y + 0.5) * TILE_SIZE;
+
+    out.push({ makeGeom: () => box(0.56, 0.30, 0.50), color: creamWall, dx: cx, dy: 0.15, dz: cz });
+    out.push({ makeGeom: () => box(0.50, 0.22, 0.46), color: creamWall, dx: cx, dy: 0.41, dz: cz });
+    out.push({ makeGeom: () => cone(0.40, 0.24, 4),   color: roofSlate, dx: cx, dy: 0.66, dz: cz });
+    out.push({ makeGeom: () => box(0.06, 0.20, 0.06), color: chimneyGy, dx: cx + 0.16, dy: 0.65, dz: cz - 0.10 });
+    out.push({ makeGeom: () => box(0.10, 0.16, 0.02), color: woodTrim,  dx: cx, dy: 0.08, dz: cz + 0.25 });
+    out.push({ makeGeom: () => box(0.06, 0.10, 0.02), color: shutterBl, dx: cx - 0.16, dy: 0.18, dz: cz + 0.25 });
+    out.push({ makeGeom: () => box(0.06, 0.10, 0.02), color: shutterBl, dx: cx + 0.16, dy: 0.18, dz: cz + 0.25 });
+    out.push({ makeGeom: () => box(0.10, 0.03, 0.04), color: 0xd4715a,  dx: cx - 0.16, dy: 0.14, dz: cz + 0.26 });
+    out.push({ makeGeom: () => box(0.10, 0.03, 0.04), color: 0xd4715a,  dx: cx + 0.16, dy: 0.14, dz: cz + 0.26 });
+    out.push({ makeGeom: () => box(0.24, 0.02, 0.12), color: roofSlate, dx: cx, dy: 0.26, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cyl(0.015, 0.26, 6),   color: creamWall, dx: cx - 0.10, dy: 0.13, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cyl(0.015, 0.26, 6),   color: creamWall, dx: cx + 0.10, dy: 0.13, dz: cz + 0.30 });
+    out.push({ makeGeom: () => cyl(0.015, 0.18, 6),   color: woodTrim,  dx: cx + 0.24, dy: 0.09, dz: cz + 0.24 });
+    out.push({ makeGeom: () => box(0.08, 0.05, 0.03), color: 0xffffff,  dx: cx + 0.24, dy: 0.20, dz: cz + 0.24 });
+
+  } else if (isMotel) {
+    // Long 1-storey strip — per-room doors + windows + covered walkway.
+    const wallBeige = 0xd4c9a0;
+    const roofFlat  = 0x6b7280;
+    const canopyTan = 0xb8a47a;
+    const doorBrown = 0x5c3a1e;
+    const signRed   = 0xd43a2a;
+
+    const isHoriz = bw > bh;
+
+    for (const tile of sorted) {
+      const tx = (tile.x + 0.5) * TILE_SIZE;
+      const tz = (tile.y + 0.5) * TILE_SIZE;
+      const nS = !inCluster(tile.x, tile.y + 1);
+      const nE = !inCluster(tile.x + 1, tile.y);
+
+      out.push({ makeGeom: () => box(TILE_SIZE * 0.90, 0.28, TILE_SIZE * 0.80), color: wallBeige, dx: tx, dy: 0.14, dz: tz });
+      out.push({ makeGeom: () => box(TILE_SIZE * 0.90, 0.04, TILE_SIZE * 0.80), color: roofFlat,  dx: tx, dy: 0.30, dz: tz });
+
+      if (isHoriz && nS) {
+        out.push({ makeGeom: () => box(0.10, 0.20, 0.02), color: doorBrown,  dx: tx, dy: 0.10, dz: tz + TILE_SIZE * 0.44 });
+        out.push({ makeGeom: () => box(0.12, 0.12, 0.02), color: 0x9ecfe0,   dx: tx - 0.20, dy: 0.16, dz: tz + TILE_SIZE * 0.44 });
+        out.push({ makeGeom: () => box(TILE_SIZE * 0.90, 0.02, 0.16), color: canopyTan, dx: tx, dy: 0.26, dz: tz + TILE_SIZE * 0.42 });
+      }
+      if (!isHoriz && nE) {
+        out.push({ makeGeom: () => box(0.02, 0.20, 0.10), color: doorBrown,  dx: tx + TILE_SIZE * 0.44, dy: 0.10, dz: tz });
+        out.push({ makeGeom: () => box(0.02, 0.12, 0.12), color: 0x9ecfe0,   dx: tx + TILE_SIZE * 0.44, dy: 0.16, dz: tz - 0.20 });
+        out.push({ makeGeom: () => box(0.16, 0.02, TILE_SIZE * 0.90), color: canopyTan, dx: tx + TILE_SIZE * 0.42, dy: 0.26, dz: tz });
+      }
+    }
+    // Sign pole at the end tile
+    const lastTile = isHoriz
+      ? sorted.reduce((m, c) => c.x > m.x ? c : m, sorted[0]!)
+      : sorted.reduce((m, c) => c.y > m.y ? c : m, sorted[0]!);
+    const sx = (lastTile.x + 0.5) * TILE_SIZE;
+    const sz = (lastTile.y + 0.5) * TILE_SIZE;
+    const sigOffX = isHoriz ? TILE_SIZE * 0.42 : 0;
+    const sigOffZ = isHoriz ? 0 : TILE_SIZE * 0.42;
+    out.push({ makeGeom: () => cyl(0.02, 0.38, 6),      color: 0x888888, dx: sx + sigOffX, dy: 0.19, dz: sz + sigOffZ });
+    out.push({ makeGeom: () => box(0.18, 0.10, 0.04),   color: signRed,  dx: sx + sigOffX, dy: 0.44, dz: sz + sigOffZ });
+
+  } else {
+    // Multi-storey hotel block — podium + glass tower + lobby porte-cochère.
+    const concrete  = 0xd0ccba;
+    const glassBlue = 0x7bb8d0;
+    const accentGl  = 0xa8d4e8;
+    const lobbyGl   = 0x5da8cc;
+    const canopySil = 0xd4d4d4;
+    const roofDark  = 0x444855;
+    const flagRed   = 0xcc2222;
+
+    const cx = ((minX + maxX) / 2 + 0.5) * TILE_SIZE;
+    const cz = ((minY + maxY) / 2 + 0.5) * TILE_SIZE;
+    const hw = bw * TILE_SIZE * 0.44;
+    const hd = bh * TILE_SIZE * 0.44;
+
+    // Podium
+    out.push({ makeGeom: () => box(hw * 2, 0.20, hd * 2),       color: concrete,  dx: cx, dy: 0.10, dz: cz });
+    out.push({ makeGeom: () => box(hw * 2 + 0.02, 0.03, hd * 2 + 0.02), color: 0x888888, dx: cx, dy: 0.21, dz: cz });
+
+    // Tower
+    const towerH = 0.20 + Math.min(bw, bh) * 0.12;
+    const tw = hw * 1.7;
+    const td = hd * 1.7;
+    out.push({ makeGeom: () => box(tw, towerH, td),              color: concrete,  dx: cx, dy: 0.22 + towerH / 2, dz: cz });
+
+    // Glass curtain walls
+    out.push({ makeGeom: () => box(tw * 0.96, towerH * 0.92, 0.01), color: glassBlue, dx: cx, dy: 0.22 + towerH / 2, dz: cz + td / 2 });
+    out.push({ makeGeom: () => box(tw * 0.96, towerH * 0.92, 0.01), color: glassBlue, dx: cx, dy: 0.22 + towerH / 2, dz: cz - td / 2 });
+    out.push({ makeGeom: () => box(0.01, towerH * 0.92, td * 0.96), color: accentGl,  dx: cx + tw / 2, dy: 0.22 + towerH / 2, dz: cz });
+    out.push({ makeGeom: () => box(0.01, towerH * 0.92, td * 0.96), color: accentGl,  dx: cx - tw / 2, dy: 0.22 + towerH / 2, dz: cz });
+
+    // Roof
+    out.push({ makeGeom: () => box(tw + 0.04, 0.04, td + 0.04), color: roofDark,  dx: cx, dy: 0.24 + towerH, dz: cz });
+    out.push({ makeGeom: () => box(tw * 0.5, 0.08, td * 0.5),  color: roofDark,  dx: cx, dy: 0.28 + towerH, dz: cz });
+
+    // Lobby entrance (south face)
+    const frontZ = cz + hd;
+    const entrW  = Math.min(0.40, tw * 0.6);
+    out.push({ makeGeom: () => box(entrW, 0.03, 0.20),          color: canopySil, dx: cx, dy: 0.30, dz: frontZ + 0.10 });
+    out.push({ makeGeom: () => cyl(0.02, 0.30, 6),              color: 0x888888,  dx: cx - entrW / 2 + 0.03, dy: 0.15, dz: frontZ + 0.18 });
+    out.push({ makeGeom: () => cyl(0.02, 0.30, 6),              color: 0x888888,  dx: cx + entrW / 2 - 0.03, dy: 0.15, dz: frontZ + 0.18 });
+    out.push({ makeGeom: () => box(entrW * 0.6, 0.22, 0.02),    color: lobbyGl,   dx: cx, dy: 0.11, dz: frontZ + 0.01 });
+
+    // Flag poles on roof corners
+    const roofY = 0.26 + towerH;
+    const fH = 0.18;
+    const pX = tw / 2 - 0.04;
+    const pZ = td / 2 - 0.04;
+    out.push({ makeGeom: () => cyl(0.012, fH, 6), color: 0x888888, dx: cx - pX, dy: roofY + fH / 2, dz: cz - pZ });
+    out.push({ makeGeom: () => cyl(0.012, fH, 6), color: 0x888888, dx: cx + pX, dy: roofY + fH / 2, dz: cz - pZ });
+    out.push({ makeGeom: () => box(0.08, 0.05, 0.01), color: flagRed,   dx: cx - pX + 0.05, dy: roofY + fH - 0.02, dz: cz - pZ });
+    out.push({ makeGeom: () => box(0.08, 0.05, 0.01), color: 0x2244aa,  dx: cx + pX + 0.05, dy: roofY + fH - 0.02, dz: cz - pZ });
   }
 
   return out;

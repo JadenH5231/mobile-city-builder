@@ -42,6 +42,7 @@ const STANCE_LABEL: Record<StanceKey, string> = {
   forestry: 'Forestry', farm: 'Farms',
   big_box: 'Big Box stores', warehouse: 'Warehouses', parking_lot: 'Parking lots',
   resort: 'Resorts',
+  hotel: 'Hotels & Motels',
   school: 'Schools', hospital: 'Hospitals',
   fire_station: 'Fire stations', police_station: 'Police stations',
   museum: 'Museums', stadium: 'Stadiums', observatory: 'Observatories',

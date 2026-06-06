@@ -19,6 +19,12 @@ import {
   RESORT_SCALE_BONUS_PER_TILE,
   RESORT_SCALE_CAP,
   RESORT_WATER_BONUS_MULT,
+  HOTEL_BASE_REVENUE_PER_TILE,
+  HOTEL_DISCONNECTED_MULT,
+  HOTEL_WATER_BONUS_MULT,
+  HOTEL_AIRBNB_MULT,
+  HOTEL_MOTEL_MULT,
+  HOTEL_HOTEL_MULT,
   ROAD_TIER,
   type Building,
   type Zone
@@ -116,6 +122,8 @@ export class Economy {
   lifetimeTourismRevenue = 0;
   /** Last completed month's resort tourism revenue (Beta 2.0). */
   lastResortRevenue = 0;
+  /** Last completed month's hotel/motel tourism revenue (Beta 1.9.14). */
+  lastHotelRevenue = 0;
   /** Last completed month's bond debt service (Alpha 2.18). Pull-out line
    *  in the budget panel so the player sees what their borrowing costs. */
   lastBondPayment = 0;
@@ -313,6 +321,59 @@ export class Economy {
     }
     this.lastResortRevenue = Math.round(resortRevenue);
     tourismRevenue += resortRevenue;
+    // Hotel/motel tourism (Beta 1.9.14): cluster BFS identical to resorts.
+    // Archetype multiplier branches on bounding-box shape:
+    //   1×1 → airbnb (smallest, cheapest per tile)
+    //   min dim = 1, max > 1 → motel strip
+    //   both dims ≥ 2 → hotel block (premium multiplier)
+    let hotelRevenue = 0;
+    {
+      const visitedHotels = new Set<number>();
+      for (const t of grid.iter()) {
+        if (t.building !== 'hotel') continue;
+        const startKey = t.y * grid.width + t.x;
+        if (visitedHotels.has(startKey)) continue;
+        const cluster: Array<{x: number; y: number}> = [];
+        const queue: Array<{x: number; y: number}> = [{x: t.x, y: t.y}];
+        visitedHotels.add(startKey);
+        while (queue.length > 0) {
+          const curr = queue.shift()!;
+          cluster.push(curr);
+          for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]] as const) {
+            const nx = curr.x + dx, ny = curr.y + dy;
+            const nk = ny * grid.width + nx;
+            if (visitedHotels.has(nk)) continue;
+            const nt = grid.get(nx, ny);
+            if (!nt || nt.building !== 'hotel') continue;
+            visitedHotels.add(nk);
+            queue.push({x: nx, y: ny});
+          }
+        }
+        const size = cluster.length;
+        const minX = Math.min(...cluster.map(c => c.x));
+        const maxX = Math.max(...cluster.map(c => c.x));
+        const minY = Math.min(...cluster.map(c => c.y));
+        const maxY = Math.max(...cluster.map(c => c.y));
+        const bw = maxX - minX + 1;
+        const bh = maxY - minY + 1;
+        const archMult =
+          (bw === 1 && bh === 1) ? HOTEL_AIRBNB_MULT :
+          (bw >= 2 && bh >= 2) ? HOTEL_HOTEL_MULT : HOTEL_MOTEL_MULT;
+        const hasWater = cluster.some(({x, y}) => {
+          for (const [dx2, dy2] of [[0,1],[0,-1],[1,0],[-1,0]] as const) {
+            const nt = grid.get(x + dx2, y + dy2);
+            if (nt && nt.terrain === 'water') return true;
+          }
+          return false;
+        });
+        const hasRoad = cluster.some(({x, y}) => grid.hasRoadAdjacent(x, y));
+        const connMult = hasRoad ? 1.0 : HOTEL_DISCONNECTED_MULT;
+        const waterBonus = hasWater ? HOTEL_WATER_BONUS_MULT : 1.0;
+        hotelRevenue += size * HOTEL_BASE_REVENUE_PER_TILE * archMult * waterBonus * connMult;
+      }
+    }
+    this.lastHotelRevenue = Math.round(hotelRevenue);
+    tourismRevenue += hotelRevenue;
     this.lastTourismRevenue = Math.round(tourismRevenue);
     this.lifetimeTourismRevenue += this.lastTourismRevenue;
 

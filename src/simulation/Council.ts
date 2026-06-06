@@ -126,6 +126,10 @@ export interface FactionStances {
    *  drivers stay neutral (their roads aren't taken). */
   ferry_dock: number;
   subway_entrance: number;
+  /** Subway line tracks (Beta 1.9.15). Drawing the line; distinct from
+   *  placing a station entrance. Transit/yimbys/greens strongly favour;
+   *  drivers and taxpayers push back on the cost + lane dedication. */
+  subway: number;
   /** Architect Mode decoratives (Alpha 4.0). Each row mirrors the kind
    *  of player who'd cheer / object to a given monumental build. NIMBYs
    *  love anything that raises property values without bringing density;
@@ -208,7 +212,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.3, warehouse: -0.4, parking_lot: -0.2,
     school: 0.3, hospital: 0.4, fire_station: 0.5, police_station: 0.7,
     museum: -0.1, stadium: -0.6, observatory: 0.2,
-    ferry_dock: 0.1, subway_entrance: -0.2,
+    ferry_dock: 0.1, subway_entrance: -0.2, subway: -0.4,
     plaza: 0.6, fountain: 0.8, statue: 0.5, flower_bed: 0.7, topiary: 0.8,
     pergola: 0.5, reflecting_pool: 0.6, memorial_garden: 0.7,
     clock_tower: 0.4, triumphal_arch: 0.3, pier: 0.4,
@@ -240,7 +244,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.7, warehouse: -0.2, parking_lot: -0.8,
     school: 0.5, hospital: 0.5, fire_station: 0.3, police_station: 0.0,
     museum: 0.0, stadium: -0.2, observatory: 0.4,
-    ferry_dock: 0.4, subway_entrance: 0.7,
+    ferry_dock: 0.4, subway_entrance: 0.7, subway: 0.6,
     // Yimbys mildly resent monumental decoratives that occupy buildable
     // tiles (could've been housing). Plaza / pergola get a pass — they
     // promote walkability.
@@ -276,7 +280,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.6, warehouse: -0.5, parking_lot: -0.7,
     school: 0.4, hospital: 0.5, fire_station: 0.2, police_station: -0.1,
     museum: 0.4, stadium: -0.4, observatory: 0.5,
-    ferry_dock: 0.5, subway_entrance: 0.7,
+    ferry_dock: 0.5, subway_entrance: 0.7, subway: 0.5,
     // Greenleaf adores anything that adds nature: gardens, water
     // features, trees-in-architecture. Stone monuments are neutral.
     plaza: 0.2, fountain: 0.8, statue: 0.0, flower_bed: 1.0, topiary: 0.9,
@@ -312,7 +316,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.9, warehouse: -0.6, parking_lot: -0.4,
     school: 0.4, hospital: 0.5, fire_station: 0.7, police_station: 0.6,
     museum: 0.7, stadium: -0.4, observatory: 0.1,
-    ferry_dock: 0.2, subway_entrance: -0.1,
+    ferry_dock: 0.2, subway_entrance: -0.1, subway: -0.3,
     // Hometown Heritage venerates classical decoratives — statues, clock
     // towers, arches, memorial gardens are exactly their bag.
     plaza: 0.5, fountain: 0.6, statue: 0.9, flower_bed: 0.5, topiary: 0.6,
@@ -347,7 +351,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: 0.7, warehouse: 0.8, parking_lot: 0.4,
     school: 0.3, hospital: 0.4, fire_station: 0.4, police_station: 0.5,
     museum: 0.5, stadium: 0.8, observatory: 0.3,
-    ferry_dock: 0.3, subway_entrance: 0.4,
+    ferry_dock: 0.3, subway_entrance: 0.4, subway: 0.2,
     // Chamber loves anything that draws shoppers to downtown.
     // Streetscape beautification is their #1 issue (they want it MAX).
     plaza: 0.8, fountain: 0.6, statue: 0.5, flower_bed: 0.4, topiary: 0.4,
@@ -381,7 +385,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.7, warehouse: -0.4, parking_lot: -0.8,
     school: 0.4, hospital: 0.4, fire_station: 0.3, police_station: 0.1,
     museum: 0.4, stadium: 0.5, observatory: 0.4,
-    ferry_dock: 0.7, subway_entrance: 1.0,
+    ferry_dock: 0.7, subway_entrance: 1.0, subway: 0.9,
     // Transit loves walkability features (plaza/pergola/pier) — those
     // make a transit trip feel like a destination, not just transport.
     plaza: 0.7, fountain: 0.4, statue: 0.2, flower_bed: 0.3, topiary: 0.2,
@@ -415,7 +419,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: 0.6, warehouse: 0.5, parking_lot: 1.0,
     school: 0.2, hospital: 0.4, fire_station: 0.5, police_station: 0.6,
     museum: 0.0, stadium: 0.4, observatory: 0.0,
-    ferry_dock: 0.0, subway_entrance: -0.1,
+    ferry_dock: 0.0, subway_entrance: -0.1, subway: -0.4,
     // Drivers don't care either way about streetscape — but they
     // dislike pedestrian-only plazas (no parking).
     plaza: -0.2, fountain: 0.0, statue: 0.0, flower_bed: 0.0, topiary: 0.0,
@@ -450,7 +454,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: 0.3, warehouse: 0.4, parking_lot: 0.1,
     school: 0.1, hospital: -0.1, fire_station: 0.3, police_station: 0.3,
     museum: 0.2, stadium: 0.0, observatory: -0.1,
-    ferry_dock: -0.1, subway_entrance: -0.3,
+    ferry_dock: -0.1, subway_entrance: -0.3, subway: -0.6,
     // Taxpayers Alliance HATES vanity spending on principle.
     // Beautification is the policy lever they're most opposed to.
     plaza: -0.5, fountain: -0.7, statue: -0.6, flower_bed: -0.3, topiary: -0.5,
@@ -485,7 +489,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: -0.2, warehouse: -0.3, parking_lot: -0.3,
     school: 0.6, hospital: 0.7, fire_station: 0.9, police_station: 0.7,
     museum: 0.4, stadium: -0.1, observatory: 0.3,
-    ferry_dock: 0.4, subway_entrance: 0.6,
+    ferry_dock: 0.4, subway_entrance: 0.6, subway: 0.3,
     // Safer Streets: more eyes-on-the-street = safer. Plazas and
     // gardens activate the public realm; supports beautification.
     plaza: 0.7, fountain: 0.4, statue: 0.3, flower_bed: 0.5, topiary: 0.3,
@@ -519,7 +523,7 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     big_box: 0.5, warehouse: 0.6, parking_lot: 0.2,
     school: 0.8, hospital: 0.8, fire_station: 0.5, police_station: 0.4,
     museum: 0.5, stadium: 0.6, observatory: 0.3,
-    ferry_dock: 0.3, subway_entrance: 0.6,
+    ferry_dock: 0.3, subway_entrance: 0.6, subway: 0.4,
     // Working Families resent monuments-vs-housing trade-off but DO
     // value local plazas, flower beds, free public spaces.
     plaza: 0.5, fountain: 0.2, statue: -0.2, flower_bed: 0.4, topiary: 0.0,

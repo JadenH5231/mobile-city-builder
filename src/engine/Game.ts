@@ -15,6 +15,7 @@ import { Stats } from '../simulation/Stats';
 import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Bonds, type BondId } from '../simulation/Bonds';
 import { Ferries } from '../simulation/Ferries';
+import { Trains } from '../simulation/Trains';
 import { Crime } from '../simulation/Crime';
 import { Districts } from '../simulation/Districts';
 import { Skyscrapers } from '../simulation/Skyscrapers';
@@ -71,6 +72,7 @@ import {
   SERVICE_RADIUS,
   RAMP_COST,
   STOP_SIGN_COST,
+  SUBWAY_TRACK_COST,
   TERRAFORM_COSTS,
   TILE_SIZE,
   TRAFFIC_LIGHT_COST,
@@ -133,6 +135,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_observatory: 'Observatory',
   place_ferry_dock: 'Ferry Dock',
   place_subway_entrance: 'Subway',
+  draw_subway: 'Subway Track',
   place_plaza: 'Plaza',
   place_fountain: 'Fountain',
   place_statue: 'Statue',
@@ -429,6 +432,8 @@ export class Game {
   readonly bonds = new Bonds();
   /** Ferry routes between dock pairs (Alpha 2.19). */
   readonly ferries = new Ferries();
+  /** Subway train lines between station pairs (Beta 1.9.15). */
+  readonly trains = new Trains();
   /** Per-tile crime simulation (Alpha 2.21). Recomputed monthly, drives the
    *  Crime heatmap layer + a small commercial-revenue penalty. */
   readonly crime = new Crime();
@@ -669,6 +674,7 @@ export class Game {
     this.renderer.drawWorld(this.grid);
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
+    this.renderer.drawSubwayTracks(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
@@ -824,6 +830,7 @@ export class Game {
       ['place_observatory', 'observatory'],
       ['place_ferry_dock', 'ferry_dock'],
       ['place_subway_entrance', 'subway_entrance'],
+      ['draw_subway', 'subway'],
       // Architect Mode decoratives (Alpha 4.0) — same dispatch shape,
       // each tool keys into its FACTION_STANCES row.
       ['place_plaza', 'plaza'],
@@ -1559,6 +1566,8 @@ export class Game {
       this.renderer.updateBuses(this.buses, this.grid);
       this.ferries.update(dt, this.grid);
       this.renderer.updateFerries(this.ferries, this.grid);
+      this.trains.update(dt, this.grid);
+      this.renderer.updateTrains(this.trains, this.grid);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
       // Beta 1.3.4 (Phase 2.1) — shoppers (walkers spawned by parked
@@ -1902,6 +1911,7 @@ export class Game {
     this.renderer.drawWorld(this.grid);
     this.renderer.drawZones(this.grid);
     this.renderer.drawPaths(this.grid);
+    this.renderer.drawSubwayTracks(this.grid);
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
@@ -2008,6 +2018,7 @@ export class Game {
     this.strokeStubs.clear();
     this.strokeZones.clear();
     this.strokePaths.clear();
+    this.strokeSubway.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
     this.strokeBridgeEdges.clear();
@@ -2258,6 +2269,7 @@ export class Game {
     this.strokeStubs.clear();
     this.strokeZones.clear();
     this.strokePaths.clear();
+    this.strokeSubway.clear();
     this.strokeBulldozed.clear();
     this.strokeForestCleared.clear();
     this.terraformBlockNotifiedThisStroke = false;
@@ -3347,6 +3359,10 @@ export class Game {
       this.applyPathStroke(path);
       return;
     }
+    if (this.tool === 'draw_subway') {
+      this.applySubwayTrackStroke(path);
+      return;
+    }
     if (this.tool === 'bulldoze') {
       this.applyBulldozeStroke(path);
       return;
@@ -3803,6 +3819,52 @@ export class Game {
     }
   }
 
+  // --- Subway track stroke ------------------------------------------------
+
+  /** Rubber-band stroke for the draw_subway tool. Places subwayTrack bits
+   *  at the given path tiles, charging $SUBWAY_TRACK_COST per new tile. */
+  private readonly strokeSubway = new Set<number>();
+
+  private applySubwayTrackStroke(path: { x: number; y: number }[]): void {
+    const desired = new Set<number>();
+    for (const p of path) desired.add(this.tileIndex(p.x, p.y));
+
+    let changed = false;
+
+    // Retreat: remove track we set earlier that the band has since left.
+    for (const idx of this.strokeSubway) {
+      if (desired.has(idx)) continue;
+      const { x, y } = this.unpackTile(idx);
+      const t = this.grid.get(x, y);
+      if (t && t.subwayTrack) {
+        t.subwayTrack = false;
+        // Refund the tile cost on retreat.
+        this.economy.treasury += SUBWAY_TRACK_COST;
+        changed = true;
+      }
+      this.strokeSubway.delete(idx);
+    }
+
+    // Apply to fresh tiles. Skip tiles that already have track.
+    for (const idx of desired) {
+      if (this.strokeSubway.has(idx)) continue;
+      const { x, y } = this.unpackTile(idx);
+      const t = this.grid.get(x, y);
+      if (!t) continue;
+      if (t.subwayTrack) { this.strokeSubway.add(idx); continue; }
+      if (!this.cheatUnlimitedMoney && this.economy.treasury < SUBWAY_TRACK_COST) break;
+      t.subwayTrack = true;
+      if (!this.cheatUnlimitedMoney) this.economy.treasury -= SUBWAY_TRACK_COST;
+      this.strokeSubway.add(idx);
+      changed = true;
+    }
+
+    if (changed) {
+      this.renderer.drawSubwayTracks(this.grid);
+      this.trains.rebuildIfNeeded(this.grid);
+    }
+  }
+
   // --- Bulldoze stroke ----------------------------------------------------
 
   private applyBulldozeStroke(path: { x: number; y: number }[]): void {
@@ -4117,6 +4179,10 @@ export class Game {
       if (tile.path) {
         if (this.grid.setPath(x, y, false)) pathsChanged = true;
       }
+      if (tile.subwayTrack) {
+        tile.subwayTrack = false;
+        pathsChanged = true; // reuse flag — subway redraw happens below
+      }
     }
 
     if (roadsChanged) {
@@ -4150,6 +4216,7 @@ export class Game {
     if (pathsChanged) {
       this.renderer.drawPaths(this.grid);
       this.pathGraph.rebuild(this.grid);
+      this.renderer.drawSubwayTracks(this.grid);
     }
   }
 

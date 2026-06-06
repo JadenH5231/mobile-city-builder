@@ -352,6 +352,7 @@ on a different machine isn't a forensic exercise.
 - **Tourism + landmarks** (museum / stadium / observatory) with monthly revenue scaled by city pop (Alpha 2.17).
 - **Bonds + wealth surtax** (Alpha 2.18) — 3 bond tiers with default penalty + a surtax slider on L3 R/C + luxury R.
 - **Ferries + subway entrances** (Alpha 2.19) — ferry docks pair across water with visible boats; subway entrances suppress car spawns within radius.
+- **Subway lines + trains** (Beta 1.9.15) — `draw_subway` tool paints `subwayTrack` tiles; `Trains.ts` BFS-groups station entrances per connected track component and cycles a visible metro car between stations (ping-pong, ferry-style). Capital-milestone unlock, $200/tile.
 - **Crime simulation + purple heatmap** (Alpha 2.21) — per-tile crime score recomputed monthly, drives commercial revenue penalty + faction reactions.
 - **Districts + per-zone surtax** (Alpha 2.22) — paint districts, name them, set color, and apply per-zone surtax sliders that stack on base R/C/I.
 - **Skyscrapers** (Alpha 3.1.2) — 2×2 footprint, 4-stage construction over 12 sim months, 18 visual variants across R/C/MU. Translucent on zoom-in (Alpha 3.1.7) so the player can see ground-level activity behind a tower.
@@ -361,6 +362,36 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+
+## Status: Beta 2.0.0 (Batch complete — consolidated What's New)
+
+All six features from the batch (Grand Stadium, 1×1 luxury homes, milestone-gated architecture, Resorts, Hotels & Motels, Subways) shipped as silent patches 1.9.6–1.9.15 and are now consolidated under MINOR bump 2.0.0 with a `WHATS_NEW['2.0']` entry for returning players. SW cache `v51`. **No further batch items queued.**
+
+---
+
+## Status: Beta 1.9.15 (Subways — draw_subway + Trains.ts + visible metro cars)
+
+New `draw_subway` stroke tool (Capital milestone, $200/tile) lets players paint `subwayTrack`
+tiles connecting placed `subway_entrance` stations. `src/simulation/Trains.ts`: BFS-floods
+track into connected components, groups adjacent stations per component, cycles a visible
+train back-and-forth (ferry-style ping-pong, 2.5 tiles/sec, 2 s dwell). Track renders as
+dark ballast + twin silver rails. Metro car InstancedMesh (blue + yellow stripe + windows).
+
+**Key files changed:**
+- `types.ts` — `draw_subway` Tool, `SUBWAY_TRACK_COST = 200`, Capital milestone unlock
+- `Tile.ts` — `subwayTrack = false` bit
+- `Council.ts` — `subway: number` in FactionStances + all 10 faction rows
+- `FactionDetailPanel.ts` — STANCE_LABEL `subway: 'Subway lines'`
+- `src/simulation/Trains.ts` (NEW) — BFS grouping, lerp, rebuildIfNeeded/update
+- `Game.ts` — Trains field, loop wiring, `applySubwayTrackStroke`, rubber-band dispatch, bulldoze teardown, init/restore draw calls, TOOL_LABEL, toolToKey
+- `Toolbar.ts` — 'Track' entry in Transit group (rail SVG icon)
+- `Renderer.ts` — `subwayTrackMesh` + `trainsMesh` InstancedMesh, `drawSubwayTracks`, `updateTrains`
+- `builders.ts` — `buildSubwayTrackMesh` (ballast + rail quads)
+- `SaveGame.ts` — `subwayTrack?: boolean`, write/read with `?? false`
+
+SW cache `v49` → `v50`. `APP_VERSION` 1.9.14 → 1.9.15 (silent patch).
+
+---
 
 ## Status: Beta 1.9.14 (Hotels & Motels — dimension-based archetypes)
 
@@ -423,11 +454,7 @@ alongside landmarks; tracked separately as `Economy.lastResortRevenue`.
 
 SW cache `v47` → `v48`. `APP_VERSION` 1.9.12 → 1.9.13 (**silent patch**).
 
-**⏭ Batch not finished — 1 feature still queued:** Subways (1.9.15, real
-transit lines with drawable tracks, stations, visible trains), then a
-**consolidated Beta 2.0.0 What's New** popup covering the full batch (Grand
-Stadium + 1×1 luxury homes + milestone-gated architecture + Resorts +
-Hotels & Motels + Subways). Continue numbering at 1.9.15.
+**✅ Batch complete.** Subways landed as Beta 1.9.15; consolidated What's New at Beta 2.0.0.
 
 ---
 

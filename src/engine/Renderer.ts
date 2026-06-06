@@ -58,6 +58,7 @@ import {
   buildLitWindowsMesh,
   buildNightLightsMesh,
   buildPathMesh,
+  buildSubwayTrackMesh,
   buildRoadMesh,
   buildRoadOrnamentsGroup,
   buildSidewalkMesh,
@@ -180,6 +181,8 @@ export class Renderer {
   private sidewalkMesh: Mesh | null = null;
   /** Walking-path strips. Rebuilt when path tiles change. */
   private pathMesh: Mesh | null = null;
+  /** Subway track ballast + rails. Rebuilt when subwayTrack tiles change. */
+  private subwayTrackMesh: Mesh | null = null;
   private roadMesh: Mesh | null = null;
   private roadLanes: LineSegments | null = null;
   /** Highway flow arrows + stop signs — rebuilt with the road mesh. */
@@ -272,6 +275,7 @@ export class Renderer {
   private busWindowsMesh!: InstancedMesh;
   private busHeadlightsMesh!: InstancedMesh;
   private ferriesMesh!: InstancedMesh;
+  private trainsMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
   /** Shopper bodies / heads (Beta 1.3.4 — Phase 2.1). Visible while a
    *  parked-car shopper is on the outbound or return leg between the
@@ -869,6 +873,26 @@ export class Renderer {
     this.ferriesMesh.count = 0;
     this.ferriesMesh.frustumCulled = false;
     this.worldGroup.add(this.ferriesMesh);
+
+    // Subway train (Beta 1.9.15) — metro car silhouette: long boxy body, roof
+    // stripe, small windows. Sits at rail height, longer than a bus.
+    const carBody  = new BoxGeometry(0.22, 0.12, 0.50);
+    carBody.translate(0, 0.07, 0);
+    const carRoof  = new BoxGeometry(0.22, 0.02, 0.50);
+    carRoof.translate(0, 0.135, 0);
+    // Window strips — thin bright bands on the sides.
+    const winStrip = new BoxGeometry(0.01, 0.05, 0.38);
+    const winLeft  = winStrip.clone(); winLeft.translate(-0.115, 0.085, 0);
+    const winRight = winStrip.clone(); winRight.translate( 0.115, 0.085, 0);
+    const trainGeom = mergeGeoms(
+      [carBody, carRoof, winLeft, winRight],
+      [0x3a5fd9, 0xe8e000, 0xe0e8ff, 0xe0e8ff]  // blue body / yellow roof stripe / bright windows
+    );
+    const trainMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.trainsMesh = new InstancedMesh(trainGeom, trainMat, 24);
+    this.trainsMesh.count = 0;
+    this.trainsMesh.frustumCulled = false;
+    this.worldGroup.add(this.trainsMesh);
   }
 
   setSize(width: number, height: number): void {
@@ -1542,6 +1566,45 @@ export class Renderer {
       this.pathMesh = built;
       this.worldGroup.add(this.pathMesh);
     }
+  }
+
+  /** Rebuild the subway track mesh when subwayTrack tiles change. */
+  drawSubwayTracks(grid: Grid): void {
+    if (this.subwayTrackMesh) {
+      this.worldGroup.remove(this.subwayTrackMesh);
+      this.subwayTrackMesh.geometry.dispose();
+      (this.subwayTrackMesh.material as MeshLambertMaterial).dispose();
+      this.subwayTrackMesh = null;
+    }
+    const built = buildSubwayTrackMesh(grid);
+    if (built) {
+      this.subwayTrackMesh = built;
+      this.worldGroup.add(this.subwayTrackMesh);
+    }
+  }
+
+  /** Per-frame train positions. Trains lerp between stations along subwayTrack. */
+  updateTrains(trains: import('../simulation/Trains').Trains, _grid: Grid): void {
+    const obj = this.tmpObj;
+    let visible = 0;
+    for (const train of trains.active) {
+      if (visible >= this.trainsMesh.count + 1 && visible >= 24) break;
+      const n = train.stations.length;
+      const fromIdx = Math.max(0, Math.min(train.destIdx - train.dir, n - 1));
+      const from = train.stations[fromIdx]!;
+      const to   = train.stations[Math.max(0, Math.min(train.destIdx, n - 1))]!;
+      const px = from.x + (to.x - from.x) * train.t + 0.5;
+      const pz = from.y + (to.y - from.y) * train.t + 0.5;
+      const heading = Math.atan2(to.x - from.x, to.y - from.y);
+      obj.position.set(px, 0.02, pz);
+      obj.rotation.set(0, heading, 0);
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      this.trainsMesh.setMatrixAt(visible, obj.matrix);
+      visible++;
+    }
+    this.trainsMesh.count = visible;
+    if (visible > 0) this.trainsMesh.instanceMatrix.needsUpdate = true;
   }
 
   private rebuildSidewalks(grid: Grid): void {

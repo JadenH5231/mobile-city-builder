@@ -7453,6 +7453,104 @@ export function buildSidewalkMesh(grid: Grid): Mesh | null {
   return new Mesh(geom, mat);
 }
 
+/** Subway track + ballast mesh (Beta 1.9.15). One dark ballast pad + two silver
+ *  rail strips per tile, with stubs extending toward adjacent track tiles. */
+export function buildSubwayTrackMesh(grid: Grid): Mesh | null {
+  const trackTiles: { x: number; y: number; elevation: number }[] = [];
+  for (const t of grid.iter()) {
+    if (t.subwayTrack) trackTiles.push({ x: t.x, y: t.y, elevation: t.elevation });
+  }
+  if (trackTiles.length === 0) return null;
+
+  const SUBWAY_HALF = 0.19;
+  const RAIL_OFFSET = 0.09;  // distance from centreline to each rail centre
+  const RAIL_HALF  = 0.025;  // half-width of a rail strip
+  const stubLen = TILE_SIZE * 0.5;
+  const BASE_Y = ROAD_LIFT - 0.006; // just below road level so roads overlay cleanly
+
+  // Upper bound: each tile ≤ 5 ballast quads + 8 rail quads (2 rails × 4 directions).
+  const maxQuads = trackTiles.length * 13;
+  const positions = new Float32Array(maxQuads * 4 * 3);
+  const colours   = new Float32Array(maxQuads * 4 * 3);
+  const indices   = new Uint32Array(maxQuads * 6);
+  const cBallast  = new Color(0x2d2d2d);   // dark charcoal ballast
+  const cRail     = new Color(0xa8a8a8);   // silver rails
+
+  let vi = 0, ci = 0, ii = 0, v = 0;
+
+  const push = (x0: number, z0: number, x1: number, z1: number, y: number, col: Color) => {
+    pushQuad(positions, colours, indices, x0, z0, x1, z1, y, col, vi, ci, ii, v);
+    vi += 12; ci += 12; ii += 6; v += 4;
+  };
+
+  const hasTrack = (tx: number, ty: number) => {
+    const t = grid.get(tx, ty);
+    return t?.subwayTrack ?? false;
+  };
+
+  for (const tile of trackTiles) {
+    const cx  = (tile.x + 0.5) * TILE_SIZE;
+    const cz  = (tile.y + 0.5) * TILE_SIZE;
+    const y   = BASE_Y + tile.elevation;
+    const yR  = y + 0.003; // rails sit slightly above the ballast
+
+    // Centre ballast pad.
+    push(cx - SUBWAY_HALF, cz - SUBWAY_HALF, cx + SUBWAY_HALF, cz + SUBWAY_HALF, y, cBallast);
+
+    const cN = hasTrack(tile.x, tile.y - 1);
+    const cS = hasTrack(tile.x, tile.y + 1);
+    const cE = hasTrack(tile.x + 1, tile.y);
+    const cW = hasTrack(tile.x - 1, tile.y);
+
+    // Ballast + rails extending into each connected direction.
+    if (cN) {
+      push(cx - SUBWAY_HALF, cz - stubLen, cx + SUBWAY_HALF, cz - SUBWAY_HALF, y, cBallast);
+      push(cx - RAIL_OFFSET - RAIL_HALF, cz - stubLen, cx - RAIL_OFFSET + RAIL_HALF, cz, yR, cRail);
+      push(cx + RAIL_OFFSET - RAIL_HALF, cz - stubLen, cx + RAIL_OFFSET + RAIL_HALF, cz, yR, cRail);
+    }
+    if (cS) {
+      push(cx - SUBWAY_HALF, cz + SUBWAY_HALF, cx + SUBWAY_HALF, cz + stubLen, y, cBallast);
+      push(cx - RAIL_OFFSET - RAIL_HALF, cz, cx - RAIL_OFFSET + RAIL_HALF, cz + stubLen, yR, cRail);
+      push(cx + RAIL_OFFSET - RAIL_HALF, cz, cx + RAIL_OFFSET + RAIL_HALF, cz + stubLen, yR, cRail);
+    }
+    if (cE) {
+      push(cx + SUBWAY_HALF, cz - SUBWAY_HALF, cx + stubLen, cz + SUBWAY_HALF, y, cBallast);
+      push(cx, cz - RAIL_OFFSET - RAIL_HALF, cx + stubLen, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
+      push(cx, cz + RAIL_OFFSET - RAIL_HALF, cx + stubLen, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
+    }
+    if (cW) {
+      push(cx - stubLen, cz - SUBWAY_HALF, cx - SUBWAY_HALF, cz + SUBWAY_HALF, y, cBallast);
+      push(cx - stubLen, cz - RAIL_OFFSET - RAIL_HALF, cx, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
+      push(cx - stubLen, cz + RAIL_OFFSET - RAIL_HALF, cx, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
+    }
+
+    // Rail crosses on isolated centre (no connections) — two short L-crossing marks.
+    if (!cN && !cS) {
+      push(cx - RAIL_OFFSET - RAIL_HALF, cz - SUBWAY_HALF, cx - RAIL_OFFSET + RAIL_HALF, cz + SUBWAY_HALF, yR, cRail);
+      push(cx + RAIL_OFFSET - RAIL_HALF, cz - SUBWAY_HALF, cx + RAIL_OFFSET + RAIL_HALF, cz + SUBWAY_HALF, yR, cRail);
+    }
+    if (!cE && !cW) {
+      push(cx - SUBWAY_HALF, cz - RAIL_OFFSET - RAIL_HALF, cx + SUBWAY_HALF, cz - RAIL_OFFSET + RAIL_HALF, yR, cRail);
+      push(cx - SUBWAY_HALF, cz + RAIL_OFFSET - RAIL_HALF, cx + SUBWAY_HALF, cz + RAIL_OFFSET + RAIL_HALF, yR, cRail);
+    }
+  }
+
+  // Trim to actual usage.
+  const usedVerts = vi / 3;
+  const usedTris  = ii / 3;
+  const trimPos  = positions.slice(0, vi);
+  const trimCol  = colours.slice(0, ci);
+  const trimIdx  = indices.slice(0, ii);
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(trimPos, 3));
+  geom.setAttribute('color',    new BufferAttribute(trimCol, 3));
+  geom.setIndex(new BufferAttribute(trimIdx, 1));
+  void usedVerts; void usedTris;
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(geom, mat);
+}
+
 /** True if the tile at (x, y) is a non-highway road — i.e. it has a sidewalk. */
 /**
  * Perpendicular offset (in tile units, unsigned) where a pedestrian

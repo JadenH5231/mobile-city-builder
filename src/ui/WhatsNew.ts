@@ -29,6 +29,17 @@ interface ChangeEntry {
  *  added at the top or bottom — display order is computed by version, not
  *  object order. */
 const WHATS_NEW: Record<string, ChangeEntry> = {
+  '2.0': {
+    title: 'Big city, bigger ambitions',
+    highlights: [
+      '🏟 Grand Stadium — a 5×4 multi-block showpiece with a full bowl, floodlit pitch, and animated players at night.',
+      '🏠 1×1 luxury homes — a compact single-tile estate with the same premium effects as the two-tile pair, now at half the cost.',
+      '🏗 Milestone-gated architecture — new premium building variants (glass condos, art-deco shopfronts, HQ towers) unlock as your city grows.',
+      '🌴 Resorts — modular tropical complexes that grow from a cosy beach villa all the way to a grand resort hotel.',
+      '🏨 Hotels & Motels — place tiles to shape the archetype automatically: one tile = Airbnb cottage, a strip = motel row, a block = glass hotel tower.',
+      '🚇 Subway lines — draw tracks between Subway Entrance stations; a visible metro train cycles between them. Unlocked at Capital milestone.'
+    ]
+  },
   '1.9': {
     title: 'A better-looking city',
     highlights: [

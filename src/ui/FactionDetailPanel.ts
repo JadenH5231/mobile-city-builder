@@ -46,7 +46,7 @@ const STANCE_LABEL: Record<StanceKey, string> = {
   school: 'Schools', hospital: 'Hospitals',
   fire_station: 'Fire stations', police_station: 'Police stations',
   museum: 'Museums', stadium: 'Stadiums', observatory: 'Observatories',
-  ferry_dock: 'Ferries', subway_entrance: 'Subway',
+  ferry_dock: 'Ferries', subway_entrance: 'Subway', subway: 'Subway lines',
   plaza: 'Plazas', fountain: 'Fountains', statue: 'Statues',
   flower_bed: 'Flower beds', topiary: 'Topiary',
   pergola: 'Pergolas', reflecting_pool: 'Reflecting pools',

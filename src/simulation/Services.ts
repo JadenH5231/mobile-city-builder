@@ -7,6 +7,31 @@ import {
 } from '../types';
 
 /**
+ * Architect-mode decoratives (Alpha 4.0) that provide a small park-coverage
+ * bonus to nearby residential tiles. These radii are intentionally smaller
+ * than SERVICE_RADIUS.park (10) so a dedicated `park` tile is still the most
+ * efficient coverage option, but placing civic amenities has a real quality-
+ * of-life payoff for adjacent residents.
+ *
+ * The `reflecting_pool` entry also applies to multi-tile clusters — each tile
+ * in a cluster independently paints its radius, so a larger pool complex
+ * covers a wider area naturally.
+ */
+const ARCH_PARK_RADIUS: Record<string, number> = {
+  plaza:           4,
+  fountain:        5,
+  pergola:         4,
+  reflecting_pool: 4,
+  memorial_garden: 6,
+  flower_bed:      3,
+  topiary:         3,
+  pier:            3,
+  statue:          3,
+  clock_tower:     4,
+  triumphal_arch:  5,
+};
+
+/**
  * Service-coverage sweep.
  *
  * **Power + water (Alpha 3.1.4)**: city-wide demand-based. Total city
@@ -82,8 +107,17 @@ export class Services {
           break;
         // power_plant / water_tower handled in the city-wide pass below.
         // bus_stop / bus_depot don't grant services — handled by Buses.
-        default:
+        default: {
+          // Architect-mode decoratives (Alpha 4.0 / Beta 2.1) — each one
+          // paints a small park-coverage radius. Checked via a lookup
+          // rather than explicit cases so new decoratives just need a
+          // single entry in ARCH_PARK_RADIUS.
+          const archR = ARCH_PARK_RADIUS[t.building];
+          if (archR !== undefined) {
+            this.paint(grid, t.x, t.y, archR, 'park');
+          }
           break;
+        }
       }
     }
 

@@ -2288,6 +2288,23 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
       }
       continue;
     }
+    // Reflecting Pool (Beta 2.1) — adjacent pool tiles merge into one
+    // cohesive marble-edged water feature. Exterior edges get raised
+    // coping; interior edges merge seamlessly. Larger clusters gain
+    // stepping-stone bridges and a centre fountain.
+    if (t.building === 'reflecting_pool') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'reflecting_pool', visited);
+      const parts = reflectingPoolClusterParts(cluster);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Big Box (Beta 1.3) — modular cluster of adjacent big_box tiles
     // forms one strip-mall composition. The cluster builder also
     // absorbs adjacent parking_lot tiles into the same paved field.
@@ -5231,6 +5248,157 @@ function hotelClusterParts(
     out.push({ makeGeom: () => cyl(0.009, fH, 6), color: 0x888888, dx: cx + pX, dy: roofY + fH / 2, dz: cz - pZ });
     out.push({ makeGeom: () => box(0.065, 0.036, 0.007), color: flagRed,  dx: cx - pX + 0.036, dy: roofY + fH - 0.012, dz: cz - pZ });
     out.push({ makeGeom: () => box(0.065, 0.036, 0.007), color: 0x2244aa, dx: cx + pX + 0.036, dy: roofY + fH - 0.012, dz: cz - pZ });
+  }
+
+  return out;
+}
+
+/**
+ * Modular reflecting-pool cluster (Beta 2.1). Adjacent `reflecting_pool`
+ * tiles merge into one cohesive water feature:
+ * - Every tile: flat stone base pad + raised marble coping on EXTERIOR sides
+ *   only, so interior edges form a seamless water canal.
+ * - Corner bollards only at exterior corners (not along shared interior edges).
+ * - Per-tile shimmer ripple strip on the water surface.
+ * - Elongated clusters (1×N, N≥3): stepping-stone bridge at the midpoint.
+ * - Large clusters (size ≥ 4): a bronze fountain pedestal with a water-jet
+ *   cone at the cluster centre.
+ */
+function reflectingPoolClusterParts(
+  cluster: Array<{ x: number; y: number }>,
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  const STONE    = 0xeae3d0;  // limestone / marble surround
+  const STONE_DK = 0xc7c2b3;  // slightly darker coping + bollards
+  const WATER    = 0x4d8eb9;  // cool still water
+  const SHIMMER  = 0xc6dff0;  // light reflection ripple
+  const BRONZE   = 0xb87333;  // fountain pedestal / bowl
+  const JET      = 0x88d4e8;  // fountain water arc (lighter)
+
+  const T         = TILE_SIZE; // 1.0
+  const CURB      = 0.068;    // marble coping width on exterior edges
+  const PAD_H     = 0.018;    // base stone pad height
+  const CURB_H    = 0.062;    // total raised coping height (from zero)
+  const WATER_H   = 0.044;    // water body height
+  const BOLLARD_H = 0.096;    // bollard post height
+
+  const sorted = cluster.slice().sort((a, b) =>
+    a.x === b.x ? a.y - b.y : a.x - b.x);
+  const clusterSet = new Set(sorted.map(c => `${c.x},${c.y}`));
+  const inC = (x: number, y: number) => clusterSet.has(`${x},${y}`);
+
+  const minX = sorted.reduce((m, c) => Math.min(m, c.x), sorted[0]!.x);
+  const maxX = sorted.reduce((m, c) => Math.max(m, c.x), sorted[0]!.x);
+  const minY = sorted.reduce((m, c) => Math.min(m, c.y), sorted[0]!.y);
+  const maxY = sorted.reduce((m, c) => Math.max(m, c.y), sorted[0]!.y);
+  const bw = maxX - minX + 1;
+  const bh = maxY - minY + 1;
+  const centerX = ((minX + maxX) / 2 + 0.5) * T;
+  const centerZ = ((minY + maxY) / 2 + 0.5) * T;
+
+  const WATER_Y = PAD_H + WATER_H / 2;   // water body centre y
+  const WATER_TOP = PAD_H + WATER_H;     // water surface y
+
+  for (const c of sorted) {
+    const N = !inC(c.x, c.y - 1);
+    const E = !inC(c.x + 1, c.y);
+    const S = !inC(c.x, c.y + 1);
+    const W = !inC(c.x - 1, c.y);
+
+    const tx  = c.x * T;           // tile left (world x)
+    const tz  = c.y * T;           // tile top  (world z)
+    const tcx = tx + T / 2;        // tile centre x
+    const tcz = tz + T / 2;        // tile centre z
+
+    // Flat base pad (full tile, low height)
+    out.push({ makeGeom: () => box(T, PAD_H, T), color: STONE,
+      dx: tcx, dy: PAD_H / 2, dz: tcz });
+
+    // Raised coping strips on exterior sides.
+    // N/S strips span the full tile width; E/W strips span the full tile
+    // depth — simple to construct, minor corner overlap is fine in a
+    // flat-shaded merged mesh.
+    if (N) out.push({ makeGeom: () => box(T, CURB_H, CURB), color: STONE_DK,
+      dx: tcx, dy: CURB_H / 2, dz: tz + CURB / 2 });
+    if (S) out.push({ makeGeom: () => box(T, CURB_H, CURB), color: STONE_DK,
+      dx: tcx, dy: CURB_H / 2, dz: tz + T - CURB / 2 });
+    if (W) out.push({ makeGeom: () => box(CURB, CURB_H, T), color: STONE_DK,
+      dx: tx + CURB / 2, dy: CURB_H / 2, dz: tcz });
+    if (E) out.push({ makeGeom: () => box(CURB, CURB_H, T), color: STONE_DK,
+      dx: tx + T - CURB / 2, dy: CURB_H / 2, dz: tcz });
+
+    // Water body — inset from exterior sides only so adjacent tiles merge.
+    {
+      const iW = W ? CURB : 0;
+      const iE = E ? CURB : 0;
+      const iN = N ? CURB : 0;
+      const iS = S ? CURB : 0;
+      const ww = T - iW - iE;
+      const wd = T - iN - iS;
+      const wx = tx + iW + ww / 2;
+      const wz = tz + iN + wd / 2;
+      if (ww > 0 && wd > 0) {
+        out.push({ makeGeom: () => box(ww, WATER_H, wd), color: WATER,
+          dx: wx, dy: WATER_Y, dz: wz });
+      }
+    }
+
+    // Corner bollards — only where BOTH adjacent perpendicular sides are exterior.
+    if (N && W) out.push({ makeGeom: () => box(0.052, BOLLARD_H, 0.052), color: STONE_DK,
+      dx: tx + CURB / 2, dy: BOLLARD_H / 2, dz: tz + CURB / 2 });
+    if (N && E) out.push({ makeGeom: () => box(0.052, BOLLARD_H, 0.052), color: STONE_DK,
+      dx: tx + T - CURB / 2, dy: BOLLARD_H / 2, dz: tz + CURB / 2 });
+    if (S && W) out.push({ makeGeom: () => box(0.052, BOLLARD_H, 0.052), color: STONE_DK,
+      dx: tx + CURB / 2, dy: BOLLARD_H / 2, dz: tz + T - CURB / 2 });
+    if (S && E) out.push({ makeGeom: () => box(0.052, BOLLARD_H, 0.052), color: STONE_DK,
+      dx: tx + T - CURB / 2, dy: BOLLARD_H / 2, dz: tz + T - CURB / 2 });
+
+    // Shimmer ripple on every tile's water surface.
+    out.push({ makeGeom: () => box(0.36, 0.006, 0.036), color: SHIMMER,
+      dx: tcx, dy: WATER_TOP + 0.002, dz: tcz });
+  }
+
+  // Stepping-stone bridge across the narrow midpoint of elongated clusters.
+  if (cluster.length >= 3 && (bw === 1 || bh === 1)) {
+    const midIdx = Math.floor(sorted.length / 2);
+    const mid = sorted[midIdx]!;
+    const mx = (mid.x + 0.5) * T;
+    const mz = (mid.y + 0.5) * T;
+    const SLAB_Y = WATER_TOP + 0.005;    // just above the water surface
+    if (bw === 1) {
+      // Pool runs N–S: stones span E–W at the midpoint tile.
+      for (let i = -1; i <= 1; i++) {
+        const sx = mx + i * 0.21;
+        out.push({ makeGeom: () => box(0.13, 0.013, 0.13), color: STONE,
+          dx: sx, dy: SLAB_Y, dz: mz });
+      }
+    } else {
+      // Pool runs E–W: stones span N–S.
+      for (let i = -1; i <= 1; i++) {
+        const sz = mz + i * 0.21;
+        out.push({ makeGeom: () => box(0.13, 0.013, 0.13), color: STONE,
+          dx: mx, dy: SLAB_Y, dz: sz });
+      }
+    }
+  }
+
+  // Central fountain for larger pools (size ≥ 4).
+  if (cluster.length >= 4) {
+    const basY = WATER_TOP + 0.004;
+    // Wide bronze bowl / basin
+    out.push({ makeGeom: () => cyl(0.11, 0.022, 12), color: STONE_DK,
+      dx: centerX, dy: basY + 0.011, dz: centerZ });
+    // Raised bronze pedestal
+    out.push({ makeGeom: () => cyl(0.050, 0.09, 8), color: BRONZE,
+      dx: centerX, dy: basY + 0.09 / 2, dz: centerZ });
+    // Water jet — a tapered upward cone
+    out.push({ makeGeom: () => cone(0.030, 0.18, 8), color: JET,
+      dx: centerX, dy: basY + 0.09 + 0.18 / 2, dz: centerZ });
+    // Small sphere "droplet" at the peak
+    out.push({ makeGeom: () => sphereLite(0.025), color: JET,
+      dx: centerX, dy: basY + 0.09 + 0.18 + 0.018, dz: centerZ });
   }
 
   return out;

@@ -496,6 +496,12 @@ export class Game {
   // Adaptive traffic-light controller — phases + queue-aware green timing.
   readonly trafficLights = new TrafficLights();
   private simAccumulatorMs = 0;
+  /**
+   * Stadium Game Day event timer (Beta 2.0.3). Counts down in sim months;
+   * when it reaches 0 and a grand_stadium exists, a traffic surge fires and
+   * the timer is re-armed to a random 4-8 month interval.
+   */
+  private stadiumGameDayMonthsLeft = 0;
   /** Toggle for the traffic heatmap overlay. */
   heatmapVisible = false;
   /** Crime heatmap toggle (Alpha 2.21). Mutually exclusive with the
@@ -1388,6 +1394,38 @@ export class Game {
             const intensity = Math.min(1, (this.crime.cityCrime - 0.20) / 0.30);
             delta.set('safer_streets', (delta.get('safer_streets') ?? 0) - 0.30 * intensity);
             delta.set('working_families', (delta.get('working_families') ?? 0) - 0.15 * intensity);
+          }
+          // Stadium Game Day event (Beta 2.0.3). Fires every 4-8 sim months
+          // when a grand_stadium exists. Spawns a burst of tourist-kind cars
+          // all routing to the stadium, temporarily exceeding the normal cap
+          // to create a visible traffic surge. The variability (random interval)
+          // means the player can't just memorize a schedule — they need the
+          // road network to hold up at any time.
+          if (this.stadiumGameDayMonthsLeft > 0) {
+            this.stadiumGameDayMonthsLeft--;
+          }
+          if (this.stadiumGameDayMonthsLeft === 0) {
+            // Find the grand_stadium anchor tile.
+            let stadiumAx = -1, stadiumAy = -1;
+            for (const t of this.grid.iter()) {
+              if (t.building === 'grand_stadium') { stadiumAx = t.x; stadiumAy = t.y; break; }
+            }
+            if (stadiumAx >= 0) {
+              // Stadium exists — fire the surge.
+              const surgeCount = 20 + Math.floor(Math.random() * 15);  // 20-34 cars
+              const spawned = this.vehicles.spawnStadiumSurge(
+                this.grid, this.roadGraph, this.pathfinder,
+                stadiumAx, stadiumAy, surgeCount
+              );
+              if (spawned > 0) {
+                this.onStatusMessage?.('🏟 Game Day! Stadium traffic surge');
+              }
+              // Re-arm for next Game Day in 4-8 months.
+              this.stadiumGameDayMonthsLeft = 4 + Math.floor(Math.random() * 5);
+            } else {
+              // No stadium — check again next month (fast poll, no surge).
+              this.stadiumGameDayMonthsLeft = 1;
+            }
           }
           // Capture history sample (Alpha 2.11) for the Stats panel.
           this.stats.capture(

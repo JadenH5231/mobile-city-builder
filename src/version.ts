@@ -11,4 +11,4 @@
  * add a matching entry to WHATS_NEW in src/ui/WhatsNew.ts so returning
  * players see what changed.
  */
-export const APP_VERSION = '2.0.2';
+export const APP_VERSION = '2.0.3';

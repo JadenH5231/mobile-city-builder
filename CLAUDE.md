@@ -363,6 +363,18 @@ on a different machine isn't a forensic exercise.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
 
+## Status: Beta 2.0.3 (Stadium visual fixes + Game Day traffic surge)
+
+Three patches on top of 2.0.2:
+
+1. **Seating shading glitch fixed** — `arc = 1.3` caused 30% tangential overlap between bowl segments → z-fighting. Replaced with exact ellipse arc-length formula per segment (`sqrt((rx·sinθ)² + (rz·cosθ)²) · dθ`) so every box fills its slot with zero overlap.
+2. **Odd stand lighting fixed** — 16 floating axis-aligned warm boxes replaced with one `CylinderGeometry` ring at the correct concourse height; glow is now smooth and continuous.
+3. **Game Day traffic surge** — every 4-8 sim months (random interval), if a `grand_stadium` exists, 20-34 tourist-kind cars burst-spawn toward the stadium, bypassing `MAX_VEHICLES` to create a visible spike. `🏟 Game Day!` toast fires. Encourages planning strong stadium access roads.
+
+SW cache `v53` → `v54`. `APP_VERSION` `2.0.2` → `2.0.3` (patch = silent). **No further items queued.**
+
+---
+
 ## Status: Beta 2.0.1 (Subways removed, hotel tower rework, resort amenity system)
 
 Three post-ship polish fixes on 2.0.0:

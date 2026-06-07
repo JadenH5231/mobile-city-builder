@@ -1821,13 +1821,14 @@ function addArchitecturalLights(
       field.scale(1.05, 1, 0.72);
       field.translate(scx, 0.062, scz);
       pushLit(field, 0xe6f0d6);
-      // Lit upper stands — a warm concourse glow ringing the bowl.
-      for (let i = 0; i < 16; i++) {
-        const th = (i / 16) * Math.PI * 2;
-        const bx2 = new BoxGeometry(0.34, 0.05, 0.30);
-        bx2.translate(scx + Math.cos(th) * (RX - 0.55), 0.58, scz + Math.sin(th) * (RZ - 0.55));
-        pushLit(bx2, 0xffd890);
-      }
+      // Lit upper stands — a warm ring at the concourse level. A single
+      // elliptical cylinder follows the bowl geometry precisely; the 16
+      // floating axis-aligned boxes it replaces produced disconnected warm
+      // squares that clashed with the seating colour pattern at close zoom.
+      const standRing = new CylinderGeometry(1, 1, 0.04, 28);
+      standRing.scale(RX - 0.50, 1, RZ - 0.50);
+      standRing.translate(scx, 0.62, scz);
+      pushLit(standRing, 0xffd890);
       // Scoreboard screen glow at the back.
       const sb = new BoxGeometry(0.92, 0.44, 0.04);
       sb.translate(scx, 1.55, scz - (RZ - 0.30) + 0.07);

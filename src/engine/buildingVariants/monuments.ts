@@ -2200,9 +2200,13 @@ export function buildGrandStadiumParts(ax: number, ay: number): VariantPart[] {
   circInner.scale(0.24, 1, 0.24); circInner.translate(cx, 0.066, cz);
   out.push({ geom: circInner, color: GS_PITCH });
 
-  // ===== Seating bowl — concentric FLAT stepped rings. Flat tops shade
-  // consistently (no tilt → no patchy lighting), and each ring overlaps the
-  // next radially + tangentially so the bowl reads as one solid mass. =====
+  // ===== Seating bowl — concentric stepped rings, bowl rises outward. =====
+  // Each ring uses per-angle exact ellipse arc length so adjacent segments
+  // fill their slots perfectly without overlap or gap — the 1.3× factor used
+  // previously caused tangential z-fighting between segments of the same ring,
+  // producing the patchy shading glitch. The arc-length formula:
+  //   ds = sqrt((rx·sin θ)² + (rz·cos θ)²) · dθ
+  // gives the tangential size each box needs to tile the ellipse exactly.
   const seatPal = [GS_SEAT_A, GS_SEAT_B, GS_SEAT_C, GS_SEAT_D];
   const STEPS = 5;
   const rIn = FX + 0.12, rOut = RX - 0.16;
@@ -2213,10 +2217,13 @@ export function buildGrandStadiumParts(ax: number, ay: number): VariantPart[] {
     const rzMid = zIn + (zOut - zIn) * f;
     const h = 0.13 + s * 0.13;                       // top rises outward → bowl
     const depth = Math.max((rOut - rIn) / STEPS, (zOut - zIn) / STEPS) * 1.55;
+    const dTheta = TWO_PI / SEG;
     for (let i = 0; i < SEG; i++) {
-      const th = (i / SEG) * TWO_PI;
-      const arc = (TWO_PI / SEG) * 1.3;
-      const w = ((rxMid + rzMid) / 2) * arc;
+      const th = i * dTheta;
+      // Exact ellipse arc element — no overlap between adjacent segments.
+      const w = Math.sqrt(
+        Math.pow(rxMid * Math.sin(th), 2) + Math.pow(rzMid * Math.cos(th), 2)
+      ) * dTheta;
       const box = new BoxGeometry(w, h, depth);
       box.rotateY(radialYaw(th));
       box.translate(cx + Math.cos(th) * rxMid, h / 2 + 0.04, cz + Math.sin(th) * rzMid);

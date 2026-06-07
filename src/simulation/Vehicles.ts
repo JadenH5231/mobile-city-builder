@@ -1083,6 +1083,55 @@ export class Vehicles {
   }
 
   /**
+   * Stadium Game Day surge (Beta 2.0.3). Called by Game when the periodic
+   * Game Day event fires. Spawns `count` cars heading to the grand_stadium
+   * anchor tile, using the TOURIST kind so they add on top of the normal
+   * resident cap — this is intentional, giving the player a visible traffic
+   * spike that rewards having planned strong road access to the stadium.
+   * Returns the number of cars successfully dispatched.
+   */
+  spawnStadiumSurge(
+    grid: Grid,
+    roadGraph: RoadGraph,
+    pathfinder: Pathfinding,
+    stadiumAx: number,
+    stadiumAy: number,
+    count: number
+  ): number {
+    // Route to the nearest road tile adjacent to the stadium anchor.
+    const endRoad = nearestRoadTile(grid, stadiumAx, stadiumAy);
+    if (!endRoad) return 0;
+    const endIdx = endRoad.y * grid.width + endRoad.x;
+    const TOURIST_PALETTE = getActiveTheme().vehicles.tourist;
+    let spawned = 0;
+    for (let i = 0; i < count; i++) {
+      // Each Game Day car departs from a random residential tile.
+      const origin = pickRandomDevelopedTile(grid, 'residential');
+      if (!origin) continue;
+      const startRoad = nearestRoadTile(grid, origin.x, origin.y);
+      if (!startRoad) continue;
+      const startIdx = startRoad.y * grid.width + startRoad.x;
+      if (startIdx === endIdx) continue;
+      const path = pathfinder.findPath(roadGraph, startIdx, endIdx, grid.width);
+      if (!path || path.length < 2) continue;
+      const color = TOURIST_PALETTE[Math.floor(Math.random() * TOURIST_PALETTE.length)] ?? 0xffa500;
+      const car: Car = {
+        pathTiles: path, segmentIdx: 0, segmentT: 0, speed: 1.0,
+        color, loadedTile: path[1]!, pauseRemaining: 0,
+        yielding: false, yieldSince: 0,
+        destX: stadiumAx, destY: stadiumAy,
+        originRoadIdx: startIdx,
+        originHomeX: origin.x, originHomeY: origin.y,
+        kind: 'tourist'
+      };
+      this.cars.push(car);
+      this.incrementLoad(grid, car.loadedTile);
+      spawned++;
+    }
+    return spawned;
+  }
+
+  /**
    * Emergency vehicle spawn (Alpha 4.14). Each police station / fire
    * station can have at most one of its kind out at a time. We sweep
    * the grid for stations once per call (cheap — at most a few dozen),

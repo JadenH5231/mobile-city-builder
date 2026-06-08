@@ -344,6 +344,34 @@ export const MAX_SERVICE_VEHICLES = 20;
  */
 export const MAX_TRUCKS = 50;
 /**
+ * Airport simulation constants (Beta 2.1).
+ *
+ * Aircraft count: separate from road vehicles — planes live entirely on
+ * airport tiles and never conflict with MAX_VEHICLES. 8 concurrent aircraft
+ * gives lively visible traffic without hammering InstancedMesh updates.
+ *
+ * Revenue: landing fees accrue per runway tile per month (encourages long
+ * runways). Terminal concession revenue is per terminal tile per month.
+ * Passenger revenue fires monthly based on how many airport visitors are
+ * currently staying in the city — hotel/resort demand scales with this.
+ *
+ * Transit multiplier: if the airport has no transit connection (bus stop /
+ * subway within 12 tiles of an apron), passenger revenue drops to 40% —
+ * visitors arrive but can't get anywhere and don't stay.
+ */
+export const MAX_AIRCRAFT = 8;
+export const APT_RUNWAY_REVENUE_PER_MONTH = 280;    // $ per runway tile
+export const APT_TERMINAL_REVENUE_PER_MONTH = 480;  // $ per terminal tile
+export const APT_PASSENGER_REVENUE = 45;             // $ per active visitor per month
+export const APT_TRANSIT_MULT = 0.40;               // revenue mult when no transit link
+/** Passenger stay duration: how long (real-time sim ms) an airport visitor
+ *  dwells in the city before their flight departs. About 2 sim months. */
+export const APT_PASSENGER_STAY_MS = 40_000;
+/** Min runway length (tiles) before it's considered "active" and can accept
+ *  aircraft. Runways shorter than this are visual-only. */
+export const APT_MIN_RUNWAY_TILES = 3;
+
+/**
  * Farm tractor visual polish (Alpha 4.19). A contiguous cluster of this
  * many farm tiles or more gets ONE animated tractor that drives a
  * boustrophedon (snake) path across the cluster — looks like plowing /
@@ -517,7 +545,19 @@ export type Building =
   // time — 1×1=airbnb cottage, 1×N strip=motel, M×N block=hotel. All earn
   // per-tile tourism revenue; hotels earn more per tile than motels/airbnbs.
   // Employment destination. City milestone unlock.
-  | 'hotel';
+  | 'hotel'
+  // Airport infrastructure (Beta 2.1). Painted tiles and buildings.
+  // Runways and taxiways are stroke tools; terminals + hangars are
+  // modular (adjacent tiles cluster at render time); tower is single-tile.
+  // NOTE: the older `'runway'` and `'pearson_terminal'` Toronto easter egg
+  // stubs are completely separate from this system (zero-cost cosmetics).
+  // All apt_ buildings have real costs and simulation effects.
+  | 'apt_runway'
+  | 'apt_taxiway'
+  | 'apt_apron'
+  | 'apt_terminal'
+  | 'apt_hangar'
+  | 'apt_tower';
 
 /**
  * One-time placement cost in $. Memory: feedback_challenge_tuning — services
@@ -623,7 +663,16 @@ export const BUILDING_COSTS: Record<Exclude<Building, 'none'>, number> = {
   art_gallery_ontario: 0,
   distillery_district: 0,
   pearson_terminal: 0,
-  runway: 0
+  runway: 0,
+  // Airport infrastructure (Beta 2.1). Per-tile costs. Runways are the
+  // most expensive paved surface; the control tower is the premium single
+  // placement — only one per airport is needed.
+  apt_runway: 900,
+  apt_taxiway: 350,
+  apt_apron: 200,
+  apt_terminal: 5000,
+  apt_hangar: 3000,
+  apt_tower: 150000
 };
 
 /** Monthly upkeep in $. Aggregated by `Economy` at month rollover. */
@@ -702,7 +751,16 @@ export const BUILDING_UPKEEP: Record<Exclude<Building, 'none'>, number> = {
   art_gallery_ontario: 0,
   distillery_district: 0,
   pearson_terminal: 0,
-  runway: 0
+  runway: 0,
+  // Airport upkeep (Beta 2.1). Runways: pavement maintenance + lighting
+  // systems. Terminal: staff, security, cleaning — highest per-tile.
+  // Tower: ATC staffing, radar + comms maintenance.
+  apt_runway: 180,
+  apt_taxiway: 60,
+  apt_apron: 30,
+  apt_terminal: 600,
+  apt_hangar: 350,
+  apt_tower: 800
 };
 
 /** Subway car-spawn suppression radius in tiles (Alpha 2.19). Tiles
@@ -968,12 +1026,17 @@ export const MILESTONES: readonly Milestone[] = [
       // city before they make sense.
       'residential_skyscraper', 'commercial_skyscraper', 'mixed_skyscraper',
       // Architect Mode mid-tier (Alpha 4.0) — water + civic features.
-      'terra_pond', 'place_pergola', 'place_topiary', 'place_statue'
+      'terra_pond', 'place_pergola', 'place_topiary', 'place_statue',
+      // Airport system (Beta 2.1) — a real city needs an airport. All
+      // airport tools unlock together: runways, taxiways, aprons,
+      // terminals, hangars, control tower, and the rotate tool.
+      'paint_apt_runway', 'paint_apt_taxiway', 'paint_apt_apron',
+      'paint_apt_terminal', 'paint_apt_hangar', 'place_apt_tower', 'rotate_apt'
     ],
     rewardCash: 10000,
     rewardPC: 5,
     herald: 'yimbys',
-    blurb: 'we did it!! a real city. highways, adaptive lights, high-density residential, and a hospital are unlocked. now build the housing supply your residents have been waiting for 🏙️'
+    blurb: 'we did it!! a real city. highways, high-density residential, a hospital, skyscrapers — AND airport infrastructure!! now build the housing supply your residents have been waiting for 🏙️✈️'
   },
   {
     id: 'metro',
@@ -1224,7 +1287,19 @@ export type Tool =
   // Cloverleaf interchange (Alpha 4.17). 5×5 prefab built per-block,
   // beautiful curved highway loops + grass infields + bridge over.
   // Lives in the Roads group (it's road infrastructure, not a building).
-  | 'place_cloverleaf';
+  | 'place_cloverleaf'
+  // Airport infrastructure (Beta 2.1). Stroke tools for runways and
+  // taxiways; paint tools for aprons/terminals/hangars; tap-only for
+  // the control tower. `rotate_apt` taps a placed terminal/hangar/tower
+  // and cycles its aptBuildingRot by 90° CW so the player can orient it
+  // toward the runway.
+  | 'paint_apt_runway'
+  | 'paint_apt_taxiway'
+  | 'paint_apt_apron'
+  | 'paint_apt_terminal'
+  | 'paint_apt_hangar'
+  | 'place_apt_tower'
+  | 'rotate_apt';
 
 /**
  * Tools that paint a zone, mapped to (zone kind, density cap). Used by Game's
@@ -1305,6 +1380,8 @@ export const PLACE_TOOL_TO_BUILDING: ReadonlyMap<Tool, Exclude<Building, 'none'>
   ['place_resort', 'resort' as const],
   // Hotel (Beta 2.0).
   ['place_hotel', 'hotel' as const],
+  // Airport control tower (Beta 2.1) — single-tile tap-to-place.
+  ['place_apt_tower', 'apt_tower' as const],
   // Cloverleaf interchange (Alpha 4.17). Per-block flow.
   ['place_cloverleaf', 'cloverleaf' as const]
 ]);

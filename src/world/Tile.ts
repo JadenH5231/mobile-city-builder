@@ -295,4 +295,27 @@ export class Tile {
    * outsourced supply). Cleared on the next domestic delivery.
    */
   importSource = false;
+  /**
+   * Airport runway orientation (Beta 2.1). Only meaningful when
+   * `building === 'apt_runway'`. Stores the stroke direction the runway
+   * was painted in so the renderer can draw the correct markings and the
+   * aircraft simulation can compute the correct approach/departure path.
+   *   0         = NS orientation (tiles run along the grid Y / world Z axis)
+   *   Math.PI/2 = EW orientation (tiles run along the grid X / world X axis)
+   */
+  aptRunwayYaw = 0;
+  /**
+   * Airport building rotation (Beta 2.1). Only meaningful on the
+   * lex-smallest (anchor) tile of a modular airport cluster — terminal,
+   * hangar, or the single-tile tower. The `rotate_apt` tool cycles
+   * this by 1 (mod 4) each tap; the renderer rotates the cluster
+   * geometry by `aptBuildingRot × Math.PI/2` CCW around the cluster
+   * centroid so the apron-facing side (gates / bay doors) points in the
+   * chosen direction.
+   *   0 = apron side faces South (+Z)
+   *   1 = apron side faces West (-X)
+   *   2 = apron side faces North (-Z)
+   *   3 = apron side faces East (+X)
+   */
+  aptBuildingRot: 0 | 1 | 2 | 3 = 0;
 }

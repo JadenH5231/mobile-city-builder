@@ -177,6 +177,11 @@ export interface FactionStances {
    *  council each election to pick a tier — see `Council.electBeautificationTier`.
    *  Mayor cannot influence; this is a council-only lever. */
   beautification: number;
+  /** Airport system (Beta 2.1). All airport tools map to this single stance
+   *  key. Chamber + Working Families love the jobs + economic connectivity;
+   *  Greenleaf hates noise + emissions; NIMBYs hate airport proximity;
+   *  Transit loves the transit-hub potential; Hometown is indifferent. */
+  apt_terminal: number;
 }
 
 export type StanceKey = keyof FactionStances;
@@ -217,7 +222,9 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // NIMBYs see civic monuments as prestige + property values. Scale
     // with grandeur — National is the apex flex.
     city_hall: 0.5, provincial_capital: 0.7, national_capital: 0.8,
-    beautification: 0.7
+    beautification: 0.7,
+    // Airport: massive noise pollution near homes — NIMBYs strongly oppose.
+    apt_terminal: -0.9
   },
   yimbys: {
     road_local: -0.1, road_avenue: 0.3, road_highway: 0.0,
@@ -253,7 +260,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // services to a 35-tile area — that's straightforwardly pro-density.
     // Still skeptical of the National Capital's vast footprint.
     city_hall: 0.5, provincial_capital: 0.2, national_capital: -0.3,
-    beautification: 0.3
+    beautification: 0.3,
+    // Airport: YIMBYs are mildly positive — economic connectivity is good,
+    // but airports are car-centric and don't help walkability.
+    apt_terminal: 0.2
   },
   environmentalists: {
     road_local: -0.2, road_avenue: -0.4, road_highway: -0.8,
@@ -288,7 +298,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // field — fewer scattered power plants is environmentally better.
     // National Capital trips the "land use" alarm slightly.
     city_hall: 0.4, provincial_capital: 0.3, national_capital: 0.1,
-    beautification: 0.6
+    beautification: 0.6,
+    // Airport: Greenleaf strongly opposes — jet fuel emissions, noise, massive
+    // paved footprint, habitat destruction. The worst single infrastructure build.
+    apt_terminal: -0.8
   },
   hometown: {
     road_local: 0.1, road_avenue: -0.3, road_highway: -0.6,
@@ -324,7 +337,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // exactly the buildings they want to see in their town. Top-tier
     // stance across the board.
     city_hall: 0.9, provincial_capital: 1.0, national_capital: 1.0,
-    beautification: 0.7
+    beautification: 0.7,
+    // Airport: Hometown is conflicted — they like the regional connectivity but
+    // airports are thoroughly modern infrastructure, not small-town charm.
+    apt_terminal: -0.3
   },
   chamber: {
     road_local: 0.1, road_avenue: 0.3, road_highway: 0.4,
@@ -358,7 +374,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Chamber loves civic prestige — bigger = more business / tourist
     // draw. National Capital is a chamber-of-commerce dream.
     city_hall: 0.7, provincial_capital: 0.9, national_capital: 1.0,
-    beautification: 0.9
+    beautification: 0.9,
+    // Airport: Chamber LOVES airports — business travel, cargo, jobs, tourism.
+    // Every airport landing is a customer or client arriving in the region.
+    apt_terminal: 1.0
   },
   transit: {
     road_local: -0.1, road_avenue: 0.3, road_highway: -0.5,
@@ -392,7 +411,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Transit loves civic buildings — they're transit destinations
     // by definition (government workers commute to them in volume).
     city_hall: 0.6, provincial_capital: 0.7, national_capital: 0.7,
-    beautification: 0.5
+    beautification: 0.5,
+    // Airport: Transit Riders LOVE airports — terminals are the ultimate
+    // transit hub. Bus routes feeding an airport = their raison d'être.
+    apt_terminal: 0.6
   },
   drivers: {
     road_local: 0.5, road_avenue: 0.8, road_highway: 1.0,
@@ -427,7 +449,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // positive on prestige, slight negative on the National Capital's
     // mandatory pedestrian-friendly approach.
     city_hall: 0.2, provincial_capital: 0.1, national_capital: -0.1,
-    beautification: 0.0
+    beautification: 0.0,
+    // Airport: Drivers are ambivalent — flying is great but airport
+    // approach roads are legendary congestion. Net slightly negative.
+    apt_terminal: -0.2
   },
   taxpayers: {
     road_local: -0.2, road_avenue: -0.3, road_highway: -0.5,
@@ -461,7 +486,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // Taxpayers HATE every civic monument — these are the largest
     // single capital expenditures in the game. Scales with price.
     city_hall: -0.5, provincial_capital: -0.8, national_capital: -1.0,
-    beautification: -0.9
+    beautification: -0.9,
+    // Airport: Taxpayers HATE airports — the capital cost is enormous
+    // and the public subsidy per passenger rarely pencils out.
+    apt_terminal: -0.5
   },
   safer_streets: {
     road_local: 0.1, road_avenue: 0.0, road_highway: -0.4,
@@ -497,7 +525,10 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // infrastructure to the central district (more eyes-on-the-street
     // around government). Police HQ adjacency is implied.
     city_hall: 0.6, provincial_capital: 0.7, national_capital: 0.7,
-    beautification: 0.5
+    beautification: 0.5,
+    // Airport: Safer Streets dislikes heavy construction traffic and
+    // the congested approach roads airports inevitably produce.
+    apt_terminal: -0.2
   },
   working_families: {
     road_local: 0.1, road_avenue: 0.2, road_highway: 0.1,
@@ -531,7 +562,11 @@ export const FACTION_STANCES: Record<FactionId, FactionStances> = {
     // neighbourhood) but turn against capitals — that's money that
     // could've been housing / schools at scale.
     city_hall: 0.5, provincial_capital: -0.3, national_capital: -0.6,
-    beautification: 0.2
+    beautification: 0.2,
+    // Airport: Working Families LOVE airports — they're one of the best
+    // jobs engines in any city (baggage, catering, retail, airlines,
+    // maintenance). Every terminal tile = dozens of union-wage positions.
+    apt_terminal: 0.8
   }
 };
 

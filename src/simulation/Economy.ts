@@ -26,6 +26,10 @@ import {
   HOTEL_MOTEL_MULT,
   HOTEL_HOTEL_MULT,
   ROAD_TIER,
+  APT_RUNWAY_REVENUE_PER_MONTH,
+  APT_TERMINAL_REVENUE_PER_MONTH,
+  APT_PASSENGER_REVENUE,
+  APT_TRANSIT_MULT,
   type Building,
   type Zone
 } from '../types';
@@ -124,6 +128,9 @@ export class Economy {
   lastResortRevenue = 0;
   /** Last completed month's hotel/motel tourism revenue (Beta 1.9.14). */
   lastHotelRevenue = 0;
+  /** Last completed month's airport revenue (Beta 2.1): runway landing fees
+   *  + terminal concession revenue + passenger spending. 0 with no runway. */
+  lastAirportRevenue = 0;
   /** Last completed month's bond debt service (Alpha 2.18). Pull-out line
    *  in the budget panel so the player sees what their borrowing costs. */
   lastBondPayment = 0;
@@ -161,12 +168,13 @@ export class Economy {
     districts?: Districts,
     council?: Council,
     parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness,
-    supplyChain?: import('./SupplyChain').SupplyChain
+    supplyChain?: import('./SupplyChain').SupplyChain,
+    airport?: import('./Airport').Airport
   ): void {
     this.accumulatorMs += stepMs;
     while (this.accumulatorMs >= MONTH_MS) {
       this.accumulatorMs -= MONTH_MS;
-      this.runMonth(grid, population, market, events, bonds, crime, districts, council, parkingStrictness, supplyChain);
+      this.runMonth(grid, population, market, events, bonds, crime, districts, council, parkingStrictness, supplyChain, airport);
     }
   }
 
@@ -200,7 +208,8 @@ export class Economy {
     districts?: Districts,
     council?: Council,
     parkingStrictness?: import('../ui/SettingsPanel').ParkingStrictness,
-    supplyChain?: import('./SupplyChain').SupplyChain
+    supplyChain?: import('./SupplyChain').SupplyChain,
+    airport?: import('./Airport').Airport
   ): void {
     // Luxury bonus (Alpha 2.5): luxury residents pay base R tax PLUS an
     // extra LUXURY_TAX_BONUS multiple. With bonus 1.5, a luxury resident
@@ -377,6 +386,25 @@ export class Economy {
     this.lastTourismRevenue = Math.round(tourismRevenue);
     this.lifetimeTourismRevenue += this.lastTourismRevenue;
 
+    // Airport revenue (Beta 2.1): landing fees per runway tile + concession
+    // revenue per terminal tile + per-visitor spending (scaled by transit
+    // connectivity). The transit multiplier punishes airports with no bus/
+    // subway link — visitors arrive but can't get anywhere and don't stay.
+    let airportRevenue = 0;
+    if (airport) {
+      // Per-tile infrastructure revenue (always available once placed).
+      for (const t of grid.iter()) {
+        if (t.building === 'apt_runway') airportRevenue += APT_RUNWAY_REVENUE_PER_MONTH;
+        else if (t.building === 'apt_terminal') airportRevenue += APT_TERMINAL_REVENUE_PER_MONTH;
+      }
+      // Visitor spending: active plane passengers staying in the city.
+      // Transit multiplier: airport without a nearby bus/subway link = 40%.
+      const passengerCount = airport.activePassengers;
+      const transitMult = airport.transitConnected ? 1.0 : APT_TRANSIT_MULT;
+      airportRevenue += passengerCount * APT_PASSENGER_REVENUE * transitMult;
+    }
+    this.lastAirportRevenue = Math.round(airportRevenue);
+
     const surtaxFraction = this.wealthSurtax / 100;
     let surtaxRevenue =
       surtaxResidents * this.taxR * REV_PER_RESIDENT * surtaxFraction +
@@ -471,6 +499,7 @@ export class Economy {
       farmRevenue +
       hospitalBonus +
       tourismRevenue +
+      airportRevenue +
       surtaxRevenue;
 
     // Tier-aware road maintenance — local $15, avenue $25, highway $40.

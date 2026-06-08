@@ -120,6 +120,8 @@ src/
     Bonds.ts          municipal bond catalog + active loan tracker (Alpha 2.18)
     Crime.ts          per-tile crime score + commercial revenue penalty (Alpha 2.21)
     Districts.ts      district registry + per-zone surtax (Alpha 2.22)
+    Airport.ts        airport infrastructure registry — runways/gates/transit link (Beta 2.1)
+    Planes.ts         aircraft FSM — approach/landing/taxi/parked/takeoff/departure (Beta 2.1)
   persistence/
     SaveGame.ts       IndexedDB multi-slot auto-save + restore (Alpha 2.20)
   simulation/
@@ -362,6 +364,21 @@ on a different machine isn't a forensic exercise.
 - **Humanoid pedestrians** (Alpha 3.2.2) — pedestrians render with body + head + hair instead of plain pawns; subtle walking animation in 3.2.4.
 - **Settings cheats** (Alpha 3.2.4) — unlimited money + unlimited demand toggles in the More-menu for playtesting.
 - **More-menu HUD popover** (Alpha 3.1.1) — secondary HUD pills (Photo, Heatmap, Achievements, Stats, Districts, Crime, Bonds) collapsed behind a single ⋯ More pill so the primary HUD stays focused on Pop / RCI / Treasury / Undo / Speed.
+- **Full airport system** (Beta 2.1) — 7 tools build a modular airport (runways, taxiways, aprons, terminals, hangars, control tower, rotate tool). Planes spawn off-map, land on the runway, taxi to a gate, dwell as passengers explore hotels/resorts, then push back and depart. Three aircraft types (regional jet / narrowbody / widebody). Revenue: runway landing fees + terminal concessions + visitor spending (transit link doubles visitor revenue). Airport jobs counted in Population. All 10 factions have `apt_terminal` stances. City-milestone unlock.
+
+## Status: Beta 2.1.0 (Full airport system — runways, terminals, hangars, dynamic flights)
+
+Seven new paint/place tools build a fully modular airport. Planes spawn off-map, approach at altitude, land on a runway, taxi to a gate, dwell as passengers explore the city, then push back and depart. Transit connectivity doubles passenger revenue.
+
+**New files:** `src/simulation/Airport.ts` — infrastructure registry (BFS runway detection, gate detection, transit link check, taxi pathfinding, `activePassengers` counter). `src/simulation/Planes.ts` — Aircraft FSM (approach → flare → landing → taxi_in → parked → pushback → taxi_out → lineup → takeoff → departure → done), approach/departure waypoint builders.
+
+**Key integration points:** All 7 airport tools (`paint_apt_runway`, `paint_apt_taxiway`, `paint_apt_apron`, `paint_apt_terminal`, `paint_apt_hangar`, `place_apt_tower`, `rotate_apt`) unlock at City milestone. `rotate_apt` cycles `aptBuildingRot` on nearest terminal/hangar anchor (0|1|2|3 = 0°/90°/180°/270°). Renderer has three separate aircraft `InstancedMesh` (regional/narrowbody/widebody, cap 8 each) + `drawAirportGround` separate from city buildings mesh. Economy adds airport revenue monthly (runway fees + terminal concessions + passenger spending × transit multiplier). Population adds iJobs per airport tile.
+
+**`apt_terminal` StanceKey wires all 7 tools** to the council ban/cost system. All 10 factions have `apt_terminal` stances. `FactionDetailPanel` STANCE_LABEL: `'Airport'`.
+
+**Save:** `aptRunwayYaw` + `aptBuildingRot` per tile, optional (pre-2.1 saves load with 0 defaults). No schema bump. SW cache `v54` → `v55`. `APP_VERSION` `2.0.3` → `2.1.0`.
+
+---
 
 ## Status: Beta 2.0.3 (Stadium visual fixes + Game Day traffic surge)
 

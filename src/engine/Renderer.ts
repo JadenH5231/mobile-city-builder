@@ -29,6 +29,7 @@ import type { Grid } from '../world/Grid';
 import type { Tile } from '../world/Tile';
 import {
   FARM_TRACTOR_MIN_CLUSTER,
+  MAX_AIRCRAFT,
   MAX_PEDESTRIANS,
   MAX_TRACTORS,
   MAX_STADIUM_PLAYERS,
@@ -43,11 +44,16 @@ import {
 import type { Buses } from '../simulation/Buses';
 import type { Pedestrians } from '../simulation/Pedestrians';
 import type { Vehicles } from '../simulation/Vehicles';
+import type { Planes } from '../simulation/Planes';
 import { getActiveTheme } from '../themes/registry';
 import {
+  buildAirportGroundMesh,
   buildBeautificationMesh,
   buildBridgeRoadMesh,
   buildBuildingsMesh,
+  buildNarrowbodyAircraftGeom,
+  buildRegionalAircraftGeom,
+  buildWidebodyAircraftGeom,
   emitZonedBuildingTile,
   mergeZonedBuildings,
   buildCityBuildingsMesh,
@@ -272,6 +278,15 @@ export class Renderer {
   private busWindowsMesh!: InstancedMesh;
   private busHeadlightsMesh!: InstancedMesh;
   private ferriesMesh!: InstancedMesh;
+  /** Airport infrastructure ground layer (Beta 2.1).  One merged Mesh for all
+   *  apt_runway / apt_taxiway / apt_apron tiles.  Rebuilt by drawAirportGround
+   *  whenever an airport tile changes (placement, bulldoze). */
+  private airportGroundMesh: Mesh | null = null;
+  /** Aircraft InstancedMesh set (Beta 2.1). One InstancedMesh per aircraft
+   *  type (regional / narrowbody / widebody); MAX_AIRCRAFT capacity each. */
+  private aircraftRegionalMesh!: InstancedMesh;
+  private aircraftNarrowMesh!: InstancedMesh;
+  private aircraftWideMesh!: InstancedMesh;
   private pedestriansMesh: InstancedMesh;
   /** Shopper bodies / heads (Beta 1.3.4 — Phase 2.1). Visible while a
    *  parked-car shopper is on the outbound or return leg between the
@@ -870,6 +885,24 @@ export class Renderer {
     this.ferriesMesh.frustumCulled = false;
     this.worldGroup.add(this.ferriesMesh);
 
+    // Aircraft InstancedMesh set (Beta 2.1). Three aircraft types, each with
+    // their own geometry, shared single material (vertex colours drive livery;
+    // per-instance colour set via setColorAt for airline stripe).
+    const aircraftMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.aircraftRegionalMesh = new InstancedMesh(buildRegionalAircraftGeom(), aircraftMat, MAX_AIRCRAFT);
+    this.aircraftRegionalMesh.count = 0;
+    this.aircraftRegionalMesh.frustumCulled = false;
+    this.worldGroup.add(this.aircraftRegionalMesh);
+
+    this.aircraftNarrowMesh = new InstancedMesh(buildNarrowbodyAircraftGeom(), aircraftMat, MAX_AIRCRAFT);
+    this.aircraftNarrowMesh.count = 0;
+    this.aircraftNarrowMesh.frustumCulled = false;
+    this.worldGroup.add(this.aircraftNarrowMesh);
+
+    this.aircraftWideMesh = new InstancedMesh(buildWidebodyAircraftGeom(), aircraftMat, MAX_AIRCRAFT);
+    this.aircraftWideMesh.count = 0;
+    this.aircraftWideMesh.frustumCulled = false;
+    this.worldGroup.add(this.aircraftWideMesh);
   }
 
   setSize(width: number, height: number): void {
@@ -1980,6 +2013,53 @@ export class Renderer {
     }
     this.ferriesMesh.count = visible;
     if (visible > 0) this.ferriesMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Rebuild the merged airport ground mesh (runway / taxiway / apron tiles).
+   *  Called by Game.ts after any apt_* tile is placed or bulldozed. */
+  drawAirportGround(grid: Grid): void {
+    if (this.airportGroundMesh) {
+      this.worldGroup.remove(this.airportGroundMesh);
+      this.airportGroundMesh.geometry.dispose();
+      (this.airportGroundMesh.material as MeshLambertMaterial).dispose();
+      this.airportGroundMesh = null;
+    }
+    this.airportGroundMesh = buildAirportGroundMesh(grid);
+    if (this.airportGroundMesh) this.worldGroup.add(this.airportGroundMesh);
+  }
+
+  /** Per-frame aircraft positions (Beta 2.1). Reads live Aircraft positions
+   *  from the Planes simulation and updates the three InstancedMesh sets. */
+  updateAircraft(planes: Planes): void {
+    const obj = this.tmpObj;
+    let rIdx = 0, nIdx = 0, wIdx = 0;
+
+    for (const a of planes.aircraft) {
+      if (a.phase === 'done') continue;
+      obj.position.set(a.wx, a.wy, a.wz);
+      // Aircraft yaw: 0 = nose pointing +Z. Three.js rotateY is CCW around Y.
+      // a.yaw = 0 means nose to +Z, which is the default for the geometry.
+      obj.rotation.set(0, -a.yaw, 0);
+      obj.updateMatrix();
+
+      if (a.type === 'regional' && rIdx < MAX_AIRCRAFT) {
+        this.aircraftRegionalMesh.setMatrixAt(rIdx, obj.matrix);
+        rIdx++;
+      } else if (a.type === 'narrowbody' && nIdx < MAX_AIRCRAFT) {
+        this.aircraftNarrowMesh.setMatrixAt(nIdx, obj.matrix);
+        nIdx++;
+      } else if (a.type === 'widebody' && wIdx < MAX_AIRCRAFT) {
+        this.aircraftWideMesh.setMatrixAt(wIdx, obj.matrix);
+        wIdx++;
+      }
+    }
+
+    this.aircraftRegionalMesh.count = rIdx;
+    this.aircraftNarrowMesh.count = nIdx;
+    this.aircraftWideMesh.count = wIdx;
+    if (rIdx > 0) this.aircraftRegionalMesh.instanceMatrix.needsUpdate = true;
+    if (nIdx > 0) this.aircraftNarrowMesh.instanceMatrix.needsUpdate = true;
+    if (wIdx > 0) this.aircraftWideMesh.instanceMatrix.needsUpdate = true;
   }
 
   drawSelection(gx: number, gy: number): void {

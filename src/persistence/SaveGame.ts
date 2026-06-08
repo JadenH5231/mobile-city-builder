@@ -146,6 +146,13 @@ export interface TileSnapshot {
   // feature was cut. Old saves may still carry roundabout* fields in their
   // blob; they're simply ignored on load (the ring tiles were real `local`
   // road edges, so they reload as plain roads). No fields read/written here.
+  /** Runway orientation (Beta 2.1). 0=NS, Math.PI/2=EW. Only meaningful
+   *  on apt_runway tiles; defaults to 0 on load from pre-2.1 saves. */
+  aptRunwayYaw?: number;
+  /** Airport building rotation (Beta 2.1). 0|1|2|3 = 0°/90°/180°/270° CW.
+   *  Only meaningful on the anchor tile of a terminal/hangar cluster.
+   *  Defaults to 0 on load from pre-2.1 saves. */
+  aptBuildingRot?: 0 | 1 | 2 | 3;
 }
 
 export interface SaveData {
@@ -477,7 +484,9 @@ export function serialize(
       cloverleaf: t.cloverleaf,
       bigBuildRotation: t.bigBuildRotation,
       supplies: t.supplies,
-      importSource: t.importSource
+      importSource: t.importSource,
+      aptRunwayYaw: t.aptRunwayYaw,
+      aptBuildingRot: t.aptBuildingRot
     };
   }
   const edges: number[] = [];
@@ -679,6 +688,9 @@ export function applySave(
     // first time a long-running city is opened post-update.
     t.supplies = snap.supplies ?? 1;
     t.importSource = snap.importSource ?? false;
+    // Airport tile fields (Beta 2.1). Pre-2.1 saves load with 0 defaults.
+    t.aptRunwayYaw = snap.aptRunwayYaw ?? 0;
+    t.aptBuildingRot = (snap.aptBuildingRot ?? 0) as 0 | 1 | 2 | 3;
     t.resetServices();
     t.trafficLoad = 0;
     t.trafficLoadAvg = 0;

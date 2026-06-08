@@ -2289,6 +2289,54 @@ export function buildCityBuildingsMesh(grid: Grid, forestryHealth: number, farmH
       }
       continue;
     }
+    // Airport terminal (Beta 2.1) — modular cluster with rotation.
+    if (t.building === 'apt_terminal') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'apt_terminal', visited);
+      const anchor = cluster.reduce((a, b) => a.y < b.y || (a.y === b.y && a.x < b.x) ? a : b);
+      const anchorT = grid.get(anchor.x, anchor.y);
+      const rot = (anchorT?.aptBuildingRot ?? 0) as 0 | 1 | 2 | 3;
+      const parts = aptTerminalClusterParts(cluster, rot);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
+    // Airport hangar (Beta 2.1) — modular cluster with rotation.
+    if (t.building === 'apt_hangar') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      const cluster = floodBuilding(grid, t.x, t.y, 'apt_hangar', visited);
+      const anchor = cluster.reduce((a, b) => a.y < b.y || (a.y === b.y && a.x < b.x) ? a : b);
+      const anchorT = grid.get(anchor.x, anchor.y);
+      const rot = (anchorT?.aptBuildingRot ?? 0) as 0 | 1 | 2 | 3;
+      const parts = aptHangarClusterParts(cluster, rot);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
+    // Airport control tower (Beta 2.1) — single-tile, tall landmark.
+    if (t.building === 'apt_tower') {
+      const key = t.y * grid.width + t.x;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const parts = aptControlTowerParts(t.x, t.y);
+      for (const p of parts) {
+        const g = p.makeGeom();
+        g.translate(p.dx, p.dy, p.dz);
+        geoms.push(g);
+        colours.push(tint(p.color));
+      }
+      continue;
+    }
     // Reflecting Pool (Beta 2.1) — adjacent pool tiles merge into one
     // cohesive marble-edged water feature. Exterior edges get raised
     // coping; interior edges merge seamlessly. Larger clusters gain
@@ -7999,4 +8047,718 @@ function makeChevronGeom(width: number, length: number): BufferGeometry {
   g.setAttribute('position', new BufferAttribute(positions, 3));
   g.setIndex(new BufferAttribute(indices, 1));
   return g;
+}
+
+// ============================================================================
+// Airport infrastructure geometry (Beta 2.1)
+// ============================================================================
+
+/**
+ * Build a merged Mesh covering all apt_runway / apt_taxiway / apt_apron tiles.
+ * Called by Renderer.drawAirportGround whenever any airport tile changes.
+ * Separate from buildCityBuildingsMesh so airport ground can be rebuilt
+ * independently of the building layer (much cheaper — no cluster BFS).
+ */
+export function buildAirportGroundMesh(grid: Grid): Mesh | null {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const lift = ROAD_LIFT + 0.003;
+
+  for (const t of grid.iter()) {
+    const cx = (t.x + 0.5) * TILE_SIZE;
+    const cz = (t.y + 0.5) * TILE_SIZE;
+
+    if (t.building === 'apt_runway') {
+      // Dark asphalt base.
+      const base = new BoxGeometry(TILE_SIZE * 0.99, 0.005, TILE_SIZE * 0.99);
+      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x202020);
+
+      // Centerline dashes along the runway axis.
+      const isNS = Math.abs(t.aptRunwayYaw) < 0.1;
+      const dl = 0.28, dg = 0.10, dw = 0.04;
+      for (let s = -1; s <= 1; s += 2) {
+        const stripe = isNS
+          ? new BoxGeometry(dw, 0.005, dl)
+          : new BoxGeometry(dl, 0.005, dw);
+        stripe.translate(cx, lift + 0.001, isNS ? cz + s * (dl / 2 + dg / 2) : cz);
+        if (!isNS) stripe.translate(s * (dl / 2 + dg / 2), 0, 0);
+        geoms.push(stripe); colours.push(0xffffff);
+      }
+
+      // Edge stripe lines on each long side.
+      const edgeOff = 0.44;
+      const edgeLen = TILE_SIZE * 0.90;
+      if (isNS) {
+        for (const ex of [-edgeOff, edgeOff]) {
+          const edge = new BoxGeometry(0.025, 0.004, edgeLen);
+          edge.translate(cx + ex, lift + 0.001, cz); geoms.push(edge); colours.push(0xffffff);
+        }
+      } else {
+        for (const ez of [-edgeOff, edgeOff]) {
+          const edge = new BoxGeometry(edgeLen, 0.004, 0.025);
+          edge.translate(cx, lift + 0.001, cz + ez); geoms.push(edge); colours.push(0xffffff);
+        }
+      }
+
+      // Small yellow edge-light boxes at each tile corner.
+      for (const [ex, ez] of [[-0.46, -0.46], [-0.46, 0.46], [0.46, -0.46], [0.46, 0.46]] as const) {
+        const light = new BoxGeometry(0.045, 0.04, 0.045);
+        light.translate(cx + ex, lift + 0.02, cz + ez); geoms.push(light); colours.push(0xfff5aa);
+      }
+    }
+
+    if (t.building === 'apt_taxiway') {
+      // Slightly lighter grey, narrower than runway.
+      const base = new BoxGeometry(TILE_SIZE * 0.78, 0.004, TILE_SIZE * 0.78);
+      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x353535);
+
+      // Solid yellow centerline.
+      const cl = new BoxGeometry(0.04, 0.004, TILE_SIZE * 0.74);
+      cl.translate(cx, lift + 0.001, cz); geoms.push(cl); colours.push(0xffcc00);
+
+      // Blue edge-hold lights.
+      for (const [ex, ez] of [[-0.37, 0], [0.37, 0], [0, -0.37], [0, 0.37]] as const) {
+        const light = new BoxGeometry(0.04, 0.04, 0.04);
+        light.translate(cx + ex, lift + 0.02, cz + ez); geoms.push(light); colours.push(0x3366ff);
+      }
+    }
+
+    if (t.building === 'apt_apron') {
+      // Light concrete pad.
+      const base = new BoxGeometry(TILE_SIZE * 0.99, 0.003, TILE_SIZE * 0.99);
+      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x919185);
+
+      // Subtle gridline: one horizontal + one vertical seam crack.
+      const h = new BoxGeometry(TILE_SIZE * 0.96, 0.002, 0.02);
+      h.translate(cx, lift + 0.001, cz); geoms.push(h); colours.push(0x787770);
+      const v = new BoxGeometry(0.02, 0.002, TILE_SIZE * 0.96);
+      v.translate(cx, lift + 0.001, cz); geoms.push(v); colours.push(0x787770);
+
+      // Yellow guide-line toward the centre.
+      const gl = new BoxGeometry(0.025, 0.002, TILE_SIZE * 0.55);
+      gl.translate(cx, lift + 0.001, cz); geoms.push(gl); colours.push(0xffd700);
+    }
+  }
+
+  if (geoms.length === 0) return null;
+  const merged = mergeGeoms(geoms, colours);
+  const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  return new Mesh(merged, mat);
+}
+
+// ---------------------------------------------------------------------------
+// Airport terminal cluster (apt_terminal)
+// ---------------------------------------------------------------------------
+
+function aptTerminalClusterParts(
+  cluster: { x: number; y: number }[],
+  rot: 0 | 1 | 2 | 3
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  // Cluster bounding box.
+  let minX = cluster[0]!.x, maxX = cluster[0]!.x;
+  let minZ = cluster[0]!.y, maxZ = cluster[0]!.y;
+  for (const c of cluster) {
+    if (c.x < minX) minX = c.x; if (c.x > maxX) maxX = c.x;
+    if (c.y < minZ) minZ = c.y; if (c.y > maxZ) maxZ = c.y;
+  }
+  const clusterSet = new Set(cluster.map(c => `${c.x},${c.y}`));
+  const has = (x: number, y: number) => clusterSet.has(`${x},${y}`);
+
+  const size = cluster.length;
+  // Body height: 0.35 for small, up to 0.6 for large.
+  const bodyH = Math.min(0.60, 0.35 + size * 0.012);
+  const lift = ROAD_LIFT + 0.003;
+
+  // "Apron direction" per rotation: which grid direction the apron faces.
+  //  rot=0: south (+y in grid = +z in world)
+  //  rot=1: west  (-x in grid = -x in world)
+  //  rot=2: north (-y in grid = -z in world)
+  //  rot=3: east  (+x in grid = +x in world)
+  const apronDirs = [[0, 1], [-1, 0], [0, -1], [1, 0]] as const;
+  const [adx, adz] = apronDirs[rot];
+
+  const clrConcrete = 0xd0ccc0;
+  const clrGlass    = 0x88bbdd;
+  const clrGlassDk  = 0x5588aa;
+  const clrRoof     = 0xb0aba0;
+  const clrSteel    = 0x909090;
+  const clrAccent   = 0x2255aa; // airline signage
+
+  for (const c of cluster) {
+    const wx = (c.x + 0.5) * TILE_SIZE;
+    const wz = (c.y + 0.5) * TILE_SIZE;
+
+    // Tile-level building body.
+    const body = () => {
+      const g = new BoxGeometry(TILE_SIZE * 0.95, bodyH, TILE_SIZE * 0.95);
+      g.translate(0, bodyH / 2 + lift, 0);
+      return g;
+    };
+    out.push({ makeGeom: body, dx: wx, dy: 0, dz: wz, color: clrConcrete });
+
+    // Roof slab (slightly darker + overhanging).
+    const roof = () => {
+      const g = new BoxGeometry(TILE_SIZE * 0.98, 0.04, TILE_SIZE * 0.98);
+      g.translate(0, bodyH + lift + 0.02, 0);
+      return g;
+    };
+    out.push({ makeGeom: roof, dx: wx, dy: 0, dz: wz, color: clrRoof });
+
+    // Determine which sides of this tile are exterior.
+    const extN = !has(c.x, c.y - 1); // -Z
+    const extS = !has(c.x, c.y + 1); // +Z
+    const extW = !has(c.x - 1, c.y); // -X
+    const extE = !has(c.x + 1, c.y); // +X
+
+    // Is this tile on the apron-facing side?
+    const isApronFacing =
+      (adx === 0 && adz === 1  && extS) ||
+      (adx === -1 && adz === 0 && extW) ||
+      (adx === 0 && adz === -1 && extN) ||
+      (adx === 1 && adz === 0  && extE);
+
+    if (isApronFacing) {
+      // Glass curtain wall on the apron-facing exterior.
+      // The glass runs the full body height in panels.
+      const panelCount = 4;
+      for (let p = 0; p < panelCount; p++) {
+        const px = p / panelCount - 0.5 + 0.5 / panelCount;
+        const panelH = bodyH * 0.85;
+        const makePanel = (pOff: number) => {
+          const g = new BoxGeometry(0.8 / panelCount * 0.9, panelH, 0.02);
+          const pY = panelH / 2 + lift + bodyH * 0.07;
+          if (adz === 1) {
+            // Apron faces +Z (south): glass on +Z face.
+            g.translate(pOff, pY, 0.475);
+          } else if (adz === -1) {
+            g.translate(pOff, pY, -0.475);
+          } else if (adx === 1) {
+            g.rotateY(Math.PI / 2);
+            g.translate(0.475, pY, pOff);
+          } else {
+            g.rotateY(Math.PI / 2);
+            g.translate(-0.475, pY, pOff);
+          }
+          return g;
+        };
+        const pOff = px * TILE_SIZE;
+        out.push({ makeGeom: () => makePanel(pOff), dx: wx, dy: 0, dz: wz, color: clrGlass });
+      }
+
+      // Jetway arm sticking out from each apron-facing tile.
+      const makeJetway = () => {
+        const armH = 0.10, armW = 0.12, armLen = 0.35;
+        const g = new BoxGeometry(armW, armH, armLen);
+        const jY = lift + bodyH * 0.55;
+        if (adz === 1) { g.translate(0, jY, 0.48 + armLen / 2); }
+        else if (adz === -1) { g.translate(0, jY, -0.48 - armLen / 2); }
+        else if (adx === 1) { g.rotateY(Math.PI / 2); g.translate(0.48 + armLen / 2, jY, 0); }
+        else { g.rotateY(Math.PI / 2); g.translate(-0.48 - armLen / 2, jY, 0); }
+        return g;
+      };
+      out.push({ makeGeom: makeJetway, dx: wx, dy: 0, dz: wz, color: clrSteel });
+    } else {
+      // Solid concrete wall on non-apron exterior faces.
+      const faceDefs: [boolean, number, number, number][] = [
+        [extN, 0, 0, -0.48],   // north face offset
+        [extS, 0, 0, 0.48],
+        [extW, -0.48, 0, 0],
+        [extE, 0.48, 0, 0],
+      ];
+      for (const [isExt, ox, , oz] of faceDefs) {
+        if (!isExt) continue;
+        const isZFace = Math.abs(oz) > 0.1;
+        const makeWin = (offX: number) => {
+          const g = new BoxGeometry(
+            isZFace ? 0.14 : 0.02,
+            0.16,
+            isZFace ? 0.02 : 0.14
+          );
+          g.translate(
+            isZFace ? offX : (ox > 0 ? 0.49 : -0.49),
+            lift + bodyH * 0.55,
+            isZFace ? (oz > 0 ? 0.49 : -0.49) : offX
+          );
+          return g;
+        };
+        out.push({ makeGeom: () => makeWin(-0.22), dx: wx, dy: 0, dz: wz, color: clrGlassDk });
+        out.push({ makeGeom: () => makeWin(0.22), dx: wx, dy: 0, dz: wz, color: clrGlassDk });
+      }
+    }
+
+    // Rooftop skylights on every 2nd tile (deterministic).
+    if ((c.x + c.y) % 2 === 0) {
+      const skylight = () => {
+        const g = new BoxGeometry(0.40, 0.06, 0.22);
+        g.translate(0, bodyH + lift + 0.05, 0);
+        return g;
+      };
+      out.push({ makeGeom: skylight, dx: wx, dy: 0, dz: wz, color: clrGlass });
+    }
+
+    // HVAC units on roof.
+    if ((c.x * 3 + c.y * 7) % 5 === 0) {
+      const hvac = () => {
+        const g = new BoxGeometry(0.18, 0.10, 0.12);
+        g.translate(0.15, bodyH + lift + 0.07, 0.10);
+        return g;
+      };
+      out.push({ makeGeom: hvac, dx: wx, dy: 0, dz: wz, color: 0x888888 });
+    }
+  }
+
+  // Cluster-wide features: airline sign band on top of apron-facing wall.
+  // Use the centroid tile.
+  const centX = cluster.reduce((s, c) => s + c.x, 0) / cluster.length;
+  const centZ = cluster.reduce((s, c) => s + c.y, 0) / cluster.length;
+  const centWx = (centX + 0.5) * TILE_SIZE;
+  const centWz = (centZ + 0.5) * TILE_SIZE;
+  const signW = Math.min(size * 0.6, 2.0);
+  const makeSign = () => {
+    const g = new BoxGeometry(signW, 0.10, 0.05);
+    g.translate(0, ROAD_LIFT + bodyH + 0.08, adz === 1 ? 0.48 * size * 0.3 : adz === -1 ? -0.48 * size * 0.3 : 0);
+    return g;
+  };
+  out.push({ makeGeom: makeSign, dx: centWx, dy: 0, dz: centWz, color: clrAccent });
+
+  // Flag poles near the main entrance (large clusters).
+  if (size >= 4) {
+    for (const side of [-1, 1]) {
+      const flagOff = signW * 0.5 + 0.15;
+      const makePole = () => {
+        const pole = new CylinderGeometry(0.02, 0.02, 0.55, 6);
+        pole.translate(side * flagOff, ROAD_LIFT + bodyH + 0.30, 0);
+        return pole;
+      };
+      out.push({ makeGeom: makePole, dx: centWx, dy: 0, dz: centWz, color: 0xc0c0c0 });
+      const makeFlag = () => {
+        const g = new BoxGeometry(0.20, 0.12, 0.02);
+        g.translate(side * flagOff + 0.10, ROAD_LIFT + bodyH + 0.52, 0);
+        return g;
+      };
+      out.push({ makeGeom: makeFlag, dx: centWx, dy: 0, dz: centWz, color: side > 0 ? 0xff3333 : 0x3333ff });
+    }
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Airport hangar cluster (apt_hangar)
+// ---------------------------------------------------------------------------
+
+function aptHangarClusterParts(
+  cluster: { x: number; y: number }[],
+  rot: 0 | 1 | 2 | 3
+): CityBuildingPart[] {
+  if (cluster.length === 0) return [];
+  const out: CityBuildingPart[] = [];
+
+  const clusterSet = new Set(cluster.map(c => `${c.x},${c.y}`));
+  const has = (x: number, y: number) => clusterSet.has(`${x},${y}`);
+  const size = cluster.length;
+  const bodyH = Math.min(0.70, 0.42 + size * 0.015);
+  const lift = ROAD_LIFT + 0.003;
+
+  const apronDirs = [[0, 1], [-1, 0], [0, -1], [1, 0]] as const;
+  const [adx, adz] = apronDirs[rot];
+
+  const clrSteel   = 0x8a9aa0;
+  const clrDark    = 0x4a5560;
+  const clrDoor    = 0x6a7a7a;
+  const clrAccent  = 0xff8800; // safety orange stripe
+  const clrRoof    = 0x707880;
+
+  for (const c of cluster) {
+    const wx = (c.x + 0.5) * TILE_SIZE;
+    const wz = (c.y + 0.5) * TILE_SIZE;
+
+    // Hangar body — steel-panel cladding.
+    const body = () => {
+      const g = new BoxGeometry(TILE_SIZE * 0.95, bodyH, TILE_SIZE * 0.95);
+      g.translate(0, bodyH / 2 + lift, 0);
+      return g;
+    };
+    out.push({ makeGeom: body, dx: wx, dy: 0, dz: wz, color: clrSteel });
+
+    // Barrel-vault roof (arched feel using two sloped slabs).
+    const makeRoof = () => {
+      const g = new BoxGeometry(TILE_SIZE * 0.97, 0.05, TILE_SIZE * 0.97);
+      g.translate(0, bodyH + lift + 0.03, 0);
+      return g;
+    };
+    out.push({ makeGeom: makeRoof, dx: wx, dy: 0, dz: wz, color: clrRoof });
+
+    // Orange safety stripe near the bottom of each wall.
+    const stripeH = 0.06, stripeY = lift + 0.10;
+    for (const [isExt, ox, , oz] of [
+      [!has(c.x, c.y - 1), 0, 0, -0.475],
+      [!has(c.x, c.y + 1), 0, 0,  0.475],
+      [!has(c.x - 1, c.y), -0.475, 0, 0],
+      [!has(c.x + 1, c.y),  0.475, 0, 0]
+    ] as [boolean, number, number, number][]) {
+      if (!isExt) continue;
+      const makeStripe = () => {
+        const isZ = Math.abs(oz) > 0.1;
+        const g = new BoxGeometry(isZ ? TILE_SIZE * 0.95 : 0.02, stripeH, isZ ? 0.02 : TILE_SIZE * 0.95);
+        g.translate(ox, stripeY, oz);
+        return g;
+      };
+      out.push({ makeGeom: makeStripe, dx: wx, dy: 0, dz: wz, color: clrAccent });
+    }
+
+    // Apron-side exterior: large bay doors.
+    const isApronFacing =
+      (adx === 0 && adz === 1  && !has(c.x, c.y + 1)) ||
+      (adx === -1 && adz === 0 && !has(c.x - 1, c.y)) ||
+      (adx === 0 && adz === -1 && !has(c.x, c.y - 1)) ||
+      (adx === 1 && adz === 0  && !has(c.x + 1, c.y));
+
+    if (isApronFacing) {
+      // Large bay door panels.
+      const doorH = bodyH * 0.80;
+      const doorW = TILE_SIZE * 0.75;
+      const makeDoor = () => {
+        const g = new BoxGeometry(
+          Math.abs(adz) > 0.5 ? doorW : 0.03,
+          doorH,
+          Math.abs(adz) > 0.5 ? 0.03 : doorW
+        );
+        const faceOff = 0.48;
+        g.translate(
+          adx !== 0 ? adx * faceOff : 0,
+          doorH / 2 + lift + bodyH * 0.04,
+          adz !== 0 ? adz * faceOff : 0
+        );
+        return g;
+      };
+      out.push({ makeGeom: makeDoor, dx: wx, dy: 0, dz: wz, color: clrDoor });
+
+      // Horizontal door tracks (panel dividers).
+      for (let row = 1; row <= 3; row++) {
+        const rowY = lift + (doorH / 4) * row;
+        const makeDivider = () => {
+          const g = new BoxGeometry(
+            Math.abs(adz) > 0.5 ? doorW * 1.02 : 0.04,
+            0.025,
+            Math.abs(adz) > 0.5 ? 0.04 : doorW * 1.02
+          );
+          const faceOff = 0.478;
+          g.translate(
+            adx !== 0 ? adx * faceOff : 0,
+            rowY,
+            adz !== 0 ? adz * faceOff : 0
+          );
+          return g;
+        };
+        out.push({ makeGeom: makeDivider, dx: wx, dy: 0, dz: wz, color: clrDark });
+      }
+    }
+
+    // Skylights / vent ridgeline on roof.
+    if ((c.x + c.y) % 3 === 0) {
+      const makeVent = () => {
+        const g = new CylinderGeometry(0.06, 0.08, 0.10, 8);
+        g.translate(0.20, bodyH + lift + 0.06, -0.15);
+        return g;
+      };
+      out.push({ makeGeom: makeVent, dx: wx, dy: 0, dz: wz, color: 0x667080 });
+    }
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Airport control tower (apt_tower) — single-tile, tall landmark
+// ---------------------------------------------------------------------------
+
+function aptControlTowerParts(tx: number, ty: number): CityBuildingPart[] {
+  const out: CityBuildingPart[] = [];
+  const cx = (tx + 0.5) * TILE_SIZE;
+  const cz = (ty + 0.5) * TILE_SIZE;
+  const lift = ROAD_LIFT + 0.003;
+
+  // Wide concrete base pad.
+  out.push({
+    makeGeom: () => {
+      const g = new BoxGeometry(0.55, 0.06, 0.55);
+      g.translate(0, lift + 0.03, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0xc8c0b8
+  });
+
+  // Tapered shaft — narrows toward the top.
+  const shaftH = 1.60;
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.12, 0.18, shaftH, 8);
+      g.translate(0, lift + 0.06 + shaftH / 2, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0xd0ccc4
+  });
+
+  // Glass cab — wider than shaft, sits on top.
+  const cabY = lift + 0.06 + shaftH;
+  const cabH = 0.28;
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.22, 0.20, cabH, 12);
+      g.translate(0, cabY + cabH / 2, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x88ccee
+  });
+
+  // Cab overhang rim.
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.26, 0.22, 0.04, 12);
+      g.translate(0, cabY + cabH + 0.02, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x888888
+  });
+
+  // Rooftop equipment platform.
+  const roofY = cabY + cabH + 0.04;
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.15, 0.15, 0.06, 10);
+      g.translate(0, roofY + 0.03, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x707070
+  });
+
+  // Radar dish — angled saucer.
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.10, 0.08, 0.04, 10);
+      g.rotateX(Math.PI * 0.35);
+      g.translate(0.08, roofY + 0.12, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x606060
+  });
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.015, 0.015, 0.12, 6);
+      g.translate(0.08, roofY + 0.18, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x888888
+  });
+
+  // Antenna mast.
+  out.push({
+    makeGeom: () => {
+      const g = new CylinderGeometry(0.012, 0.018, 0.30, 6);
+      g.translate(0, roofY + 0.18, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0x999999
+  });
+
+  // Red aviation beacon at tip.
+  out.push({
+    makeGeom: () => {
+      const g = new IcosahedronGeometry(0.025, 0);
+      g.translate(0, roofY + 0.35, 0);
+      return g;
+    },
+    dx: cx, dy: 0, dz: cz, color: 0xff2200
+  });
+
+  // Four small support struts at base of cab.
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const sx = Math.cos(angle) * 0.18;
+    const sz = Math.sin(angle) * 0.18;
+    out.push({
+      makeGeom: () => {
+        const g = new CylinderGeometry(0.015, 0.015, 0.15, 6);
+        g.translate(sx, lift + 0.06 + shaftH - 0.07, sz);
+        return g;
+      },
+      dx: cx, dy: 0, dz: cz, color: 0x909090
+    });
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Aircraft geometry for InstancedMesh (exported for Renderer.ts)
+// ---------------------------------------------------------------------------
+
+/** Return a merged fuselage+wing+tail+engine geometry for a regional jet.
+ *  Built in canonical pose: nose at +Z, wing tips at ±X, tail at -Z.
+ *  Per-instance color tints the white body; engines/windows have baked colors. */
+export function buildRegionalAircraftGeom(): BufferGeometry {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const FW = 0.055, FH = 0.055, FL = 0.55; // fuselage dims
+
+  // Fuselage — slightly tapered box.
+  const fuse = new BoxGeometry(FW, FH, FL);
+  fuse.translate(0, 0, 0);
+  geoms.push(fuse); colours.push(0xffffff);
+
+  // Tapered nose cone.
+  const nose = new ConeGeometry(FW * 0.45, FL * 0.18, 8);
+  nose.rotateX(-Math.PI / 2);
+  nose.translate(0, 0, FL / 2 + FL * 0.09);
+  geoms.push(nose); colours.push(0xffffff);
+
+  // Windows strip.
+  const windows = new BoxGeometry(FW * 1.02, FH * 0.22, FL * 0.62);
+  windows.translate(0, FH * 0.15, 0);
+  geoms.push(windows); colours.push(0x4477aa);
+
+  // Wings — thin trapezoid approximated as scaled box.
+  for (const side of [-1, 1]) {
+    const wing = new BoxGeometry(0.30, 0.012, 0.14);
+    wing.translate(side * (FW / 2 + 0.15), -FH * 0.10, FL * 0.08);
+    geoms.push(wing); colours.push(0xeeeeee);
+  }
+
+  // Tail fin — vertical.
+  const tail = new BoxGeometry(0.02, 0.14, 0.10);
+  tail.translate(0, FH / 2 + 0.07, -FL / 2 + 0.06);
+  geoms.push(tail); colours.push(0xeeeeee);
+
+  // Horizontal stabilizers.
+  for (const side of [-1, 1]) {
+    const stab = new BoxGeometry(0.16, 0.012, 0.08);
+    stab.translate(side * 0.09, FH * 0.05, -FL / 2 + 0.07);
+    geoms.push(stab); colours.push(0xeeeeee);
+  }
+
+  // Engines — two under-wing cylinders.
+  for (const side of [-1, 1]) {
+    const eng = new CylinderGeometry(0.028, 0.025, 0.13, 8);
+    eng.rotateX(Math.PI / 2);
+    eng.translate(side * (FW / 2 + 0.13), -FH * 0.20, FL * 0.12);
+    geoms.push(eng); colours.push(0x555555);
+
+    // Intake ring.
+    const ring = new CylinderGeometry(0.030, 0.028, 0.015, 8);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(side * (FW / 2 + 0.13), -FH * 0.20, FL * 0.12 + 0.065);
+    geoms.push(ring); colours.push(0x333333);
+  }
+
+  return mergeGeoms(geoms, colours);
+}
+
+/** Narrowbody jet (737-style). Larger than regional. */
+export function buildNarrowbodyAircraftGeom(): BufferGeometry {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const FW = 0.072, FH = 0.072, FL = 0.80;
+
+  const fuse = new BoxGeometry(FW, FH, FL);
+  geoms.push(fuse); colours.push(0xffffff);
+
+  const nose = new ConeGeometry(FW * 0.45, FL * 0.15, 8);
+  nose.rotateX(-Math.PI / 2);
+  nose.translate(0, 0, FL / 2 + FL * 0.075);
+  geoms.push(nose); colours.push(0xffffff);
+
+  const windows = new BoxGeometry(FW * 1.02, FH * 0.20, FL * 0.65);
+  windows.translate(0, FH * 0.16, 0);
+  geoms.push(windows); colours.push(0x4477aa);
+
+  for (const side of [-1, 1]) {
+    const wing = new BoxGeometry(0.42, 0.015, 0.18);
+    wing.translate(side * (FW / 2 + 0.21), -FH * 0.12, FL * 0.06);
+    geoms.push(wing); colours.push(0xeeeeee);
+  }
+
+  const tail = new BoxGeometry(0.025, 0.18, 0.13);
+  tail.translate(0, FH / 2 + 0.09, -FL / 2 + 0.08);
+  geoms.push(tail); colours.push(0xeeeeee);
+
+  for (const side of [-1, 1]) {
+    const stab = new BoxGeometry(0.22, 0.015, 0.10);
+    stab.translate(side * 0.12, FH * 0.06, -FL / 2 + 0.09);
+    geoms.push(stab); colours.push(0xeeeeee);
+  }
+
+  for (const side of [-1, 1]) {
+    const eng = new CylinderGeometry(0.040, 0.036, 0.17, 8);
+    eng.rotateX(Math.PI / 2);
+    eng.translate(side * (FW / 2 + 0.20), -FH * 0.22, FL * 0.10);
+    geoms.push(eng); colours.push(0x555555);
+    const ring = new CylinderGeometry(0.042, 0.040, 0.018, 8);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(side * (FW / 2 + 0.20), -FH * 0.22, FL * 0.10 + 0.085);
+    geoms.push(ring); colours.push(0x333333);
+  }
+
+  return mergeGeoms(geoms, colours);
+}
+
+/** Widebody jet (777-style). Largest aircraft type. */
+export function buildWidebodyAircraftGeom(): BufferGeometry {
+  const geoms: BufferGeometry[] = [];
+  const colours: number[] = [];
+  const FW = 0.098, FH = 0.090, FL = 1.08;
+
+  const fuse = new BoxGeometry(FW, FH, FL);
+  geoms.push(fuse); colours.push(0xffffff);
+
+  const nose = new ConeGeometry(FW * 0.44, FL * 0.14, 8);
+  nose.rotateX(-Math.PI / 2);
+  nose.translate(0, 0, FL / 2 + FL * 0.07);
+  geoms.push(nose); colours.push(0xffffff);
+
+  const windows = new BoxGeometry(FW * 1.02, FH * 0.20, FL * 0.68);
+  windows.translate(0, FH * 0.16, 0);
+  geoms.push(windows); colours.push(0x4477aa);
+
+  // Hump on top for upper deck.
+  const hump = new BoxGeometry(FW * 0.68, FH * 0.22, FL * 0.35);
+  hump.translate(0, FH / 2 + 0.06, FL * 0.10);
+  geoms.push(hump); colours.push(0xffffff);
+
+  for (const side of [-1, 1]) {
+    const wing = new BoxGeometry(0.62, 0.018, 0.26);
+    wing.translate(side * (FW / 2 + 0.31), -FH * 0.15, FL * 0.03);
+    geoms.push(wing); colours.push(0xeeeeee);
+
+    // Winglets.
+    const winglet = new BoxGeometry(0.025, 0.10, 0.08);
+    winglet.translate(side * (FW / 2 + 0.61), -FH * 0.05, FL * 0.03);
+    geoms.push(winglet); colours.push(0xdddddd);
+  }
+
+  const tail = new BoxGeometry(0.03, 0.24, 0.18);
+  tail.translate(0, FH / 2 + 0.12, -FL / 2 + 0.11);
+  geoms.push(tail); colours.push(0xeeeeee);
+
+  for (const side of [-1, 1]) {
+    const stab = new BoxGeometry(0.30, 0.018, 0.14);
+    stab.translate(side * 0.17, FH * 0.06, -FL / 2 + 0.12);
+    geoms.push(stab); colours.push(0xeeeeee);
+  }
+
+  for (const side of [-1, 1]) {
+    const eng = new CylinderGeometry(0.056, 0.050, 0.22, 10);
+    eng.rotateX(Math.PI / 2);
+    eng.translate(side * (FW / 2 + 0.28), -FH * 0.25, FL * 0.08);
+    geoms.push(eng); colours.push(0x555555);
+    const ring = new CylinderGeometry(0.058, 0.056, 0.022, 10);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(side * (FW / 2 + 0.28), -FH * 0.25, FL * 0.08 + 0.110);
+    geoms.push(ring); colours.push(0x333333);
+  }
+
+  return mergeGeoms(geoms, colours);
 }

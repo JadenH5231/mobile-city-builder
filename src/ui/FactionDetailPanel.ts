@@ -57,7 +57,8 @@ const STANCE_LABEL: Record<StanceKey, string> = {
   provincial_capital: 'Provincial Capital',
   national_capital: 'National Capital',
   grand_stadium: 'Grand Stadium',
-  beautification: 'Beautification budget'
+  beautification: 'Beautification budget',
+  apt_terminal: 'Airport'
 };
 
 export interface FactionDetailDeps {

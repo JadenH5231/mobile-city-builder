@@ -15,6 +15,8 @@ import { Stats } from '../simulation/Stats';
 import { Achievements, type Achievement } from '../simulation/Achievements';
 import { Bonds, type BondId } from '../simulation/Bonds';
 import { Ferries } from '../simulation/Ferries';
+import { Airport } from '../simulation/Airport';
+import { Planes } from '../simulation/Planes';
 import { Crime } from '../simulation/Crime';
 import { Districts } from '../simulation/Districts';
 import { Skyscrapers } from '../simulation/Skyscrapers';
@@ -148,7 +150,14 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   place_city_hall: 'City Hall',
   place_provincial_capital: 'Provincial Capital',
   place_national_capital: 'National Capital',
-  place_grand_stadium: 'Grand Stadium'
+  place_grand_stadium: 'Grand Stadium',
+  paint_apt_runway: 'Runway',
+  paint_apt_taxiway: 'Taxiway',
+  paint_apt_apron: 'Apron',
+  paint_apt_terminal: 'Terminal',
+  paint_apt_hangar: 'Hangar',
+  place_apt_tower: 'Control Tower',
+  rotate_apt: 'Rotate Airport Bldg'
 };
 
 /**
@@ -429,6 +438,12 @@ export class Game {
   readonly bonds = new Bonds();
   /** Ferry routes between dock pairs (Alpha 2.19). */
   readonly ferries = new Ferries();
+  /** Airport infrastructure registry (Beta 2.1). Rebuilt monthly from the
+   *  grid; the Planes system reads it to spawn / route aircraft. */
+  readonly airport = new Airport();
+  /** Aircraft life-cycle manager (Beta 2.1). Spawns planes whenever the
+   *  airport is operational; updates positions each sim step. */
+  readonly planes = new Planes();
   /** Per-tile crime simulation (Alpha 2.21). Recomputed monthly, drives the
    *  Crime heatmap layer + a small commercial-revenue penalty. */
   readonly crime = new Crime();
@@ -850,7 +865,15 @@ export class Game {
       ['place_provincial_capital', 'provincial_capital'],
       ['place_national_capital', 'national_capital'],
       ['place_grand_stadium', 'grand_stadium'],
-      ['place_cloverleaf', 'cloverleaf']
+      ['place_cloverleaf', 'cloverleaf'],
+      // Airport (Beta 2.1) — all airport tools share the apt_terminal stance.
+      ['paint_apt_runway', 'apt_terminal'],
+      ['paint_apt_taxiway', 'apt_terminal'],
+      ['paint_apt_apron', 'apt_terminal'],
+      ['paint_apt_terminal', 'apt_terminal'],
+      ['paint_apt_hangar', 'apt_terminal'],
+      ['place_apt_tower', 'apt_terminal'],
+      ['rotate_apt', 'apt_terminal']
     ];
     for (const [tool, key] of toolToKey) {
       if (!isFinite(this.council.costMultiplier(key))) banned.add(tool);
@@ -906,7 +929,10 @@ export class Game {
       // Grand Stadium (Beta 1.10) — Metropolis milestone (see Milestones).
       'place_grand_stadium',
       // Cloverleaf interchange (Alpha 4.17) — City milestone, alongside highways.
-      'place_cloverleaf'
+      'place_cloverleaf',
+      // Airport (Beta 2.1) — City milestone.
+      'paint_apt_runway', 'paint_apt_taxiway', 'paint_apt_apron',
+      'paint_apt_terminal', 'paint_apt_hangar', 'place_apt_tower', 'rotate_apt'
     ];
     const locked = new Set<Tool>();
     for (const t of KNOWN_TOOLS) {
@@ -1276,8 +1302,11 @@ export class Game {
           this.refreshToolbarLocks();
         }
         if (this.development.tick(this.grid, this.economy.monthsElapsed)) buildingsDirty = true;
+        // Rebuild airport registry so Economy sees current gate / runway
+        // counts in this month's revenue calculation.
+        this.airport.rebuild(this.grid);
         const monthsBefore = this.economy.monthsElapsed;
-        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council, this.parkingStrictness, this.supplyChain);
+        this.economy.tick(SIM_STEP_MS, this.grid, this.population, this.globalMarket, this.events, this.bonds, this.crime, this.districts, this.council, this.parkingStrictness, this.supplyChain, this.airport);
         // Beta 1.6 — supply-chain monthly consumption fires exactly on
         // a month rollover, AFTER Economy reads the supply state (Economy
         // factors current supplies into commercial revenue), so the tick
@@ -1597,6 +1626,8 @@ export class Game {
       this.renderer.updateBuses(this.buses, this.grid);
       this.ferries.update(dt, this.grid);
       this.renderer.updateFerries(this.ferries, this.grid);
+      this.planes.update(SIM_STEP_MS, this.airport, this.grid);
+      this.renderer.updateAircraft(this.planes);
       this.pedestrians.update(dt, this.grid.width);
       this.renderer.updatePedestrians(this.pedestrians, this.grid);
       // Beta 1.3.4 (Phase 2.1) — shoppers (walkers spawned by parked
@@ -2220,6 +2251,16 @@ export class Game {
         this.undoStack.pop();
         this.strokeDidSnapshot = false;
       }
+      this.strokeOrigin = null;
+      return;
+    }
+
+    // Rotate airport cluster — tap-only, cycles aptBuildingRot on the
+    // nearest terminal / hangar cluster's anchor tile.
+    if (this.tool === 'rotate_apt') {
+      this.rotateAirportCluster(tile.x, tile.y);
+      this.undoStack.pop();
+      this.strokeDidSnapshot = false;
       this.strokeOrigin = null;
       return;
     }
@@ -3408,10 +3449,131 @@ export class Game {
       this.applyTerraformStroke(path, this.tool);
       return;
     }
+    // Airport paint strokes (Beta 2.1). All 5 paint_apt_* tools are
+    // free-stroke — drag to paint tiles without a rubber-band path.
+    if (
+      this.tool === 'paint_apt_runway'   ||
+      this.tool === 'paint_apt_taxiway'  ||
+      this.tool === 'paint_apt_apron'    ||
+      this.tool === 'paint_apt_terminal' ||
+      this.tool === 'paint_apt_hangar'
+    ) {
+      this.applyAirportStroke(path, this.tool);
+      return;
+    }
+
     const zoneInfo = ZONE_TOOL_INFO.get(this.tool);
     if (zoneInfo) {
       this.applyZoneStroke(path, zoneInfo.zone, ZONE_TIER_CAP[zoneInfo.tier]);
     }
+  }
+
+  // --- Airport stroke & rotate -------------------------------------------
+
+  /**
+   * Paint airport infrastructure tiles along a stroke (Beta 2.1).
+   * Per-tile cost deducted as each tile is painted; stops on empty treasury.
+   * Runway tiles also stamp the current stroke direction as aptRunwayYaw so
+   * the renderer can draw the correct markings.
+   */
+  private applyAirportStroke(
+    path: { x: number; y: number }[],
+    tool: 'paint_apt_runway' | 'paint_apt_taxiway' | 'paint_apt_apron' |
+          'paint_apt_terminal' | 'paint_apt_hangar'
+  ): void {
+    const buildingKind: Building =
+      tool === 'paint_apt_runway'   ? 'apt_runway'   :
+      tool === 'paint_apt_taxiway'  ? 'apt_taxiway'  :
+      tool === 'paint_apt_apron'    ? 'apt_apron'    :
+      tool === 'paint_apt_terminal' ? 'apt_terminal' :
+                                      'apt_hangar';
+    const stanceKey = 'apt_terminal'; // all airport tiles share the stance
+    const mult = this.council.costMultiplier(stanceKey);
+    if (!isFinite(mult)) {
+      this.onStatusMessage?.('Banned by council');
+      return;
+    }
+    const baseCost = BUILDING_COSTS[buildingKind];
+    const perTileCost = Math.round(baseCost * mult);
+
+    // Infer runway yaw from stroke direction (first→last tile vector).
+    let runwayYaw = 0; // default NS
+    if (path.length >= 2) {
+      const dx = path[path.length - 1]!.x - path[0]!.x;
+      const dz = path[path.length - 1]!.y - path[0]!.y;
+      runwayYaw = Math.abs(dx) >= Math.abs(dz) ? Math.PI / 2 : 0;
+    }
+
+    const seen = new Set<number>();
+    let anyChanged = false;
+    let blockedByCash = false;
+    for (const p of path) {
+      const idx = this.tileIndex(p.x, p.y);
+      if (seen.has(idx)) continue;
+      seen.add(idx);
+      const t = this.grid.get(p.x, p.y);
+      if (!t || !t.owned || t.terrain === 'water') continue;
+      if (t.building === buildingKind) continue;
+      // Don't allow painting over non-airport buildings (services, etc.).
+      if (t.building !== 'none' && !t.building.startsWith('apt_')) continue;
+      if (this.economy.treasury < perTileCost) { blockedByCash = true; continue; }
+      this.economy.treasury -= perTileCost;
+      t.building = buildingKind;
+      t.road = false;
+      t.zone = 'none';
+      t.path = false;
+      t.density = 0;
+      if (buildingKind === 'apt_runway') t.aptRunwayYaw = runwayYaw;
+      anyChanged = true;
+    }
+    if (anyChanged) {
+      this.services.recompute(this.grid);
+      this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+      this.renderer.drawAirportGround(this.grid);
+    }
+    if (blockedByCash) {
+      this.onStatusMessage?.(`Not enough money — need $${perTileCost.toLocaleString()}/tile`);
+    }
+  }
+
+  /**
+   * Rotate the airport cluster (terminal or hangar) under or adjacent to the
+   * tapped tile. Cycles aptBuildingRot on the anchor tile (0→1→2→3→0).
+   */
+  private rotateAirportCluster(x: number, y: number): void {
+    const kinds: Building[] = ['apt_terminal', 'apt_hangar'];
+    for (const kind of kinds) {
+      // Try the tapped tile and its 4-adjacent neighbours to find a cluster.
+      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const cx = x + dx, cy = y + dy;
+        const t = this.grid.get(cx, cy);
+        if (!t || t.building !== kind) continue;
+        // Find the lex-smallest anchor of this cluster.
+        const visited = new Set<string>();
+        const cluster: { x: number; y: number }[] = [];
+        const stack = [{ x: cx, y: cy }];
+        while (stack.length) {
+          const cur = stack.pop()!;
+          const key = `${cur.x},${cur.y}`;
+          if (visited.has(key)) continue;
+          const ct = this.grid.get(cur.x, cur.y);
+          if (!ct || ct.building !== kind) continue;
+          visited.add(key);
+          cluster.push(cur);
+          stack.push({ x: cur.x + 1, y: cur.y }, { x: cur.x - 1, y: cur.y },
+                     { x: cur.x, y: cur.y + 1 }, { x: cur.x, y: cur.y - 1 });
+        }
+        if (!cluster.length) continue;
+        const anchor = cluster.reduce((a, b) => a.y < b.y || (a.y === b.y && a.x < b.x) ? a : b);
+        const at = this.grid.get(anchor.x, anchor.y);
+        if (!at) continue;
+        at.aptBuildingRot = ((at.aptBuildingRot + 1) % 4) as 0 | 1 | 2 | 3;
+        this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+        this.onStatusMessage?.(`Rotated ${kind === 'apt_terminal' ? 'Terminal' : 'Hangar'}`);
+        return;
+      }
+    }
+    this.onStatusMessage?.('Tap a terminal or hangar to rotate it');
   }
 
   /** Paint district membership over a 4-connected stroke. If activeDistrictId

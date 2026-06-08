@@ -141,6 +141,15 @@ export class Population {
       // front desk, housekeeping, F&B, concierge). Motels/airbnbs are
       // per-tile so the sum still reflects actual employment size.
       else if (t.building === 'hotel') iJobs += 2;
+      // Airport (Beta 2.1): every airport tile type generates industrial
+      // jobs. Terminals are the most labour-intensive (gate agents, retail,
+      // security, customs). Hangars are skilled-trade maintenance. The tower
+      // is a single tile so its absolute job count is small but meaningful.
+      else if (t.building === 'apt_terminal') iJobs += 3;
+      else if (t.building === 'apt_hangar') iJobs += 2;
+      else if (t.building === 'apt_tower') iJobs += 1;
+      else if (t.building === 'apt_apron') iJobs += 1;
+      else if (t.building === 'apt_runway') iJobs += 0; // runway ops included in apron/terminal
       if (t.zone === 'none' || t.road) continue;
       // Luxury tiles count even at density 0 — they're permanent placement
       // (not demand-driven growth), so capacity is fixed per tile.

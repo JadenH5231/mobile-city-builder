@@ -515,6 +515,93 @@ const BUILD_ITEMS: readonly ToolbarItem[] = [
       </svg>` },
     ]
   },
+  // Airport group (Beta 2.1) — full modular airport builder.
+  // All tools unlock at City milestone (1000 pop). Seven tools:
+  // paint_apt_runway, paint_apt_taxiway, paint_apt_apron (stroke tools),
+  // paint_apt_terminal, paint_apt_hangar (stroke-based cluster tiles),
+  // place_apt_tower (single-tile tap-only control tower),
+  // rotate_apt (tap to cycle aptBuildingRot on nearest cluster).
+  {
+    kind: 'group',
+    id: 'airport',
+    label: 'Airport',
+    headerLabel: 'Airport',
+    icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <!-- Plane silhouette — wide swept wings, tail, fuselage -->
+      <path d="M22 9l-5 2-4-5H9l2 5H4l-2-1.5V11L4 9.5H9l-2-5h4l4 5 5 2a1 1 0 0 1 0 2z"
+            stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+      <path d="M4 16l12-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>`,
+    members: [
+      { kind: 'tool', tool: 'paint_apt_runway', label: 'Runway', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Runway: long centre stripe with dashed centre line -->
+        <rect x="8" y="2" width="8" height="20" rx="1"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M12 4v2 M12 9v2 M12 14v2 M12 19v2"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'paint_apt_taxiway', label: 'Taxiway', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Taxiway: narrower path with yellow centre-line style -->
+        <path d="M5 20l3-8h8l3 8"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M8 12V4h8v8"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        <path d="M12 6v6" stroke="currentColor" stroke-width="1.0" stroke-linecap="round" stroke-dasharray="1.5 1.5"/>
+      </svg>` },
+      { kind: 'tool', tool: 'paint_apt_apron', label: 'Apron', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Apron: flat open area with grid dots -->
+        <rect x="3" y="6" width="18" height="12" rx="1"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <circle cx="8"  cy="12" r="0.9" fill="currentColor"/>
+        <circle cx="12" cy="12" r="0.9" fill="currentColor"/>
+        <circle cx="16" cy="12" r="0.9" fill="currentColor"/>
+        <circle cx="8"  cy="9"  r="0.9" fill="currentColor"/>
+        <circle cx="16" cy="9"  r="0.9" fill="currentColor"/>
+        <circle cx="8"  cy="15" r="0.9" fill="currentColor"/>
+        <circle cx="16" cy="15" r="0.9" fill="currentColor"/>
+      </svg>` },
+      { kind: 'tool', tool: 'paint_apt_terminal', label: 'Terminal', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Terminal: broad building with jetway arm extending forward -->
+        <rect x="3" y="8" width="18" height="10" rx="1"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M8 8V5h3v3 M13 8V5h3v3"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+        <path d="M10 18l-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M14 18l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'paint_apt_hangar', label: 'Hangar', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Hangar: wide low building with large bay door -->
+        <rect x="2" y="9" width="20" height="12" rx="1"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M2 9 C2 4 22 4 22 9"
+              stroke="currentColor" stroke-width="1.6" fill="none"/>
+        <path d="M6 21v-8h12v8"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+        <path d="M7 17h10" stroke="currentColor" stroke-width="1.0" stroke-linecap="round"/>
+      </svg>` },
+      { kind: 'tool', tool: 'place_apt_tower', label: 'Tower', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Control tower: tall shaft with glass cab at top -->
+        <path d="M10 22h4 M11 22V12h2v10"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+        <path d="M8 9h8l1 3H7z"
+              stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
+        <rect x="9" y="4" width="6" height="5" rx="1"
+              stroke="currentColor" stroke-width="1.4" fill="none"/>
+        <circle cx="16" cy="4" r="1" fill="currentColor"/>
+      </svg>` },
+      { kind: 'tool', tool: 'rotate_apt', label: 'Rotate', icon: `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Rotate arrows — circular arc with arrowhead -->
+        <path d="M4.5 10a8 8 0 0 1 15 2"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        <path d="M19.5 10l-1.5-3.5L22 8z"
+              fill="currentColor"/>
+        <path d="M19.5 14a8 8 0 0 1-15-2"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        <path d="M4.5 14l1.5 3.5L2 16z"
+              fill="currentColor"/>
+      </svg>` },
+    ]
+  },
   // Landmarks (Alpha 2.17). Grouped popover so the toolbar stays scannable.
   // Each one generates monthly tourism revenue scaled by city pop.
   {

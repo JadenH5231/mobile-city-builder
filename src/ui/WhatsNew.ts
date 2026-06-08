@@ -29,6 +29,16 @@ interface ChangeEntry {
  *  added at the top or bottom — display order is computed by version, not
  *  object order. */
 const WHATS_NEW: Record<string, ChangeEntry> = {
+  '2.1': {
+    title: 'Your city gets an airport ✈️',
+    highlights: [
+      '✈️ Full airport builder — paint runways, taxiways, aprons, terminal blocks, hangars, and a control tower to design your perfect airport layout.',
+      '🛫 Dynamic flight system — planes fly in from the map edge, land on the runway, taxi to a gate, and later push back and take off again. Regional jets, narrow-body, and wide-body aircraft all look distinct.',
+      '🧳 Airport passengers — arriving flights add visitors who fill your hotels and resorts; connect the airport with a bus stop or subway and they spread through the whole city.',
+      '↩️ Rotate airport buildings — tap the Rotate tool on any terminal or hangar cluster to spin it 90° so the gates face the apron.',
+      '💰 Revenue model — runway landing fees + terminal concessions + visitor spending (transit link doubles visitor spending, so plan your access roads!).'
+    ]
+  },
   '2.0': {
     title: 'Big city, bigger ambitions',
     highlights: [

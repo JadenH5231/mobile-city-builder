@@ -8055,88 +8055,178 @@ function makeChevronGeom(width: number, length: number): BufferGeometry {
 
 /**
  * Build a merged Mesh covering all apt_runway / apt_taxiway / apt_apron tiles.
+ *
+ * Uses a center-pad + arm-toward-neighbor approach (the same idiom roads use):
+ * each tile owns a center square at its surface width, then extends rectangular
+ * arms out to the tile edge toward each cardinal neighbor that is also airport
+ * ground.  This makes taxiways and runways connect seamlessly in every direction
+ * without a separate edge graph — pick up two adjacent tiles and they just join.
+ *
+ * Width hierarchy (in tile units, TILE_SIZE = 1):
+ *   runway  : 0.92  (wide, like a real runway)
+ *   taxiway : 0.60  (narrower connector)
+ *   apron   : 0.99  (full-tile concrete pad — seamlessly absorbs everything)
+ *
  * Called by Renderer.drawAirportGround whenever any airport tile changes.
- * Separate from buildCityBuildingsMesh so airport ground can be rebuilt
- * independently of the building layer (much cheaper — no cluster BFS).
  */
 export function buildAirportGroundMesh(grid: Grid): Mesh | null {
   const geoms: BufferGeometry[] = [];
   const colours: number[] = [];
+
+  // Surface sits just above ROAD_LIFT so it clears the road layer cleanly.
   const lift = ROAD_LIFT + 0.003;
+  const T    = TILE_SIZE;
 
+  // --------------- helpers -----------------------------------------------
+  /** True for any tile that belongs to the painted airport ground surface. */
+  const isAptGround = (tx: number, ty: number): boolean => {
+    const nb = grid.get(tx, ty);
+    return nb?.building === 'apt_runway' ||
+           nb?.building === 'apt_taxiway' ||
+           nb?.building === 'apt_apron';
+  };
+
+  /**
+   * Surface half-width (in world units) for each airport ground building type.
+   * Runway is wide; taxiway is narrower; apron is a full-tile concrete slab.
+   */
+  const aptHalf = (building: string): number => {
+    if (building === 'apt_runway')  return T * 0.46;   // 0.92T total
+    if (building === 'apt_taxiway') return T * 0.30;   // 0.60T total
+    /* apt_apron */                  return T * 0.495;  // 0.99T total — full tile
+  };
+
+  /** Asphalt/concrete base colour per type. */
+  const aptColor = (building: string): number => {
+    if (building === 'apt_runway')  return 0x1c1c1c;
+    if (building === 'apt_taxiway') return 0x2e2e2e;
+    /* apt_apron */                  return 0x8e8a7f;
+  };
+
+  /** Emit a flat rectangular box (trivially thin) at world position (wx, wz). */
+  const box = (wx: number, wz: number, wid: number, dep: number, y: number, col: number, th = 0.005) => {
+    const g = new BoxGeometry(wid, th, dep);
+    g.translate(wx, y, wz);
+    geoms.push(g); colours.push(col);
+  };
+
+  // --------------- main pass ---------------------------------------------
   for (const t of grid.iter()) {
-    const cx = (t.x + 0.5) * TILE_SIZE;
-    const cz = (t.y + 0.5) * TILE_SIZE;
+    const b = t.building ?? '';
+    if (!isAptGround(t.x, t.y)) continue;
 
-    if (t.building === 'apt_runway') {
-      // Dark asphalt base.
-      const base = new BoxGeometry(TILE_SIZE * 0.99, 0.005, TILE_SIZE * 0.99);
-      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x202020);
+    const cx = (t.x + 0.5) * T;
+    const cz = (t.y + 0.5) * T;
+    const half = aptHalf(b);    // half-width of this tile's surface
+    const col  = aptColor(b);
 
-      // Centerline dashes along the runway axis.
-      const isNS = Math.abs(t.aptRunwayYaw) < 0.1;
-      const dl = 0.28, dg = 0.10, dw = 0.04;
-      for (let s = -1; s <= 1; s += 2) {
-        const stripe = isNS
-          ? new BoxGeometry(dw, 0.005, dl)
-          : new BoxGeometry(dl, 0.005, dw);
-        stripe.translate(cx, lift + 0.001, isNS ? cz + s * (dl / 2 + dg / 2) : cz);
-        if (!isNS) stripe.translate(s * (dl / 2 + dg / 2), 0, 0);
-        geoms.push(stripe); colours.push(0xffffff);
-      }
+    // Cardinal neighbors.
+    const hasN = isAptGround(t.x, t.y - 1);
+    const hasS = isAptGround(t.x, t.y + 1);
+    const hasE = isAptGround(t.x + 1, t.y);
+    const hasW = isAptGround(t.x - 1, t.y);
 
-      // Edge stripe lines on each long side.
-      const edgeOff = 0.44;
-      const edgeLen = TILE_SIZE * 0.90;
+    // 1. Center pad — always present; covers the intersection area.
+    box(cx, cz, half * 2, half * 2, lift, col);
+
+    // 2. Arms: one per connected neighbor, from tile-center to tile-edge.
+    //    Each arm is W×(T/2) where W = this tile's own width.  The same
+    //    pattern roads use — each tile owns its half of the connection
+    //    segment, so a runway arm and a taxiway arm meet cleanly at the
+    //    shared tile boundary with a natural width step (wide runway on
+    //    one side, narrow taxiway on the other).
+    const armL = T * 0.5; // arm length = half-tile
+    if (hasN) box(cx, cz - armL * 0.5, half * 2, armL, lift + 0.0001, col);
+    if (hasS) box(cx, cz + armL * 0.5, half * 2, armL, lift + 0.0001, col);
+    if (hasE) box(cx + armL * 0.5, cz, armL, half * 2, lift + 0.0001, col);
+    if (hasW) box(cx - armL * 0.5, cz, armL, half * 2, lift + 0.0001, col);
+
+    // ---- markings (layered on top, z-lifted slightly) ----
+    const mY = lift + 0.003;
+
+    if (b === 'apt_runway') {
+      // Runway markings use the stored aptRunwayYaw to decide orientation.
+      // 0 = NS runway, PI/2 = EW runway.
+      const isNS = Math.abs(t.aptRunwayYaw ?? 0) < 0.1;
+
+      // Centerline: two dashes per tile, offset along the runway axis.
+      // Sized so they don't spill into the arm regions — they sit in the
+      // center ±0.15 of the tile, well inside the center pad.
+      const dashL = 0.22, dashW = 0.035, dashOff = 0.14;
       if (isNS) {
-        for (const ex of [-edgeOff, edgeOff]) {
-          const edge = new BoxGeometry(0.025, 0.004, edgeLen);
-          edge.translate(cx + ex, lift + 0.001, cz); geoms.push(edge); colours.push(0xffffff);
-        }
+        box(cx, cz - dashOff, dashW, dashL, mY, 0xffffff);
+        box(cx, cz + dashOff, dashW, dashL, mY, 0xffffff);
+        // White edge stripes on the long (N/S) sides.
+        const edgeX = half * 0.93;
+        box(cx - edgeX, cz, 0.020, half * 2 * 0.92, mY - 0.001, 0xffffff, 0.003);
+        box(cx + edgeX, cz, 0.020, half * 2 * 0.92, mY - 0.001, 0xffffff, 0.003);
       } else {
-        for (const ez of [-edgeOff, edgeOff]) {
-          const edge = new BoxGeometry(edgeLen, 0.004, 0.025);
-          edge.translate(cx, lift + 0.001, cz + ez); geoms.push(edge); colours.push(0xffffff);
+        box(cx - dashOff, cz, dashL, dashW, mY, 0xffffff);
+        box(cx + dashOff, cz, dashL, dashW, mY, 0xffffff);
+        const edgeZ = half * 0.93;
+        box(cx, cz - edgeZ, half * 2 * 0.92, 0.020, mY - 0.001, 0xffffff, 0.003);
+        box(cx, cz + edgeZ, half * 2 * 0.92, 0.020, mY - 0.001, 0xffffff, 0.003);
+      }
+
+      // Yellow edge-light boxes at the four corners of this tile's runway
+      // surface.  Always at the full runway half-width regardless of arms
+      // (they mark the physical edge of the paved runway surface).
+      const el = half * 0.96;
+      for (const [ex, ez] of [[-el, -el], [-el, el], [el, -el], [el, el]] as const) {
+        const g = new BoxGeometry(0.045, 0.042, 0.045);
+        g.translate(cx + ex, lift + 0.022, cz + ez);
+        geoms.push(g); colours.push(0xfff5aa);
+      }
+    }
+
+    if (b === 'apt_taxiway') {
+      // Solid yellow centerline: draw a segment along every arm direction
+      // (and stub lines toward non-connected edges so isolated tiles still
+      // look like taxiways rather than plain squares).
+      const clW = 0.036;
+      const halfArmL = armL * 0.5;
+
+      // Arms toward connected neighbors — full arm length.
+      if (hasN) box(cx, cz - armL * 0.5, clW, armL, mY, 0xffcc00, 0.003);
+      if (hasS) box(cx, cz + armL * 0.5, clW, armL, mY, 0xffcc00, 0.003);
+      if (hasE) box(cx + armL * 0.5, cz, armL, clW, mY, 0xffcc00, 0.003);
+      if (hasW) box(cx - armL * 0.5, cz, armL, clW, mY, 0xffcc00, 0.003);
+
+      // Stub lines for unconnected sides: half-arm length so they end at
+      // the edge of the center pad, giving a closed +/T/L look.
+      if (!hasN) box(cx, cz - halfArmL * 0.5, clW, halfArmL, mY, 0xffcc00, 0.003);
+      if (!hasS) box(cx, cz + halfArmL * 0.5, clW, halfArmL, mY, 0xffcc00, 0.003);
+      if (!hasE) box(cx + halfArmL * 0.5, cz, halfArmL, clW, mY, 0xffcc00, 0.003);
+      if (!hasW) box(cx - halfArmL * 0.5, cz, halfArmL, clW, mY, 0xffcc00, 0.003);
+
+      // Blue hold-position lights on the non-neighbor edges of this tile.
+      // They mark where aircraft must stop before entering the runway.
+      for (const [dx, dz, side] of [
+        [0, -1, 'N'], [0, 1, 'S'], [1, 0, 'E'], [-1, 0, 'W']
+      ] as const) {
+        const nb = grid.get(t.x + dx, t.y + dz);
+        // Show hold lights facing runway tiles (taxiway edge abutting runway).
+        if (nb?.building === 'apt_runway') {
+          const lx = cx + dx * (half * 0.88);
+          const lz = cz + dz * (half * 0.88);
+          const isLat = side === 'E' || side === 'W';
+          for (const sp of [-half * 0.45, 0, half * 0.45]) {
+            const g = new BoxGeometry(0.04, 0.04, 0.04);
+            g.translate(isLat ? lx : cx + sp, lift + 0.022, isLat ? cz + sp : lz);
+            geoms.push(g); colours.push(0x3366ff);
+          }
         }
       }
-
-      // Small yellow edge-light boxes at each tile corner.
-      for (const [ex, ez] of [[-0.46, -0.46], [-0.46, 0.46], [0.46, -0.46], [0.46, 0.46]] as const) {
-        const light = new BoxGeometry(0.045, 0.04, 0.045);
-        light.translate(cx + ex, lift + 0.02, cz + ez); geoms.push(light); colours.push(0xfff5aa);
-      }
     }
 
-    if (t.building === 'apt_taxiway') {
-      // Slightly lighter grey, narrower than runway.
-      const base = new BoxGeometry(TILE_SIZE * 0.78, 0.004, TILE_SIZE * 0.78);
-      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x353535);
-
-      // Solid yellow centerline.
-      const cl = new BoxGeometry(0.04, 0.004, TILE_SIZE * 0.74);
-      cl.translate(cx, lift + 0.001, cz); geoms.push(cl); colours.push(0xffcc00);
-
-      // Blue edge-hold lights.
-      for (const [ex, ez] of [[-0.37, 0], [0.37, 0], [0, -0.37], [0, 0.37]] as const) {
-        const light = new BoxGeometry(0.04, 0.04, 0.04);
-        light.translate(cx + ex, lift + 0.02, cz + ez); geoms.push(light); colours.push(0x3366ff);
-      }
-    }
-
-    if (t.building === 'apt_apron') {
-      // Light concrete pad.
-      const base = new BoxGeometry(TILE_SIZE * 0.99, 0.003, TILE_SIZE * 0.99);
-      base.translate(cx, lift, cz); geoms.push(base); colours.push(0x919185);
-
-      // Subtle gridline: one horizontal + one vertical seam crack.
-      const h = new BoxGeometry(TILE_SIZE * 0.96, 0.002, 0.02);
-      h.translate(cx, lift + 0.001, cz); geoms.push(h); colours.push(0x787770);
-      const v = new BoxGeometry(0.02, 0.002, TILE_SIZE * 0.96);
-      v.translate(cx, lift + 0.001, cz); geoms.push(v); colours.push(0x787770);
-
-      // Yellow guide-line toward the centre.
-      const gl = new BoxGeometry(0.025, 0.002, TILE_SIZE * 0.55);
-      gl.translate(cx, lift + 0.001, cz); geoms.push(gl); colours.push(0xffd700);
+    if (b === 'apt_apron') {
+      // Subtle expansion-joint grid on the concrete slab.
+      const gW = 0.016;
+      box(cx, cz, T * 0.97, gW, mY, 0x7a766c, 0.002); // horizontal joint
+      box(cx, cz, gW, T * 0.97, mY, 0x7a766c, 0.002); // vertical joint
+      // Yellow nose-in guide line — from the south tile edge toward the centre,
+      // suggesting an aircraft parking centreline.
+      box(cx, cz + T * 0.18, 0.024, T * 0.60, mY + 0.001, 0xffd700, 0.002);
     }
   }
 

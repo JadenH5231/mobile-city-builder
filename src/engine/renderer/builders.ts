@@ -8852,3 +8852,237 @@ export function buildWidebodyAircraftGeom(): BufferGeometry {
 
   return mergeGeoms(geoms, colours);
 }
+
+// ============================================================
+// Airport lighting — Beta 2.1.1 (runway / taxiway / apron night)
+// ============================================================
+
+/** Animated light specification for one blink-light instance.
+ *  The Renderer stores an array of these parallel to the aptBlinkMesh
+ *  InstancedMesh and updates per-instance colour each frame. */
+export interface AptBlinkSpec {
+  wx: number; wy: number; wz: number;  // world-space centre
+  r: number;                            // flat-disc half-size
+  cr: number; cg: number; cb: number;  // lit RGB (0..1)
+  kind: 'strobe' | 'obstruction' | 'reil';
+  /** Approach-rabbit sequence index: 0 = farthest (fires first),
+   *  APT_NUM_STROBES-1 = nearest threshold (fires last). Others: 0. */
+  seqIndex: number;
+}
+
+/** Steps in one approach-rabbit animation cycle.
+ *  Must match the seqIndex range emitted by buildAirportBlinkData. */
+export const APT_NUM_STROBES = 8;
+
+/** Build the static night-glow layer for all airport tiles.
+ *
+ *  Returns a single vertex-coloured, additive-blended Mesh containing:
+ *   - Runway edge lights (cool white-blue, 3 pairs per side per tile)
+ *   - Runway centreline dashes (white)
+ *   - Threshold green bars + PAPI indicator (approach end)
+ *   - Far-end red bars (departure end)
+ *   - Taxiway centreline dot + blue corner markers
+ *   - Apron warm flood pool + blue safety corners
+ *
+ *  Opacity controlled by the Renderer via applyTimeOfDay (same pattern
+ *  as lampGlowMesh). Returns null when no airport tiles exist. */
+export function buildAirportStaticGlowMesh(grid: Grid): Mesh | null {
+  const positions: number[] = [];
+  const colours:   number[] = [];
+  const indices:   number[] = [];
+  let v = 0;
+  // Sit just above the asphalt surface (ROAD_LIFT matches the airport
+  // ground mesh height for runway / taxiway / apron quads).
+  const Y = ROAD_LIFT + 0.008;
+
+  /** Push one flat horizontal quad centred at (cx, Y, cz) with half-extents
+   *  (rx x rz).  CW winding matches buildLampGlowMesh so the top face is
+   *  visible from the 3/4 camera above. */
+  const pushGlow = (cx: number, cz: number, rx: number, rz: number, col: number): void => {
+    const r = ((col >> 16) & 0xff) / 255;
+    const g = ((col >>  8) & 0xff) / 255;
+    const b = ( col        & 0xff) / 255;
+    positions.push(
+      cx - rx, Y, cz - rz,
+      cx + rx, Y, cz - rz,
+      cx + rx, Y, cz + rz,
+      cx - rx, Y, cz + rz,
+    );
+    for (let i = 0; i < 4; i++) colours.push(r, g, b);
+    indices.push(v, v + 2, v + 1, v, v + 3, v + 2);
+    v += 4;
+  };
+
+  const isRwy = (tx: number, ty: number): boolean =>
+    grid.get(tx, ty)?.building === 'apt_runway';
+
+  for (const t of grid.iter()) {
+    const cx = t.x + 0.5, cz = t.y + 0.5;
+
+    // -- Runway ---------------------------------------------------
+    if (t.building === 'apt_runway') {
+      // aptRunwayYaw: 0 = NS runway, Math.PI/2 = EW runway (per tile).
+      const isNS = Math.abs(t.aptRunwayYaw ?? 0) < 0.3;
+
+      // Edge lights - cool white-blue, 3 positions per tile per side.
+      if (isNS) {
+        for (const dz of [-0.33, 0.0, 0.33]) {
+          pushGlow(cx - 0.435, cz + dz, 0.048, 0.048, 0xb8d8ff);
+          pushGlow(cx + 0.435, cz + dz, 0.048, 0.048, 0xb8d8ff);
+        }
+      } else {
+        for (const dx of [-0.33, 0.0, 0.33]) {
+          pushGlow(cx + dx, cz - 0.435, 0.048, 0.048, 0xb8d8ff);
+          pushGlow(cx + dx, cz + 0.435, 0.048, 0.048, 0xb8d8ff);
+        }
+      }
+
+      // Centreline dashes - white, 3 per tile.
+      for (const dl of [-0.22, 0.0, 0.22]) {
+        pushGlow(isNS ? cx : cx + dl, isNS ? cz + dl : cz, 0.036, 0.036, 0xffffff);
+      }
+
+      // Threshold - approach end: south tile for NS (no runway at Y+1),
+      //             east tile for EW (no runway at X+1).
+      const isThreshold = isNS ? !isRwy(t.x, t.y + 1) : !isRwy(t.x + 1, t.y);
+      if (isThreshold) {
+        if (isNS) {
+          // Green bar at the south edge.
+          for (const dx of [-0.28, -0.14, 0, 0.14, 0.28])
+            pushGlow(cx + dx, cz + 0.455, 0.058, 0.058, 0x00ee44);
+          // PAPI: 4 lights to the WEST (left of northbound approach).
+          // Inner 2 red + outer 2 white = standard on-glidepath indication.
+          for (let i = 0; i < 4; i++)
+            pushGlow(cx - 0.50, cz + 0.42 - i * 0.060, 0.048, 0.048,
+              i < 2 ? 0xff3300 : 0xffffff);
+        } else {
+          // Green bar at the east edge.
+          for (const dz of [-0.28, -0.14, 0, 0.14, 0.28])
+            pushGlow(cx + 0.455, cz + dz, 0.058, 0.058, 0x00ee44);
+          // PAPI: to the SOUTH (left of westbound approach).
+          for (let i = 0; i < 4; i++)
+            pushGlow(cx + 0.42 - i * 0.060, cz + 0.50, 0.048, 0.048,
+              i < 2 ? 0xff3300 : 0xffffff);
+        }
+      }
+
+      // Far end - departure end: north for NS, west for EW.
+      const isFarEnd = isNS ? !isRwy(t.x, t.y - 1) : !isRwy(t.x - 1, t.y);
+      if (isFarEnd) {
+        if (isNS) {
+          for (const dx of [-0.28, -0.14, 0, 0.14, 0.28])
+            pushGlow(cx + dx, cz - 0.455, 0.058, 0.058, 0xff2200);
+        } else {
+          for (const dz of [-0.28, -0.14, 0, 0.14, 0.28])
+            pushGlow(cx - 0.455, cz + dz, 0.058, 0.058, 0xff2200);
+        }
+      }
+    }
+
+    // -- Taxiway - blue centreline + corner markers ----------------
+    if (t.building === 'apt_taxiway') {
+      pushGlow(cx, cz, 0.040, 0.040, 0x3388ff); // centreline dot
+      for (const [ox, oz] of [[-0.38, -0.38], [0.38, -0.38], [-0.38, 0.38], [0.38, 0.38]] as const)
+        pushGlow(cx + ox, cz + oz, 0.040, 0.040, 0x3388ff);
+    }
+
+    // -- Apron - warm flood pool + blue safety corners -------------
+    if (t.building === 'apt_apron') {
+      pushGlow(cx, cz, 0.52, 0.52, 0xffe8aa);
+      for (const [ox, oz] of [[-0.43, -0.43], [0.43, -0.43], [-0.43, 0.43], [0.43, 0.43]] as const)
+        pushGlow(cx + ox, cz + oz, 0.042, 0.042, 0x4499ff);
+    }
+  }
+
+  if (positions.length === 0) return null;
+
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geom.setAttribute('color',    new BufferAttribute(new Float32Array(colours), 3));
+  geom.setIndex(new BufferAttribute(new Uint32Array(indices), 1));
+
+  const mat = new MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: AdditiveBlending,
+  });
+  const mesh = new Mesh(geom, mat);
+  mesh.visible = false;
+  return mesh;
+}
+
+/** Compute animated blink-light specs from the current airport layout.
+ *
+ *  Call whenever airport tiles change (same trigger as buildAirportGroundMesh).
+ *  The Renderer builds one InstancedMesh of flat discs (cap APT_BLINK_CAP)
+ *  and calls updateAirportBlinks() each frame to colour them.
+ *
+ *  Light types:
+ *    'strobe'      - Approach rabbit: APT_NUM_STROBES lights flash far-to-near
+ *                    at 2 Hz, creating a running-light effect toward the runway.
+ *    'reil'        - Runway End Identifier: double-pulse at ~1.25 Hz flanking
+ *                    the threshold.
+ *    'obstruction' - Slow red blink on tall structures (tower / hangars). */
+export function buildAirportBlinkData(grid: Grid): AptBlinkSpec[] {
+  const specs: AptBlinkSpec[] = [];
+  const STATIC_Y = ROAD_LIFT + 0.022;  // just above the static glow layer
+  const STROBE_Y = 0.14;               // floats above terrain beyond the runway
+
+  const isRwy = (tx: number, ty: number): boolean =>
+    grid.get(tx, ty)?.building === 'apt_runway';
+
+  for (const t of grid.iter()) {
+    const cx = t.x + 0.5, cz = t.y + 0.5;
+
+    if (t.building === 'apt_runway') {
+      const isNS = Math.abs(t.aptRunwayYaw ?? 0) < 0.3;
+      const isThreshold = isNS ? !isRwy(t.x, t.y + 1) : !isRwy(t.x + 1, t.y);
+
+      if (isThreshold) {
+        // REIL - two bright white flashers flanking the threshold.
+        if (isNS) {
+          specs.push({ wx: cx - 0.44, wy: STATIC_Y, wz: cz + 0.46,
+            r: 0.130, cr: 1, cg: 1, cb: 1, kind: 'reil', seqIndex: 0 });
+          specs.push({ wx: cx + 0.44, wy: STATIC_Y, wz: cz + 0.46,
+            r: 0.130, cr: 1, cg: 1, cb: 1, kind: 'reil', seqIndex: 0 });
+        } else {
+          specs.push({ wx: cx + 0.46, wy: STATIC_Y, wz: cz - 0.44,
+            r: 0.130, cr: 1, cg: 1, cb: 1, kind: 'reil', seqIndex: 0 });
+          specs.push({ wx: cx + 0.46, wy: STATIC_Y, wz: cz + 0.44,
+            r: 0.130, cr: 1, cg: 1, cb: 1, kind: 'reil', seqIndex: 0 });
+        }
+
+        // Approach rabbit - APT_NUM_STROBES strobes extending outward from
+        // the threshold (south for NS, east for EW), 0.75 tiles apart.
+        // seqIndex 0 = farthest (fires first), so light runs TOWARD the runway.
+        for (let i = 0; i < APT_NUM_STROBES; i++) {
+          const dist = 0.55 + i * 0.75;
+          specs.push({
+            wx: isNS ? cx : cx + dist,
+            wy: STROBE_Y,
+            wz: isNS ? cz + dist : cz,
+            r: 0.115, cr: 1, cg: 1, cb: 1,
+            kind: 'strobe',
+            seqIndex: APT_NUM_STROBES - 1 - i,
+          });
+        }
+      }
+    }
+
+    // Obstruction - control tower: single red beacon at apex.
+    if (t.building === 'apt_tower') {
+      specs.push({ wx: cx, wy: STATIC_Y + 1.80, wz: cz,
+        r: 0.095, cr: 1, cg: 0.08, cb: 0.04, kind: 'obstruction', seqIndex: 0 });
+    }
+
+    // Obstruction - hangars: one position light per alternate tile.
+    if (t.building === 'apt_hangar' && (t.x + t.y) % 2 === 0) {
+      specs.push({ wx: cx, wy: STATIC_Y + 0.90, wz: cz,
+        r: 0.085, cr: 1, cg: 0.08, cb: 0.04, kind: 'obstruction', seqIndex: 0 });
+    }
+  }
+
+  return specs;
+}

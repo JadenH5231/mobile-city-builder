@@ -693,6 +693,7 @@ export class Game {
     this.renderer.drawRoads(this.grid);
     this.renderer.drawBuildings(this.grid, this.cityMood(), this.economy.monthsElapsed);
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
+    this.renderer.drawAirportGround(this.grid); // Beta 2.1.1 — airport ground + night lights
     this.services.recompute(this.grid);
     // Beta 1.3 Phase 2 — refresh parking stalls registry whenever the
     // building grid changes. Cheap O(grid). Idempotent: existing stalls
@@ -1976,6 +1977,7 @@ export class Game {
     this.renderer.drawCityBuildings(this.grid, this.forestryHealth(), this.farmHealth());
     this.renderer.drawDistricts(this.grid, this.districts);
     this.renderer.drawNightLights(this.grid);
+    this.renderer.drawAirportGround(this.grid); // Beta 2.1.1 — airport ground + night lights
     this.vehicles.clear(this.grid, this.grid.width);
     this.buses.clear();
     this.pedestrians.clear();

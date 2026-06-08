@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
@@ -47,8 +48,11 @@ import type { Vehicles } from '../simulation/Vehicles';
 import type { Planes } from '../simulation/Planes';
 import { getActiveTheme } from '../themes/registry';
 import {
+  buildAirportBlinkData,
   buildAirportGroundMesh,
+  buildAirportStaticGlowMesh,
   buildBeautificationMesh,
+  type AptBlinkSpec,
   buildBridgeRoadMesh,
   buildBuildingsMesh,
   buildNarrowbodyAircraftGeom,
@@ -282,6 +286,18 @@ export class Renderer {
    *  apt_runway / apt_taxiway / apt_apron tiles.  Rebuilt by drawAirportGround
    *  whenever an airport tile changes (placement, bulldoze). */
   private airportGroundMesh: Mesh | null = null;
+  /** Airport static night-glow layer (Beta 2.1.1).  Vertex-coloured additive
+   *  quads for runway edge lights, taxiway blues, and apron flood pools.
+   *  Rebuilt together with airportGroundMesh; opacity driven by applyTimeOfDay. */
+  private aptGlowMesh: Mesh | null = null;
+  /** Animated blink-light InstancedMesh (Beta 2.1.1).  Flat discs positioned
+   *  at each AptBlinkSpec; colour set to lit or black each frame by
+   *  updateAirportBlinks(). */
+  private aptBlinkMesh: InstancedMesh | null = null;
+  /** Metadata parallel to aptBlinkMesh instances, rebuilt with the mesh. */
+  private aptBlinkSpecs: AptBlinkSpec[] = [];
+  /** Number of distinct strobe positions in aptBlinkSpecs; cached on build. */
+  private aptStrobeCount = 0;
   /** Aircraft InstancedMesh set (Beta 2.1). One InstancedMesh per aircraft
    *  type (regional / narrowbody / widebody); MAX_AIRCRAFT capacity each. */
   private aircraftRegionalMesh!: InstancedMesh;
@@ -2026,6 +2042,126 @@ export class Renderer {
     }
     this.airportGroundMesh = buildAirportGroundMesh(grid);
     if (this.airportGroundMesh) this.worldGroup.add(this.airportGroundMesh);
+    // Night lights rebuild in sync with the ground mesh.
+    this.drawAirportLights(grid);
+  }
+
+  /** Rebuild both airport night-light meshes.  Called by drawAirportGround;
+   *  also called on init so pre-existing airports light up on first load. */
+  drawAirportLights(grid: Grid): void {
+    // ── dispose static glow ──
+    if (this.aptGlowMesh) {
+      this.worldGroup.remove(this.aptGlowMesh);
+      this.aptGlowMesh.geometry.dispose();
+      (this.aptGlowMesh.material as MeshBasicMaterial).dispose();
+      this.aptGlowMesh = null;
+    }
+    // ── dispose blink mesh ──
+    if (this.aptBlinkMesh) {
+      this.worldGroup.remove(this.aptBlinkMesh);
+      this.aptBlinkMesh.geometry.dispose();
+      (this.aptBlinkMesh.material as MeshBasicMaterial).dispose();
+      this.aptBlinkMesh = null;
+    }
+    this.aptBlinkSpecs = [];
+    this.aptStrobeCount = 0;
+
+    // ── build static glow ──
+    const glow = buildAirportStaticGlowMesh(grid);
+    if (glow) { this.aptGlowMesh = glow; this.worldGroup.add(glow); }
+
+    // ── build blink InstancedMesh ──
+    const specs = buildAirportBlinkData(grid);
+    this.aptBlinkSpecs = specs;
+    this.aptStrobeCount = specs.reduce(
+      (m, s) => s.kind === 'strobe' ? Math.max(m, s.seqIndex + 1) : m, 0);
+
+    const APT_BLINK_CAP = 128;
+    const cap = Math.min(specs.length, APT_BLINK_CAP);
+    if (cap === 0) return;
+
+    const blinkGeom = new BoxGeometry(1, 0.01, 1);
+    const blinkMat  = new MeshBasicMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
+    const blinkMesh = new InstancedMesh(blinkGeom, blinkMat, APT_BLINK_CAP);
+    blinkMesh.count = cap;
+    blinkMesh.frustumCulled = false;
+    blinkMesh.visible = false;
+
+    const obj   = new Object3D();
+    const black = new Color(0, 0, 0);
+    for (let i = 0; i < cap; i++) {
+      const s = specs[i]!;
+      obj.position.set(s.wx, s.wy, s.wz);
+      obj.rotation.set(0, 0, 0);
+      obj.scale.set(s.r * 2, 1, s.r * 2);
+      obj.updateMatrix();
+      blinkMesh.setMatrixAt(i, obj.matrix);
+      blinkMesh.setColorAt(i, black); // start dark; lit by updateAirportBlinks
+    }
+    blinkMesh.instanceMatrix.needsUpdate = true;
+    if (blinkMesh.instanceColor) blinkMesh.instanceColor.needsUpdate = true;
+
+    this.aptBlinkMesh = blinkMesh;
+    this.worldGroup.add(blinkMesh);
+  }
+
+  /** Colour the animated blink InstancedMesh for the current frame.
+   *  Called from applyTimeOfDay so it runs at render rate with the correct
+   *  nightOpacity.
+   *
+   *  Animations:
+   *    strobe      — APT_NUM_STROBES-step rabbit at 2 Hz (seqIndex 0 fires first,
+   *                  creating a light that visually runs TOWARD the runway).
+   *    reil        — Double-pulse at ~1.25 Hz (120ms on / 130ms off / 120ms on).
+   *    obstruction — Slow 0.55 Hz blink (350ms on). */
+  updateAirportBlinks(nightOpacity: number): void {
+    if (!this.aptBlinkMesh || this.aptBlinkSpecs.length === 0) return;
+    if (nightOpacity < 0.01) {
+      this.aptBlinkMesh.visible = false;
+      return;
+    }
+    this.aptBlinkMesh.visible = true;
+
+    const t = performance.now() / 1000;
+
+    // Approach rabbit: APT_NUM_STROBES steps, 0.5 s per full cycle (2 Hz).
+    const STROBE_PERIOD = 0.5;
+    const N = this.aptStrobeCount;
+    const activeStrobe = N > 0
+      ? Math.floor(((t % STROBE_PERIOD) / STROBE_PERIOD) * N) % N
+      : -1;
+
+    // REIL: double-pulse every 0.8 s (120ms on, 130ms off, 120ms on, 430ms off).
+    const reilPhase = t % 0.8;
+    const reilOn    = reilPhase < 0.12 || (reilPhase > 0.25 && reilPhase < 0.37);
+
+    // Obstruction: 1.8 s period, 350 ms on.
+    const obstOn = (t % 1.8) < 0.35;
+
+    const litColor = new Color();
+    const black    = new Color(0, 0, 0);
+    const cap = Math.min(this.aptBlinkSpecs.length, this.aptBlinkMesh.count);
+
+    for (let i = 0; i < cap; i++) {
+      const s = this.aptBlinkSpecs[i]!;
+      let on = false;
+      switch (s.kind) {
+        case 'strobe':      on = s.seqIndex === activeStrobe; break;
+        case 'reil':        on = reilOn;  break;
+        case 'obstruction': on = obstOn;  break;
+      }
+      if (on) {
+        litColor.setRGB(s.cr * nightOpacity, s.cg * nightOpacity, s.cb * nightOpacity);
+        this.aptBlinkMesh.setColorAt(i, litColor);
+      } else {
+        this.aptBlinkMesh.setColorAt(i, black);
+      }
+    }
+    this.aptBlinkMesh.instanceColor!.needsUpdate = true;
   }
 
   /** Per-frame aircraft positions (Beta 2.1). Reads live Aircraft positions
@@ -2551,6 +2687,14 @@ export class Renderer {
       mat.opacity = nightOpacity * 0.95;
       this.litWindowsMesh.visible = nightOpacity > 0.01;
     }
+    // Airport night lighting (Beta 2.1.1).  Static glow fades in with
+    // nightOpacity; animated blinks update each frame via updateAirportBlinks.
+    if (this.aptGlowMesh) {
+      const mat = this.aptGlowMesh.material as MeshBasicMaterial;
+      mat.opacity = nightOpacity * 0.90;
+      this.aptGlowMesh.visible = nightOpacity > 0.01;
+    }
+    this.updateAirportBlinks(nightOpacity);
   }
 
   private disposeMesh(m: Mesh | null): void {

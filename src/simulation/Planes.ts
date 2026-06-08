@@ -26,10 +26,9 @@ import { MAX_AIRCRAFT } from '../types';
 
 const GROUND_Y = 0.05;   // y-coordinate when on the ground (just above tiles)
 const CRUISE_ALT = 7.0;  // altitude above ground for approach/departure
-const APPROACH_DIST = 18; // tiles outside map edge where aircraft spawns
+const APPROACH_DIST = 42; // tiles outside map edge where aircraft spawns (long enough for a visible glidepath)
 const TAXI_SPEED = 0.6;  // tiles/sec on the ground (taxiing)
 const LAND_SPEED_MAX = 3.2; // speed at touch-down (tiles/sec)
-const LAND_SPEED_MIN = 0.8; // speed after rollout, before turn
 const TAKEOFF_SPEED = 3.5; // speed during takeoff roll
 const ROTATE_SPEED = 3.0;  // speed when nose lifts for climb-out
 const APPROACH_SPEED = 2.0; // speed on final approach
@@ -241,7 +240,7 @@ export class Planes {
   private advancePhase(a: Aircraft): void {
     switch (a.phase) {
       case 'approach': a.phase = 'flare';   break;
-      case 'flare':    a.phase = 'landing'; break;
+      case 'flare':    a.phase = 'landing'; a.waypoints = []; a.wpIdx = 0; break;
       case 'landing':  /* handled in doLanding */ break;
       case 'taxi_in':  a.phase = 'parked';  break;
       case 'pushback': a.phase = 'taxi_out'; break;
@@ -253,41 +252,58 @@ export class Planes {
   }
 
   /**
-   * Landing roll: decelerate along runway, then start taxi_in phase
-   * by computing path from runway to gate.
+   * Landing roll: decelerate along the runway using waypoints so the plane
+   * visibly traverses most of the runway length before turning off.
+   * advancePhase resets a.waypoints=[] when entering this phase (flare→landing),
+   * so length===0 reliably means "first frame."
    */
   private doLanding(a: Aircraft, dt: number, airport: Airport, grid: Grid): void {
-    // Roll in the heading direction the plane was already going.
-    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw);
-    a.speed = Math.max(LAND_SPEED_MIN, a.speed - dt * 1.8);
-    a.wx += fx * a.speed * dt;
-    a.wz += fz * a.speed * dt;
-    a.wy = GROUND_Y;
+    const runway = airport.runways[a.runwayIdx]!;
 
-    if (a.speed <= LAND_SPEED_MIN + 0.1) {
-      // Rolled out enough — build taxi path to gate.
-      const runway = airport.runways[a.runwayIdx]!;
-      const gate = airport.gates.find(g => g.id === a.gateId);
-      if (!gate) { a.phase = 'done'; return; }
-      const exitTile = airport.nearestRunwayExit(gate.x, gate.y, runway);
-      const fromTile = { x: Math.round(a.wx - 0.5), y: Math.round(a.wz - 0.5) };
-      if (exitTile) {
-        const taxiPath = airport.findTaxiPath(
-          fromTile.x, fromTile.y,
-          gate.x, gate.y,
-          grid
-        );
-        a.waypoints = taxiPath.map(tp => ({
-          wx: tp.x + 0.5, wy: GROUND_Y, wz: tp.y + 0.5,
-          speed: TAXI_SPEED
-        }));
-      } else {
-        // No taxi path — teleport to gate area.
-        a.waypoints = [{ wx: gate.x + 0.5, wy: GROUND_Y, wz: gate.y + 0.5, speed: TAXI_SPEED }];
-      }
+    // First frame in landing: build rollout waypoints down 72% of the runway.
+    if (a.waypoints.length === 0) {
+      const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+      const midX = lerp(runway.thresholdX, runway.farEndX, 0.38);
+      const midZ = lerp(runway.thresholdZ, runway.farEndZ, 0.38);
+      const turnOffX = lerp(runway.thresholdX, runway.farEndX, 0.72);
+      const turnOffZ = lerp(runway.thresholdZ, runway.farEndZ, 0.72);
+      a.waypoints = [
+        // Still fast at mid-runway
+        { wx: midX, wy: GROUND_Y, wz: midZ, speed: LAND_SPEED_MAX * 0.5 },
+        // Slowed to taxi speed at the turn-off point
+        { wx: turnOffX, wy: GROUND_Y, wz: turnOffZ, speed: TAXI_SPEED },
+      ];
       a.wpIdx = 0;
-      a.phase = 'taxi_in';
+      return;
     }
+
+    // Rollout in progress — follow the waypoints.
+    if (a.wpIdx < a.waypoints.length) {
+      this.followWaypoints(a, dt);
+      // followWaypoints calls advancePhase when done, which is a no-op for landing
+      return;
+    }
+
+    // Rollout complete — build taxi path from current position to gate.
+    const gate = airport.gates.find(g => g.id === a.gateId);
+    if (!gate) { a.phase = 'done'; return; }
+    const exitTile = airport.nearestRunwayExit(gate.x, gate.y, runway);
+    const fromTile = { x: Math.round(a.wx - 0.5), y: Math.round(a.wz - 0.5) };
+    if (exitTile) {
+      const taxiPath = airport.findTaxiPath(
+        fromTile.x, fromTile.y,
+        gate.x, gate.y,
+        grid
+      );
+      a.waypoints = taxiPath.map(tp => ({
+        wx: tp.x + 0.5, wy: GROUND_Y, wz: tp.y + 0.5,
+        speed: TAXI_SPEED
+      }));
+    } else {
+      a.waypoints = [{ wx: gate.x + 0.5, wy: GROUND_Y, wz: gate.y + 0.5, speed: TAXI_SPEED }];
+    }
+    a.wpIdx = 0;
+    a.phase = 'taxi_in';
   }
 
   /**
@@ -379,29 +395,48 @@ export class Planes {
   private buildApproachWaypoints(runway: AptRunway, _grid: Grid): AircraftWaypoint[] {
     const isNS = Math.abs(runway.yaw) < 0.1;
     let spawnX: number, spawnZ: number;
-    let approachYaw: number; // heading aircraft flies ON approach
+    let approachYaw: number;
 
     if (isNS) {
-      // Approach from south (high Z).
+      // Approach from south (high Z), plane faces north (−Z).
       spawnX = runway.thresholdX;
       spawnZ = runway.thresholdZ + APPROACH_DIST;
-      approachYaw = Math.PI; // facing north (-Z)
+      approachYaw = Math.PI;
     } else {
-      // Approach from east (high X).
+      // Approach from east (high X), plane faces west (−X).
       spawnX = runway.thresholdX + APPROACH_DIST;
       spawnZ = runway.thresholdZ;
-      approachYaw = -Math.PI / 2; // facing west (-X)
+      approachYaw = -Math.PI / 2;
     }
 
-    // Waypoints: spawn → intercept altitude reduction → flare start → threshold.
-    const interceptX = isNS ? spawnX : (runway.thresholdX + 5);
-    const interceptZ = isNS ? (runway.thresholdZ + 5) : spawnZ;
+    // Helper: interpolate a point along the approach vector at fraction f.
+    // f=1.0 → spawn (far end), f=0.0 → threshold.
+    const D = APPROACH_DIST;
+    const p = (f: number): [number, number] => isNS
+      ? [spawnX,                             runway.thresholdZ + D * f]
+      : [runway.thresholdX + D * f,          spawnZ];
+
+    // Glidepath: cruise plateau → descent begins at ~24 tiles out →
+    // low approach at ~10 tiles out → flare just before threshold → touchdown.
+    // This produces a long, clearly visible descent across the sky.
+    const [cruX, cruZ]  = p(0.55); // halfway in, still at cruise altitude
+    const [desX, desZ]  = p(0.25); // begin descent (≈10.5 tiles from threshold)
+    const [lowX, lowZ]  = p(0.09); // low approach (≈3.8 tiles out)
+    const [flrX, flrZ]  = p(0.03); // flare (≈1.3 tiles out, just above ground)
 
     return [
-      { wx: spawnX, wy: CRUISE_ALT, wz: spawnZ, speed: APPROACH_SPEED, yaw: approachYaw },
-      { wx: interceptX, wy: CRUISE_ALT * 0.6, wz: interceptZ, speed: APPROACH_SPEED },
-      { wx: runway.thresholdX, wy: CRUISE_ALT * 0.15, wz: runway.thresholdZ, speed: APPROACH_SPEED * 0.9 },
-      { wx: runway.thresholdX, wy: GROUND_Y, wz: runway.thresholdZ, speed: LAND_SPEED_MAX }
+      // Spawn well off-map at cruise altitude, heading established.
+      { wx: spawnX, wy: CRUISE_ALT,         wz: spawnZ,  speed: APPROACH_SPEED, yaw: approachYaw },
+      // Cruise plateau — plane is level and visible crossing the map edge.
+      { wx: cruX,   wy: CRUISE_ALT,         wz: cruZ,    speed: APPROACH_SPEED },
+      // Begin gradual descent.
+      { wx: desX,   wy: CRUISE_ALT * 0.50,  wz: desZ,    speed: APPROACH_SPEED * 0.9 },
+      // Low approach, clearly on glidepath toward the runway.
+      { wx: lowX,   wy: CRUISE_ALT * 0.14,  wz: lowZ,    speed: APPROACH_SPEED * 0.8 },
+      // Flare — nose pitches up, speed slows for touchdown.
+      { wx: flrX,   wy: GROUND_Y + 0.30,   wz: flrZ,    speed: LAND_SPEED_MAX * 0.85 },
+      // Touchdown at the threshold.
+      { wx: runway.thresholdX, wy: GROUND_Y, wz: runway.thresholdZ, speed: LAND_SPEED_MAX },
     ];
   }
 

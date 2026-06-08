@@ -163,21 +163,25 @@ export class Planes {
     this.arrivalAccumMs += dtMs;
     this.departAccumMs  += dtMs;
 
-    // Arrival spawn: only when runway is unoccupied (ATC separation).
+    // Arrival spawn: pick a free runway at random (ATC separation per-runway).
     if (this.arrivalAccumMs >= this.nextArrivalMs && this.aircraft.length < MAX_AIRCRAFT) {
-      if (!this.isRunwayHot()) {
+      const freeRwy = this.pickFreeRunway(airport);
+      if (freeRwy !== -1) {
         this.arrivalAccumMs = 0;
         this.nextArrivalMs = ARRIVAL_MIN_MS + Math.random() * (ARRIVAL_MAX_MS - ARRIVAL_MIN_MS);
-        this.trySpawnAircraft(airport, grid);
+        this.trySpawnAircraft(airport, grid, freeRwy);
       }
-      // If runway is hot, timer keeps running — try every tick until it clears.
+      // If no runway free, timer keeps running — try every tick until one clears.
     }
 
-    // Ground-departure spawn (independent of arrivals).
+    // Ground-departure spawn (independent of arrivals, also per-runway).
     if (this.departAccumMs >= this.nextDepartMs && this.aircraft.length < MAX_AIRCRAFT) {
       this.departAccumMs = 0;
       this.nextDepartMs = DEPART_MIN_MS + Math.random() * (DEPART_MAX_MS - DEPART_MIN_MS);
-      this.trySpawnDeparture(airport, grid);
+      // Departures don't need the runway yet (they start parked), so pick any
+      // qualifying runway — the lineup ATC hold will gate the actual takeoff.
+      const anyRwy = this.pickAnyQualifyingRunway(airport);
+      if (anyRwy !== -1) this.trySpawnDeparture(airport, grid, anyRwy);
     }
 
     // Advance each aircraft.
@@ -192,26 +196,49 @@ export class Planes {
   }
 
   /**
-   * True when any aircraft is actively using the runway (approach, flare,
-   * landing, takeoff, or departure).  New arrivals wait until this is false.
+   * True when a specific runway is actively occupied by an aircraft on
+   * approach, flare, landing, takeoff, or departure.  Checked per-runway
+   * so a two-runway airport can work both runways simultaneously.
    */
-  private isRunwayHot(): boolean {
+  private isRunwayHot(rwyIdx: number): boolean {
     return this.aircraft.some(a =>
-      a.phase === 'approach' || a.phase === 'flare' ||
-      a.phase === 'landing'  || a.phase === 'takeoff' ||
-      a.phase === 'departure'
+      a.runwayIdx === rwyIdx &&
+      (a.phase === 'approach' || a.phase === 'flare' ||
+       a.phase === 'landing'  || a.phase === 'takeoff' ||
+       a.phase === 'departure')
     );
+  }
+
+  /**
+   * Return the index of a random qualifying runway that is currently free,
+   * or -1 if none are available.  Qualifying = length ≥ APT_MIN_RUNWAY_TILES.
+   * Randomly ordered so a two-runway airport distributes traffic evenly.
+   */
+  private pickFreeRunway(airport: Airport): number {
+    const candidates = airport.runways
+      .map((r, i) => ({ r, i }))
+      .filter(({ r, i }) => r.length >= 3 && !this.isRunwayHot(i));
+    if (candidates.length === 0) return -1;
+    return candidates[Math.floor(Math.random() * candidates.length)]!.i;
+  }
+
+  /** Return the index of any qualifying runway (ignores hot status). */
+  private pickAnyQualifyingRunway(airport: Airport): number {
+    const candidates = airport.runways
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.length >= 3);
+    if (candidates.length === 0) return -1;
+    return candidates[Math.floor(Math.random() * candidates.length)]!.i;
   }
 
   /**
    * Spawn an inbound aircraft that flies in from off-map, lands, taxis to a
    * gate, dwells, then pushes back and departs.
    */
-  private trySpawnAircraft(airport: Airport, grid: Grid): boolean {
+  private trySpawnAircraft(airport: Airport, grid: Grid, rwyIdx: number): boolean {
     const gate = airport.findAvailableGate();
     if (!gate) return false;
-    const rwyIdx = airport.runways.findIndex(r => r.length >= 3);
-    if (rwyIdx === -1) return false;
+    if (rwyIdx < 0 || rwyIdx >= airport.runways.length) return false;
     const runway = airport.runways[rwyIdx]!;
 
     const type = pickType(airport.terminalTileCount);
@@ -253,11 +280,10 @@ export class Planes {
    * These planes make the airport feel like a hub (traffic coming AND going)
    * rather than a pure arrival-only destination.
    */
-  private trySpawnDeparture(airport: Airport, grid: Grid): boolean {
+  private trySpawnDeparture(airport: Airport, grid: Grid, rwyIdx: number): boolean {
     const gate = airport.findAvailableGate();
     if (!gate) return false;
-    const rwyIdx = airport.runways.findIndex(r => r.length >= 3);
-    if (rwyIdx === -1) return false;
+    if (rwyIdx < 0 || rwyIdx >= airport.runways.length) return false;
 
     // Need taxiway connectivity to the runway — if there's no path, skip.
     const runway = airport.runways[rwyIdx]!;

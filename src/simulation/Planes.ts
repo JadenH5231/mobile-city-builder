@@ -10,15 +10,27 @@
  * Aircraft on the ground ride at y ≈ GROUND_Y; airborne altitude ramps from
  * GROUND_Y up to CRUISE_ALT during takeoff/approach.
  *
- * Approach: a plane spawns 18 tiles outside the map edge, at CRUISE_ALT
+ * Approach: a plane spawns 42 tiles outside the map edge, at CRUISE_ALT
  * altitude, and follows a curved glidepath toward the runway threshold.
- * Departure: the reverse — accelerates along the runway then climbs away.
+ *
+ * Departure: two kinds of departure —
+ *   (A) Inbound planes that landed and are now pushing back from their gate.
+ *   (B) Ground-spawned "turnaround" planes that start directly at a gate
+ *       (simulate the airport as a hub, not just a destination). These spawn
+ *       via trySpawnDeparture on a separate timer.
+ *
+ * ATC separation (Beta 2.1.2):
+ *   - New arrivals are blocked while any aircraft is on the runway
+ *     (approach / flare / landing / takeoff / departure phase).
+ *   - Departing aircraft hold at the lineup position until the runway is
+ *     clear of incoming traffic before starting the takeoff roll.
+ *   - Spawn intervals are randomised so traffic feels organic.
  *
  * Passenger economy: on gate arrival the Airport.activePassengers count
  * increments by the aircraft's capacity * occupancy. Economy.runMonth reads
  * activePassengers and pays out APT_PASSENGER_REVENUE per visitor per month
  * (scaled by transit connectivity). Passengers "depart" when their aircraft
- * pushes back from the gate and decrease the count accordingly.
+ * pushes back from the gate.
  */
 import type { Airport, AptRunway } from './Airport';
 import type { Grid } from '../world/Grid';
@@ -32,8 +44,23 @@ const LAND_SPEED_MAX = 3.2; // speed at touch-down (tiles/sec)
 const TAKEOFF_SPEED = 3.5; // speed during takeoff roll
 const ROTATE_SPEED = 3.0;  // speed when nose lifts for climb-out
 const APPROACH_SPEED = 2.0; // speed on final approach
-const PARKTIME_MIN_MS = 25_000; // min dwell at gate
-const PARKTIME_MAX_MS = 55_000; // max dwell at gate
+const PARKTIME_MIN_MS = 25_000; // min dwell at gate (arrival)
+const PARKTIME_MAX_MS = 55_000; // max dwell at gate (arrival)
+const TURNAROUND_MIN_MS = 8_000; // min dwell for ground-spawned departure
+const TURNAROUND_MAX_MS = 18_000; // max dwell for ground-spawned departure
+
+// Arrival spawn interval range (randomised per spawn attempt).
+const ARRIVAL_MIN_MS = 45_000;  // 45 s minimum between arrivals
+const ARRIVAL_MAX_MS = 90_000;  // 90 s maximum between arrivals
+
+// Ground-departure spawn interval range.
+const DEPART_MIN_MS  = 35_000;  // 35 s minimum between departure spawns
+const DEPART_MAX_MS  = 80_000;  // 80 s maximum
+
+// How long a departure is allowed to fly after rotation before despawning.
+// At TAKEOFF_SPEED*1.3 ≈ 4.55 tiles/s, 20 s carries the plane ~91 tiles
+// (well beyond any map size — clearly off-screen).
+const DEPARTURE_LIFETIME_MS = 20_000;
 
 const AIRLINE_LIVERIES: number[] = [
   0xffffff, // white (generic)
@@ -53,7 +80,7 @@ export type AircraftPhase =
   | 'parked'      // at gate, passenger exchange timer running
   | 'pushback'    // reversing away from gate (short animation)
   | 'taxi_out'    // following taxi path from gate to runway
-  | 'lineup'      // at runway threshold, brief hold before takeoff
+  | 'lineup'      // at runway threshold, holding for clearance
   | 'takeoff'     // accelerating down runway
   | 'departure'   // airborne, climbing away from map
   | 'done';       // despawn this frame
@@ -93,6 +120,12 @@ export interface Aircraft {
   passengerCount: number;
   /** Total airborne time (ms) — used to cap departure animation. */
   departureMs: number;
+  /**
+   * True for ground-spawned "turnaround" departures that start at a gate.
+   * These aircraft skip the arrival passenger credit so activePassengers
+   * isn't inflated — they represent planes that were already there.
+   */
+  isDeparture: boolean;
 }
 
 /** Typical seat count for fare economy: regional 45, narrowbody 175, widebody 370. */
@@ -105,20 +138,46 @@ function randomOccupancy(): number {
   return 0.60 + Math.random() * 0.35;
 }
 
+/** Random aircraft type weighted by terminal size. */
+function pickType(termSize: number): AircraftType {
+  if (termSize <= 4)       return 'regional';
+  if (termSize <= 15)      return Math.random() < 0.5 ? 'regional' : 'narrowbody';
+  return Math.random() < 0.33 ? 'regional' : Math.random() < 0.5 ? 'narrowbody' : 'widebody';
+}
+
 export class Planes {
   aircraft: Aircraft[] = [];
   private nextId = 1;
-  private spawnAccumMs = 0;
-  private readonly SPAWN_INTERVAL_MS = 15_000; // try to spawn every 15 s
+
+  // Arrival timing — randomised interval so traffic feels organic, not metronomic.
+  private arrivalAccumMs = 0;
+  private nextArrivalMs = ARRIVAL_MIN_MS + Math.random() * (ARRIVAL_MAX_MS - ARRIVAL_MIN_MS);
+
+  // Ground-departure timing — separate cadence from arrivals.
+  private departAccumMs = 0;
+  private nextDepartMs = DEPART_MIN_MS + Math.random() * (DEPART_MAX_MS - DEPART_MIN_MS);
 
   update(dtMs: number, airport: Airport, grid: Grid): void {
     if (!airport.isOperational()) return;
 
-    // Spawn cadence: try every SPAWN_INTERVAL_MS; also respect MAX_AIRCRAFT.
-    this.spawnAccumMs += dtMs;
-    if (this.spawnAccumMs >= this.SPAWN_INTERVAL_MS && this.aircraft.length < MAX_AIRCRAFT) {
-      this.spawnAccumMs = 0;
-      this.trySpawnAircraft(airport, grid);
+    this.arrivalAccumMs += dtMs;
+    this.departAccumMs  += dtMs;
+
+    // Arrival spawn: only when runway is unoccupied (ATC separation).
+    if (this.arrivalAccumMs >= this.nextArrivalMs && this.aircraft.length < MAX_AIRCRAFT) {
+      if (!this.isRunwayHot()) {
+        this.arrivalAccumMs = 0;
+        this.nextArrivalMs = ARRIVAL_MIN_MS + Math.random() * (ARRIVAL_MAX_MS - ARRIVAL_MIN_MS);
+        this.trySpawnAircraft(airport, grid);
+      }
+      // If runway is hot, timer keeps running — try every tick until it clears.
+    }
+
+    // Ground-departure spawn (independent of arrivals).
+    if (this.departAccumMs >= this.nextDepartMs && this.aircraft.length < MAX_AIRCRAFT) {
+      this.departAccumMs = 0;
+      this.nextDepartMs = DEPART_MIN_MS + Math.random() * (DEPART_MAX_MS - DEPART_MIN_MS);
+      this.trySpawnDeparture(airport, grid);
     }
 
     // Advance each aircraft.
@@ -132,21 +191,30 @@ export class Planes {
     }
   }
 
+  /**
+   * True when any aircraft is actively using the runway (approach, flare,
+   * landing, takeoff, or departure).  New arrivals wait until this is false.
+   */
+  private isRunwayHot(): boolean {
+    return this.aircraft.some(a =>
+      a.phase === 'approach' || a.phase === 'flare' ||
+      a.phase === 'landing'  || a.phase === 'takeoff' ||
+      a.phase === 'departure'
+    );
+  }
+
+  /**
+   * Spawn an inbound aircraft that flies in from off-map, lands, taxis to a
+   * gate, dwells, then pushes back and departs.
+   */
   private trySpawnAircraft(airport: Airport, grid: Grid): boolean {
-    // Pick an available gate + runway.
     const gate = airport.findAvailableGate();
     if (!gate) return false;
     const rwyIdx = airport.runways.findIndex(r => r.length >= 3);
     if (rwyIdx === -1) return false;
     const runway = airport.runways[rwyIdx]!;
 
-    // Choose aircraft type based on terminal size.
-    const termSize = airport.terminalTileCount;
-    let type: AircraftType;
-    if (termSize <= 4)       type = 'regional';
-    else if (termSize <= 15) type = Math.random() < 0.5 ? 'regional' : 'narrowbody';
-    else                     type = Math.random() < 0.33 ? 'regional' : Math.random() < 0.5 ? 'narrowbody' : 'widebody';
-
+    const type = pickType(airport.terminalTileCount);
     const liveryIdx = Math.floor(Math.random() * AIRLINE_LIVERIES.length);
     const id = this.nextId++;
 
@@ -154,7 +222,6 @@ export class Planes {
     const waypoints = this.buildApproachWaypoints(runway, grid);
     if (waypoints.length === 0) return false;
 
-    // Starting position (first waypoint, off-map).
     const start = waypoints[0]!;
 
     const a: Aircraft = {
@@ -168,10 +235,58 @@ export class Planes {
       runwayIdx: rwyIdx,
       parkTimerMs: PARKTIME_MIN_MS + Math.random() * (PARKTIME_MAX_MS - PARKTIME_MIN_MS),
       passengerCount: 0,
-      departureMs: 0
+      departureMs: 0,
+      isDeparture: false,
     };
 
-    // Reserve the gate.
+    airport.occupyGate(gate.id, id);
+    this.aircraft.push(a);
+    return true;
+  }
+
+  /**
+   * Spawn a ground-originated departure — a plane that starts at a gate
+   * as if it were a turnaround from a previous flight.  It skips the
+   * landing sequence entirely and begins in the parked phase with a short
+   * turnaround timer, then pushes back and departs normally.
+   *
+   * These planes make the airport feel like a hub (traffic coming AND going)
+   * rather than a pure arrival-only destination.
+   */
+  private trySpawnDeparture(airport: Airport, grid: Grid): boolean {
+    const gate = airport.findAvailableGate();
+    if (!gate) return false;
+    const rwyIdx = airport.runways.findIndex(r => r.length >= 3);
+    if (rwyIdx === -1) return false;
+
+    // Need taxiway connectivity to the runway — if there's no path, skip.
+    const runway = airport.runways[rwyIdx]!;
+    const far = { x: Math.round(runway.farEndX - 0.5), y: Math.round(runway.farEndZ - 0.5) };
+    const taxiTest = airport.findTaxiPath(gate.x, gate.y, far.x, far.y, grid);
+    // findTaxiPath returns [] if gate and far end are the same tile OR no route.
+    // Allow spawning even without a path — the taxi_out phase handles the fallback.
+    void taxiTest;
+
+    const type = pickType(airport.terminalTileCount);
+    const liveryIdx = Math.floor(Math.random() * AIRLINE_LIVERIES.length);
+    const id = this.nextId++;
+
+    const a: Aircraft = {
+      id, type, liveryIdx,
+      phase: 'parked',
+      wx: gate.x + 0.5, wy: GROUND_Y, wz: gate.y + 0.5,
+      yaw: 0,
+      speed: 0,
+      waypoints: [], wpIdx: 0,
+      gateId: gate.id,
+      runwayIdx: rwyIdx,
+      // Short turnaround: the plane was already serviced, just finishing boarding.
+      parkTimerMs: TURNAROUND_MIN_MS + Math.random() * (TURNAROUND_MAX_MS - TURNAROUND_MIN_MS),
+      passengerCount: 0, // stays 0 so doParked knows it's a departure (isDeparture flag)
+      departureMs: 0,
+      isDeparture: true,
+    };
+
     airport.occupyGate(gate.id, id);
     this.aircraft.push(a);
     return true;
@@ -181,7 +296,6 @@ export class Planes {
     switch (a.phase) {
       case 'approach':
       case 'flare':
-      case 'lineup':
       case 'taxi_in':
       case 'taxi_out':
         this.followWaypoints(a, dt);
@@ -194,6 +308,10 @@ export class Planes {
         break;
       case 'pushback':
         this.doPushback(a, dt, airport, grid);
+        break;
+      case 'lineup':
+        // ATC hold: taxi to lineup position then wait for runway to clear.
+        this.doLineup(a, dt, airport);
         break;
       case 'takeoff':
         this.doTakeoff(a, dt, airport, grid);
@@ -245,7 +363,7 @@ export class Planes {
       case 'taxi_in':  a.phase = 'parked';  break;
       case 'pushback': a.phase = 'taxi_out'; break;
       case 'taxi_out': a.phase = 'lineup';  break;
-      case 'lineup':   a.phase = 'takeoff'; break;
+      // lineup → takeoff is handled by doLineup (ATC hold), not here.
       case 'takeoff':  /* handled in doTakeoff */ break;
       case 'departure': a.phase = 'done'; break;
     }
@@ -308,10 +426,12 @@ export class Planes {
 
   /**
    * Parked: count down timer, then credit passengers, then start pushback.
+   * Ground-departure planes (isDeparture=true) skip the arrival passenger
+   * credit — they represent planes already serviced in the city.
    */
   private doParked(a: Aircraft, dtMs: number, airport: Airport, _grid: Grid): void {
-    if (a.passengerCount === 0) {
-      // First frame parked: credit passengers.
+    if (a.passengerCount === 0 && !a.isDeparture) {
+      // First frame parked (arrival): credit incoming passengers.
       a.passengerCount = Math.round(passengerCapacity(a.type) * randomOccupancy());
       airport.activePassengers += a.passengerCount;
     }
@@ -339,9 +459,8 @@ export class Planes {
   private doPushback(a: Aircraft, dt: number, airport: Airport, grid: Grid): void {
     this.followWaypoints(a, dt);
     if (a.wpIdx >= a.waypoints.length) {
-      // Build taxi_out path to runway.
+      // Build taxi_out path to runway far end (lineup position).
       const runway = airport.runways[a.runwayIdx]!;
-      // Use far-end threshold for lineup.
       const far = { x: Math.round(runway.farEndX - 0.5), y: Math.round(runway.farEndZ - 0.5) };
       const fromTile = { x: Math.round(a.wx - 0.5), y: Math.round(a.wz - 0.5) };
       const taxiPath = airport.findTaxiPath(fromTile.x, fromTile.y, far.x, far.y, grid);
@@ -357,6 +476,48 @@ export class Planes {
     }
   }
 
+  /**
+   * Lineup: finish taxiing to the runway end, then hold until the runway
+   * is clear of incoming traffic before starting the takeoff roll.
+   * This is the ATC separation gate — it prevents a departing plane from
+   * rolling while another aircraft is on approach or landing.
+   */
+  private doLineup(a: Aircraft, dt: number, airport: Airport): void {
+    // Still moving along taxi-out waypoints toward the lineup position.
+    if (a.wpIdx < a.waypoints.length) {
+      this.followWaypoints(a, dt);
+      return;
+    }
+
+    // At lineup position.  Check runway clear of incoming traffic.
+    const incomingClear = !this.aircraft.some(other =>
+      other.id !== a.id &&
+      other.runwayIdx === a.runwayIdx &&
+      (other.phase === 'approach' || other.phase === 'flare' || other.phase === 'landing')
+    );
+
+    if (incomingClear) {
+      // Set takeoff yaw so the plane rolls toward the approach end of the runway.
+      // For NS runway (yaw≈0): take off toward south (facing +Z, yaw=0).
+      // For EW runway (yaw≈π/2): take off toward east (facing +X, yaw=π/2).
+      const runway = airport.runways[a.runwayIdx];
+      if (runway) {
+        const isNS = Math.abs(runway.yaw) < 0.1;
+        // Takeoff direction = from farEnd toward threshold.
+        const dx = runway.thresholdX - runway.farEndX;
+        const dz = runway.thresholdZ - runway.farEndZ;
+        if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
+          a.yaw = Math.atan2(dx, dz);
+        } else {
+          // Fallback: use runway yaw convention
+          a.yaw = isNS ? 0 : Math.PI / 2;
+        }
+      }
+      a.phase = 'takeoff';
+    }
+    // else: hold position, wait for next tick.
+  }
+
   private doTakeoff(a: Aircraft, dt: number, airport: Airport, grid: Grid): void {
     const runway = airport.runways[a.runwayIdx]!;
     // Accelerate toward threshold (opposite of approach direction).
@@ -366,10 +527,19 @@ export class Planes {
     a.wz += fz * a.speed * dt;
     a.wy = GROUND_Y;
 
-    // Check if we've reached rotate speed AND passed the threshold.
-    const atThreshold = Math.abs(a.yaw) < 0.1
-      ? (a.wz < runway.thresholdZ - 0.5)    // NS: flew past south threshold
-      : (a.wx > runway.thresholdX + 0.5);   // EW: flew past east threshold
+    // Check if we've reached rotate speed AND are close to or past the threshold.
+    const isNS = Math.abs(runway.yaw) < 0.1;
+    let atThreshold: boolean;
+    if (isNS) {
+      // NS runway: threshold is south end (high Z). Taking off toward south
+      // (yaw≈0, +Z direction). Trigger when near the south threshold.
+      atThreshold = (a.wz > runway.thresholdZ - 0.5);
+    } else {
+      // EW runway: threshold is east end (high X). Taking off toward east
+      // (yaw≈π/2, +X direction). Trigger when near the east threshold.
+      atThreshold = (a.wx > runway.thresholdX - 0.5);
+    }
+
     if (a.speed >= ROTATE_SPEED && atThreshold) {
       // Build departure waypoints (climb away off-map).
       a.waypoints = this.buildDepartureWaypoints(runway, grid, a.yaw);
@@ -379,15 +549,17 @@ export class Planes {
   }
 
   private doDeparture(a: Aircraft, dt: number, dtMs: number, _airport: Airport): void {
-    // Climb while flying off-map.
+    // Climb while flying off-map in the takeoff direction.
     const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw);
     a.speed = Math.min(TAKEOFF_SPEED * 1.3, a.speed + dt * 1.5);
     a.wx += fx * a.speed * dt;
     a.wy = Math.min(CRUISE_ALT, a.wy + dt * 1.8);
     a.wz += fz * a.speed * dt;
     a.departureMs += dtMs;
-    // Despawn after 8 seconds or when well off-map.
-    if (a.departureMs > 8_000) a.phase = 'done';
+    // Despawn after DEPARTURE_LIFETIME_MS — gives the plane time to clearly
+    // fly off the map edge before vanishing. At 4.5+ tiles/s this covers
+    // 90+ tiles, well beyond any map width.
+    if (a.departureMs > DEPARTURE_LIFETIME_MS) a.phase = 'done';
   }
 
   // --- Waypoint builders --------------------------------------------------
@@ -418,37 +590,30 @@ export class Planes {
 
     // Glidepath: cruise plateau → descent begins at ~24 tiles out →
     // low approach at ~10 tiles out → flare just before threshold → touchdown.
-    // This produces a long, clearly visible descent across the sky.
-    const [cruX, cruZ]  = p(0.55); // halfway in, still at cruise altitude
-    const [desX, desZ]  = p(0.25); // begin descent (≈10.5 tiles from threshold)
-    const [lowX, lowZ]  = p(0.09); // low approach (≈3.8 tiles out)
-    const [flrX, flrZ]  = p(0.03); // flare (≈1.3 tiles out, just above ground)
+    const [cruX, cruZ]  = p(0.55);
+    const [desX, desZ]  = p(0.25);
+    const [lowX, lowZ]  = p(0.09);
+    const [flrX, flrZ]  = p(0.03);
 
     return [
-      // Spawn well off-map at cruise altitude, heading established.
       { wx: spawnX, wy: CRUISE_ALT,         wz: spawnZ,  speed: APPROACH_SPEED, yaw: approachYaw },
-      // Cruise plateau — plane is level and visible crossing the map edge.
       { wx: cruX,   wy: CRUISE_ALT,         wz: cruZ,    speed: APPROACH_SPEED },
-      // Begin gradual descent.
       { wx: desX,   wy: CRUISE_ALT * 0.50,  wz: desZ,    speed: APPROACH_SPEED * 0.9 },
-      // Low approach, clearly on glidepath toward the runway.
       { wx: lowX,   wy: CRUISE_ALT * 0.14,  wz: lowZ,    speed: APPROACH_SPEED * 0.8 },
-      // Flare — nose pitches up, speed slows for touchdown.
       { wx: flrX,   wy: GROUND_Y + 0.30,   wz: flrZ,    speed: LAND_SPEED_MAX * 0.85 },
-      // Touchdown at the threshold.
       { wx: runway.thresholdX, wy: GROUND_Y, wz: runway.thresholdZ, speed: LAND_SPEED_MAX },
     ];
   }
 
-  /** For takeoff, determine which direction to depart based on lineup yaw. */
+  /** Departure climb-out waypoint: fly well off the map edge in takeoff direction. */
   private buildDepartureWaypoints(runway: AptRunway, _grid: Grid, takeoffYaw: number): AircraftWaypoint[] {
     const fx = Math.sin(takeoffYaw), fz = Math.cos(takeoffYaw);
-    const outX = runway.thresholdX + fx * APPROACH_DIST;
-    const outZ = runway.thresholdZ + fz * APPROACH_DIST;
+    // Depart from the threshold (approach end), heading away from the airport.
+    const outX = runway.thresholdX + fx * APPROACH_DIST * 1.5;
+    const outZ = runway.thresholdZ + fz * APPROACH_DIST * 1.5;
     return [
       { wx: outX, wy: CRUISE_ALT, wz: outZ, speed: TAKEOFF_SPEED * 1.2 }
     ];
   }
 
 }
-

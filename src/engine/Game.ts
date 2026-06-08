@@ -2354,7 +2354,15 @@ export class Game {
    */
   private placeBuilding(x: number, y: number, kind: Exclude<Building, 'none'>): boolean {
     const baseCost = BUILDING_COSTS[kind];
-    const stanceKey = kind as StanceKey;
+    // Airport buildings (apt_tower, etc.) share the apt_terminal stance key.
+    // Using 'kind as StanceKey' for 'apt_tower' produces undefined stances because
+    // 'apt_tower' has no FACTION_STANCES row → costMultiplier returns Infinity
+    // (allStronglyOpposed stays true on undefined > -0.4 = false) even when
+    // Override is active. Map all apt_* kinds to 'apt_terminal'. (Beta 2.1.2)
+    const APT_KINDS: readonly string[] = [
+      'apt_runway', 'apt_taxiway', 'apt_apron', 'apt_terminal', 'apt_hangar', 'apt_tower'
+    ];
+    const stanceKey = (APT_KINDS.includes(kind) ? 'apt_terminal' : kind) as StanceKey;
     const mult = this.council.costMultiplier(stanceKey);
     if (!isFinite(mult)) {
       this.onStatusMessage?.('Banned by council');

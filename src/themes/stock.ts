@@ -107,7 +107,7 @@ export const STOCK_THEME: ThemePack = {
     sunColorNoon:  0xffffff,
     sunIntensityNight: 0.18,
     sunIntensityDay:   0.85,
-    ambientIntensityNight: 0.20,
+    ambientIntensityNight: 0.15,   // darkened so lit windows/lamps read with contrast
     ambientIntensityDay:   0.65,
     hemiSkyDay:    0xbcd9ff,
     hemiGroundDay: 0x223322,

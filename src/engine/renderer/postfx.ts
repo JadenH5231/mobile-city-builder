@@ -42,13 +42,13 @@ export interface PostFXConfig {
  */
 export const DEFAULT_POSTFX: PostFXConfig = {
   bloom: true,
-  // Gentle: light surfaces (sidewalks / walking trails) under full sun were
-  // blooming too hard, so the threshold is high (only the genuinely brightest
-  // pixels — night lit-windows / lamps — pass) and the strength is low so the
-  // glow is a soft halo, not a wash.
-  bloomStrength: 0.22,
-  bloomRadius: 0.40,
-  bloomThreshold: 0.92
+  // Release-tuned bloom: threshold lowered so lit windows + lamp halos catch
+  // a soft corona without over-blooming daytime surfaces (sidewalks / roads
+  // stay clean because they're below the threshold even in bright sun).
+  // Strength bumped modestly so nighttime skylines glow without washing out.
+  bloomStrength: 0.28,
+  bloomRadius: 0.45,
+  bloomThreshold: 0.88
 };
 
 export class PostFX {

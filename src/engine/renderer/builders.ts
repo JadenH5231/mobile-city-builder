@@ -1179,6 +1179,40 @@ export function buildLampGlowMesh(grid: Grid, texture: import('three').Texture):
         // light pool spreads wide onto the apron below.
         lamps.push({ cx, cz, y: baseY, r: 1.80 });
         break;
+      // Service buildings — civic / emergency / transit structures that
+      // are illuminated all night. Added in the release lighting pass.
+      case 'hospital':
+        // Emergency entrance floodlit + illuminated red cross signage.
+        lamps.push({ cx, cz, y: baseY, r: 1.40 });
+        break;
+      case 'school':
+        // Evening classroom glow — homework hours and after-school programs.
+        lamps.push({ cx, cz, y: baseY, r: 0.90 });
+        break;
+      case 'museum':
+        // Grand illuminated civic entrance — stays lit for evening events.
+        lamps.push({ cx, cz, y: baseY, r: 1.30 });
+        break;
+      case 'observatory':
+        // Subtle cool stellar glow from the lit dome aperture.
+        lamps.push({ cx, cz, y: baseY, r: 0.80 });
+        break;
+      case 'fire_station':
+        // Station always manned — bright bay interior visible at night.
+        lamps.push({ cx, cz, y: baseY, r: 0.90 });
+        break;
+      case 'police_station':
+        // On-duty lighting plus emergency beacons on the roof.
+        lamps.push({ cx, cz, y: baseY, r: 0.90 });
+        break;
+      case 'bus_depot':
+        // Workshop bay lit all night as buses return from routes.
+        lamps.push({ cx, cz, y: baseY, r: 0.90 });
+        break;
+      case 'power_plant':
+        // Orange-tinted industrial ground glow under the stack flare.
+        lamps.push({ cx, cz, y: baseY, r: 0.70 });
+        break;
       case 'pier':
         // End-of-pier accent.
         lamps.push({ cx, cz: cz + 0.30, y: baseY, r: 0.90 });
@@ -1585,6 +1619,25 @@ export function buildLitWindowsMesh(grid: Grid): Mesh | null {
         b.dispose();
       }
     }
+    // Low-density (L1) residential — small houses were completely dark at
+    // night before this pass. Add 1-2 sparse warm windows per house so
+    // quiet neighbourhoods feel inhabited. ~50% of tiles lit (deterministic
+    // per tile so it's stable across frames) — not every room has a light on.
+    if (t.density === 1 && t.zone === 'residential' && !t.luxury && !t.skyscraper) {
+      const fp = getVariantBodyFootprint('residential', 1, t.x, t.y);
+      if (!fp) continue;
+      const { cx: bcx, cz: bcz, halfX, halfZ } = fp;
+      for (let col = 0; col < 2; col++) {
+        // ~50% lit: alternates per tile hash. Reads as "some lights on".
+        if (((col + palIdx) & 1) === 0) continue;
+        const offsetX = col === 0 ? -halfX * 0.44 : halfX * 0.44;
+        addWindow(bcx + offsetX, 0.17, bcz + halfZ + 0.004, 0.07, 0.10, 'X', litColor);
+        addWindow(bcx + offsetX, 0.17, bcz - halfZ - 0.004, 0.07, 0.10, 'X', litColor);
+        const offsetZ = col === 0 ? -halfZ * 0.44 : halfZ * 0.44;
+        addWindow(bcx + halfX + 0.004, 0.17, bcz + offsetZ, 0.07, 0.10, 'Z', litColor);
+        addWindow(bcx - halfX - 0.004, 0.17, bcz + offsetZ, 0.07, 0.10, 'Z', litColor);
+      }
+    }
     // Beta 1.6.8 — Medium+ residential lit windows. Pre-1.6.8 only C/MU
     // got window overlays; an apartment block on the same street stayed
     // visually dark while the offices next door glowed. Now L2 and L3+
@@ -1663,8 +1716,8 @@ export function buildLitWindowsMesh(grid: Grid): Mesh | null {
         const wy = 0.25 + row * 0.30;
         if (wy > h - 0.05) break;
         for (let col = 0; col < 2; col++) {
-          // Sparse — only ~30% on (security lighting feel).
-          if (((row * 7 + col + palIdx * 3) & 3) !== 0) continue;
+          // ~50% lit — factories run 24/7 shifts; every other light on.
+          if (((row * 7 + col + palIdx * 3) & 1) !== 0) continue;
           const offsetX = -colSpreadX * 0.5 + col * colSpreadX;
           addWindow(bcx + offsetX, wy, bcz + halfZ + 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
           addWindow(bcx + offsetX, wy, bcz - halfZ - 0.005, 0.10, 0.08, 'X', INDUSTRIAL_LIT);
@@ -1977,6 +2030,117 @@ function addArchitecturalLights(
       const beacon = new IcosahedronGeometry(0.040, 1);
       beacon.translate(cx, 2.345, cz);
       pushLit(beacon, 0xff4444);
+      break;
+    }
+    // ── Service & civic buildings (release lighting pass) ────────────────
+    // All service buildings are illuminated overnight. Each case adds the
+    // characteristic light signature of that building type. Window positions
+    // are derived from the matching cityBuildingParts geometry offsets.
+    case 'school': {
+      // Classroom window strips visible in evenings + clock-tower lantern.
+      // Main wing front face sits at local dz=+0.22 (from geometry).
+      addWin(cx, 0.22, cz + 0.22, 0.48, 0.06, 'X', WARM_WHITE);   // lower window band
+      addWin(cx, 0.32, cz + 0.22, 0.48, 0.06, 'X', WARM_WHITE);   // upper window band
+      // Clock tower room — warm light behind the arched opening.
+      addWin(cx + 0.24, 0.30, cz + 0.19, 0.10, 0.14, 'X', AMBER);
+      // Flagpole tip — tiny warm speck makes the silhouette readable at night.
+      const tip = new IcosahedronGeometry(0.020, 1);
+      tip.translate(cx - 0.30, 0.56, cz + 0.30);
+      pushLit(tip, WARM_WHITE);
+      break;
+    }
+    case 'hospital': {
+      // Hospitals never sleep — all floors lit + glowing red cross sign.
+      // Main tower front face at local dz ≈ +0.20 (dz offset −0.06 + depth 0.25).
+      addWin(cx - 0.18, 0.22, cz + 0.20, 0.14, 0.16, 'X', WARM_WHITE);
+      addWin(cx + 0.18, 0.22, cz + 0.20, 0.14, 0.16, 'X', WARM_WHITE);
+      addWin(cx - 0.18, 0.55, cz + 0.20, 0.14, 0.16, 'X', WARM_WHITE);
+      addWin(cx + 0.18, 0.55, cz + 0.20, 0.14, 0.16, 'X', WARM_WHITE);
+      // Glowing red cross sign (lit illuminated signage slab).
+      const crossV = new BoxGeometry(0.06, 0.18, 0.012);
+      crossV.translate(cx, 0.42, cz + 0.205);
+      pushLit(crossV, 0xff4444);
+      const crossH = new BoxGeometry(0.18, 0.06, 0.012);
+      crossH.translate(cx, 0.42, cz + 0.208);
+      pushLit(crossH, 0xff4444);
+      // Ambulance bay — warm interior visible through the wide door.
+      addWin(cx + 0.30, 0.14, cz + 0.37, 0.26, 0.16, 'X', AMBER);
+      break;
+    }
+    case 'fire_station': {
+      // Always manned. Bay door interior warm amber + red roof beacon on
+      // the hose-drying tower. Bay faces south at local dz ≈ +0.23.
+      addWin(cx - 0.10, 0.18, cz + 0.23, 0.36, 0.26, 'X', 0xffe090);
+      // Red aviation beacon at top of hose-drying tower (dx=0.22, h≈0.72).
+      const fireTowerBeacon = new IcosahedronGeometry(0.040, 1);
+      fireTowerBeacon.translate(cx + 0.22, 0.73, cz + 0.18);
+      pushLit(fireTowerBeacon, 0xff4444);
+      break;
+    }
+    case 'police_station': {
+      // On-duty lighting plus blue/red emergency roof beacons.
+      // Main building front face at local dz ≈ +0.23.
+      addWin(cx - 0.18, 0.22, cz + 0.23, 0.14, 0.16, 'X', WARM_WHITE);
+      addWin(cx + 0.18, 0.22, cz + 0.23, 0.14, 0.16, 'X', WARM_WHITE);
+      // Lit "POLICE" sign band (wide illuminated strip).
+      addWin(cx, 0.30, cz + 0.23, 0.48, 0.06, 'X', WARM_WHITE);
+      // Blue + red roof emergency beacons (geometry: dy=0.50, dz=−0.04).
+      const polBlue = new IcosahedronGeometry(0.040, 1);
+      polBlue.translate(cx - 0.10, 0.52, cz - 0.04);
+      pushLit(polBlue, 0x4488ff);
+      const polRed = new IcosahedronGeometry(0.040, 1);
+      polRed.translate(cx + 0.10, 0.52, cz - 0.04);
+      pushLit(polRed, 0xff4444);
+      break;
+    }
+    case 'museum': {
+      // Grand illuminated colonnade — three lit bays between the columns +
+      // a soft apex glow above the pediment. Colonnade faces south at cz+0.30.
+      addWin(cx - 0.24, 0.22, cz + 0.30, 0.10, 0.20, 'X', WARM_WHITE);
+      addWin(cx,        0.22, cz + 0.30, 0.10, 0.20, 'X', WARM_WHITE);
+      addWin(cx + 0.24, 0.22, cz + 0.30, 0.10, 0.20, 'X', WARM_WHITE);
+      // Apex block gold glow — civic crown detail.
+      const museumApex = new IcosahedronGeometry(0.050, 1);
+      museumApex.translate(cx, 0.60, cz - 0.10);
+      pushLit(museumApex, GOLD);
+      break;
+    }
+    case 'observatory': {
+      // Dome lit from within — cool stellar blue visible at night.
+      // Dome centre at dy ≈ 0.42 (geometry: 0.04 + 0.20 + 0.18 = 0.42).
+      const obsDome = new IcosahedronGeometry(0.065, 1);
+      obsDome.translate(cx, 0.42, cz);
+      pushLit(obsDome, 0xb8d8ff);          // cool stellar blue
+      // Telescope slit — faint blue gleam through the aperture.
+      const obsSlit = new BoxGeometry(0.05, 0.26, 0.012);
+      obsSlit.translate(cx, 0.42, cz + 0.01);
+      pushLit(obsSlit, 0xc8e4ff);
+      break;
+    }
+    case 'water_tower': {
+      // FAA red navigation beacon at the tank cap — required on all tall
+      // structures. Cap at dy ≈ 1.02 (0.55 legs + 0.40 tank + 0.07 dome).
+      const wtBeacon = new IcosahedronGeometry(0.030, 1);
+      wtBeacon.translate(cx, 1.05, cz);
+      pushLit(wtBeacon, 0xff4444);
+      break;
+    }
+    case 'power_plant': {
+      // Red aviation beacon on the exhaust stack top + warm cooling-tower
+      // steam glow. Stack top at dy ≈ 1.07 (0.45 hall + 0.55 stack + 0.07 cap).
+      const stackBeacon = new IcosahedronGeometry(0.040, 1);
+      stackBeacon.translate(cx + 0.20, 1.07, cz - 0.10);
+      pushLit(stackBeacon, 0xff4444);
+      // Cooling-tower vapour puff — warm orange heat shimmer glow.
+      const steamGlow = new IcosahedronGeometry(0.070, 1);
+      steamGlow.translate(cx - 0.20, 0.92, cz + 0.18);
+      pushLit(steamGlow, 0xffe0c0);
+      break;
+    }
+    case 'bus_depot': {
+      // Workshop bay lit all night as buses return to the garage.
+      // Garage door faces south at local dz ≈ +0.06 (−0.18 body + 0.225 depth).
+      addWin(cx, 0.17, cz + 0.06, 0.52, 0.28, 'X', AMBER);
       break;
     }
     case 'pier': {

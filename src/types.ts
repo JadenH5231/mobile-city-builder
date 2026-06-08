@@ -282,12 +282,13 @@ export const SKYSCRAPER_COST = {
 /** Months per construction stage. 4 stages × 3 months = 12 months total. */
 export const SKYSCRAPER_MONTHS_PER_STAGE = 3;
 /** Per-tile resident capacity for an R skyscraper at stage 4 (built).
- *  4 tiles × 64 = 256 residents per skyscraper — substantially more
- *  than 4×L3 (4 × 64 = 256, same), but the visual + civic statement
- *  is the real reward. */
-export const SKYSCRAPER_RESIDENTS_PER_TILE = 64;
+ *  4 tiles × 120 = 480 residents per skyscraper — a significant step
+ *  up from the ~128 you'd get with four L3 tiles (4 × 32 base cap),
+ *  reflecting real skyscraper density. The visual + civic statement
+ *  is the real reward on top of that. */
+export const SKYSCRAPER_RESIDENTS_PER_TILE = 120;
 /** Per-tile commercial jobs (C + MU) at stage 4. */
-export const SKYSCRAPER_C_JOBS_PER_TILE = 56;
+export const SKYSCRAPER_C_JOBS_PER_TILE = 100;
 /** Number of finished-design variants per zone (R/C/MU).
  *  Bumped 6 → 8 in Alpha 3.2.0. The `skyscraperVariant` field in Tile +
  *  SaveGame is widened to 0..7 to match. */

@@ -2666,7 +2666,9 @@ export class Renderer {
     //  - nightLightsMesh: visible lamp fixtures (poles + bulbs).
     //  - lampGlowMesh: smooth radial glow pools spilling onto the ground.
     //  - litWindowsMesh: lit windows on developed buildings.
-    const nightOpacity = Math.max(0, Math.min(1, 1 - dayMix * 2.5));
+    // Softer ramp than the original 2.5× — lights linger a touch longer
+    // into early morning / late evening so twilight cities feel alive.
+    const nightOpacity = Math.max(0, Math.min(1, 1 - dayMix * 2.2));
     if (this.nightLightsMesh) {
       const mat = this.nightLightsMesh.material as MeshBasicMaterial;
       mat.opacity = nightOpacity * 0.85;
@@ -2675,16 +2677,17 @@ export class Renderer {
     if (this.lampGlowMesh) {
       const mat = this.lampGlowMesh.material as MeshBasicMaterial;
       // Slightly dim overall (Alpha 3.1.8) so overlapping lamp pools
-      // don't wash out the road surface they sit on.
-      mat.opacity = nightOpacity * 0.75;
+      // don't wash out the road surface they sit on. Bumped 0.75→0.82
+      // so glow halos read more vividly against the darkened night ambient.
+      mat.opacity = nightOpacity * 0.82;
       this.lampGlowMesh.visible = nightOpacity > 0.01;
     }
     if (this.litWindowsMesh) {
       const mat = this.litWindowsMesh.material as MeshBasicMaterial;
-      // Lit windows are subtle in twilight, full at deep night.
-      // Beta 1.6.8: bumped 0.85 → 0.95 so the high-density skyline
-      // reads as alive from across the map.
-      mat.opacity = nightOpacity * 0.95;
+      // Lit windows at full opacity at night — windows should be the
+      // dominant light source in a dense downtown after dark. Bumped
+      // 0.95 → 1.00 for the release build lighting pass.
+      mat.opacity = nightOpacity * 1.00;
       this.litWindowsMesh.visible = nightOpacity > 0.01;
     }
     // Airport night lighting (Beta 2.1.1).  Static glow fades in with

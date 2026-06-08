@@ -1174,6 +1174,11 @@ export function buildLampGlowMesh(grid: Grid, texture: import('three').Texture):
         // monument in the game.
         lamps.push({ cx, cz, y: baseY, r: 2.00 });
         break;
+      case 'apt_tower':
+        // The glowing control-tower cab sits 1.8+ units up — its cyan
+        // light pool spreads wide onto the apron below.
+        lamps.push({ cx, cz, y: baseY, r: 1.80 });
+        break;
       case 'pier':
         // End-of-pier accent.
         lamps.push({ cx, cz: cz + 0.30, y: baseY, r: 0.90 });
@@ -1949,6 +1954,29 @@ function addArchitecturalLights(
       const archGlow = new BoxGeometry(0.40, 0.40, 0.40);
       archGlow.translate(cx, 0.55, cz);
       pushLit(archGlow, AMBER);
+      break;
+    }
+    case 'apt_tower': {
+      // ATC control-tower night lighting (Beta 2.1). Three layers:
+      // 1. Glowing cab ring — cyan glass wraps the controller cab (~1.81 up).
+      // 2. Radar/antenna glow — cool blue-white at the rotating array.
+      // 3. FAA red aviation beacon — required on any structure this tall.
+      const cabRing = new CylinderGeometry(0.24, 0.22, 0.26, 12);
+      cabRing.translate(cx, 1.815, cz);
+      pushLit(cabRing, 0x88ddff);          // bright cyan cab glass
+      // Cab windows on all four faces so the tower glows 360°.
+      addWin(cx,        1.815, cz - 0.23, 0.28, 0.20, 'X', 0xb0eeff);  // N
+      addWin(cx,        1.815, cz + 0.23, 0.28, 0.20, 'X', 0xb0eeff);  // S
+      addWin(cx - 0.23, 1.815, cz,        0.28, 0.20, 'Z', 0xb0eeff);  // W
+      addWin(cx + 0.23, 1.815, cz,        0.28, 0.20, 'Z', 0xb0eeff);  // E
+      // Radar array — pale blue at the spinning dish.
+      const radar = new IcosahedronGeometry(0.050, 1);
+      radar.translate(cx + 0.08, 2.115, cz);
+      pushLit(radar, DUSK_WATER);
+      // Aviation beacon at the antenna tip — FAA red.
+      const beacon = new IcosahedronGeometry(0.040, 1);
+      beacon.translate(cx, 2.345, cz);
+      pushLit(beacon, 0xff4444);
       break;
     }
     case 'pier': {
@@ -8100,7 +8128,7 @@ export function buildAirportGroundMesh(grid: Grid): Mesh | null {
   const aptColor = (building: string): number => {
     if (building === 'apt_runway')  return 0x1c1c1c;
     if (building === 'apt_taxiway') return 0x2e2e2e;
-    /* apt_apron */                  return 0x8e8a7f;
+    /* apt_apron */                  return 0x55524f;
   };
 
   /** Emit a flat rectangular box (trivially thin) at world position (wx, wz). */
